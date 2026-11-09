@@ -16,12 +16,14 @@ public class IntakeCommands {
     private final Access access;
     private final Lifecycle life;
     private final Documents documents;
+    private final FormularioKeys formularioKeys;
 
-    public IntakeCommands(Db db,Access access,Lifecycle life,Documents documents){
+    public IntakeCommands(Db db,Access access,Lifecycle life,Documents documents,FormularioKeys formularioKeys){
         this.db=db;
         this.access=access;
         this.life=life;
         this.documents=documents;
+        this.formularioKeys=formularioKeys;
     }
 
     Result run(Actor a,String type,long id,Long expected,Input in){
@@ -84,7 +86,8 @@ public class IntakeCommands {
      */
     Result conserveExternal(Actor a,long scope,String document){
         access.scope(scope);
-        var o=ExternalOriginal.parse(document);
+        // Huellas y sello de custodia se verifican antes de cualquier lectura o escritura de COM, incluso al repetir.
+        var o=ExternalOriginal.parse(document,formularioKeys.keys());
         var previous=db.rows("SELECT communication_id,content_hash,provenance_hash FROM communication_original WHERE source=? AND external_id=?",o.source(),o.externalId());
         if(!previous.isEmpty()){
             var p=previous.getFirst();

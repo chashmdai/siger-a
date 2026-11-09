@@ -1,21 +1,27 @@
 package cl.nexbyte.sigera;
 
 import java.nio.charset.StandardCharsets;
+import java.security.*;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import tools.jackson.databind.node.ObjectNode;
 import tools.jackson.databind.json.JsonMapper;
 import static org.junit.jupiter.api.Assertions.*;
 import static cl.nexbyte.sigera.Db.*;
 
 /** Original de Comunicacion externa (Formulario completo via SMR) con los vectores sinteticos de SMR. */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,properties={
-    "spring.datasource.url=jdbc:h2:mem:sigera_external;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"})
+    "spring.datasource.url=jdbc:h2:mem:sigera_external;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+    "siger.formulario-trusted-keys="+ExternalOriginalTest.TRUST})
 @ActiveProfiles("test")
 class ExternalOriginalTest {
+    static final String TRUST="src/test/resources/smr/claves-formulario-sinteticas.json";
+    static final JsonMapper JSON=JsonMapper.builder().build();
     @Autowired Workflow flow;@Autowired Db db;
 
     static String fixture(String version)throws Exception{
@@ -23,20 +29,79 @@ class ExternalOriginalTest {
             return new String(Objects.requireNonNull(in).readAllBytes(),StandardCharsets.UTF_8);
         }
     }
+    static Map<String,PublicKey> trust(){return new FormularioKeys(TRUST).keys();}
+    static String custody(String document,String field,String value){
+        var root=(ObjectNode)JSON.readTree(document);((ObjectNode)root.get("custodia")).put(field,value);return root.toString();
+    }
+    /** Vuelve a sellar el documento con una clave de prueba, aplicando un cambio al contenido firmado. */
+    static String reseal(String document,KeyPair pair,UnaryOperator<String> edit)throws Exception{
+        var root=(ObjectNode)JSON.readTree(document);var c=(ObjectNode)root.get("custodia");
+        byte[] payload=edit.apply(new String(Base64.getUrlDecoder().decode(c.get("payload").asString()),StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
+        var signer=Signature.getInstance("Ed25519");signer.initSign(pair.getPrivate());signer.update(payload);
+        c.put("keyId","PRUEBA");c.put("payload",Base64.getUrlEncoder().withoutPadding().encodeToString(payload));
+        c.put("firma",Base64.getUrlEncoder().withoutPadding().encodeToString(signer.sign()));
+        return root.toString();
+    }
+    static void rejected(String document,Map<String,PublicKey> trust,String reason){
+        var p=assertThrows(Problem.class,()->ExternalOriginal.parse(document,trust));
+        assertEquals(400,p.status);
+        assertTrue(p.getMessage().contains(reason),p.getMessage());
+    }
     Workflow.Result run(String user,String type,Map<String,Object> data){return flow.run(user,new Workflow.Command(UUID.randomUUID(),type,null,null,data));}
 
     @Test void huellasCoincidenConSmrYAlteracionSeRechaza()throws Exception{
-        var o=ExternalOriginal.parse(fixture("1.1"));
+        var o=ExternalOriginal.parse(fixture("1.1"),trust());
         assertEquals("bccac2446b7cd6f2a1d8af086622e46274aebf855dcefabd704252a138de10dc",o.contentHash());
         assertEquals("10000000-0000-4000-8000-000000000001",o.externalId());
         assertEquals("FORMULARIO_WEB_NNA",o.channel());
         assertEquals(Instant.parse("2026-11-04T12:00:00Z").toEpochMilli(),o.receivedMs());
         assertEquals("FORM_FIXTURE_PUBLIC",o.custodyKeyId());
-        ExternalOriginal.parse(fixture("1.0"));
+        ExternalOriginal.parse(fixture("1.0"),trust());
         var tampered=fixture("1.1").replace("Relato sintetico completo","Relato alterado");
-        assertEquals(400,assertThrows(Problem.class,()->ExternalOriginal.parse(tampered)).status);
+        rejected(tampered,trust(),"huellas");
         var duplicated=fixture("1.1").replaceFirst("\\{","{\"sha256\":\"x\",");
-        assertEquals(400,assertThrows(Problem.class,()->ExternalOriginal.parse(duplicated)).status);
+        rejected(duplicated,trust(),"contrato");
+        // Ningun campo fuera de lo cubierto por el sello.
+        rejected(fixture("1.1").replaceFirst("\\{","{\"nota\":\"sin firma\","),trust(),"contrato");
+        rejected(custody(fixture("1.1"),"clavePublica","no se usa"),trust(),"contrato");
+    }
+
+    @Test void selloDeCustodiaExigeClaveConfiableFirmaValidaYCorrespondencia()throws Exception{
+        String document=fixture("1.1");
+        // Sin claves configuradas (valor por defecto) no se acepta ningun original.
+        assertTrue(new FormularioKeys("").keys().isEmpty());
+        rejected(document,Map.of(),"clave confiable");
+        rejected(document,null,"clave confiable");
+        // keyId desconocido: el documento no puede elegir otra clave ni aportar la suya.
+        rejected(custody(document,"keyId","OTRA_CLAVE"),trust(),"clave confiable");
+        // Mismo keyId asociado por el operador a otra clave: la firma no verifica.
+        var other=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        rejected(document,Map.of("FORM_FIXTURE_PUBLIC",other.getPublic()),"firma");
+        // Firma alterada o ilegible.
+        String firma=JSON.readTree(document).path("custodia").path("firma").asString();
+        rejected(custody(document,"firma",(firma.charAt(0)=='A'?"B":"A")+firma.substring(1)),trust(),"firma");
+        rejected(custody(document,"firma","%%%"),trust(),"firma");
+        // Sello autentico de otro documento (1.0, mismo id): firma valida, huellas distintas.
+        String foreign=JSON.readTree(fixture("1.0")).path("custodia").toString();
+        var swapped=(ObjectNode)JSON.readTree(document);swapped.set("custodia",JSON.readTree(foreign));
+        rejected(swapped.toString(),trust(),"no corresponde a este documento");
+
+        // Sellos correctamente firmados con una clave confiable pero cuyo contenido no corresponde.
+        var pair=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var lab=Map.of("PRUEBA",pair.getPublic());
+        assertEquals("PRUEBA",ExternalOriginal.parse(reseal(document,pair,p->p),lab).custodyKeyId());
+        rejected(reseal(document,pair,p->p.replace("2026-11-04T12:00:00Z","2026-11-04T12:00:01Z")),lab,"no corresponde");
+        rejected(reseal(document,pair,p->p.replace("10000000-0000-4000-8000-000000000001","10000000-0000-4000-8000-000000000002")),lab,"no corresponde");
+        rejected(reseal(document,pair,p->p.replace("NNA_LAB_1","NNA_LAB_2")),lab,"no corresponde");
+        rejected(reseal(document,pair,p->p.replace("FORMULARIO_PUBLICO_DDN","OTRO_EMISOR")),lab,"no corresponde");
+        rejected(reseal(document,pair,p->p.replace("CUSTODIA_PUBLICA","OTRA")),lab,"no corresponde");
+        rejected(reseal(document,pair,p->p.replace("4fd1dd38","4fd1dd39")),lab,"no corresponde");
+        rejected(reseal(document,pair,p->p.replace("}",",\"extra\":\"x\"}")),lab,"no corresponde");
+        rejected(reseal(document,pair,p->p.replace(",",", ")),lab,"no corresponde");
+
+        // Un archivo de claves configurado pero invalido detiene el arranque (no degrada a sin verificacion).
+        assertThrows(IllegalStateException.class,()->new FormularioKeys("src/test/resources/smr/no-existe.json"));
+        assertThrows(IllegalStateException.class,()->new FormularioKeys("src/test/resources/smr/entrega-sintetica-1.1.json"));
     }
 
     long staff(String username,long scope){return db.insert("INSERT INTO staff(username,name,password_hash,home_scope,must_change) VALUES(?,?,'test-non-login',?,FALSE)",username,username,scope);}
@@ -68,6 +133,13 @@ class ExternalOriginalTest {
         rejectedAsCommand("amplio.ext",scope,document);
         assertEquals(0,db.count("SELECT COUNT(*) FROM audit_event WHERE action='COM_ORIGINAL_CONSERVADO'"));
 
+        // Sin sello autentico no se crea COM ni original ni auditoria.
+        long comsBefore=db.count("SELECT COUNT(*) FROM communication");
+        assertEquals(400,assertThrows(Problem.class,()->flow.conserveExternal("registro.ext",scope,custody(document,"keyId","OTRA_CLAVE"))).status);
+        assertEquals(comsBefore,db.count("SELECT COUNT(*) FROM communication"));
+        assertEquals(0,db.count("SELECT COUNT(*) FROM communication_original"));
+        assertEquals(0,db.count("SELECT COUNT(*) FROM audit_event WHERE action='COM_ORIGINAL_CONSERVADO'"));
+
         // Persistencia interna (futuro receptor tecnico autorizado).
         long com=flow.conserveExternal("registro.ext",scope,document).id();
 
@@ -94,6 +166,10 @@ class ExternalOriginalTest {
         assertEquals(com,flow.conserveExternal("registro.ext",scope,compact).id());
         assertEquals(document,s(db.one("SELECT document FROM communication_original WHERE communication_id=?",com),"document"));
         assertEquals(1,db.count("SELECT COUNT(*) FROM audit_event WHERE action='COM_ORIGINAL_CONSERVADO' AND resource_id=?",com));
+        // Reenvio del mismo original con la firma alterada: se rechaza antes de la idempotencia, no devuelve la COM.
+        String firma=JSON.readTree(document).path("custodia").path("firma").asString();
+        String forged=custody(document,"firma",(firma.charAt(0)=='A'?"B":"A")+firma.substring(1));
+        assertEquals(400,assertThrows(Problem.class,()->flow.conserveExternal("registro.ext",scope,forged)).status);
         // Mismo identificador de origen con otro contenido: conflicto, sin nada nuevo.
         long before=db.count("SELECT COUNT(*) FROM communication");
         assertEquals(409,assertThrows(Problem.class,()->flow.conserveExternal("registro.ext",scope,fixture("1.0"))).status);

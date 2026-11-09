@@ -76,7 +76,8 @@ public class Workflow {
      * No es un comando: no figura en run(), por lo que /api/commands lo rechaza como desconocido para
      * cualquier sesion funcionaria, sin importar sus funciones. Queda reservada al futuro receptor tecnico
      * autorizado, que sera responsable de autenticar la fuente. Misma transaccion y lock global que run().
-     * Comprobar las huellas no acredita autenticidad: la firma Ed25519 de custodia aun no se verifica.
+     * Antes de escribir se verifican huellas y sello Ed25519 de custodia con las claves confiables del
+     * operador (FormularioKeys); sin claves configuradas, todo original se rechaza.
      */
     @Transactional
     public Result conserveExternal(String username,long scope,String document){
