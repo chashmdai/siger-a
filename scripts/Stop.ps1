@@ -1,7 +1,7 @@
 ﻿[CmdletBinding(SupportsShouldProcess=$true)]
 param([string]$Root='D:\SIGER-A',[switch]$AlsoMySql,[int]$WaitSeconds=180)
 . (Join-Path $PSScriptRoot 'Common.ps1')
-$s=Read-Settings $Root;$pidfile=Join-Path $Root 'runpp.pid'
+$s=Read-Settings $Root;$pidfile=Join-Path $Root 'run\app.pid'
 $services=Get-SigerServices $s
 if($services){
     # Servicio: el host pide la parada ordenada (run\stop.request) y espera a que terminen los ciclos en curso.

@@ -21,14 +21,16 @@ final class MailWorker {
     private final long intervalMs;private final int batch;private final long stopWaitMs;
     private final ScheduledExecutorService executor=Executors.newSingleThreadScheduledExecutor(r->{var t=new Thread(r,"siger-correo");t.setDaemon(true);return t;});
     private volatile boolean stopping;private int failures;private String lastState="";
+    /** Cota de un ciclo (lote de hasta 10 envios, cada uno con token y sendMail de 40 s como maximo): pasado el plazo el latido vence. */
+    static final long MAX_CYCLE_MS=900_000L;
 
     MailWorker(MailOutbox outbox,GraphMail graph,Integrations integrations,long intervalMs,int batch,long stopWaitMs){
-        if(intervalMs<1_000||batch<1||batch>50)throw new IllegalStateException("Intervalo o lote del correo fuera de rango.");
+        if(intervalMs<1_000||batch<1||batch>10)throw new IllegalStateException("Intervalo o lote del correo fuera de rango.");
         this.outbox=outbox;this.graph=graph;this.integrations=integrations;this.intervalMs=intervalMs;this.batch=batch;this.stopWaitMs=stopWaitMs;
     }
 
     void start(){
-        integrations.state(Integrations.CORREO,"INICIANDO",null);
+        integrations.state(Integrations.CORREO,"INICIANDO",null,System.currentTimeMillis()+MAX_CYCLE_MS);
         LOG.info("Envio de correo Graph iniciado (cada {} ms, lote {}).",intervalMs,batch);
         executor.schedule(this::loop,0,TimeUnit.MILLISECONDS);
     }
@@ -42,6 +44,7 @@ final class MailWorker {
     /** Un ciclo y la espera siguiente en milisegundos. Visible para pruebas dirigidas. */
     long tick(){
         String name=Integrations.CORREO;
+        integrations.started(name,System.currentTimeMillis()+MAX_CYCLE_MS);
         try{
             if(integrations.paused(name)){integrations.record(name,"PAUSADO",null,true,0,null,System.currentTimeMillis()+intervalMs);changed("PAUSADO");return intervalMs;}
             int recovered=outbox.recover();
@@ -78,7 +81,7 @@ final class MailWorker {
         stopping=true;executor.shutdown();
         try{if(!executor.awaitTermination(stopWaitMs,TimeUnit.MILLISECONDS)){executor.shutdownNow();executor.awaitTermination(5,TimeUnit.SECONDS);}}
         catch(InterruptedException e){Thread.currentThread().interrupt();executor.shutdownNow();}
-        integrations.state(Integrations.CORREO,"DETENIDO",null);
+        integrations.state(Integrations.CORREO,"DETENIDO",null,null);
         LOG.info("Envio de correo Graph detenido.");
     }
 

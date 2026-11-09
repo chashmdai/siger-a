@@ -1,76 +1,36 @@
 # SIGER - fuente 0.4.0
 
-Monolito institucional: Java 25 / Spring Boot 4.1.1, React 19 / TypeScript y base propia H2 local o MySQL independiente. Fase A manual y sintetica; SMR/PULL/ACK es fase B, todavia no integrado. El frontend se empaqueta dentro del JAR.
+SIGER (Defensoria de la Ninez) gestiona Comunicaciones, Solicitudes, Requerimientos y Casos. Es un monolito Java 25 / Spring Boot 4.1.1 con frontend React 19 / TypeScript empaquetado en el mismo JAR, base MySQL 8.4 propia en la VM y H2 para desarrollo y pruebas. Antes se llamaba SIGER A; los nombres internos (`siger-a.jar`, esquema `siger_a_*`, `D:\SIGER-A`) se conservan por compatibilidad.
 
 ## Estado real
 
-**Candidata de codigo fuente, no version productiva ni JAR compilado en el entorno de preparacion.** Se ejecutaron comprobaciones auxiliares de codigo, tipos, SQL y dominio; no se dispuso de JDK25, Maven/dependencias, React/Vite instalados ni PowerShell Windows. No se ejecutaron aqui los 12 metodos JUnit del proyecto, Flyway H2/MySQL nativos ni el flujo integrado en navegador. Ver `docs/VERIFICACION.md`.
+- Codigo compilado y probado en el PC de preparacion (Windows Server 2022): 71 pruebas JUnit en 19 clases, incluida una prueba de integracion sobre un MySQL 8.4.3 aislado y desechable (`MySql84IntegrationTest`, solo con `-Dsiger.mysql.base=...`; V1-V10, ciclo PULL/ACK con productor sintetico, outbox con Graph falso, inicializacion institucional), y el JAR real con el perfil `mysql` (TLS VERIFY_CA): migracion, salud y parada ordenada.
+- **No es una puesta en produccion acreditada.** No se han ejecutado aun en la VM: la instalacion institucional, el registro de servicios, un PULL real con el Formulario, un envio real por Graph ni el analisis antivirus con el motor institucional.
+- Integraciones existentes e **inactivas hasta configurarlas**: consumidor PULL/ACK del Formulario Publico (manual o automatico), correo institucional por Microsoft Graph con outbox, servicio permanente de Windows y analisis antivirus para liberar originales.
 
-La 0.4.0 amplifica primera atencion sin reproducir literalmente los HTML conceptuales ni convertirlos en normas. Respeta las decisiones mas recientes del responsable del proyecto.
+## Modos de instalacion
 
-## Primer build o actualizacion en tu PC
+- **Institucional** (`Init-Server.ps1 -Mode Institucional`): sin cuentas, sedes ni datos de prueba. Crea solo los ambitos reales del archivo de estructura inicial, una cuenta TI y una autoridad habilitante; el resto se registra por la interfaz con autoria y fundamento. Se inicializa y opera con una cuenta de servicio de Windows **sin privilegios administrativos**; un administrador solo registra los servicios.
+- **Pruebas** (`-Mode Pruebas`): datos sinteticos, etiqueta visible "Entorno de pruebas" y liberacion manual de archivos de prueba.
 
-Extraer en una carpeta fuera de OneDrive y del proyecto anterior de SIGER. La raiz contiene `mvnw.cmd`, `backend`, `frontend`, `scripts`.
+## Desarrollo en el PC
 
-Si ya tienes `.tools` de la 0.3.1, **conservala**, junto con `frontend/package-lock.json`, `frontend/node_modules`, `.git` y toda `var/`. No hace falta descargar herramientas otra vez.
-
-Solo para preparar herramientas que falten (internet, sin instalacion global):
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Get-Tools.ps1
-```
-
-Compilar y generar paquete con Java portable:
+Herramientas portables en `.tools/` (sin instalacion global; `scripts\Get-Tools.ps1` si faltan):
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -IncludeJava
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -IncludeJava   # build con pruebas y paquete release\SIGER-<fecha>.zip
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-Local.ps1           # local con H2 y datos sinteticos
 ```
 
-El build comprueba la sintaxis de los scripts y los hashes .NET, prepara React, ejecuta Maven `clean verify` y empaqueta solo si termina sin errores. En un primer build resuelve `package-lock.json` y lo conserva para Git. No se entrega un lockfile inventado. Puedes indicar `-JavaHome` y `-NodeHome` si usas tus propias carpetas portables. No cambia PATH/JAVA_HOME persistentes.
+Conservar `.tools`, `var/`, `frontend/package-lock.json` y `frontend/node_modules`. No compartir `var/bootstrap-usuarios.csv`, bases, originales ni configuracion privada.
 
-Arranque local, **solo despues de build correcto**:
+## Instalacion en la VM
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-Local.ps1
-```
+`docs/INSTALACION_VM.md`: cuentas e identidades, inicializacion institucional, servicios Windows, integraciones, antivirus, monitoreo de latidos, pruebas de arranque/parada/recuperacion y sustitucion del consumidor de SMR. No se tocan Java 8, MySQL80, Tomcat, SQL Server, SMR ni el firewall existentes.
 
-Navegador: `http://localhost:18543`. Java25 propio y H2 persistente bajo `var/local-db`; no necesita MySQL local. Claves iniciales privadas en `var/bootstrap-usuarios.csv`. Las claves existentes no cambian. No compartir esos CSV, bases, originales ni configuraciones privadas.
+## Documentos
 
-## Cambios principales 0.4.0
-
-- **Nueva atencion ciudadana**: COM + REQ desde el primer registro, abiertos y sin SOL/Caso automaticos. Motivo breve, canal, fecha y ambito; datos personales, RUN, NNA, judiciales y entrevista no obligatorios.
-- Una ficha compartida general/NNA, por secciones, editable durante primera atencion. Versiones con autoria/motivo; no modifica la COM original. Diferencia relato, observacion, acciones y compromisos. Asentimiento negativo o desconocido no bloquea el ingreso.
-- Entrega directa a profesional habilitado o a autoridad receptora, con aceptar/devolver/retirar. El encargado de origen permanece hasta la recepcion. **No transfiere la jefatura principal ni crea un Caso.**
-- Resolucion inmediata por quien atiende o jefatura competente, con resultado y fecha reales, sin SOL/Caso. Si hay seguimiento, la jefatura abre un Caso en el mismo REQ.
-- Bandejas de atenciones a cargo, entregas entrantes/salientes, iniciadas por mi y seguimiento por asignar. Contadores limitados al alcance autorizado.
-- Adjuntos originales preparados al ingresar o incorporados durante primera atencion editable; separados de documentos de gestion, siempre en cuarentena.
-- Registro externo por clasificar sigue COM -> SOL -> REQ. No convierte automaticamente ingresos antiguos.
-- V5 aditiva. V1/V2/V3/V4 identicas a la 0.3.1.
-
-## Errores de build contemplados
-
-- Hash SHA-256/SHA-512 con .NET (`scripts/Hash.ps1`), sin depender de `Get-FileHash`.
-- Ninguna asignacion a `$HOME`: Java usa `$JavaDirectory`; Maven `$mavenHome`.
-- `package-lock.json` se lee con `JSON.parse` de Node. Evita claves vacias/case-sensitive y no exige `ConvertFrom-Json -AsHashtable` de PowerShell6+.
-- `Db.dataSource()` publico y unico, llamado por Bootstrap; JdbcTemplate privado, no acceso directo al campo de un proxy.
-- `cas.longValue()` solo tras comprobar `cas != null`; `UserDetails` sin `Serializable` redundante.
-
-## VM posterior
-
-Ver `docs/INSTALACION_VM.md`. Destino propuesto `D:\SIGER-A`, Java25 portable, MySQL propio en 13326 y HTTPS18543 candidatos, solo loopback inicialmente. No instalar Node/Maven en VM. No tocar Java8, MySQL80, Tomcat, SQLServer, SMR ni firewall. Los scripts nativos requieren validacion guiada y permisos, no autorizan operar por haber generado este ZIP.
-
-## Lo que no se declara terminado
-
-Sin SMR, Graph/correo/SMS, antivirus o visor seguro, politicas completas de reserva excepcional, plazos normativos 48h, migracion del SIGER historico ni puesta en produccion. Solo datos sinteticos. No se atribuye firma externa a una version documental.
-
-Al abrir un Caso se conserva la ficha inicial y la gestion continua en actuaciones del Caso; no hay edicion libre de una ficha cerrada ni de los originales. Completar tareas no genera actuaciones. Los compromisos escritos no crean tareas por su cuenta.
-
-## Documentos utiles
-
-- `docs/ACTUALIZACION_0_4_0.md`: aplicar fuente sin perder datos.
-- `docs/PRUEBAS_MANUALES_0_4_0.md`: seis recorridos focales de primera atencion.
-- `docs/DECISIONES_FUNCIONALES.md`: reglas vigentes y limites de esta entrega.
-- `docs/ALCANCE_Y_PENDIENTES.md`: lo incluido frente a lo pendiente.
-- `docs/VERIFICACION.md`: evidencia exacta y pruebas que quedan para el PC/VM.
-
-No se modifico ningun repositorio remoto ni servidor para generar esta entrega.
+- `docs/INSTALACION_VM.md`: instalacion y operacion.
+- `docs/DECISIONES_FUNCIONALES.md`: reglas de dominio vigentes.
+- `docs/ALCANCE_Y_PENDIENTES.md`: alcance funcional y pendientes.
+- `docs/PRUEBAS_MANUALES_0_4_0.md` y `docs/VERIFICACION.md`: recorridos y evidencia de versiones anteriores.

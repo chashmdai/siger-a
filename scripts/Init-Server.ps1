@@ -1,9 +1,20 @@
 ﻿[CmdletBinding(SupportsShouldProcess=$true)]
-param([string]$Root='D:\SIGER-A',[Parameter(Mandatory=$true)][string]$Release,[Parameter(Mandatory=$true)][string]$MySqlHome,[string]$JavaHome,[int]$MySqlPort=13326,[int]$WebPort=18543)
+param([string]$Root='D:\SIGER-A',[Parameter(Mandatory=$true)][string]$Release,[Parameter(Mandatory=$true)][string]$MySqlHome,[string]$JavaHome,[int]$MySqlPort=13326,[int]$WebPort=18543,
+    # Institucional: sin cuentas, sedes ni datos de prueba; requiere -EstructuraInicial y se ejecuta como la cuenta de
+    # servicio SIN privilegios administrativos (sera la duena de DPAPI). Pruebas: datos sinteticos como hasta ahora.
+    [Parameter(Mandatory=$true)][ValidateSet('Institucional','Pruebas')][string]$Mode,
+    [string]$EstructuraInicial='')
 . (Join-Path $PSScriptRoot 'Common.ps1')
 $Root=[IO.Path]::GetFullPath($Root).TrimEnd('\');$Release=(Resolve-Path $Release).Path;$MySqlHome=(Resolve-Path $MySqlHome).Path
 if($Root -notmatch '^[D-Z]:\\[^\r\n]+$'){throw 'Usa una carpeta nueva de D: u otra unidad de datos; no C: ni la raiz del disco.'}
-if(Test-Path $Root){throw 'La raiz ya existe. No se inicializa encima de datos ni se borra nada.'}
+# La raiz no existe, o TI la creo vacia para la cuenta de servicio (que debe poder escribirla).
+if(Test-Path $Root){if(@(Get-ChildItem -LiteralPath $Root -Force).Count -gt 0){throw 'La raiz ya existe y no esta vacia. No se inicializa encima de datos ni se borra nada.'}}
+$me=[Security.Principal.WindowsIdentity]::GetCurrent()
+if($Mode -eq 'Institucional'){
+    $groups=(& "$env:SystemRoot\System32\whoami.exe" /groups /fo csv /nh) -join "`n"
+    if($groups -match 'S-1-5-32-544'){throw 'La instancia institucional se inicializa COMO la cuenta de servicio de SIGER, sin privilegios administrativos (runas /user:<cuenta>). Esa cuenta sera la duena de la custodia DPAPI.'}
+    if(-not $EstructuraInicial -or -not(Test-Path -LiteralPath $EstructuraInicial -PathType Leaf)){throw 'El modo Institucional exige -EstructuraInicial con el archivo de ambitos reales, TI y autoridad habilitante (ver docs\INSTALACION_VM.md).'}
+}elseif($EstructuraInicial){throw '-EstructuraInicial solo corresponde al modo Institucional.'}
 if($MySqlPort -lt 1024 -or $WebPort -lt 1024 -or $MySqlPort -eq $WebPort -or $MySqlPort -in @(3306,33060,1433,13316) -or $WebPort -in @(80,443,8080,3389)){throw 'Elige puertos propios no reservados para servicios existentes.'}
 Free-Port $MySqlPort;Free-Port $WebPort
 $jar=Join-Path $Release 'app\siger-a.jar';$manifest=Get-Content (Join-Path $Release 'manifest.json') -Raw | ConvertFrom-Json
@@ -14,7 +25,10 @@ $mysql=Join-Path $MySqlHome 'bin\mysqld.exe';$mysqlClient=Join-Path $MySqlHome '
 if(-not(Test-Path $mysql) -or -not(Test-Path $mysqlClient)){throw 'MySqlHome debe contener una distribucion ZIP completa.'}
 $mysqlVersion=(& $mysql --version | Out-String)
 if($LASTEXITCODE -ne 0 -or $mysqlVersion -notmatch 'Ver 8\.(0|4)\.'){throw 'Se requiere MySQL 8.0/8.4 x64. Revisa tambien el runtime Visual C++ instalado.'}
-if(-not $PSCmdlet.ShouldProcess($Root,'Crear instancia aislada SIGER, MySQL propio y usuarios sinteticos')){return}
+$what=if($Mode -eq 'Institucional'){'Crear instancia institucional SIGER (sin datos de prueba) y MySQL propio'}else{'Crear instancia de pruebas SIGER, MySQL propio y usuarios sinteticos'}
+if(-not $PSCmdlet.ShouldProcess($Root,$what)){return}
+# Esquema propio por modo (siger_a_* exigido por MigrationGuard); el nombre interno no cambia el producto visible.
+$schema=if($Mode -eq 'Institucional'){'siger_a_inst'}else{'siger_a_lab'}
 Private-Directory $Root
 foreach($d in @('config','data','data\documents','data\tmp','logs','tmp','run','mysql','mysql\data','mysql\tmp','releases')){New-Item -ItemType Directory -Force -Path (Join-Path $Root $d)|Out-Null}
 $tag='initial-'+(Get-Date -Format 'yyyyMMdd-HHmmss');$installed=Join-Path $Root "releases\$tag"
@@ -29,9 +43,9 @@ $ini=Join-Path $Root 'mysql\my.ini';$data=(Join-Path $Root 'mysql\data').Replace
 & $mysql "--defaults-file=$ini" --initialize-insecure
 if($LASTEXITCODE -ne 0){throw 'MySQL no se inicializo. Revisa el log privado; no repitas sobre el datadir creado.'}
 $init=Join-Path $Root 'tmp\init-users.sql'
-$sql=@("ALTER USER 'root'@'localhost' IDENTIFIED BY '$owner';","CREATE USER 'siger_a_owner'@'127.0.0.1' IDENTIFIED BY '$owner';","GRANT ALL PRIVILEGES ON *.* TO 'siger_a_owner'@'127.0.0.1' WITH GRANT OPTION;","CREATE DATABASE siger_a_lab CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;","CREATE USER 'siger_a_app'@'127.0.0.1' IDENTIFIED BY '$app';","GRANT SELECT,INSERT,UPDATE,DELETE ON siger_a_lab.* TO 'siger_a_app'@'127.0.0.1';","CREATE USER 'siger_a_migrator'@'127.0.0.1' IDENTIFIED BY '$migrator';","GRANT ALL PRIVILEGES ON siger_a_lab.* TO 'siger_a_migrator'@'127.0.0.1';","CREATE USER 'siger_a_backup'@'127.0.0.1' IDENTIFIED BY '$backup';","GRANT SELECT,SHOW VIEW,TRIGGER,EVENT ON siger_a_lab.* TO 'siger_a_backup'@'127.0.0.1';")
+$sql=@("ALTER USER 'root'@'localhost' IDENTIFIED BY '$owner';","CREATE USER 'siger_a_owner'@'127.0.0.1' IDENTIFIED BY '$owner';","GRANT ALL PRIVILEGES ON *.* TO 'siger_a_owner'@'127.0.0.1' WITH GRANT OPTION;","CREATE DATABASE $schema CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;","CREATE USER 'siger_a_app'@'127.0.0.1' IDENTIFIED BY '$app';","GRANT SELECT,INSERT,UPDATE,DELETE ON $schema.* TO 'siger_a_app'@'127.0.0.1';","CREATE USER 'siger_a_migrator'@'127.0.0.1' IDENTIFIED BY '$migrator';","GRANT ALL PRIVILEGES ON $schema.* TO 'siger_a_migrator'@'127.0.0.1';","CREATE USER 'siger_a_backup'@'127.0.0.1' IDENTIFIED BY '$backup';","GRANT SELECT,SHOW VIEW,TRIGGER,EVENT ON $schema.* TO 'siger_a_backup'@'127.0.0.1';")
 [IO.File]::WriteAllLines($init,$sql,[Text.Encoding]::ASCII)
-$settings=[PSCustomObject]@{namespace='SIGER-A-2026';root=$Root;mysqlHome=$MySqlHome;mysqlPort=$MySqlPort;webPort=$WebPort;javaHome=$JavaHome;activeJar=$jar;jarSha256=$manifest.jarSha256;database='siger_a_lab';createdUtc=(Get-Date).ToUniversalTime().ToString('o')}
+$settings=[PSCustomObject]@{namespace='SIGER-A-2026';root=$Root;mysqlHome=$MySqlHome;mysqlPort=$MySqlPort;webPort=$WebPort;javaHome=$JavaHome;activeJar=$jar;jarSha256=$manifest.jarSha256;database=$schema;mode=$Mode.ToUpperInvariant();ownerSid=$me.User.Value;createdUtc=(Get-Date).ToUniversalTime().ToString('o')}
 $settings | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $Root 'config\instance.json')
 $started=$null;$client=$null
 try {
@@ -52,7 +66,10 @@ try {
     if($LASTEXITCODE -ne 0){throw 'No se creo el truststore de MySQL.'}
 } finally {if(Test-Path $passFile){Remove-Item $passFile}}
 Copy-Item $PSScriptRoot (Join-Path $Root 'scripts') -Recurse
+# La estructura inicial queda en config\ (ACL privada) y la aplica la primera migracion, una sola vez.
+if($Mode -eq 'Institucional'){Copy-Item -LiteralPath $EstructuraInicial -Destination (Join-Path $Root 'config\estructura-inicial.json')}
 & (Join-Path $Root 'scripts\Migrate.ps1') -Root $Root -Initial
 if($LASTEXITCODE -and $LASTEXITCODE -ne 0){throw 'La migracion necesita revision.'}
-Write-Host "Instancia preparada en $Root. MySQL propio permanece activo. No se inicio SIGER ni se abrio firewall."
-Write-Host 'Las claves sinteticas estan en data\bootstrap-usuarios.csv. Nunca pegarlas en el chat.'
+Write-Host "Instancia $($Mode.ToLowerInvariant()) preparada en $Root. MySQL propio permanece activo. No se inicio SIGER ni se abrio firewall."
+if($Mode -eq 'Institucional'){Write-Host 'Claves temporales de la cuenta TI y de la autoridad habilitante en data\bootstrap-usuarios.csv: entregarlas por canal seguro y retirar el archivo. No hay cuentas ni datos de prueba.'}
+else{Write-Host 'Las claves sinteticas estan en data\bootstrap-usuarios.csv. Nunca pegarlas en el chat.'}

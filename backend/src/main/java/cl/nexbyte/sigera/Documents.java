@@ -17,9 +17,83 @@ import static cl.nexbyte.sigera.Problem.require;
 @Service
 public class Documents {
     final Db db; final Access access; final Path directory; final TransactionTemplate tx;
-    public Documents(Db db,Access access,PlatformTransactionManager manager,@Value("${siger.data}")String data){
+    final DocumentScanner scanner; final boolean syntheticRelease; final long releaseWindowMs;
+    public Documents(Db db,Access access,PlatformTransactionManager manager,@Value("${siger.data}")String data,DocumentScanner scanner,
+                     @Value("${siger.documents.synthetic-release:false}")boolean syntheticRelease,@Value("${siger.documents.av.release-window-ms:3600000}")long releaseWindowMs){
         this.db=db;this.access=access;tx=new TransactionTemplate(manager);
         directory=Path.of(data).toAbsolutePath().normalize().resolve("documents");
+        this.scanner=scanner;this.syntheticRelease=syntheticRelease;this.releaseWindowMs=releaseWindowMs;
+    }
+
+    // --- Liberacion segura de originales ------------------------------------------------------------
+    /** Politica visible para TI: motor configurado y si la instancia admite la liberacion manual de pruebas. */
+    Map<String,Object> releasePolicy(){return Map.of("engine",scanner.engine(),"synthetic_release",syntheticRelease,"release_window_ms",releaseWindowMs);}
+
+    /** SHA-256 completo del original custodiado; null si falta, es un enlace o su tamano no coincide. */
+    private String storedHash(String key,long size){
+        try{
+            Path p=path(key);if(!Files.isRegularFile(p,LinkOption.NOFOLLOW_LINKS)||Files.size(p)!=size)return null;
+            var hash=MessageDigest.getInstance("SHA-256");
+            try(var in=Files.newInputStream(p)){byte[] block=new byte[65536];int count;while((count=in.read(block))!=-1)hash.update(block,0,count);}
+            return HexFormat.of().formatHex(hash.digest());
+        }catch(IOException|GeneralSecurityException|RuntimeException e){return null;}
+    }
+
+    /**
+     * Analisis antivirus de un original en cuarentena (solo TI, sin acceso al contenido). Corre fuera del lock global;
+     * verifica el SHA-256 custodiado antes y despues del analisis y registra la evidencia en document_scan. No libera.
+     */
+    public Map<String,Object> scan(String username,long id){
+        Actor a=active(username);if(!a.role("TI"))Problem.denied();
+        var d=db.one("SELECT id,storage_key,sha256,size_bytes,quarantined FROM document_item WHERE id=?",id);
+        require(b(d,"quarantined"),"El documento no esta en cuarentena.");
+        require(scanner.configured(),"No hay un motor antivirus configurado; los originales permanecen en cuarentena.");
+        long started=System.currentTimeMillis();String expected=s(d,"sha256");
+        DocumentScanner.Verdict v;
+        if(!expected.equals(storedHash(s(d,"storage_key"),n(d,"size_bytes"))))v=new DocumentScanner.Verdict("ERROR",null,scanner.engine(),null,"INTEGRIDAD_PREVIA_FALLIDA");
+        else{
+            v=scanner.scan(path(s(d,"storage_key")),directory.getParent().resolve("tmp").resolve("av-"+UUID.randomUUID()));
+            // El motor o la proteccion en tiempo real pudieron alterar o retirar el archivo: el veredicto no vale.
+            if(!expected.equals(storedHash(s(d,"storage_key"),n(d,"size_bytes")))&&!v.verdict().equals("INFECTADO"))
+                v=new DocumentScanner.Verdict("ERROR",v.exitCode(),v.engine(),v.engineVersion(),"INTEGRIDAD_POSTERIOR_FALLIDA");
+        }
+        var verdict=v;long finished=System.currentTimeMillis();
+        long scan=Objects.requireNonNull(tx.execute(st->{
+            long row=db.insert("INSERT INTO document_scan(document_id,sha256,engine,engine_version,verdict,exit_code,detail,requested_by,started_ms,finished_ms) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                id,expected,verdict.engine(),verdict.engineVersion(),verdict.verdict(),verdict.exitCode(),verdict.detail(),a.id(),started,finished);
+            db.audit(a.id(),verdict.verdict().equals("INFECTADO")?"DOCUMENTO_INFECTADO_DETECTADO":"DOCUMENTO_ANALIZADO","DOCUMENTO",id,null,
+                "Analisis #"+row+" "+verdict.engine()+" "+verdict.verdict()+(verdict.detail()==null?"":" ("+verdict.detail()+")"));
+            return row;
+        }));
+        var out=new LinkedHashMap<String,Object>();out.put("scan",scan);out.put("verdict",verdict.verdict());out.put("detail",verdict.detail());out.put("engine",verdict.engine());
+        return out;
+    }
+
+    /**
+     * DOC_RELEASE (TI, dentro de la transaccion de Workflow). Un original real solo sale de cuarentena si su ultimo
+     * analisis es LIMPIO, reciente, de los mismos bytes, nunca hubo un analisis INFECTADO y el archivo vuelve a
+     * coincidir con su SHA-256 ahora. La liberacion manual sin motor existe solo en instancias de pruebas.
+     */
+    Workflow.Result release(Actor a,long id,Input in){
+        if(!a.role("TI"))Problem.denied();
+        var d=db.one("SELECT id,storage_key,sha256,size_bytes,quarantined FROM document_item WHERE id=?",id);
+        require(b(d,"quarantined"),"El documento ya no esta en cuarentena.");
+        if(syntheticRelease&&in.flag("synthetic_review")){
+            db.update("UPDATE document_item SET quarantined=FALSE WHERE id=?",id);
+            db.audit(a.id(),"LIBERACION_MANUAL_SINTETICA","DOCUMENTO",id,null,in.reason());return Workflow.done("DOCUMENTO",id);
+        }
+        require(scanner.configured(),"No hay un motor antivirus configurado. Un original real no se libera sin un analisis confiable.");
+        require(db.count("SELECT COUNT(*) FROM document_scan WHERE document_id=? AND verdict='INFECTADO'",id)==0,"El original tuvo un analisis con deteccion; permanece en cuarentena.");
+        var scans=db.rows("SELECT * FROM document_scan WHERE document_id=? ORDER BY id DESC LIMIT 1",id);
+        require(!scans.isEmpty(),"Analiza el original antes de liberarlo.");
+        var last=scans.getFirst();
+        require(s(last,"verdict").equals("LIMPIO"),"El ultimo analisis no fue limpio; vuelve a analizar.");
+        require(s(last,"sha256").equals(s(d,"sha256"))&&s(last,"engine").equals(scanner.engine()),"El analisis no corresponde a este original o al motor vigente.");
+        require(System.currentTimeMillis()-n(last,"finished_ms")<=releaseWindowMs,"El analisis ya no es reciente; vuelve a analizar.");
+        require(s(d,"sha256").equals(storedHash(s(d,"storage_key"),n(d,"size_bytes"))),"El original no supera la comprobacion de integridad; permanece en cuarentena.");
+        db.update("UPDATE document_item SET quarantined=FALSE WHERE id=? AND quarantined=TRUE",id);
+        db.audit(a.id(),"LIBERACION_TRAS_ANALISIS","DOCUMENTO",id,null,"Analisis #"+n(last,"id")+" "+s(last,"engine")+" "+s(last,"engine_version")+". "+in.reason());
+        return Workflow.done("DOCUMENTO",id);
     }
     private record Stored(String name,String key,String hash,long size,Path path) { }
     private Stored conserve(MultipartFile upload)throws Exception{

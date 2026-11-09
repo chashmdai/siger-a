@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>4.1.1</version><relativePath/></parent>
   <groupId>cl.nexbyte</groupId><artifactId>siger-a</artifactId><version>0.4.0</version>
-  <name>SIGER A</name><description>Monolito institucional reconstruido. Fase A, sin SMR.</description>
+  <name>SIGER</name><description>SIGER, Defensoria de la Ninez: Comunicaciones, Solicitudes, Requerimientos y Casos.</description>
   <properties><java.version>25</java.version><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
   <dependencies>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-webmvc</artifactId></dependency>

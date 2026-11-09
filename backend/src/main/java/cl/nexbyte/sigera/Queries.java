@@ -10,7 +10,8 @@ import static cl.nexbyte.sigera.Db.*;
 public class Queries {
     final Db db;final Access access;final Attention attention;
     private final Integrations integrations;
-    public Queries(Db db,Access access,Attention attention,Integrations integrations){this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;}
+    private final Documents documents;
+    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents){this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;}
     public Map<String,Object> workspace(Actor a){
         // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales.
         var notices=db.rows("SELECT * FROM inbox_notice WHERE user_id=? ORDER BY id DESC LIMIT 20",a.id());
@@ -176,7 +177,11 @@ public class Queries {
         result.put("grants",authority?db.rows("SELECT id,user_id,role_code,scope_id,valid_from,valid_until,revoked_at,basis FROM role_assignment ORDER BY id").stream().filter(g->g.get("scope_id")==null?s(g,"role_code").equals("DISTRIBUIDOR"):a.authority(n(g,"scope_id"))).toList():List.of());
         // Operacion de integraciones para TI: estado, pausa y contadores agregados; sin documentos ni contenidos.
         result.put("integrations",ti?integrations.overview():Map.of());
-        result.put("quarantine",ti?db.rows("SELECT id,size_bytes,sha256,created_ms,quarantined FROM document_item WHERE quarantined=TRUE ORDER BY id"):List.of());
+        // Cuarentena: identificador, tamano, huella y ultimo analisis; nunca nombre ni contenido del original.
+        result.put("quarantine",ti?db.rows("SELECT d.id,d.size_bytes,d.sha256,d.created_ms,d.quarantined,s.verdict AS scan_verdict,s.detail AS scan_detail,s.engine AS scan_engine,s.finished_ms AS scan_ms,"
+            +"(SELECT COUNT(*) FROM document_scan x WHERE x.document_id=d.id AND x.verdict='INFECTADO') AS detections FROM document_item d "
+            +"LEFT JOIN document_scan s ON s.id=(SELECT MAX(y.id) FROM document_scan y WHERE y.document_id=d.id) WHERE d.quarantined=TRUE ORDER BY d.id"):List.of());
+        result.put("document_policy",ti?documents.releasePolicy():Map.of());
         result.put("audit",db.rows("SELECT e.*,u.name AS actor FROM audit_event e JOIN staff u ON u.id=e.actor_id WHERE e.scope_id IN ("+BoardQueries.ids(BoardQueries.grants(a,"AUDITORIA"))+")"+(ti?" OR e.resource_type IN ('USUARIO','SISTEMA','AMBITO')":"")+" ORDER BY e.id DESC LIMIT 300"));
         return result;
     }

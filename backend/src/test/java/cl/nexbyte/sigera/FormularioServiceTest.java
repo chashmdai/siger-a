@@ -53,7 +53,7 @@ class FormularioServiceTest {
                 while(producer.acks.isEmpty()&&System.currentTimeMillis()<end)Thread.sleep(50);
                 assertEquals(1,producer.acks.size());
                 var health=ctx.getBean(Api.class).health().getBody();
-                assertEquals("UP",health.get("status"));assertEquals("9",health.get("schema"));
+                assertEquals("UP",health.get("status"));assertEquals("10",health.get("schema"));
                 String state=((Map<?,?>)health.get("integrations")).get("formulario").toString();
                 assertTrue(Set.of("RECIBIENDO","ESPERANDO_ENTREGAS").contains(state),state);
                 assertEquals("DESACTIVADO",((Map<?,?>)health.get("integrations")).get("correo"));

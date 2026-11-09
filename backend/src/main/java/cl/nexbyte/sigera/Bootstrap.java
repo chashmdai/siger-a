@@ -17,15 +17,19 @@ import static cl.nexbyte.sigera.Db.*;
 @Component
 public class Bootstrap implements ApplicationRunner {
     final Db db;final PasswordEncoder passwords;final TransactionTemplate tx;final ConfigurableApplicationContext ctx;
-    final Path data;final boolean seed,migrate;
+    final Path data;final boolean seed,migrate;final String institutional;
     public Bootstrap(Db db,PasswordEncoder passwords,PlatformTransactionManager manager,ConfigurableApplicationContext ctx,
-                     @Value("${siger.data}")String data,@Value("${siger.seed-demo:false}")boolean seed,@Value("${siger.migrate-only:false}")boolean migrate){
+                     @Value("${siger.data}")String data,@Value("${siger.seed-demo:false}")boolean seed,@Value("${siger.migrate-only:false}")boolean migrate,
+                     @Value("${siger.bootstrap-file:}")String institutional){
         this.db=db;this.passwords=passwords;this.tx=new TransactionTemplate(manager);this.ctx=ctx;this.data=Path.of(data).toAbsolutePath().normalize();this.seed=seed;this.migrate=migrate;
+        this.institutional=institutional.strip();
     }
     @Override public void run(ApplicationArguments args)throws Exception{
         requireDatabase();
         Files.createDirectories(data.resolve("tmp"));Files.createDirectories(data.resolve("documents"));
         if(Files.isSymbolicLink(data)||Files.isSymbolicLink(data.resolve("documents")))throw new IllegalStateException("Raiz de datos no debe ser enlace.");
+        if(seed&&!institutional.isEmpty())throw new IllegalStateException("Inicializacion institucional y datos de prueba son excluyentes.");
+        if(!institutional.isEmpty()&&db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE")==0)institutional(Path.of(institutional));
         if(seed){
             if(db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE")==0)seed();
             reconcileDemoOrganization(); // Actualiza solo cuentas sinteticas; nunca nombres de funcionarios reales.
@@ -166,6 +170,91 @@ public class Bootstrap implements ApplicationRunner {
             db.update("INSERT INTO application_marker(code,applied_ms) VALUES('DEMO_ORGANIZATION_030',?)",System.currentTimeMillis());
         });
     }
+    // --- Inicializacion institucional --------------------------------------------------------------
+    /** Codigos de unidad que reconoce el producto (SCOPE_CREATE) con su denominacion institucional. */
+    static final Map<String,String> UNITS=new LinkedHashMap<>();
+    static{
+        UNITS.put("UPR","Proteccion de Derechos y Representacion Judicial");UNITS.put("UPD","Promocion y Difusion de Derechos");
+        UNITS.put("UEP","Estudios Publicaciones y Estadisticas");UNITS.put("UGI","Gestion Institucional");UNITS.put("REG","Sedes Regionales");
+        UNITS.put("DAI","Desarrollo y Analisis Institucional");UNITS.put("GAB","Gabinete");UNITS.put("DEF","Defensoria");UNITS.put("AUD","Auditoria");
+    }
+    /**
+     * Instancia institucional vacia: sin cuentas, sedes ni datos de prueba. Desde el archivo del operador
+     * (siger.bootstrap-file) se crean solo los ambitos reales informados, una cuenta TI (administra cuentas, sin
+     * acceso a expedientes) y una autoridad habilitante (concede funciones en los ambitos indicados), ambas con clave
+     * temporal individual y cambio obligatorio. Todo lo demas se registra despues por la interfaz, con autoria y
+     * fundamento. Solo actua con la tabla de personal vacia; un archivo invalido detiene el arranque sin escribir.
+     */
+    void institutional(Path file)throws Exception{
+        if(!Files.isRegularFile(file)||Files.size(file)>262_144)throw new IllegalStateException("Archivo de inicializacion institucional ausente o demasiado grande.");
+        var reader=tools.jackson.databind.json.JsonMapper.builder(tools.jackson.core.json.JsonFactory.builder().enable(tools.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION).build()).build();
+        tools.jackson.databind.JsonNode root;
+        // Se admite la marca BOM de UTF-8 que agregan Windows PowerShell 5.1 y algunos editores.
+        String content=Files.readString(file,java.nio.charset.StandardCharsets.UTF_8);
+        if(!content.isEmpty()&&content.charAt(0)==0xFEFF)content=content.substring(1);
+        try{root=reader.readTree(content);}catch(RuntimeException e){throw new IllegalStateException("Archivo de inicializacion institucional con JSON invalido.");}
+        String basis=text(root,"fundamento",1000,true);
+        var scopes=root.path("ambitos");if(!scopes.isArray()||scopes.isEmpty()||scopes.size()>500)throw invalid("ambitos (1 a 500)");
+        var codes=new LinkedHashSet<String>();
+        for(var sc:scopes){
+            String code=text(sc,"codigo",48,true);
+            if(!code.matches("[A-Z0-9_-]{2,48}")||!codes.add(code))throw invalid("codigo de ambito "+code);
+            if(!UNITS.containsKey(text(sc,"unidad",24,true)))throw invalid("unidad del ambito "+code);
+            text(sc,"nombre",160,true);text(sc,"sede",48,true);text(sc,"area",48,false);
+        }
+        var ti=root.path("ti");var authority=root.path("autoridad");
+        String tiUser=user(ti),authorityUser=user(authority);
+        if(tiUser.equals(authorityUser))throw invalid("TI y autoridad deben ser personas distintas");
+        for(var a:List.of(ti,authority))if(!codes.contains(text(a,"ambito",48,true)))throw invalid("ambito de adscripcion de "+text(a,"usuario",64,true));
+        var granted=new LinkedHashSet<String>();
+        var list=authority.path("ambitos");if(!list.isArray()||list.isEmpty())throw invalid("ambitos de la autoridad");
+        for(var g:list){String c=g.asString("");if(c.equals("*"))granted.addAll(codes);else if(codes.contains(c))granted.add(c);else throw invalid("ambito de la autoridad "+c);}
+
+        Path credentials=data.resolve("bootstrap-usuarios.csv");
+        if(Files.exists(credentials))throw new IllegalStateException("Existe un archivo de acceso anterior; no se sobreescribe.");
+        var csv=new StringBuilder("usuario,nombre,clave_temporal\n");
+        tx.executeWithoutResult(status->{
+            db.lock();if(db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE")>0)return;
+            for(var u:UNITS.entrySet())if(db.count("SELECT COUNT(*) FROM org_unit WHERE code=?",u.getKey())==0)db.update("INSERT INTO org_unit(code,name) VALUES(?,?)",u.getKey(),u.getValue());
+            Map<String,Long> ids=new HashMap<>();
+            for(var sc:scopes){
+                String area=text(sc,"area",48,false);
+                ids.put(text(sc,"codigo",48,true),db.insert("INSERT INTO org_scope(code,name,unit_code,area_code,site_code,regional) VALUES(?,?,?,?,?,?)",
+                    text(sc,"codigo",48,true),text(sc,"nombre",160,true),text(sc,"unidad",24,true),area.isEmpty()?null:area,text(sc,"sede",48,true),sc.path("regional").asBoolean(false)));
+            }
+            long tiId=account(ti,ids,csv),authorityId=account(authority,ids,csv);
+            db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,'TI',NULL,?,?)",tiId,System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);
+            for(var c:granted)db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,'AUTORIDAD',?,?,?)",authorityId,ids.get(c),System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);
+            db.audit(tiId,"CONFIGURACION_INSTITUCIONAL_INICIAL","SISTEMA",0,null,ids.size()+" ambitos, una cuenta TI y una autoridad habilitante. "+basis);
+            db.update("INSERT INTO application_marker(code,applied_ms) VALUES('INSTITUTIONAL_BOOTSTRAP',?)",System.currentTimeMillis());
+            try{
+                Files.writeString(credentials,csv.toString(),StandardOpenOption.CREATE_NEW);
+                if(Files.getFileStore(credentials).supportsFileAttributeView("posix"))Files.setPosixFilePermissions(credentials,PosixFilePermissions.fromString("rw-------"));
+            }catch(Exception e){throw new IllegalStateException("No fue posible crear el archivo privado de accesos iniciales.");}
+        });
+    }
+    private long account(tools.jackson.databind.JsonNode a,Map<String,Long> ids,StringBuilder csv){
+        String pass=randomPassword(),username=user(a),name=text(a,"nombre",160,true),email=text(a,"correo",200,false);
+        long id=db.insert("INSERT INTO staff(username,name,email,password_hash,home_scope,must_change) VALUES(?,?,?,?,?,TRUE)",username,name,email.isEmpty()?null:email,passwords.encode(pass),ids.get(text(a,"ambito",48,true)));
+        csv.append(username).append(',').append(name.replace(',',' ')).append(',').append(pass).append('\n');
+        return id;
+    }
+    private static String user(tools.jackson.databind.JsonNode a){
+        if(!a.isObject())throw invalid("cuenta TI o autoridad");
+        String u=text(a,"usuario",64,true).toLowerCase(Locale.ROOT);
+        if(!u.matches("[a-z0-9][a-z0-9._-]{2,63}")||u.contains(":"))throw invalid("usuario "+u);
+        return u;
+    }
+    private static String text(tools.jackson.databind.JsonNode node,String key,int max,boolean required){
+        var v=node.path(key);
+        if(v.isMissingNode()||v.isNull()){if(required)throw invalid(key);return "";}
+        if(!v.isString())throw invalid(key);
+        String s=v.asString().strip();
+        if((required&&s.isEmpty())||s.length()>max||s.chars().anyMatch(Character::isISOControl))throw invalid(key);
+        return s;
+    }
+    private static IllegalStateException invalid(String what){return new IllegalStateException("Archivo de inicializacion institucional invalido: "+what+".");}
+
     private void ensureDemoGrant(long user,String role,long scope){
         if(db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code=? AND scope_id=? AND revoked_at IS NULL",user,role,scope)==0)
             grant(user,role,scope);

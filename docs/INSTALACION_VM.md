@@ -8,7 +8,7 @@ Usar solo datos sinteticos. La VM tambien aloja sistemas existentes: el aislamie
 
 ## Lo que se copia a D:
 
-1. El ZIP de release generado por `Build.ps1 -IncludeJava` y extraido, por ejemplo en `D:\Entregas\SIGER-A-<fecha>`.
+1. El ZIP de release generado por `Build.ps1 -IncludeJava` y extraido, por ejemplo en `D:\Entregas\SIGER-<fecha>`.
 2. Una distribucion **ZIP noinstall MySQL Community 8.4 Windows x64** extraida en una carpeta nueva como `D:\Herramientas\mysql-8.4`. El parametro MySqlHome debe apuntar a la carpeta que contiene `bin\mysqld.exe`, no al propio bin ni al datadir.
 3. El runtime Microsoft Visual C++ requerido por esa distribucion, solo si falta y TI autoriza instalarlo. No viene integrado ni se instala automaticamente. Que `mysqld.exe --version` falle puede indicar esta dependencia; no borres ni cambies el MySQL80 existente.
 
@@ -76,15 +76,51 @@ Get-NetTCPConnection -State Listen | Where-Object {$_.LocalPort -in @(13326,1854
 
 Sin resultados significa sin listener observado, **no** una reserva permanente ni prueba de conectividad. El instalador vuelve a comprobarlo y falla si estan ocupados; nunca mata otro proceso.
 
+## Identidades de Windows (instalacion institucional)
+
+Se separan dos identidades:
+
+| Identidad | Para que | Privilegios |
+|---|---|---|
+| **Cuenta de servicio de SIGER** (p. ej. `DOMINIO\svc-siger`, cuenta de dominio o local) | Inicializa la instancia, es duena de su custodia DPAPI (`config\*.clixml`), ejecuta los servicios `SIGER` y `SIGERMySQL` y las tareas de operacion (Start, Stop, Estado, Backup, Migrate, Update, Import-Integrations, Test-Service). | **Ninguno administrativo.** Solo "Iniciar sesion como servicio", inicio de sesion local durante la instalacion (para `runas`), escritura en `D:\SIGER-A` y control de sus dos servicios. |
+| **Administrador de TI** | Crea la cuenta, prepara `D:\SIGER-A` vacia si la cuenta no puede crearla, y ejecuta una sola vez `Install-Service.ps1` (elevado). | Administrador local, solo durante la instalacion. |
+
+Por DPAPI, todo lo que lee secretos (arranque, respaldo, migracion, importaciones) se ejecuta **como la cuenta de servicio**, por ejemplo `runas /user:DOMINIO\svc-siger powershell.exe`. El administrador no descifra ni necesita la custodia. No se admite inicializar una instancia institucional con una cuenta administradora.
+
+Si TI crea la raiz por la cuenta: `New-Item -ItemType Directory D:\SIGER-A` y `icacls D:\SIGER-A /grant "DOMINIO\svc-siger:(OI)(CI)F"` (debe quedar vacia; `Init-Server.ps1` la vuelve privada para la cuenta, SYSTEM y Administradores).
+
 ## Paso 2. Inicializacion unica
 
-Sustituir solo las rutas del release y de MySQL por las carpetas efectivamente extraidas. Cada orden es una linea:
+Sustituir solo las rutas del release y de MySQL por las carpetas efectivamente extraidas. Cada orden es una linea.
+
+**Institucional** (sin cuentas, sedes ni datos de prueba), ejecutada **como la cuenta de servicio**:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-A-FECHA\scripts\Init-Server.ps1' -Root 'D:\SIGER-A' -Release 'D:\Entregas\SIGER-A-FECHA' -MySqlHome 'D:\Herramientas\mysql-8.4' -MySqlPort 13326 -WebPort 18543
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Init-Server.ps1' -Mode Institucional -EstructuraInicial 'D:\Entregas\estructura-inicial.json' -Root 'D:\SIGER-A' -Release 'D:\Entregas\SIGER-FECHA' -MySqlHome 'D:\Herramientas\mysql-8.4' -MySqlPort 13326 -WebPort 18543
 ```
 
-La orden crea la instancia y sus cuentas MySQL, TLS local, esquema `siger_a_lab`, migracion y datos sinteticos. No usa credenciales root del MySQL existente. Durante la inicializacion se utiliza un archivo privado temporal de instrucciones SQL y luego se elimina; el datadir no se expone a red externa. No se instala un servicio Windows ni se cambia PATH, JAVA_HOME, firewall o confianza global.
+`estructura-inicial.json` lo prepara la institucion (dato real; no se versiona):
+
+```json
+{"fundamento":"Resolucion o acto que designa a TI y a la autoridad habilitante inicial",
+ "ambitos":[{"codigo":"UGI","nombre":"Gestion Institucional","unidad":"UGI","sede":"CENTRAL"},
+            {"codigo":"UPR-REQ","nombre":"Requerimientos / Atencion de Personas","unidad":"UPR","area":"REQ","sede":"CENTRAL","regional":false}],
+ "ti":{"usuario":"nombre.apellido","nombre":"Nombre de la persona TI","correo":"persona@defensorianinez.cl","ambito":"UGI"},
+ "autoridad":{"usuario":"nombre.autoridad","nombre":"Nombre de la autoridad","correo":"autoridad@defensorianinez.cl","ambito":"UGI","ambitos":["*"]}}
+```
+
+- `unidad` es uno de los codigos del producto: UPR, UPD, UEP, UGI, REG, DAI, GAB, DEF, AUD. `ambitos` de la autoridad acepta `"*"` (todos los listados) o codigos.
+- TI y autoridad son personas distintas. TI administra cuentas sin acceso a expedientes; la autoridad concede las demas funciones por la interfaz. Ambas reciben clave temporal individual en `data\bootstrap-usuarios.csv` con cambio obligatorio: entregarlas por canal seguro y retirar el archivo.
+- Un archivo invalido detiene la inicializacion sin escribir datos. Se admite UTF-8 con o sin BOM.
+- Esquema `siger_a_inst`; sin etiqueta de entorno en pantalla; la liberacion de originales exige analisis antivirus.
+
+**Pruebas** (datos sinteticos, como hasta ahora; no usar para datos ciudadanos):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Init-Server.ps1' -Mode Pruebas -Root 'D:\SIGER-PRUEBAS' -Release 'D:\Entregas\SIGER-FECHA' -MySqlHome 'D:\Herramientas\mysql-8.4' -MySqlPort 13327 -WebPort 18544
+```
+
+La orden crea la instancia y sus cuentas MySQL, TLS local, el esquema y la migracion (y, en modo Pruebas, los datos sinteticos). No usa credenciales root del MySQL existente. Durante la inicializacion se utiliza un archivo privado temporal de instrucciones SQL y luego se elimina; el datadir no se expone a red externa. No se instala un servicio Windows ni se cambia PATH, JAVA_HOME, firewall o confianza global.
 
 La cuenta habitual de la aplicacion tiene DML; la migradora es distinta. La cuenta administrativa del motor nuevo solo sirve a sus scripts. DPAPI vincula secretos al usuario Windows que inicializo la instancia: ejecutar despues bajo otra identidad requiere reprovision/traslado controlado, no copiar XML y asumir que descifra.
 
@@ -133,7 +169,7 @@ La carpeta destino debe ser nueva. Incluye SQL, originales, configuracion privad
 Para actualizar, despues de compilar una nueva version y hacer respaldo:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Update.ps1' -Root 'D:\SIGER-A' -Release 'D:\Entregas\SIGER-A-NUEVA' -BackupDirectory 'D:\Respaldos-SIGER-A\PRUEBA-001'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Update.ps1' -Root 'D:\SIGER-A' -Release 'D:\Entregas\SIGER-NUEVA' -BackupDirectory 'D:\Respaldos-SIGER-A\PRUEBA-001'
 ```
 
 La version anterior se conserva. Si una migracion falla, no arrancar un JAR anterior a ciegas. Reversion de datos/esquema y ensayo de restauracion quedan pendientes de calificacion manual. No se incluyen comandos destructivos automatizados.
@@ -151,13 +187,13 @@ Las ordenes anteriores de instalacion siguen requiriendo build valido y datos si
 Con la aplicacion detenida y solo el MySQL propio activo, generar respaldo en carpeta nueva. La copia incluye SQL, documentos, configuracion privada, conteos por tabla y manifiesto de hashes. Si tu VM ya tenia scripts viejos, ejecutar Backup desde el nuevo release compilado, usando su parametro Root; no hace falta migrar primero para respaldar.
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-A-FECHA\scripts\Backup.ps1' -Root 'D:\SIGER-A' -Destination 'D:\Respaldos-SIGER-A\PRUEBA-031'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Backup.ps1' -Root 'D:\SIGER-A' -Destination 'D:\Respaldos-SIGER-A\PRUEBA-031'
 ```
 
 Ensayar la copia en **carpeta nueva fuera de la instancia** y esquema nuevo generado automaticamente en el motor MySQL propio verificado:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-A-FECHA\scripts\Restore-Check.ps1' -Root 'D:\SIGER-A' -BackupDirectory 'D:\Respaldos-SIGER-A\PRUEBA-031' -Destination 'D:\SIGER-A-RESTORE-PRUEBA-031'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Restore-Check.ps1' -Root 'D:\SIGER-A' -BackupDirectory 'D:\Respaldos-SIGER-A\PRUEBA-031' -Destination 'D:\SIGER-A-RESTORE-PRUEBA-031'
 ```
 
 Solo informa `completed=true` tras validar hashes de copia, importacion SQL, conteos y documentos restaurados. No arranca otra aplicacion, no cambia instance.json ni sobreescribe la base activa. Conserva carpeta/esquema del ensayo para revision; su eliminacion posterior es una operacion expresa, no automatica.
@@ -172,24 +208,24 @@ MIGRATION_FAILED/PROMOTION_FAILED bloquean inicio ambiguo. START_FAILED permite 
 
 Los scripts siguen sin ejecutarse aqui sobre Windows/MySQL. Su primera validacion es parte de la prueba guiada, no una evidencia ya obtenida.
 
-## Operacion permanente 24/7 (V9)
+## Operacion permanente 24/7 (V9-V10)
 
-Esta seccion prepara SIGER para operar como servicio permanente. Nada de lo descrito se activa solo: cada paso es una orden explicita del operador. El esquema sube a V9 (`Migrate.ps1` con respaldo previo; `Start.ps1` exige esquema 9).
+Esta seccion prepara SIGER para operar como servicio permanente. Nada de lo descrito se activa solo: cada paso es una orden explicita del operador. El esquema sube a V10 (`Migrate.ps1` con respaldo previo; `Start.ps1` exige esquema 10).
 
 ### Servicios de Windows (SIGER y su MySQL propio)
 
-`Install-Service.ps1` (PowerShell elevada) registra dos servicios **sin iniciarlos**:
+`Install-Service.ps1` lo ejecuta **un administrador** (PowerShell elevada) indicando la cuenta de servicio, y registra dos servicios **sin iniciarlos**, ambos con esa cuenta sin privilegios administrativos:
 
-- `SIGERMySQL`: el motor propio de la instancia (`mysqld --install` con su `mysql\my.ini`), inicio automatico. Corre como LocalSystem, que ya figura en la ACL privada del datadir.
+- `SIGERMySQL`: el motor propio de la instancia (`mysqld --install` con su `mysql\my.ini`), inicio automatico, ejecutado con la cuenta de servicio (duena del datadir).
 - `SIGER`: un host propio (`service\SigerService.exe`, compilado en ese momento desde `scripts\SigerService.cs` con el compilador de .NET Framework de Windows; sin binarios de terceros) que ejecuta `scripts\Service.ps1`. Inicio automatico diferido, dependiente de `SIGERMySQL`, recuperacion con reinicio a los 30 s, 60 s y 5 min.
 
-La cuenta del servicio debe ser **la misma que inicializo la instancia**: DPAPI (`config\*.clixml`) solo descifra con ella. El script lo comprueba, no cambia directivas y avisa si la cuenta no tiene el derecho "Iniciar sesion como servicio" (lo concede TI). La contrasena pasa al administrador de servicios como objeto, nunca como argumento.
+El script exige que la cuenta de servicio sea **distinta** del administrador que instala y **la misma que inicializo la instancia** (`ownerSid` en `instance.json`). Lanza `Test-ServiceIdentity.ps1` con esa cuenta y perfil cargado para comprobar que **no pertenece a Administradores** y que descifra la custodia DPAPI; si falla, no registra nada. Concede a la cuenta permiso para iniciar, detener y consultar solo esos dos servicios. El derecho "Iniciar sesion como servicio" se comprueba y, con `-ConcederInicioComoServicio`, se agrega en la directiva local; una directiva de dominio puede prevalecer y debe gestionarla TI. La contrasena pasa al sistema como objeto, nunca como argumento.
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Install-Service.ps1' -Root 'D:\SIGER-A' -ServiceCredential (Get-Credential 'DOMINIO\cuenta-de-la-instancia')
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Install-Service.ps1' -Root 'D:\SIGER-A' -ServiceCredential (Get-Credential 'DOMINIO\svc-siger') -ConcederInicioComoServicio
 ```
 
-Con los servicios registrados, `Start.ps1`, `Stop.ps1`, `Start-MySql.ps1` y `Estado.ps1` operan sobre ellos (mismas ordenes de siempre). `Backup.ps1`, `Migrate.ps1` y `Update.ps1` siguen exigiendo SIGER detenido (`Stop.ps1`). `Uninstall-Service.ps1` retira solo el registro, con los servicios detenidos; no borra datos.
+Despues, **como la cuenta de servicio**, `Start.ps1`, `Stop.ps1`, `Start-MySql.ps1` y `Estado.ps1` operan sobre los servicios (mismas ordenes de siempre). `Backup.ps1`, `Migrate.ps1` y `Update.ps1` siguen exigiendo SIGER detenido (`Stop.ps1`). `Uninstall-Service.ps1` retira solo el registro, con los servicios detenidos; no borra datos.
 
 Comportamiento del servicio:
 
@@ -249,12 +285,37 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Impo
 
 DPAPI exige que SMR y SIGER usen la misma cuenta de Windows; si no, el script lo informa y no importa nada. Reutilizar la identidad ACK de SMR evita instalar otra clave en el Formulario, pero obliga a que SMR **no** vuelva a confirmar entregas mientras SIGER consume. El certificado HTTPS se usa tras reiniciar; el enlace sigue en 127.0.0.1 (abrir la red es otra decision).
 
-### Monitoreo
+### Monitoreo y latidos vencidos
 
-- `Estado.ps1`: servicios, salud HTTPS, esquema y estado de cada integracion (`DESACTIVADO`, `MANUAL`, `INICIANDO`, `ESPERANDO_ENTREGAS`, `RECIBIENDO`, `OCUPADO`, `PAUSADO`, `DEGRADADO`, `DETENIDO`; correo: `OPERATIVO`, `ENVIANDO`, `PAUSADO`, `DEGRADADO`).
+- `Estado.ps1`: servicios, salud HTTPS, esquema y estado de cada integracion (`DESACTIVADO`, `MANUAL`, `INICIANDO`, `ESPERANDO_ENTREGAS`, `RECIBIENDO`, `OCUPADO`, `PAUSADO`, `DEGRADADO`, `SIN_LATIDO`; correo: `OPERATIVO`, `ENVIANDO`, `PAUSADO`, `DEGRADADO`, `SIN_LATIDO`).
+- **Latido vencido (`SIN_LATIDO`)**: al iniciar cada ciclo, el consumidor y el correo registran el plazo en que prometen terminar (10 y 15 minutos como maximo) y, al terminar, el de su ciclo siguiente. Si ese plazo pasa con 2 minutos de margen (hilo caido, ciclo colgado o trabajador detenido con el servicio activo), `/api/health`, `Estado.ps1` y Auditoria y operacion lo informan, y un vigilante independiente lo anota una vez como ERROR en `logs\siger.log` (y otra al recuperarse). La pausa de TI no vence el latido. Nada se reinicia ni corrige solo: revisar el log y reiniciar el servicio (`Stop.ps1`, `Start.ps1`).
+- `Estado.ps1 -Alerta` termina con codigo 2 si SIGER no esta sano o una integracion permanente esta `SIN_LATIDO`, `DEGRADADO` o `NO_DISPONIBLE`; sirve para una tarea programada de monitoreo de la cuenta de servicio.
 - `/api/health` (solo localhost) incluye esos codigos, sin contadores ni datos.
 - Auditoria y operacion (TI): ultimo ciclo y exito, incidente, ACK pendientes o bloqueados, estado del outbox y correos ambiguos con su resolucion. No muestra documentos ni contenidos.
 - Un estado `DEGRADADO` persistente, ACK bloqueados o correos ambiguos requieren revision; no editar tablas ni borrar leases para limpiarlos.
+
+### Liberacion segura de originales
+
+Todo original (ingreso manual, documento de gestion u original descargado del Formulario) entra en cuarentena y no se descarga. En una instancia institucional **solo sale de cuarentena tras un analisis antivirus hecho por el servidor**:
+
+1. Configurar el motor en `config\antivirus.json` y reiniciar SIGER:
+   - ClamAV (mismos limites que SMR): `{"engine":"CLAMAV","executable":"D:\\Herramientas\\clamav\\clamscan.exe","database":"D:\\Herramientas\\clamav\\db"}`. Las bases deben actualizarse (freshclam) desde una ubicacion aprobada.
+   - Microsoft Defender: `{"engine":"DEFENDER","executable":"C:\\Program Files\\Windows Defender\\MpCmdRun.exe"}`. Exige el motor y la proteccion activos (`Get-MpComputerStatus`); en el equipo de preparacion estaba desactivado y SIGER lo rechazo.
+2. TI, en Auditoria y operacion, pulsa **Analizar**: se verifica el SHA-256 custodiado, que el motor este operativo y con firmas de menos de 72 horas, se analiza el archivo con orden fija y tiempo maximo, y se vuelve a verificar el SHA-256. La evidencia queda en `document_scan` y en la auditoria. Analizar no libera.
+3. **Liberar** solo procede si el ultimo analisis es LIMPIO, de los mismos bytes, del motor vigente y de la ultima hora, nunca hubo una deteccion y el archivo vuelve a coincidir con su SHA-256. Cualquier duda (error, firmas antiguas, motor inactivo, archivo alterado o retirado por el antivirus) deja el original en cuarentena. Una deteccion es definitiva.
+4. Sin motor configurado no hay liberacion de originales reales. La revision manual sin motor existe solo en instancias de pruebas.
+
+La descarga posterior sigue autorizada por la ficha y se entrega como adjunto con `Content-Security-Policy: sandbox`; el antivirus no sustituye el criterio de quien abre el archivo.
+
+### Pruebas de arranque, parada y recuperacion de los servicios
+
+Despues de registrar los servicios, en una ventana sin usuarios y **como la cuenta de servicio**:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Test-Service.ps1' -Root 'D:\SIGER-A' -VentanaAutorizada -IncluirMySql
+```
+
+Comprueba arranque y salud (esquema 10), parada ordenada (registro de parada, menos de 180 s, sin proceso residual y lease del Formulario libre), recuperacion automatica tras terminar Java a la fuerza (nuevo proceso sano y evento de caida) y, con `-IncluirMySql`, la detencion y recuperacion junto al motor propio. Deja el resultado en `logs\prueba-servicio-<fecha>.json` y termina con error si algun paso falla. El reinicio del equipo se prueba aparte (reiniciar en ventana autorizada y luego `Estado.ps1`). El host del servicio tambien tiene un modo de prueba en consola (`service\SigerService.exe --probar <raiz> <segundos> [plazo_ms]`) que no requiere registrar servicios.
 
 ### Procedimiento de sustitucion del consumidor de SMR
 

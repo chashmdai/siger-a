@@ -12,7 +12,8 @@ import static cl.nexbyte.sigera.Problem.require;
 public class Personnel {
     static final Set<String> SCOPED_ROLES=Set.of("ADMINISTRATIVO","PROFESIONAL","JEFATURA","DIRECCION","AUTORIDAD","LECTURA","AUDITORIA");
     private final Db db;private final Access access;private final PasswordEncoder passwords;private final Integrations integrations;private final MailOutbox mail;
-    public Personnel(Db db,Access access,PasswordEncoder passwords,Integrations integrations,MailOutbox mail){this.db=db;this.access=access;this.passwords=passwords;this.integrations=integrations;this.mail=mail;}
+    private final Documents documents;
+    public Personnel(Db db,Access access,PasswordEncoder passwords,Integrations integrations,MailOutbox mail,Documents documents){this.db=db;this.access=access;this.passwords=passwords;this.integrations=integrations;this.mail=mail;this.documents=documents;}
     public Workflow.Result run(Actor a,String type,long id,Long revision,Input in){
         switch(type){
             case "STAFF_CREATE" -> {
@@ -93,11 +94,8 @@ public class Personnel {
                 epoch(n(x,"substitute_id"));epoch(n(x,"titular_id"));audit(a,"SUBROGANCIA_TERMINADA","SUBROGANCIA",id,scope,in.reason());
                 access.notice(n(x,"titular_id"),"Retornan tus facultades; revisa los pendientes. No se cerro ningun Caso automaticamente.","SUBROGANCIA",id);return Workflow.done("SUBROGANCIA",id);
             }
-            case "DOC_RELEASE" -> {
-                ti(a);db.one("SELECT id FROM document_item WHERE id=?",id);
-                require(in.flag("synthetic_review"),"Solo se habilita descarga de archivos sinteticos revisados externamente. No hay antivirus integrado.");
-                db.update("UPDATE document_item SET quarantined=FALSE WHERE id=?",id);audit(a,"LIBERACION_MANUAL_SINTETICA","DOCUMENTO",id,null,in.reason());return Workflow.done("DOCUMENTO",id);
-            }
+            // Liberacion de cuarentena: analisis antivirus confiable previo (o, solo en instancias de pruebas, revision manual).
+            case "DOC_RELEASE" -> {return documents.release(a,id,in);}
             // Operacion de integraciones: TI pausa o reanuda y decide sobre correos ambiguos. No da acceso a expedientes.
             case "INTEGRATION_PAUSE","INTEGRATION_RESUME" -> {return integrations.control(a,id,revision,type.equals("INTEGRATION_PAUSE"),in.text("reason",1000,true));}
             case "MAIL_RESOLVE" -> {return mail.resolve(a,id,in.choice("decision","REENVIAR","DESCARTAR"),in.reason());}

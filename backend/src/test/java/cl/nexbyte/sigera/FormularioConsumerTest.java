@@ -386,6 +386,45 @@ class FormularioConsumerTest {
         }finally{producer.onClaim=null;db.update("UPDATE formulario_consumer_lock SET holder=NULL,until_ms=0 WHERE id=1");auto.stop();}
     }
 
+    @Test void latidoVencidoDelConsumidorYDelCorreoSeDetectaYSeInforma()throws Exception{
+        // Integraciones configuradas como permanentes en este proceso (la base es la de la prueba).
+        var env=new org.springframework.mock.env.MockEnvironment().withProperty("siger.formulario.pull.enabled","true").withProperty("siger.formulario.pull.automatic","true")
+            .withProperty("siger.mail.mode","GRAPH");
+        var live=new Integrations(db,env);var watchdog=new IntegrationWatchdog(live);
+        String doc=adultWithFile(original());producer.offer(doc,Map.of(attachment(doc),original()));
+        var auto=automatic(consumer);
+        // Durante el ciclo el plazo del latido es la cota del ciclo, no el sondeo anterior.
+        var during=new java.util.concurrent.atomic.AtomicLong();
+        producer.onClaim=()->during.set(n(status(),"next_ms"));
+        long begun=System.currentTimeMillis();
+        try{auto.tick();}finally{producer.onClaim=null;}
+        assertTrue(during.get()>=begun+FormularioAutomatic.MAX_CYCLE_MS-1_000,"plazo durante el ciclo");
+        long now=System.currentTimeMillis();
+        assertFalse(live.stale(Integrations.FORMULARIO,now));
+        assertEquals("RECIBIENDO",live.health(Integrations.FORMULARIO));
+        // El trabajador no registra su ciclo prometido (hilo caido o ciclo colgado): latido vencido.
+        db.update("UPDATE integration_status SET next_ms=? WHERE name='FORMULARIO_PULL'",now-Integrations.STALE_GRACE_MS-1_000);
+        assertTrue(live.stale(Integrations.FORMULARIO,now));
+        assertEquals("SIN_LATIDO",live.health(Integrations.FORMULARIO));
+        assertTrue((Boolean)((Map<?,?>)live.overview().get(Integrations.FORMULARIO)).get("stale"));
+        // Correo nunca iniciado con el modo GRAPH activo: tambien vencido.
+        db.update("UPDATE integration_status SET state='SIN_ACTIVIDAD',next_ms=NULL WHERE name='CORREO_GRAPH'");
+        assertEquals(Set.of(Integrations.FORMULARIO,Integrations.CORREO),watchdog.check(now));
+        assertEquals(Set.of(Integrations.FORMULARIO,Integrations.CORREO),watchdog.check(now)); // sigue informado, sin repetir el aviso
+        // La pausa no vence el latido; el trabajador detenido con el servicio activo si.
+        db.update("UPDATE integration_control SET paused=TRUE WHERE name='FORMULARIO_PULL'");
+        assertFalse(live.stale(Integrations.FORMULARIO,now));assertEquals("PAUSADO",live.health(Integrations.FORMULARIO));
+        db.update("UPDATE integration_control SET paused=FALSE WHERE name='FORMULARIO_PULL'");
+        // Recuperacion: un ciclo nuevo registra un plazo vigente.
+        auto.tick();
+        db.update("UPDATE integration_status SET state='OPERATIVO',next_ms=? WHERE name='CORREO_GRAPH'",System.currentTimeMillis()+15_000);
+        assertEquals(Set.of(),watchdog.check(System.currentTimeMillis()));
+        auto.stop();
+        assertTrue(live.stale(Integrations.FORMULARIO,System.currentTimeMillis())); // DETENIDO con el modo activo
+        // Sin modo permanente (ciclo manual o desactivado) no hay latido que vigilar.
+        assertFalse(integrations.stale(Integrations.FORMULARIO,System.currentTimeMillis()+86_400_000L));
+    }
+
     @Test void automaticoEnSegundoPlanoRecibeYSeDetieneOrdenado()throws Exception{
         String doc=adultWithFile(original());producer.offer(doc,Map.of(attachment(doc),original()));
         var auto=automatic(consumer);

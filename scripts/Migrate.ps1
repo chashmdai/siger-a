@@ -16,7 +16,11 @@ if(-not $hash -or (Get-SigerFileHash $jar -Algorithm SHA256).Hash -ine $hash){th
 $secret=Import-Clixml (Join-Path $Root 'config\secrets.clixml');$client=MySql-ClientFile $s $secret 'owner'
 try{Require-OwnMySql $s $client}finally{Remove-Item -LiteralPath $client}
 try {
-    Set-SigerEnvironment $s $secret -Migration -Seed:$Initial
+    # Primera migracion: datos sinteticos solo en instancias de pruebas; la institucional aplica su estructura inicial.
+    $mode=Get-InstanceMode $s
+    Set-SigerEnvironment $s $secret -Migration -Seed:($Initial -and $mode -eq 'PRUEBAS')
+    if($Initial -and $mode -eq 'INSTITUCIONAL'){$env:SIGER_BOOTSTRAP_FILE=Join-Path $Root 'config\estructura-inicial.json'}
+    $env:SIGER_SCHEDULING='false'
     & (Join-Path $s.javaHome 'bin\java.exe') '-Xms128m' '-Xmx768m' "-Djava.io.tmpdir=$(Join-Path $Root 'tmp')" '-jar' $jar '--spring.main.web-application-type=none' '--siger.migrate-only=true'
     if($LASTEXITCODE -ne 0){throw 'Fallo la migracion. No inicies una version anterior sobre un esquema incompatible.'}
     if($Initial){Set-Content -Encoding ASCII (Join-Path $Root 'config\initialized.marker') (Get-Date).ToUniversalTime().ToString('o')}

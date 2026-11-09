@@ -43,7 +43,7 @@ try{
     for($i=0;$i -lt $WaitSeconds;$i++){
         $alive=if($services){(Get-Service -Name $services.Info.serviceName).Status -ne 'Stopped'}else{App-Running $s}
         if(-not $alive){throw 'El proceso termino antes de estar listo. Revisa el primer error del log privado (logs\) y el registro de eventos Application (origen SIGER).'}
-        try{$h=Invoke-SigerHealth $s $secret;if($h.status -eq 'UP' -and $h.version -eq $manifest.version -and [int]$h.schema -eq 9){$health=$h;break}}catch{}
+        try{$h=Invoke-SigerHealth $s $secret;if($h.status -eq 'UP' -and $h.version -eq $manifest.version -and [int]$h.schema -eq 10){$health=$h;break}}catch{}
         Start-Sleep -Seconds 1
     }
     if(-not $health){throw 'No se acredito salud HTTPS/version dentro del tiempo de espera. No se informa arranque correcto.'}

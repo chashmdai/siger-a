@@ -19,6 +19,8 @@ import org.slf4j.LoggerFactory;
 final class FormularioAutomatic {
     private static final Logger LOG=LoggerFactory.getLogger(FormularioAutomatic.class);
     static final long MIN_BACKOFF_MS=10_000L,MAX_BACKOFF_MS=300_000L,DRAIN_MS=1_000L;
+    /** Cota de un ciclo (reserva de 5 min del Formulario, descargas y ACK): pasado el plazo el latido se declara vencido. */
+    static final long MAX_CYCLE_MS=600_000L;
     private final FormularioConsumer consumer;private final FormularioReception reception;private final Integrations integrations;
     private final long pollMs,leaseMs,stopWaitMs;
     final String holder=UUID.randomUUID().toString();
@@ -34,7 +36,7 @@ final class FormularioAutomatic {
     }
 
     void start(){
-        integrations.state(Integrations.FORMULARIO,"INICIANDO",holder);
+        integrations.state(Integrations.FORMULARIO,"INICIANDO",holder,System.currentTimeMillis()+MAX_CYCLE_MS);
         LOG.info("Consumidor automatico del Formulario iniciado (sondeo {} ms).",pollMs);
         // El latido renueva el lease mientras el proceso lo conserva, tambien durante una descarga larga.
         executor.scheduleWithFixedDelay(this::heartbeat,leaseMs/4,leaseMs/4,TimeUnit.MILLISECONDS);
@@ -51,6 +53,7 @@ final class FormularioAutomatic {
     /** Un ciclo y la espera siguiente en milisegundos. Visible para pruebas dirigidas. */
     long tick(){
         String name=Integrations.FORMULARIO;
+        integrations.started(name,System.currentTimeMillis()+MAX_CYCLE_MS);
         try{
             if(integrations.paused(name)){
                 releaseLease();failures=0;
@@ -116,7 +119,7 @@ final class FormularioAutomatic {
         }catch(InterruptedException e){Thread.currentThread().interrupt();executor.shutdownNow();}
         try{reception.release(holder);}catch(RuntimeException ignored){}
         leaseHeld=false;
-        integrations.state(Integrations.FORMULARIO,"DETENIDO",null);
+        integrations.state(Integrations.FORMULARIO,"DETENIDO",null,null);
         LOG.info("Consumidor automatico del Formulario detenido.");
     }
 }

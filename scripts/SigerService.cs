@@ -14,14 +14,19 @@ using System.Runtime.InteropServices;
 using System.ServiceProcess;
 
 public sealed class SigerService : ServiceBase {
-    private const int StopWaitMs = 180000;
+    private const int DefaultStopWaitMs = 180000;
     private readonly string root;
+    private readonly int stopWaitMs;
+    private readonly bool probing;
     private Process child;
     private IntPtr job = IntPtr.Zero;
     private volatile bool stopping;
 
-    public SigerService(string root) {
+    public SigerService(string root) : this(root, DefaultStopWaitMs, false) { }
+    private SigerService(string root, int stopWaitMs, bool probing) {
         this.root = root;
+        this.stopWaitMs = stopWaitMs;
+        this.probing = probing;
         ServiceName = "SIGER";
         CanStop = true;
         CanShutdown = true;
@@ -29,11 +34,33 @@ public sealed class SigerService : ServiceBase {
     }
 
     public static int Main(string[] args) {
+        // Modo de prueba en consola (sin administrador de servicios): misma supervision, para verificar la parada
+        // ordenada, el plazo y la deteccion de caidas. SigerService.exe --probar <raiz> <segundos> [plazo_ms]
+        if (args.Length >= 3 && args[0] == "--probar") return Probe(args);
         if (args.Length != 1 || !Path.IsPathRooted(args[0]) || !File.Exists(Path.Combine(args[0], "config\\instance.json"))) {
             Console.Error.WriteLine("Uso: SigerService.exe <raiz de la instancia>");
             return 2;
         }
         ServiceBase.Run(new SigerService(Path.GetFullPath(args[0]).TrimEnd('\\')));
+        return 0;
+    }
+
+    private static int Probe(string[] args) {
+        string root = Path.GetFullPath(args[1]).TrimEnd('\\');
+        int seconds = int.Parse(args[2]);
+        int wait = args.Length > 3 ? int.Parse(args[3]) : DefaultStopWaitMs;
+        var host = new SigerService(root, wait, true);
+        var clock = Stopwatch.StartNew();
+        host.OnStart(new string[0]);
+        bool early = host.child.WaitForExit(seconds * 1000);
+        if (early) {
+            Console.WriteLine("RESULTADO=CAIDA codigo=" + host.child.ExitCode + " ms=" + clock.ElapsedMilliseconds + " (el servicio terminaria con error y se reiniciaria)");
+            Native.CloseHandle(host.job);
+            return 1;
+        }
+        var stop = Stopwatch.StartNew();
+        bool forced = host.StopChild();
+        Console.WriteLine("RESULTADO=" + (forced ? "TERMINADO_POR_PLAZO" : "PARADA_ORDENADA") + " codigo=" + host.child.ExitCode + " ms=" + stop.ElapsedMilliseconds);
         return 0;
     }
 
@@ -72,7 +99,7 @@ public sealed class SigerService : ServiceBase {
     }
 
     private void ChildExited(object sender, EventArgs e) {
-        if (stopping) return;
+        if (stopping || probing) return;
         int code = -1;
         try { code = child.ExitCode; } catch (Exception) { }
         try { EventLog.WriteEntry("SIGER termino inesperadamente (codigo " + code + "). Revisa logs\\ de la instancia.", EventLogEntryType.Error); } catch (Exception) { }
@@ -83,14 +110,17 @@ public sealed class SigerService : ServiceBase {
     protected override void OnStop() { StopChild(); }
     protected override void OnShutdown() { StopChild(); }
 
-    private void StopChild() {
+    /** true si hubo que terminar el arbol de procesos por exceder el plazo. */
+    private bool StopChild() {
         stopping = true;
-        RequestAdditionalTime(StopWaitMs + 15000);
+        bool forced = false;
+        if (!probing) RequestAdditionalTime(stopWaitMs + 15000);
         try {
             if (child != null && !child.HasExited) {
                 File.WriteAllText(StopFile(), "SERVICE_STOP");
-                if (!child.WaitForExit(StopWaitMs)) {
-                    try { EventLog.WriteEntry("SIGER no se detuvo en el plazo; se terminan sus procesos.", EventLogEntryType.Warning); } catch (Exception) { }
+                if (!child.WaitForExit(stopWaitMs)) {
+                    forced = true;
+                    if (!probing) { try { EventLog.WriteEntry("SIGER no se detuvo en el plazo; se terminan sus procesos.", EventLogEntryType.Warning); } catch (Exception) { } }
                     Native.TerminateJobObject(job, 1);
                     child.WaitForExit(10000);
                 }
@@ -98,6 +128,7 @@ public sealed class SigerService : ServiceBase {
         } finally {
             if (job != IntPtr.Zero) { Native.CloseHandle(job); job = IntPtr.Zero; }
         }
+        return forced;
     }
 
     private string StopFile() { return Path.Combine(root, "run\\stop.request"); }

@@ -60,7 +60,22 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
   </div>;
   // Las funciones centrales (sin ambito) se revocan indicando el ambito de la autoridad.
   const revoke = (g: Row) => choose(ctx, 'Revocar función', 'GRANT_REVOKE', g, [...(g.scope_id ? [] : [scopeField(ctx.catalog, 'scope_id', 'Ámbito central de tu autoridad')]), reason]);
-  const release = (d: Row) => choose(ctx, 'Habilitar descarga de archivo sintético', 'DOC_RELEASE', d, [{key: 'synthetic_review', label: 'Confirmo que es un archivo sintético revisado externamente; no certifico un antivirus', type: 'checkbox', required: true}, reason], 'No usar esta liberación manual para documentos ciudadanos reales.');
+  // Liberacion: un original real sale de cuarentena solo tras un analisis antivirus limpio y reciente del servidor.
+  // La revision manual sin motor existe unicamente en instancias de pruebas (politica del servidor).
+  const policy = obj(data, 'document_policy');
+  const synthetic = bool(policy, 'synthetic_release'), engine = text(policy, 'engine');
+  const [scanning, setScanning] = useState<number | null>(null);
+  const scan = async (d: Row) => {
+    setScanning(number(d, 'id'));
+    try {
+      const r = await request(`/documents/${number(d, 'id')}/scan`, {method: 'POST'});
+      ctx.reload();
+      ctx.message(text(r, 'verdict') === 'LIMPIO' ? 'Análisis limpio registrado. Ya puedes liberar el original.' : 'Análisis registrado: ' + humanize(text(r, 'verdict')) + (text(r, 'detail') ? ' (' + humanize(text(r, 'detail')) + ')' : '') + '. El original sigue en cuarentena.');
+    } catch (e) {setError((e as Error).message);} finally {setScanning(null);}
+  };
+  const release = (d: Row) => text(d, 'scan_verdict') === 'LIMPIO' && number(d, 'detections') === 0
+    ? choose(ctx, 'Liberar original analizado', 'DOC_RELEASE', d, [reason], 'Se verifica de nuevo el SHA-256 y que el análisis limpio sea reciente. Una detección previa impide la liberación.')
+    : choose(ctx, 'Habilitar descarga de archivo de prueba', 'DOC_RELEASE', d, [{key: 'synthetic_review', label: 'Confirmo que es un archivo de prueba revisado externamente; no certifico un antivirus', type: 'checkbox', required: true}, reason], 'Solo en instancias de pruebas. No usar para documentos ciudadanos reales.');
 
   // Pausar o reanudar no cancela un ciclo en curso: el trabajador lo respeta en su ciclo siguiente.
   const control = (r: Row, name: string) => {
@@ -107,7 +122,7 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
       <Table rows={INTEGRATIONS.map(([key, label]) => ({...obj(integrations, key), key, label}))} columns={[
         {name: 'Integración', render: r => <span className='cell-strong'>{text(r, 'label')}</span>},
         {name: 'Modo', render: r => <span className='chip'>{MODE_LABELS[text(r, 'mode')] ?? text(r, 'mode')}</span>},
-        {name: 'Estado', render: r => bool(r, 'paused') ? <span className='chip'>Pausada</span> : humanize(text(obj(r, 'status'), 'state'))},
+        {name: 'Estado', render: r => bool(r, 'paused') ? <span className='chip'>Pausada</span> : bool(r, 'stale') ? <span className='chip'>Sin latido: revisar el servicio</span> : humanize(text(obj(r, 'status'), 'state'))},
         {name: 'Último ciclo', render: r => <span className='nowrap'>{when(obj(r, 'status').last_cycle_ms)}</span>},
         {name: 'Último éxito', render: r => <span className='nowrap'>{when(obj(r, 'status').last_success_ms)}</span>},
         {name: 'Incidente', render: r => text(obj(r, 'status'), 'last_error') ? <code>{text(obj(r, 'status'), 'last_error')}</code> : <span className='muted'>Sin incidentes</span>},
@@ -122,12 +137,19 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
         {name: 'Decisión', render: m => <button className='sm' onClick={() => resolve(m)}>Resolver</button>},
       ]}/>}
     </Panel>}
-    {auditOnly && ti && <Panel title='Cuarentena documental' icon='lock' count={list(data, 'quarantine').length} description='TI ve identificador, tamaño y huella, no el contenido del expediente. No existe análisis antivirus automático en esta entrega.'>
+    {auditOnly && ti && <Panel title='Cuarentena documental' icon='lock' count={list(data, 'quarantine').length} description={engine && engine !== 'NONE'
+      ? 'TI ve identificador, tamaño, huella y análisis, no el contenido del expediente. Un original sale de cuarentena solo con un análisis limpio y reciente de ' + engine + '.'
+      : 'Sin motor antivirus configurado: los originales permanecen en cuarentena' + (synthetic ? ' (en esta instancia de pruebas se admite la revisión manual).' : '.')}>
       <Table rows={list(data, 'quarantine')} emptyIcon='checkCircle' empty='Sin archivos en cuarentena' columns={[
         {name: 'ID', render: d => text(d, 'id')},
         {name: 'Bytes', render: d => <span className='tabular'>{number(d, 'size_bytes').toLocaleString('es-CL')}</span>},
         {name: 'SHA-256', render: d => <code>{text(d, 'sha256')}</code>},
-        {name: 'Revisión externa', render: d => <button className='sm' onClick={() => release(d)}>Registrar revisión manual</button>},
+        {name: 'Análisis', render: d => text(d, 'scan_verdict') ? <span className={'chip' + (text(d, 'scan_verdict') === 'LIMPIO' ? ' chip-ok' : '')}>{humanize(text(d, 'scan_verdict'))}{number(d, 'detections') > 0 ? ' · con detección previa' : ''}</span> : <span className='muted'>Sin análisis</span>},
+        {name: 'Fecha', render: d => <span className='nowrap'>{when(d.scan_ms)}</span>},
+        {name: 'Acciones', render: d => <div className='actions compact'>
+          {engine && engine !== 'NONE' && <button className='sm' disabled={scanning === number(d, 'id')} onClick={() => void scan(d)}>{scanning === number(d, 'id') ? 'Analizando…' : 'Analizar'}</button>}
+          {(text(d, 'scan_verdict') === 'LIMPIO' && number(d, 'detections') === 0 || synthetic) && <button className='sm' onClick={() => release(d)}>Liberar</button>}
+        </div>},
       ]}/>
     </Panel>}
     {auditOnly && <Panel title='Auditoría autorizada' icon='activity' count={list(data, 'audit').length} description='Hasta 300 eventos recientes dentro de tus facultades. Una consulta no demuestra lectura comprensiva ni trabajo efectuado.'>

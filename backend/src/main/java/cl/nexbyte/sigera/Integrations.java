@@ -45,18 +45,45 @@ public class Integrations {
                 state,holder,failures,now,success,now,nextMs,error==null?null:error.substring(0,Math.min(64,error.length())),now,name);
         }catch(RuntimeException e){LOG.warn("No se registro el estado de {} ({}).",name,e.getClass().getSimpleName());}
     }
-    /** Estado sin ciclo (inicio o detencion del trabajador). */
-    void state(String name,String state,String holder){
-        try{db.update("UPDATE integration_status SET state=?,holder=?,updated_ms=? WHERE name=?",state,holder,System.currentTimeMillis(),name);}
+    /**
+     * Estado sin ciclo (inicio o detencion del trabajador). nextMs es el plazo del latido siguiente: al iniciar, el
+     * primer ciclo debe registrarse antes; al detener se borra (null).
+     */
+    void state(String name,String state,String holder,Long nextMs){
+        try{db.update("UPDATE integration_status SET state=?,holder=?,next_ms=?,updated_ms=? WHERE name=?",state,holder,nextMs,System.currentTimeMillis(),name);}
         catch(RuntimeException e){LOG.warn("No se registro el estado de {} ({}).",name,e.getClass().getSimpleName());}
     }
+    /** Inicio de un ciclo: el trabajador promete registrar su resultado antes de expectedEnd (ciclo colgado si no). */
+    void started(String name,long expectedEnd){
+        try{db.update("UPDATE integration_status SET next_ms=?,updated_ms=? WHERE name=?",expectedEnd,System.currentTimeMillis(),name);}
+        catch(RuntimeException e){LOG.warn("No se registro el inicio de ciclo de {} ({}).",name,e.getClass().getSimpleName());}
+    }
 
-    /** Codigo publicable en /api/health: modo, pausa o el ultimo estado del trabajador. Sin contadores ni errores. */
+    /** Margen sobre el plazo prometido antes de declarar el latido vencido. */
+    static final long STALE_GRACE_MS=120_000L;
+    /** Integracion permanente configurada en este proceso (consumidor automatico o correo Graph). */
+    boolean permanent(String name){
+        String mode=mode(name);return mode.equals("AUTOMATICO")||mode.equals("GRAPH");
+    }
+    /**
+     * Latido vencido: integracion permanente, no pausada, cuyo trabajador no registro el ciclo prometido (hilo caido,
+     * ciclo colgado o trabajador detenido mientras el servicio sigue activo). La pausa no vence el latido.
+     */
+    boolean stale(String name,long now){
+        if(!permanent(name)||paused(name))return false;
+        var r=db.one("SELECT state,next_ms,updated_ms FROM integration_status WHERE name=?",name);
+        if(s(r,"state").equals("DETENIDO")||s(r,"state").equals("SIN_ACTIVIDAD"))return true;
+        long due=r.get("next_ms")==null?n(r,"updated_ms"):n(r,"next_ms");
+        return now>due+STALE_GRACE_MS;
+    }
+
+    /** Codigo publicable en /api/health: modo, pausa, latido vencido o el ultimo estado. Sin contadores ni errores. */
     String health(String name){
         try{
             String mode=mode(name);
             if(mode.equals("DESACTIVADO")||mode.equals("MANUAL"))return mode;
             if(paused(name))return "PAUSADO";
+            if(stale(name,System.currentTimeMillis()))return "SIN_LATIDO";
             return s(db.one("SELECT state FROM integration_status WHERE name=?",name),"state");
         }catch(RuntimeException e){return "NO_DISPONIBLE";}
     }
@@ -70,6 +97,7 @@ public class Integrations {
             item.put("id",n(control,"id"));item.put("mode",mode(name));item.put("paused",b(control,"paused"));item.put("revision",n(control,"revision"));
             item.put("control_updated_ms",control.get("updated_ms"));item.put("control_reason",control.get("reason"));
             item.put("status",db.one("SELECT state,cycles,failures,last_cycle_ms,last_success_ms,next_ms,last_error,updated_ms FROM integration_status WHERE name=?",name));
+            item.put("stale",stale(name,System.currentTimeMillis()));
             out.put(name,item);
         }
         ((Map<String,Object>)out.get(FORMULARIO)).put("counts",counts(

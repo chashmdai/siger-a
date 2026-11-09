@@ -1,4 +1,6 @@
-﻿param([string]$Root='D:\SIGER-A')
+﻿# -Alerta: codigo de salida para monitoreo (Programador de tareas u otra herramienta): 0 sano; 2 aplicacion no sana o
+# integracion permanente SIN_LATIDO, DEGRADADO o NO_DISPONIBLE.
+param([string]$Root='D:\SIGER-A',[switch]$Alerta)
 . (Join-Path $PSScriptRoot 'Common.ps1')
 $s=Read-Settings $Root;$running=App-Running $s
 $result=[ordered]@{Root=$s.root;AppRunning=$running;JarSha256Matches=((Get-SigerFileHash $s.activeJar -Algorithm SHA256).Hash -ieq $s.jarSha256);MySqlPort=$s.mysqlPort;WebUrl="https://localhost:$($s.webPort)";Schema=$s.database;Health='NOT_CHECKED'}
@@ -9,3 +11,7 @@ $journal=Join-Path $Root 'config\update-state.json';if(Test-Path $journal){$resu
 Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object {$_.LocalPort -in @($s.mysqlPort,$s.webPort)} | Select-Object LocalAddress,LocalPort,OwningProcess
 Write-Host 'Detalle de integraciones (ultimo ciclo, incidentes, ACK y correos ambiguos): Auditoria y operacion, con cuenta TI.'
 Write-Host 'No se muestran credenciales, configuracion privada ni contenido de expedientes.'
+if($Alerta){
+    $bad=@('SIN_LATIDO','DEGRADADO','NO_DISPONIBLE')
+    if($result.Health -ne 'UP' -or $bad -contains [string]$result['Formulario'] -or $bad -contains [string]$result['Correo']){Write-Warning 'ALERTA: SIGER o una integracion permanente requiere revision.';exit 2}
+}

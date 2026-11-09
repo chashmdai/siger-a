@@ -44,7 +44,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Fallo Maven. Revisa el primer error; no hay release acreditado.' }
     } finally { Pop-Location }
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $release = Join-Path $project "release\SIGER-A-$stamp"
+    $release = Join-Path $project "release\SIGER-$stamp"
     New-Item -ItemType Directory -Force -Path (Join-Path $release 'app') | Out-Null
     Copy-Item (Join-Path $project 'backend\target\siger-a.jar') (Join-Path $release 'app\siger-a.jar')
     Copy-Item $PSScriptRoot (Join-Path $release 'scripts') -Recurse
@@ -55,7 +55,7 @@ try {
     Copy-Item (Join-Path $project 'backend\pom.xml') (Join-Path $release 'build-info\pom.xml')
     if (Test-Path (Join-Path $project '.tools\java25-manifest.json')) { Copy-Item (Join-Path $project '.tools\java25-manifest.json') (Join-Path $release 'build-info\java25-manifest.json') }
     $hash=(Get-SigerFileHash (Join-Path $release 'app\siger-a.jar') -Algorithm SHA256).Hash.ToLower()
-    @{name='SIGER-A';version='0.4.0';createdUtc=(Get-Date).ToUniversalTime().ToString('o');jarSha256=$hash;java=$javaText.Trim();node=$nodeText;automatedTestsExecuted=(-not $SkipChecks);databaseTarget='MySQL independiente';smrEnabled=$false;graphEnabled=$false} | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $release 'manifest.json')
+    @{name='SIGER';version='0.4.0';createdUtc=(Get-Date).ToUniversalTime().ToString('o');jarSha256=$hash;java=$javaText.Trim();node=$nodeText;automatedTestsExecuted=(-not $SkipChecks);databaseTarget='MySQL independiente';integrations='Formulario PULL/ACK, correo Graph y servicio Windows inactivos hasta configurarlos';schema=10} | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $release 'manifest.json')
     Compress-Archive -Path $release -DestinationPath ($release+'.zip')
     Write-Host ('Paquete generado: ' + $release + '.zip')
     Write-Host ('JAR SHA-256: ' + $hash)

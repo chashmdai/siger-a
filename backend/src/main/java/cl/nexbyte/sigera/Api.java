@@ -69,6 +69,8 @@ public class Api {
     @PostMapping("/commands") public Workflow.Result command(Authentication a,@RequestBody Workflow.Command command){return flow.run(name(a),command);}
     @PostMapping(value="/documents",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> upload(Authentication a,@RequestParam String kind,@RequestParam long target,@RequestParam(defaultValue="false")boolean reserved,@RequestParam(required=false)Long note,@RequestParam(required=false)Long previous,@RequestParam(defaultValue="OTRO")String type,@RequestParam(defaultValue="")String description,@RequestParam UUID key,@RequestParam MultipartFile file)throws Exception{return documents.upload(name(a),kind,target,reserved,note,previous,type,description,key,file);}
+    /** Analisis antivirus de un original en cuarentena (solo TI). Registra evidencia; no libera ni entrega contenido. */
+    @PostMapping("/documents/{id}/scan") public Map<String,Object> scan(Authentication a,@PathVariable long id){return documents.scan(name(a),id);}
     @GetMapping("/documents/{id}/download") public ResponseEntity<FileSystemResource> download(Authentication a,@PathVariable long id)throws Exception{
         var d=documents.download(access.actor(name(a)),id);
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).contentLength(d.size()).header("Cache-Control","no-store").header("X-Content-Type-Options","nosniff").header("Content-Security-Policy","sandbox").header("Content-Disposition",ContentDisposition.attachment().filename(d.name(),StandardCharsets.UTF_8).build().toString()).body(new FileSystemResource(d.path()));

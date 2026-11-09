@@ -1,4 +1,4 @@
-# SIGER A 0.4.0 - alcance y pendientes
+# SIGER 0.4.0 - alcance y pendientes
 
 ## Incluido en el fuente
 
