@@ -24,7 +24,8 @@ import tools.jackson.databind.json.JsonMapper;
  * admite campos fuera de lo firmado, de modo que todo lo conservado queda cubierto por el sello.
  */
 record ExternalOriginal(String source,String externalId,String version,String kind,String channel,long receivedMs,
-        String contentHash,String provenanceHash,String custodyKeyId,String document,String documentSha256,long documentBytes) {
+        String contentHash,String provenanceHash,String custodyKeyId,String document,String documentSha256,long documentBytes,
+        ExternalPresenter identification) {
 
     /** Emisor del sello de custodia y origen de la cola de SMR. */
     static final String SOURCE="FORMULARIO_PUBLICO_DDN";
@@ -81,7 +82,7 @@ record ExternalOriginal(String source,String externalId,String version,String ki
         verifySeal(custody,trusted,id,received,notice,content,provenance);
         if(received.toEpochMilli()>System.currentTimeMillis())throw new Problem(400,"La fecha de recepcion del documento original es futura.");
         return new ExternalOriginal(SOURCE,id,version,kind,"NNA".equals(kind)?"FORMULARIO_WEB_NNA":"FORMULARIO_WEB_PUBLICO",received.toEpochMilli(),
-            content,provenance,keyId,document,sha256(bytes),bytes.length);
+            content,provenance,keyId,document,sha256(bytes),bytes.length,ExternalPresenter.project(com));
     }
 
     /**

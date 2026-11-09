@@ -76,9 +76,10 @@ public class IntakeCommands {
 
     /**
      * COM institucional para un original externo (Formulario completo recibido por SMR). El texto
-     * recibido se guarda tal cual en communication_original; la COM solo toma origen, identificador,
-     * canal y fecha de recepcion del propio documento. Asunto y relato quedan como rotulo de sistema
-     * hasta la normalizacion: no se inventan datos ciudadanos. No crea SOL, REQ ni Caso ni avisa.
+     * recibido se guarda tal cual en communication_original; la COM toma origen, identificador, canal,
+     * fecha de recepcion y la identificacion del presentador con su procedencia (ExternalPresenter).
+     * Asunto y relato quedan como rotulo de sistema hasta su normalizacion: no se inventan datos
+     * ciudadanos. No crea SOL, REQ ni Caso ni avisa.
      * Idempotente por (origen, identificador): el mismo original devuelve la COM existente.
      * Solo se invoca desde Workflow.conserveExternal (transaccion y lock global); no es un comando
      * despachable desde run(). La confianza en la fuente es responsabilidad del receptor tecnico
@@ -96,9 +97,10 @@ public class IntakeCommands {
             return done("COM",n(p,"communication_id"));
         }
         String subject="NNA".equals(o.kind())?"Formulario web NNA":"Formulario web adulto";
-        long com=db.insert("INSERT INTO communication(external_source,external_id,channel,received_ms,created_ms,created_by,origin_scope,subject,body) VALUES(?,?,?,?,?,?,?,?,?)",
-            o.source(),o.externalId(),o.channel(),o.receivedMs(),now(),a.id(),scope,subject,
-            "Comunicacion recibida por Formulario web. El documento original se conserva integro; sus datos aun no se normalizan en esta ficha.");
+        // Proyeccion del presentador (con su procedencia) solo al crear; un reenvio sale antes y no la toca.
+        long com=db.insert("INSERT INTO communication(external_source,external_id,channel,received_ms,created_ms,created_by,origin_scope,presenter,identity_document,subject,body) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            o.source(),o.externalId(),o.channel(),o.receivedMs(),now(),a.id(),scope,o.identification().presenter(),o.identification().identityDocument(),subject,
+            "Comunicacion recibida por Formulario web. El documento original se conserva integro; en esta ficha solo se proyecta la identificacion del presentador.");
         life.comFolio(com);
         db.update("INSERT INTO communication_original(communication_id,source,external_id,document_version,document_kind,received_ms,content_hash,provenance_hash,custody_key_id,document,document_sha256,document_bytes,stored_ms,stored_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             com,o.source(),o.externalId(),o.version(),o.kind(),o.receivedMs(),o.contentHash(),o.provenanceHash(),o.custodyKeyId(),o.document(),o.documentSha256(),o.documentBytes(),now(),a.id());

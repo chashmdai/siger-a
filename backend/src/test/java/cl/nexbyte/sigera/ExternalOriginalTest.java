@@ -150,7 +150,10 @@ class ExternalOriginalTest {
         assertEquals("10000000-0000-4000-8000-000000000001",s(c,"external_id"));
         assertEquals("FORMULARIO_WEB_NNA",s(c,"channel"));
         assertEquals("NUEVA",s(c,"state"));
-        assertEquals("",s(c,"presenter"));
+        // Presentador proyectado con su procedencia; el vector NNA no trae RUN, asi que no hay identificacion.
+        assertEquals("PERSONA SINTETICA (declarado)",s(c,"presenter"));
+        assertNull(c.get("identity_document"));
+        assertNull(c.get("contact"));
         var o=db.one("SELECT * FROM communication_original WHERE communication_id=?",com);
         assertEquals(document,s(o,"document"));
         assertEquals(ExternalOriginal.sha256(document.getBytes(StandardCharsets.UTF_8)),s(o,"document_sha256"));
@@ -166,6 +169,10 @@ class ExternalOriginalTest {
         assertEquals(com,flow.conserveExternal("registro.ext",scope,compact).id());
         assertEquals(document,s(db.one("SELECT document FROM communication_original WHERE communication_id=?",com),"document"));
         assertEquals(1,db.count("SELECT COUNT(*) FROM audit_event WHERE action='COM_ORIGINAL_CONSERVADO' AND resource_id=?",com));
+        // Un reenvio no vuelve a proyectar sobre una COM ya registrada (por ejemplo, corregida despues).
+        db.update("UPDATE communication SET presenter='Correccion posterior' WHERE id=?",com);
+        assertEquals(com,flow.conserveExternal("registro.ext",scope,document).id());
+        assertEquals("Correccion posterior",s(db.one("SELECT presenter FROM communication WHERE id=?",com),"presenter"));
         // Reenvio del mismo original con la firma alterada: se rechaza antes de la idempotencia, no devuelve la COM.
         String firma=JSON.readTree(document).path("custodia").path("firma").asString();
         String forged=custody(document,"firma",(firma.charAt(0)=='A'?"B":"A")+firma.substring(1));
