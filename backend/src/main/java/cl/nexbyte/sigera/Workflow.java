@@ -71,6 +71,19 @@ public class Workflow {
         return result;
     }
 
+    /**
+     * Entrada interna para conservar el original de una Comunicacion externa (Formulario completo via SMR).
+     * No es un comando: no figura en run(), por lo que /api/commands lo rechaza como desconocido para
+     * cualquier sesion funcionaria, sin importar sus funciones. Queda reservada al futuro receptor tecnico
+     * autorizado, que sera responsable de autenticar la fuente. Misma transaccion y lock global que run().
+     * Comprobar las huellas no acredita autenticidad: la firma Ed25519 de custodia aun no se verifica.
+     */
+    @Transactional
+    public Result conserveExternal(String username,long scope,String document){
+        db.lock();
+        return intake.conserveExternal(access.actor(username),scope,document);
+    }
+
     static Result done(String kind,long id){return Lifecycle.done(kind,id);}
 
     private Result readNotice(Actor a,long id){

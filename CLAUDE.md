@@ -73,11 +73,11 @@ Las lecturas usan endpoints GET en `Api.java`: `Queries` (detalle autorizado, ca
 
 ## Base de datos y perfiles
 
-- Migraciones Flyway en `backend/src/main/resources/db/migration`. **V1 a V5 no se modifican nunca**; cada cambio se agrega como `V6__...` aditivo, compatible con H2 y MySQL.
+- Migraciones Flyway en `backend/src/main/resources/db/migration`. **V1 a V6 no se modifican nunca**; cada cambio se agrega como `V7__...` aditivo, compatible con H2 y MySQL.
 - `MigrationGuard` rechaza migrar MySQL si el esquema no coincide con `siger_a_*` o si detecta tablas de SMR o del SIGER anterior, y solo admite los motores MySQL/H2.
 - Hay tres perfiles. `application.properties` (VM) toma todo de variables `SIGER_*` y mantiene Flyway desactivado salvo `SIGER_MIGRATE=true`. `local` usa H2 en archivo `./var/local-db` con semillas y sin TLS. `test` usa H2 en memoria.
 - La version `0.4.0` esta fija en `backend/pom.xml`, `frontend/package.json`, `Api.health()` y el manifiesto de `scripts/Build.ps1`. Al subir de version hay que cambiarla en todos esos lugares.
-- `scripts/Start.ps1` exige que el health responda `schema -eq 5` y la version del manifiesto. Una migracion V6 obliga a actualizar ese chequeo.
+- `scripts/Start.ps1` exige que el health responda `schema -eq 6` y la version del manifiesto. Cada migracion nueva obliga a actualizar ese chequeo (V6: original de Comunicacion externa).
 - El pool Hikari se ajusta con `SIGER_DB_POOL_MAX` (por defecto 6). Un comando retiene su conexion mientras espera el lock global.
 
 ## Reglas de dominio que no deben romperse

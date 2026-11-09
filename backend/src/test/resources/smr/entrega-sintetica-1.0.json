@@ -1,0 +1,70 @@
+{
+  "comunicacion": {
+    "version": "1.0",
+    "id": "10000000-0000-4000-8000-000000000001",
+    "recorridoId": "20000000-0000-4000-8000-000000000001",
+    "tipo": "NNA",
+    "recibidaEn": "2026-11-04T12:00:00Z",
+    "avisoVersion": "NNA_LAB_1",
+    "aceptaCanalDigital": false,
+    "datos": {
+      "campos": {
+        "nna-region": "13",
+        "nna-primary-method": "unsafe",
+        "nna-story": "Relato sintetico completo"
+      },
+      "personas": [],
+      "instituciones": [],
+      "adjuntos": []
+    },
+    "personas": [
+      {
+        "id": "presentador-nna",
+        "rol": "PRESENTADOR",
+        "runNumero": null,
+        "runDv": null,
+        "modulo11": false,
+        "autenticada": false,
+        "estadoConsulta": "NO_HABILITADO",
+        "consultadaEn": null,
+        "consultaRef": null,
+        "atributos": {
+          "primerNombre": {
+            "valor": "PERSONA",
+            "codigo": null,
+            "fuente": "DECLARACION_CIUDADANA",
+            "nivel": "DECLARADO_NO_CONTRASTADO",
+            "observadoEn": "2026-11-04T12:00:00Z",
+            "evidencia": "50000000-0000-4000-8000-000000000001"
+          },
+          "primerApellido": {
+            "valor": "SINTETICA",
+            "codigo": null,
+            "fuente": "DECLARACION_CIUDADANA",
+            "nivel": "DECLARADO_NO_CONTRASTADO",
+            "observadoEn": "2026-11-04T12:00:00Z",
+            "evidencia": "50000000-0000-4000-8000-000000000001"
+          },
+          "edad": {
+            "valor": "12",
+            "codigo": null,
+            "fuente": "DECLARACION_CIUDADANA",
+            "nivel": "DECLARADO_NO_CONTRASTADO",
+            "observadoEn": "2026-11-04T12:00:00Z",
+            "evidencia": "50000000-0000-4000-8000-000000000001"
+          }
+        },
+        "discrepancias": {}
+      }
+    ],
+    "adjuntos": []
+  },
+  "sha256": "1116dda2013a9ae22bd26a8bb298359ca7d83e98a45bfec34e1d698c553b6fb6",
+  "huellaProcedencia": "4fd1dd380ac13cf8b1eaba03e8212be44711560cdb35405a32baf07340e30dc7",
+  "custodia": {
+    "algoritmo": "Ed25519",
+    "keyId": "FORM_FIXTURE_PUBLIC",
+    "payload": "eyJ2ZXJzaW9uIjoiMS4wIiwiaWQiOiIxMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJyZWNpYmlkYUVuIjoiMjAyNi0xMS0wNFQxMjowMDowMFoiLCJ0aXBvUmVjZXBjaW9uIjoiQ1VTVE9ESUFfUFVCTElDQSIsImh1ZWxsYUNvbnRlbmlkbyI6IjExMTZkZGEyMDEzYTlhZTIyYmQyNmE4YmIyOTgzNTljYTdkODNlOThhNDViZmVjMzRlMWQ2OThjNTUzYjZmYjYiLCJodWVsbGFQcm9jZWRlbmNpYSI6IjRmZDFkZDM4MGFjMTNjZjhiMWVhYmEwM2U4MjEyYmU0NDcxMTU2MGNkYjM1NDA1YTMyYmFmMDczNDBlMzBkYzciLCJlbWlzb3IiOiJGT1JNVUxBUklPX1BVQkxJQ09fREROIiwiYXZpc29WZXJzaW9uIjoiTk5BX0xBQl8xIn0",
+    "firma": "3gdBaHkBppj_2tQSIdYHvgZ18eHKeFJKbHQCiQJj1anemlHYPvibeM9JwXuzfPFmIVgPPk8pgSSRKGqXzOgwCA"
+  }
+}

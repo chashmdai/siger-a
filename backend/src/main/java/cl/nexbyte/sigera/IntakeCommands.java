@@ -72,6 +72,37 @@ public class IntakeCommands {
         return done("REQ",req);
     }
 
+    /**
+     * COM institucional para un original externo (Formulario completo recibido por SMR). El texto
+     * recibido se guarda tal cual en communication_original; la COM solo toma origen, identificador,
+     * canal y fecha de recepcion del propio documento. Asunto y relato quedan como rotulo de sistema
+     * hasta la normalizacion: no se inventan datos ciudadanos. No crea SOL, REQ ni Caso ni avisa.
+     * Idempotente por (origen, identificador): el mismo original devuelve la COM existente.
+     * Solo se invoca desde Workflow.conserveExternal (transaccion y lock global); no es un comando
+     * despachable desde run(). La confianza en la fuente es responsabilidad del receptor tecnico
+     * que la invoque, no de las facultades de registro manual de un funcionario.
+     */
+    Result conserveExternal(Actor a,long scope,String document){
+        access.scope(scope);
+        var o=ExternalOriginal.parse(document);
+        var previous=db.rows("SELECT communication_id,content_hash,provenance_hash FROM communication_original WHERE source=? AND external_id=?",o.source(),o.externalId());
+        if(!previous.isEmpty()){
+            var p=previous.getFirst();
+            require(s(p,"content_hash").equals(o.contentHash())&&s(p,"provenance_hash").equals(o.provenanceHash()),
+                "Ya existe un original con ese identificador de origen y un contenido distinto. No se registro la operacion.");
+            return done("COM",n(p,"communication_id"));
+        }
+        String subject="NNA".equals(o.kind())?"Formulario web NNA":"Formulario web adulto";
+        long com=db.insert("INSERT INTO communication(external_source,external_id,channel,received_ms,created_ms,created_by,origin_scope,subject,body) VALUES(?,?,?,?,?,?,?,?,?)",
+            o.source(),o.externalId(),o.channel(),o.receivedMs(),now(),a.id(),scope,subject,
+            "Comunicacion recibida por Formulario web. El documento original se conserva integro; sus datos aun no se normalizan en esta ficha.");
+        life.comFolio(com);
+        db.update("INSERT INTO communication_original(communication_id,source,external_id,document_version,document_kind,received_ms,content_hash,provenance_hash,custody_key_id,document,document_sha256,document_bytes,stored_ms,stored_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            com,o.source(),o.externalId(),o.version(),o.kind(),o.receivedMs(),o.contentHash(),o.provenanceHash(),o.custodyKeyId(),o.document(),o.documentSha256(),o.documentBytes(),now(),a.id());
+        life.changed(a,"COM_ORIGINAL_CONSERVADO","COM",com,scope,"Origen "+o.source()+" "+o.externalId());
+        return done("COM",com);
+    }
+
     /** Antecedentes declarados de personas del ingreso; no es un registro maestro de personas. */
     private void persons(long com,Object persons){
         if(persons==null)return;
