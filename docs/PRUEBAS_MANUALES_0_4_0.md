@@ -42,6 +42,12 @@ Registrar **Comunicacion por clasificar** (no atencion directa): queda COM pendi
 
 Detener y volver a arrancar local: fichas, versiones, entrega pendiente, usuarios y permisos se conservan. Revisar un REQ/caso antiguo de 0.3.1. Tareas y bloqueo de cierre siguen iguales. No usar esta prueba como acreditacion de MySQL/SMR.
 
+## 7. Ficha del Caso: origen del REQ y solicitud de termino
+
+Desde una primera atencion con seguimiento, la jefatura recibe la ficha, clasifica el REQ como MEDIANA (o lo deja sin clasificar) y abre un Caso para un profesional. Como ese profesional, abrir el Caso.
+
+Esperado: la cadena muestra «Solicitud: No aplica: atencion directa» (paso omitido). En un Caso de un REQ nacido de SOL o de COM asumida, la Solicitud aparece como paso real. «Solicitar cierre» esta habilitado aunque el profesional no pueda confirmar el cierre. Con una tarea pendiente se deshabilita e indica el motivo; al solicitar, el Caso pasa a «En revision de cierre» y la jefatura confirma o devuelve.
+
 ## Resultado a informar
 
 Para cada punto: CORRECTO / FALLA / NO PROBADO. En fallo: rol, accion, esperado, mensaje exacto; sin datos personales o secretos. No hace falta repetir toda la matriz ni construir decenas de tests unitarios.

@@ -57,6 +57,7 @@ Los tokens viven en `src/styles/tokens.css`. Los estilos se dividen en `base`, `
   - En móvil cada fila se convierte en una tarjeta con etiquetas.
 - **Fichas (expedientes).**
   - Encabezado común: tipo, folio, estado, asunto u objetivo, y la cadena COM → SOL → REQ → Caso con enlaces a los registros relacionados que la ficha ya trae.
+    - El paso SOL se marca «No aplica: atención directa» según el origen real del REQ (`solicitation_id` nulo; en el Caso, `req_origin`), nunca por inferencia de la pantalla. Ver `docs/CORRECCIONES_FICHA_CASO_0_4_0.md`.
   - Acciones agrupadas («Gestión», «Jefatura», «Decisión»), con una sola acción primaria por grupo.
   - Columna lateral con los datos clave, las condiciones de cierre y el equipo.
   - Actuaciones, historia y entregas como línea de tiempo.

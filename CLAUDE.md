@@ -52,7 +52,7 @@ Las lecturas usan endpoints GET en `Api.java`: `Queries` (detalle autorizado, ca
 
 **Errores**: `Problem(status, mensaje)`. `Problem.require` → 409, `Problem.denied()` → 403. `ApiErrors` devuelve `{message}`, audita las denegaciones 403/404 y nunca registra SQL ni datos ciudadanos en el log. Los mensajes van en espanol y son visibles al funcionario. `Input` valida la entrada (`text(key,max,required)`, `id`, `choice`, `instant`, `reason`) y no acepta estado, autor ni rol enviados por el navegador.
 
-**`Rules`**: reglas de cierre puras (cierre de Caso por nivel o jefatura, cierre de REQ, derivacion), cubiertas por `RulesTest`.
+**`Rules`**: reglas de cierre puras (cierre de Caso por nivel o jefatura, cierre de REQ, derivacion), cubiertas por `RulesTest`. Solicitar termino (`Rules.closeRequest`, responsable) y confirmar el cierre (`Rules.closure`) son facultades distintas: la ficha del Caso expone `can_request_close`/`close_request_blockers` aparte de `can_close`/`closure_blockers`, y el frontend no debe inferir una de la otra. El origen del REQ (`solicitation_id` nulo = primera atencion directa; en el Caso, `req_origin`) se toma del servidor.
 
 **`Attention`** (0.4.0): primera atencion progresiva sobre COM+REQ. Comprende la ficha JSON validada con lista cerrada de campos (`attention_record`), versiones con autor y motivo (`attention_revision`) y entregas con aceptar/devolver/retirar (`attention_handoff`). Se ejecuta dentro de la transaccion de `Workflow`; no es un motor aparte.
 

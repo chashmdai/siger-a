@@ -83,10 +83,7 @@ public class CaseCommands {
                 db.update("DELETE FROM case_member WHERE case_id=? AND user_id=?",id,target);
             }
             case "CASE_REQUEST_CLOSE" -> {
-                if(!owner)Problem.denied();
-                require(!s(c,"state").equals("EN_REVISION"),"Ya esta en revision.");
-                require(life.pendingDerivations(id)==0,"Hay una derivacion pendiente.");
-                require(life.pendingTasks(id)==0,"Completa o cancela las tareas pendientes antes de solicitar el cierre.");
+                Rules.closeRequest(owner,s(c,"state"),(int)life.pendingTasks(id),life.pendingDerivations(id)>0);
                 db.update("UPDATE case_record SET state='EN_REVISION' WHERE id=?",id);
                 access.notifyHeads(scope,"Un Caso requiere revision de termino.","CAS",id);
             }

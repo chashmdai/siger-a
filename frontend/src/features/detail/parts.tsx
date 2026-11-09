@@ -24,6 +24,9 @@ export function DetailGrid({main, side}: {main: ReactNode; side: ReactNode}) {
 
 type Step = {kind: string; label: string; target?: [string, number]; note?: string; skipped?: boolean};
 
+/** REQ sin Solicitud: el servidor lo informa con el dato real (solicitation_id nulo o req_origin). */
+const DIRECT: Partial<Step> = {note: 'No aplica: atención directa', skipped: true};
+
 /** Cadena COM -> SOL -> REQ -> Caso: ubica la ficha en el recorrido institucional. */
 function chainFor(kind: string, r: Row): Step[] | null {
   const steps: Step[] = [{kind: 'COM', label: 'Comunicación'}, {kind: 'SOL', label: 'Solicitud'}, {kind: 'REQ', label: 'Requerimiento'}, {kind: 'CAS', label: 'Caso'}];
@@ -32,6 +35,7 @@ function chainFor(kind: string, r: Row): Step[] | null {
     case 'COM': {
       const sol = list(r, 'solicitations')[0], req = list(r, 'requirements')[0];
       if (sol) set('SOL', {target: ['SOL', number(sol, 'id')], note: 'SOL ' + number(sol, 'id')});
+      else if (req && req.solicitation_id == null) set('SOL', DIRECT);
       if (req) set('REQ', {target: ['REQ', number(req, 'id')], note: text(req, 'folio')});
       return steps;
     }
@@ -40,10 +44,11 @@ function chainFor(kind: string, r: Row): Step[] | null {
       return steps;
     case 'REQ':
       if (r.can_read_com) set('COM', {target: ['COM', number(r, 'communication_id')]});
-      if (Object.keys(obj(r, 'attention')).length > 0) set('SOL', {note: 'No aplica: atención directa', skipped: true});
+      if (r.solicitation_id == null) set('SOL', DIRECT);
       set('CAS', {note: number(r, 'total_cases') ? `${number(r, 'total_cases')} en este REQ` : 'Sin Casos'});
       return steps;
     case 'CAS':
+      if (text(r, 'req_origin') === 'ATENCION_DIRECTA') set('SOL', DIRECT);
       set('REQ', {target: ['REQ', number(r, 'requirement_id')], note: text(r, 'req_folio')});
       return steps;
     default:

@@ -64,14 +64,21 @@ public class Queries {
         return out;
     }
     Map<String,Object> caseSummary(Actor a,Map<String,Object> c){
-        var out=new LinkedHashMap<>(c);var r=db.one("SELECT complexity,folio,state FROM requirement WHERE id=?",n(c,"requirement_id"));
+        var out=new LinkedHashMap<>(c);var r=db.one("SELECT complexity,folio,state,solicitation_id FROM requirement WHERE id=?",n(c,"requirement_id"));
         out.put("req_complexity",r.get("complexity"));out.put("req_folio",r.get("folio"));out.put("req_state",r.get("state"));
+        // Origen real del REQ: sin SOL solo nace por primera atencion directa (la jefatura que asume crea una SOL ASUMIDA).
+        out.put("req_origin",r.get("solicitation_id")==null?"ATENCION_DIRECTA":"SOLICITUD");
         out.put("can_write",access.caseWrite(a,c));out.put("can_head",a.head(n(c,"scope_id")));out.put("is_owner",a.id()==n(c,"responsible_id"));out.put("own_substitution",a.substitutions().contains(n(c,"scope_id"))&&a.id()==n(c,"responsible_id"));
         long pending=db.count("SELECT COUNT(*) FROM task_item WHERE case_id=? AND state IN ('PENDIENTE','EN_CURSO')",n(c,"id"));out.put("pending_tasks",pending);
         boolean flow=db.count("SELECT COUNT(*) FROM flow_request WHERE origin_case_id=? AND state='PENDIENTE'",n(c,"id"))>0;
         var blockers=new ArrayList<String>();
         try{Rules.closure(s(r,"complexity"),a.id()==n(c,"responsible_id"),a.head(n(c,"scope_id")),a.substitutions().contains(n(c,"scope_id")),s(c,"state"),(int)pending,flow);out.put("can_close",true);}catch(Problem e){out.put("can_close",false);blockers.add(e.getMessage());}
         out.put("closure_blockers",blockers);
+        // Solicitar termino (responsable) se evalua aparte de confirmar el cierre (can_close).
+        var requestBlockers=new ArrayList<String>();
+        try{Rules.closeRequest(a.id()==n(c,"responsible_id"),s(c,"state"),(int)pending,flow);}catch(Problem e){requestBlockers.add(e.getMessage());}
+        if(!s(r,"state").equals("ABIERTO"))requestBlockers.add("El REQ esta cerrado; requiere nueva gestion autorizada.");
+        out.put("can_request_close",requestBlockers.isEmpty());out.put("close_request_blockers",requestBlockers);
         out.put("assignment_pending",db.count("SELECT COUNT(*) FROM case_assignment WHERE case_id=? AND current_flag=TRUE AND acknowledged_ms IS NULL",n(c,"id"))>0);
         return out;
     }

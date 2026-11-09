@@ -14,6 +14,17 @@ public final class Rules {
         if (head && "EN_REVISION".equals(state)) return "JEFATURA";
         throw new Problem(403, "El responsable solicita termino; la jefatura confirma, salvo BAJA o jefatura propia.");
     }
+    /**
+     * Solicitar termino es una facultad distinta de confirmar el cierre: la ejerce solo el responsable,
+     * en cualquier nivel de complejidad (incluido el subrogante en su propio Caso), y la jefatura decide.
+     */
+    public static void closeRequest(boolean owner, String state, int pendingTasks, boolean pendingFlow) {
+        if (!owner) Problem.denied();
+        Problem.require(!"CERRADO".equals(state), "El Caso esta cerrado.");
+        Problem.require(!"EN_REVISION".equals(state), "Ya esta en revision.");
+        Problem.require(!pendingFlow, "Hay una derivacion pendiente.");
+        Problem.require(pendingTasks == 0, "Completa o cancela las tareas pendientes antes de solicitar el cierre.");
+    }
     public static void requirementClosable(int openCases, int pendingDecisions, boolean principalHead) {
         if (!principalHead) Problem.denied();
         Problem.require(openCases == 0, "Todavia existen Casos abiertos.");

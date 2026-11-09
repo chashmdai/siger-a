@@ -8,7 +8,7 @@ import type {Field} from '../../components/ActionDialog';
 import {Kind, Status} from '../../components/Status';
 import {Icon} from '../../components/Icon';
 import {Callout, EmptyState, Facts, Panel} from '../../components/Primitives';
-import {ClosureStatus} from './ClosureStatus';
+import {blockersOf, ClosureStatus} from './ClosureStatus';
 import {Files} from './Files';
 import {Notes} from './Notes';
 import {noteFields, requestFlow, requestReopening, taskEditFields, taskFields} from './actions';
@@ -26,6 +26,8 @@ export function CaseDetail({r, ctx}: {r: Row; ctx: Context}) {
   const choice = (title: string, type: string, fields: Field[], note?: string) => choose(ctx, title, type, r, fields, note);
   const pendingTasks = number(r, 'pending_tasks');
   const pendingTasksTitle = (fallback: string) => pendingTasks > 0 ? 'Resuelve primero las tareas pendientes' : fallback;
+  // Solicitar término (responsable) y confirmar el cierre son facultades distintas: cada una con su evaluación del servidor.
+  const requestBlockers = blockersOf(r, 'close_request_blockers');
   const unacknowledged = list(r, 'assignments').some(x => bool(x, 'current_flag') && !x.acknowledged_ms);
   // Confirmar cierre: jefatura propia, responsable de Caso BAJA o jefatura en revision; nunca el subrogante en su Caso.
   const mayConfirmClose = !closed && !bool(r, 'own_substitution') && (head && owner || owner && text(r, 'req_complexity') === 'BAJA' || head && state === 'EN_REVISION');
@@ -44,7 +46,7 @@ export function CaseDetail({r, ctx}: {r: Row; ctx: Context}) {
         </>}
         {!closed && (head || owner) && <>
           <button onClick={() => choice('Incorporar colaborador al equipo', 'CASE_MEMBER_ADD', [person(ctx.catalog, 'user_id', 'Colaborador del mismo ámbito', number(r, 'scope_id')), reason])}><Icon name="people" size={18}/>Agregar integrante</button>
-          {owner && state !== 'EN_REVISION' && <button disabled={!bool(r, 'can_close')} title={pendingTasksTitle('Solicitar término')} onClick={() => choice('Solicitar término', 'CASE_REQUEST_CLOSE', [reason], 'El Caso pasa a revisión de cierre. Debes resolver primero todas las tareas pendientes.')}><Icon name="flag" size={18}/>Solicitar cierre</button>}
+          {owner && state !== 'EN_REVISION' && <button disabled={!bool(r, 'can_request_close')} title={requestBlockers[0] ?? 'Solicitar término'} onClick={() => choice('Solicitar término', 'CASE_REQUEST_CLOSE', [reason], 'El Caso pasa a revisión de cierre. Debes resolver primero todas las tareas pendientes.')}><Icon name="flag" size={18}/>Solicitar cierre</button>}
           {owner && state === 'EN_REVISION' && <button onClick={() => choice('Retirar solicitud de cierre', 'CASE_WITHDRAW_CLOSE', [reason], 'El Caso volverá a En gestión. Se conserva la solicitud original y se avisa a la jefatura.')}><Icon name="arrowLeft" size={18}/>Retirar mi solicitud de cierre</button>}
         </>}
         {mayConfirmClose && <button className={state === 'EN_REVISION' ? 'primary' : ''} disabled={!bool(r, 'can_close')} title={pendingTasksTitle('Cerrar Caso')} onClick={() => choice('Cerrar este Caso', 'CASE_CLOSE', [reason], 'Solo cierra este Caso. Las tareas pendientes impiden el cierre: deben estar completadas o canceladas con fundamento.')}><Icon name="lock" size={18}/>Confirmar cierre</button>}
@@ -83,7 +85,7 @@ export function CaseDetail({r, ctx}: {r: Row; ctx: Context}) {
           ['Materia', text(r, 'matter')],
         ]}/>
       </Panel>
-      {!closed && (head || owner) && <ClosureStatus row={r}/>}
+      {!closed && (head || owner) && <ClosureStatus row={r} action={owner && !mayConfirmClose && state !== 'EN_REVISION' ? 'request' : 'close'}/>}
       <Panel title="Equipo" icon="people">
         <ul className="team">
           <li><span className="avatar sm" aria-hidden="true">{initials(nameOf(ctx.catalog, r.responsible_id))}</span><span><strong>{nameOf(ctx.catalog, r.responsible_id)}</strong><small>Responsable principal</small></span></li>
