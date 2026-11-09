@@ -39,8 +39,11 @@ record ExternalProjection(Com com,List<Person> persons,List<Field> fields) {
     private static final Map<String,String> TOPIC=Map.of("general","Consulta general","entrevista","Solicitud de entrevista","estadisticas","Solicitud de estadísticas");
     private static final Map<String,String> METHOD=Map.of("celular","Celular","email","Correo electrónico","social","Red social","unsafe","No tiene una forma segura de contacto");
     private static final Map<String,String> SAFE=Map.of("yes","Sí","unsure","No está seguro o segura","no","Necesita acordar otra forma");
-    /** Respuestas narrativas del contrato (ValidacionAdultos.narrative y relato NNA), en orden de preferencia. */
-    private static final List<String> NARRATIVE=List.of("relato","nna-story","consulta-general-detalle","entrevista-motivo","stats-descripcion");
+    /**
+     * Relato de hechos: "relato" (vulneracion, promocion) y "nna-story". Los textos de consulta general, motivo de
+     * entrevista y descripcion de solicitud estadistica son solicitudes, no relatos: quedan en las respuestas con su rotulo.
+     */
+    private static final List<String> NARRATIVE=List.of("relato","nna-story");
 
     static ExternalProjection of(JsonNode comunicacion,Instant received){
         LocalDate intake=received.atZone(ZONE).toLocalDate();
@@ -62,7 +65,9 @@ record ExternalProjection(Com com,List<Person> persons,List<Field> fields) {
         }
         var presenter=persons.stream().filter(p->"PRESENTADOR".equals(p.role())).findFirst().orElseThrow();
         boolean nna="NNA".equals(comunicacion.path("tipo").asString());
-        return new ExternalProjection(com(presenter,campos,nna,comunicacion.path("aceptaCanalDigital").asBoolean()),List.copyOf(persons),List.copyOf(fields));
+        // aceptaCanalDigital es una propiedad del recorrido (falso en el flujo NNA), no una preferencia de contacto:
+        // no se proyecta como restriccion. Las preferencias reales son los medios declarados.
+        return new ExternalProjection(com(presenter,campos,nna),List.copyOf(persons),List.copyOf(fields));
     }
 
     // --- Personas -------------------------------------------------------------------------
@@ -113,14 +118,19 @@ record ExternalProjection(Com com,List<Person> persons,List<Field> fields) {
         return new Attribute(key,discrepancy,value,code,meaning(key,value,code,source),source,a.path("nivel").asString(),
             Instant.parse(a.path("observadoEn").asString()).toEpochMilli(),a.path("evidencia").asString());
     }
-    /** Lectura del diccionario SRCeI. Sin codigo y sin valor declarado codificado, no se interpreta. */
+    /**
+     * Lectura del diccionario SRCeI; el valor y el codigo originales se conservan aparte, sin cambios.
+     * "U" es sin informacion; un codigo fuera del diccionario es no reconocido (no se asume que signifique U).
+     * Sin codigo y sin valor declarado codificado, no se interpreta.
+     */
     static String meaning(String key,String value,String code,String source){
         if(key.endsWith("Truncada")&&"TRUNCADA".equals(code))return "Fecha incompleta";
         var dictionary=switch(key){case "sexo"->SEX;case "estadoCivil"->CIVIL;case "nacionalidad"->NATIONALITY;default->null;};
         if(dictionary==null)return null;
         String c=code!=null&&!code.isBlank()?code.strip():"sexo".equals(key)&&"DECLARACION_CIUDADANA".equals(source)&&value!=null?value.strip():null;
         if(c==null)return null;
-        return dictionary.getOrDefault(c,"Desconocido");
+        if("U".equals(c))return "Sin información";
+        return dictionary.getOrDefault(c,"Código no reconocido");
     }
     /** Valor util segun el Formulario: texto no vacio, distinto de "Desconocido", sin codigo U y con fuente informada. */
     static String usable(JsonNode a){
@@ -158,11 +168,12 @@ record ExternalProjection(Com com,List<Person> persons,List<Field> fields) {
     static int age(LocalDate born,LocalDate on){return Period.between(born,on).getYears();}
 
     // --- COM ------------------------------------------------------------------------------
-    private static Com com(Person p,Map<String,String> c,boolean nna,boolean digital){
+    private static Com com(Person p,Map<String,String> c,boolean nna){
         String name=join(" ",p.givenNames(),p.surnames());
         String identity=p.runNumber()!=null&&Boolean.TRUE.equals(p.runValid())?p.runNumber()+"-"+p.runDv()
             :p.foreignNumber()!=null?join(" ",p.foreignType(),p.foreignNumber()):null;
-        String email=first(c,"email","nna-primary-email","nna-secondary-email"),phone=first(c,"telefono","nna-primary-celular","nna-secondary-celular");
+        // NNA: correo y celular del medio elegido en cada preferencia (principal antes que alternativo).
+        String email=nna?byMethod(c,"email"):value(c,"email"),phone=nna?byMethod(c,"celular"):value(c,"telefono");
 
         var contact=new ArrayList<String>();
         for(String slot:List.of("primary","secondary")){
@@ -176,9 +187,12 @@ record ExternalProjection(Com com,List<Person> persons,List<Field> fields) {
             contact.add(("primary".equals(slot)?"Contacto principal: ":"Contacto alternativo: ")+join(" ",METHOD.getOrDefault(method,method),detail));
         }
         var restrictions=new ArrayList<String>();
-        if(!digital)restrictions.add("No aceptó comunicaciones por canal digital en el Formulario.");
-        if("unsafe".equals(value(c,"nna-primary-method"))||"unsafe".equals(value(c,"nna-secondary-method")))restrictions.add("No tiene una forma segura de contacto.");
-        String safe=value(c,"nna-safe");if(safe!=null)restrictions.add("Seguridad del contacto: "+SAFE.getOrDefault(safe,safe)+".");
+        // Solo el medio principal admite "unsafe" (ValidacionFormulario); un alternativo informado sigue siendo valido.
+        if("unsafe".equals(value(c,"nna-primary-method")))restrictions.add(value(c,"nna-secondary-method")==null
+            ?"No tiene una forma segura de contacto."
+            :"Contacto principal: sin forma segura de contacto; existe un contacto alternativo informado.");
+        // nna-safe solo se pregunta cuando el medio principal no es "unsafe": califica al contacto principal.
+        String safe=value(c,"nna-safe");if(safe!=null)restrictions.add("Seguridad del contacto principal: "+SAFE.getOrDefault(safe,safe)+".");
         String care=value(c,"nna-contact-instructions");if(care!=null)restrictions.add("Precauciones para el contacto: "+care);
 
         String domicile=nna?join(", ",value(c,"nna-commune"),region(value(c,"nna-region")))
@@ -190,6 +204,10 @@ record ExternalProjection(Com com,List<Person> persons,List<Field> fields) {
     }
     private static String value(Map<String,String> c,String key){String v=c.get(key);return v==null||v.isBlank()?null:v;}
     private static String first(Map<String,String> c,String... keys){for(String k:keys){String v=value(c,k);if(v!=null)return v;}return null;}
+    private static String byMethod(Map<String,String> c,String method){
+        for(String slot:List.of("primary","secondary"))if(method.equals(value(c,"nna-"+slot+"-method"))){String v=value(c,"nna-"+slot+"-"+method);if(v!=null)return v;}
+        return null;
+    }
     private static String label(Map<String,String> options,String v){return v==null?null:options.getOrDefault(v,v);}
     private static String region(String code){return code==null?null:REGIONS.getOrDefault(code,code);}
     private static String join(String sep,String... parts){

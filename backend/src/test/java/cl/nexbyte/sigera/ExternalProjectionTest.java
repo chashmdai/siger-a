@@ -58,9 +58,16 @@ class ExternalProjectionTest {
         assertEquals(1,disc.size());assertEquals("SOTTO",disc.getFirst().value());assertEquals(SRCEI,disc.getFirst().source());
         var meanings=new HashMap<String,String>();x.attributes().forEach(a->{if(!a.discrepancy())meanings.put(a.key(),a.meaning());});
         assertEquals("Femenino",meanings.get("sexo"));assertEquals("Conviviente civil",meanings.get("estadoCivil"));
-        assertEquals("Desconocido",meanings.get("nacionalidad"));assertEquals("Fecha incompleta",meanings.get("fechaDefuncionTruncada"));
-        // Diccionario: U y codigos no reconocidos, sexo declarado codificado, nacionalidad declarada textual.
-        assertEquals("Desconocido",ExternalProjection.meaning("sexo","Desconocido","U",SRCEI));
+        assertEquals("Código no reconocido",meanings.get("nacionalidad"));assertEquals("Fecha incompleta",meanings.get("fechaDefuncionTruncada"));
+        // El original (valor "Desconocido", codigo "X") se conserva sin cambios junto a su lectura.
+        var nationality=x.attributes().stream().filter(a->a.key().equals("nacionalidad")).findFirst().orElseThrow();
+        assertEquals("Desconocido",nationality.value());assertEquals("X",nationality.code());
+        // Diccionario: U es sin informacion y distinto de un codigo no reconocido; sexo declarado codificado; nacionalidad declarada textual.
+        assertEquals("Sin información",ExternalProjection.meaning("sexo","Desconocido","U",SRCEI));
+        assertEquals("Sin información",ExternalProjection.meaning("estadoCivil",null,"U",SRCEI));
+        assertEquals("Sin información",ExternalProjection.meaning("sexo","U",null,DECL));
+        assertEquals("Código no reconocido",ExternalProjection.meaning("estadoCivil","Desconocido","Z",SRCEI));
+        assertEquals("Código no reconocido",ExternalProjection.meaning("nacionalidad","Desconocido","Q",SRCEI));
         assertEquals("Separado judicialmente",ExternalProjection.meaning("estadoCivil","x","J",SRCEI));
         assertEquals("Nacionalizado",ExternalProjection.meaning("nacionalidad","x","N",SRCEI));
         assertEquals("Masculino",ExternalProjection.meaning("sexo","M",null,DECL));
@@ -81,22 +88,48 @@ class ExternalProjectionTest {
         var o=parse(c);var p=find(o,"presentador-adulto");
         assertEquals("Pasaporte AB/123-xyz.45",o.projection().com().identityDocument());
         assertEquals("DOCUMENTO_EXTRANJERO",p.identificationType());assertNull(p.runNumber());assertEquals("Lucía Quispe",o.projection().com().presenter());
-        // NNA presentador: contacto seguro y restricciones, sin RUN ni canal digital.
-        var n=com("NNA",RECEIVED,new LinkedHashMap<>(Map.of("nna-region","05","nna-commune","Viña del Mar","nna-story","Relato NNA","nna-primary-method","unsafe",
-            "nna-secondary-method","social","nna-secondary-network","instagram","nna-secondary-handle","@cuenta","nna-safe","unsure","nna-contact-instructions","Solo después de clases")),
-            List.of(person("presentador-nna","PRESENTADOR",false,null,null,"primerNombre",attr("Camila",DECL,NOCONTR),"edad",attr("14",DECL,NOCONTR))),List.of(),List.of());
+        // NNA, principal inseguro y alternativo valido (unica combinacion con "unsafe" que admite el Formulario):
+        // aceptaCanalDigital=false del recorrido NNA no se lee como rechazo, y el alternativo no queda anulado.
+        var unsafe=new LinkedHashMap<String,String>();
+        unsafe.put("nna-region","05");unsafe.put("nna-commune","Viña del Mar");unsafe.put("nna-story","Relato NNA");unsafe.put("nna-primary-method","unsafe");
+        unsafe.put("nna-extra-contact","true");unsafe.put("nna-secondary-method","email");unsafe.put("nna-secondary-email","camila@example.cl");
+        unsafe.put("nna-contact-instructions","Solo después de clases");
+        var n=com("NNA",RECEIVED,unsafe,List.of(person("presentador-nna","PRESENTADOR",false,null,null,"primerNombre",attr("Camila",DECL,NOCONTR),"edad",attr("14",DECL,NOCONTR))),List.of(),List.of());
+        assertFalse(n.path("aceptaCanalDigital").asBoolean());
         var nc=parse(n).projection().com();
-        assertEquals("Camila",nc.presenter());assertNull(nc.identityDocument());assertNull(nc.contactEmail());assertNull(nc.contactPhone());
+        assertEquals("Camila",nc.presenter());assertNull(nc.identityDocument());
+        assertEquals("camila@example.cl",nc.contactEmail());assertNull(nc.contactPhone());
         assertEquals("Formulario web NNA",nc.subject());assertEquals("Relato NNA",nc.body());assertEquals("Viña del Mar, Valparaíso",nc.presenterDomicile());
-        assertEquals("Contacto principal: No tiene una forma segura de contacto; Contacto alternativo: Red social instagram @cuenta",nc.contact());
-        assertEquals("No aceptó comunicaciones por canal digital en el Formulario.\nNo tiene una forma segura de contacto.\nSeguridad del contacto: No está seguro o segura.\nPrecauciones para el contacto: Solo después de clases",nc.contactRestrictions());
-        // Consulta general: el relato es el detalle exigido; estadisticas sin relato narrativo no inventa otro.
-        var stats=cuVulneration();var f=stats.withObjectProperty("datos").withObjectProperty("campos");f.removeAll();
-        f.put("motivo","consulta");f.put("tema","estadisticas");f.put("adult-region","13");f.put("stats-confirm","true");f.put("stats-periodo","2024");
-        stats.withObjectProperty("datos").withArrayProperty("personas").removeAll();stats.withObjectProperty("datos").withArrayProperty("instituciones").removeAll();
-        stats.withArrayProperty("personas").removeAll();stats.withArrayProperty("personas").add(cuVulneration().path("personas").get(0));
-        var sc=parse(stats).projection().com();
-        assertEquals("",sc.body());assertEquals("Formulario web adulto · Consulta · Solicitud de estadísticas",sc.subject());
+        assertEquals("Contacto principal: No tiene una forma segura de contacto; Contacto alternativo: Correo electrónico camila@example.cl",nc.contact());
+        assertEquals("Contacto principal: sin forma segura de contacto; existe un contacto alternativo informado.\nPrecauciones para el contacto: Solo después de clases",nc.contactRestrictions());
+        assertFalse(nc.contactRestrictions().contains("canal digital"));
+        // NNA con celular principal (calificado por nna-safe) y red social alternativa: celular del medio elegido, sin restriccion de inseguridad.
+        var safe=new LinkedHashMap<String,String>();
+        safe.put("nna-region","13");safe.put("nna-story","Relato");safe.put("nna-primary-method","celular");safe.put("nna-primary-celular","+56987654321");safe.put("nna-safe","unsure");
+        safe.put("nna-extra-contact","true");safe.put("nna-secondary-method","social");safe.put("nna-secondary-network","otra");safe.put("nna-secondary-other-network","Mastodon");safe.put("nna-secondary-handle","@nna");
+        var sc2=parse(com("NNA",RECEIVED,safe,List.of(person("presentador-nna","PRESENTADOR",false,null,null,"primerNombre",attr("Leo",DECL,NOCONTR))),List.of(),List.of())).projection().com();
+        assertEquals("+56987654321",sc2.contactPhone());assertNull(sc2.contactEmail());
+        assertEquals("Contacto principal: Celular +56987654321; Contacto alternativo: Red social Mastodon @nna",sc2.contact());
+        assertEquals("Seguridad del contacto principal: No está seguro o segura.",sc2.contactRestrictions());
+        // Solo principal inseguro, sin alternativo.
+        var none=new LinkedHashMap<String,String>();none.put("nna-region","13");none.put("nna-story","Relato");none.put("nna-primary-method","unsafe");
+        assertEquals("No tiene una forma segura de contacto.",parse(com("NNA",RECEIVED,none,List.of(person("presentador-nna","PRESENTADOR",false,null,null,"primerNombre",attr("Leo",DECL,NOCONTR))),List.of(),List.of())).projection().com().contactRestrictions());
+
+        // Solicitud estadistica, consulta general y entrevista: su texto es una solicitud, no un relato de hechos.
+        for(var request:List.of(Map.of("tema","estadisticas","stats-confirm","true","stats-descripcion","Ingresos por región 2024","stats-periodo","2024"),
+                                Map.of("tema","general","consulta-confirmada","true","consulta-general-detalle","¿Cómo presento una denuncia?"),
+                                Map.of("tema","entrevista","entrevista-motivo","Tesis de magíster","entrevista-rol","estudiante"))){
+            var stats=cuVulneration();var f=stats.withObjectProperty("datos").withObjectProperty("campos");f.removeAll();
+            f.put("motivo","consulta");f.put("adult-region","13");request.forEach(f::put);
+            stats.withObjectProperty("datos").withArrayProperty("personas").removeAll();stats.withObjectProperty("datos").withArrayProperty("instituciones").removeAll();
+            stats.withArrayProperty("personas").removeAll();stats.withArrayProperty("personas").add(cuVulneration().path("personas").get(0));
+            var o2=parse(stats);var sc=o2.projection().com();
+            assertEquals("",sc.body(),request.get("tema"));
+            var text=request.entrySet().stream().filter(e->e.getKey().endsWith("descripcion")||e.getKey().endsWith("detalle")||e.getKey().endsWith("motivo")).findFirst().orElseThrow();
+            assertTrue(o2.projection().fields().contains(new ExternalProjection.Field("CAMPO",null,0,text.getKey(),text.getValue())));
+        }
+        // Vulneracion y promocion si llevan relato de hechos ("relato").
+        assertEquals("Relato sintético con tildes: niño, señal, acción.",parse(cuVulneration()).projection().com().body());
     }
 
     @Test void edadCalculadaCumpleanosVeintinueveFebreroYZonaSantiago(){
@@ -144,6 +177,24 @@ class ExternalProjectionTest {
         invalid(c->c.withObjectProperty("datos").withArrayProperty("adjuntos").add(UUID.randomUUID().toString()));                        // referencia sin descriptor
         invalid(c->c.put("aceptaCanalDigital",false));                                                                    // adulto sin canal digital
         invalid(c->c.withObjectProperty("datos").withObjectProperty("campos").put("motivo",1));
+        // Fuente y nivel deben coincidir con el contrato (CU autenticada, SRCeI contrastado, declaracion no contrastada).
+        invalid(c->((ObjectNode)c.withArrayProperty("personas").get(1)).withObjectProperty("atributos").set("x",attr("v",SRCEI,NOCONTR)));
+        invalid(c->((ObjectNode)c.withArrayProperty("personas").get(1)).withObjectProperty("atributos").set("x",attr("v",DECL,CONTR)));
+        invalid(c->((ObjectNode)c.withArrayProperty("personas").get(0)).withObjectProperty("atributos").set("nombres",attr("María",CU,NOCONTR)));
+        invalid(c->((ObjectNode)c.withArrayProperty("personas").get(0)).withObjectProperty("atributos").set("sexo",attr("Femenino","F",CU,CONTR)));
+        invalid(c->((ObjectNode)c.withArrayProperty("personas").get(1)).withObjectProperty("discrepancias").set("x",attr("v",SRCEI,"OTRO_NIVEL")));
+        invalid(c->((ObjectNode)c.withArrayProperty("personas").get(1)).withObjectProperty("atributos").set("x",attr(null,SIN,CONTR)));
+        invalid(c->((ObjectNode)c.withArrayProperty("personas").get(1)).withObjectProperty("atributos").set("x",attr(null,SIN,AUTH)));
+        // RUN autenticado que no cumple modulo 11 o con formato invalido: se rechaza, no se acepta en silencio.
+        invalid(c->{var p=(ObjectNode)c.withArrayProperty("personas").get(0);p.put("runDv","4");p.withObjectProperty("atributos").set("runDv",attr("4",CU,AUTH));});
+        invalid(c->{var p=(ObjectNode)c.withArrayProperty("personas").get(0);p.put("runNumero","12.345.678");p.withObjectProperty("atributos").set("runNumero",attr("12.345.678",CU,AUTH));});
+        invalid(c->{var p=(ObjectNode)c.withArrayProperty("personas").get(0);p.put("runNumero","012345678");p.withObjectProperty("atributos").set("runNumero",attr("012345678",CU,AUTH));});
+        // SIN_DATO con nivel no verificado se admite; RUN autenticado con K minuscula valida tambien.
+        var sinDato=cuVulneration();((ObjectNode)sinDato.withArrayProperty("personas").get(1)).withObjectProperty("atributos").set("fechaNacimiento",attr(null,SIN,NOCONTR));
+        assertNull(find(parse(sinDato),"afectado-1").birthDate());
+        var k=cuVulneration();var kp=(ObjectNode)k.withArrayProperty("personas").get(0);
+        kp.put("runNumero","10000013");kp.put("runDv","k");kp.withObjectProperty("atributos").set("runNumero",attr("10000013",CU,AUTH));kp.withObjectProperty("atributos").set("runDv",attr("k",CU,AUTH));
+        assertEquals("10000013-K",parse(k).projection().com().identityDocument());
         invalid(c->{for(int i=0;i<27;i++)c.withArrayProperty("personas").add(person("relacionado-x"+i,"ADULTO_RELACIONADO",false,null,null));}); // 31
         // 30 personas, campo desconocido en comunicacion y respuesta nueva: se admiten y conservan.
         var c=cuVulneration();

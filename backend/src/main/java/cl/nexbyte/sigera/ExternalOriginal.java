@@ -89,6 +89,12 @@ record ExternalOriginal(String source,String externalId,String version,String ki
     private static final Set<String> ROLES=Set.of("PRESENTADOR","AFECTADO_NNA","ADULTO_RELACIONADO","PERSONA_SENALADA");
     private static final Set<String> SOURCES=Set.of("CLAVE_UNICA_USERINFO","SRCEI","DECLARACION_CIUDADANA","SIN_DATO");
     private static final String CU="CLAVE_UNICA_USERINFO";
+    /**
+     * Nivel unico por fuente en el Formulario: IdentificacionCiudadana.put (CU autenticada, declaracion no contrastada)
+     * y ResultadoSrcei (SRCeI siempre CONTRASTADO_EN_FUENTE). SIN_DATO no tiene emisor en el Formulario: se admite con
+     * un nivel no verificado, pero nunca con IDENTIDAD_AUTENTICADA ni CONTRASTADO_EN_FUENTE.
+     */
+    private static final Map<String,String> LEVELS=Map.of(CU,"IDENTIDAD_AUTENTICADA","SRCEI","CONTRASTADO_EN_FUENTE","DECLARACION_CIUDADANA","DECLARADO_NO_CONTRASTADO");
     private static final int MAX_KEY=255;
 
     /**
@@ -116,10 +122,16 @@ record ExternalOriginal(String source,String externalId,String version,String ki
                 if(!CU.equals(p.path("atributos").path(key).path("fuente").asString())||!p.path("atributos").path(key).path("valor").isString()||p.path("atributos").path(key).path("valor").asString().isBlank())fail();
             if(auth!=(presenter&&"ADULTO_CU".equals(kind)))fail();
             if(auth)for(var key:List.of("runNumero","runDv"))if(!p.path(key).equals(p.path("atributos").path(key).path("valor")))fail();
+            // RUN autenticado (RolUnico de ClaveUnica): numero y digito verificador validos por modulo 11; nunca se acepta en silencio.
+            if(auth){
+                String number=p.path("runNumero").asString(),dv=p.path("runDv").asString().toUpperCase(Locale.ROOT);
+                if(!number.matches("[1-9][0-9]{0,8}")||!dv.matches("[0-9K]")||!ExternalProjection.modulo11(number,dv))fail();
+            }
             for(var group:List.of(p.path("atributos"),p.path("discrepancias")))for(var entry:group.properties()){
                 var a=entry.getValue();String source=a.path("fuente").asString(),level=a.path("nivel").asString();
                 if(entry.getKey().length()>MAX_KEY||!a.isObject()||!SOURCES.contains(source)||CU.equals(source)&&!auth)fail();
-                if(!a.path("nivel").isString()||level.isBlank()||level.length()>64||"IDENTIDAD_AUTENTICADA".equals(level)&&!CU.equals(source))fail();
+                if(!a.path("nivel").isString()||level.isBlank()||level.length()>64||!LEVELS.getOrDefault(source,level).equals(level)
+                    ||"SIN_DATO".equals(source)&&LEVELS.containsValue(level)&&!"DECLARADO_NO_CONTRASTADO".equals(level))fail();
                 for(var key:List.of("valor","codigo"))if(!a.has(key)||!(a.path(key).isNull()||a.path(key).isString()))fail();
                 if(a.path("codigo").isString()&&a.path("codigo").asString().length()>MAX_KEY)fail();
                 UUID.fromString(a.path("evidencia").asString());

@@ -154,7 +154,8 @@ class ExternalOriginalTest {
         assertEquals("PERSONA SINTETICA",s(c,"presenter"));
         assertNull(c.get("identity_document"));
         assertEquals("Contacto principal: No tiene una forma segura de contacto",s(c,"contact"));
-        assertEquals("No aceptó comunicaciones por canal digital en el Formulario.\nNo tiene una forma segura de contacto.",s(c,"contact_restrictions"));
+        // aceptaCanalDigital=false del recorrido NNA no es un rechazo de contacto: solo cuenta el medio declarado.
+        assertEquals("No tiene una forma segura de contacto.",s(c,"contact_restrictions"));
         assertEquals("Metropolitana de Santiago",s(c,"presenter_domicile"));
         assertEquals("Formulario web NNA",s(c,"subject"));assertEquals("Relato sintetico completo",s(c,"body"));
         // Procedencia estructurada: persona, atributos con fuente/nivel y respuestas integras.
