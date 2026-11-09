@@ -209,6 +209,22 @@ public class Bootstrap implements ApplicationRunner {
         var granted=new LinkedHashSet<String>();
         var list=authority.path("ambitos");if(!list.isArray()||list.isEmpty())throw invalid("ambitos de la autoridad");
         for(var g:list){String c=g.asString("");if(c.equals("*"))granted.addAll(codes);else if(codes.contains(c))granted.add(c);else throw invalid("ambito de la autoridad "+c);}
+        // Funcionarios opcionales con sus funciones (mismas reglas que GRANT_CREATE): evita crearlos uno a uno en la interfaz.
+        var staff=root.path("funcionarios");if(!staff.isMissingNode()&&(!staff.isArray()||staff.size()>500))throw invalid("funcionarios (hasta 500)");
+        var usernames=new HashSet<>(List.of(tiUser,authorityUser));var heads=new HashSet<String>();int distributors=0;
+        for(var f:staff.isArray()?staff:List.<tools.jackson.databind.JsonNode>of()){
+            String u=user(f);if(!usernames.add(u))throw invalid("usuario repetido "+u);
+            if(!codes.contains(text(f,"ambito",48,true)))throw invalid("ambito de adscripcion de "+u);
+            var roles=f.path("funciones");if(!roles.isArray()||roles.isEmpty())throw invalid("funciones de "+u);
+            for(var g:roles){
+                String role=text(g,"funcion",32,true);
+                if(role.equals("DISTRIBUIDOR")){if(!g.path("ambito").isMissingNode())throw invalid("la distribucion es central y no lleva ambito ("+u+")");distributors++;continue;}
+                if(!STAFF_ROLES.contains(role))throw invalid("funcion "+role+" de "+u);
+                String scope=text(g,"ambito",48,true);if(!codes.contains(scope))throw invalid("ambito de la funcion de "+u);
+                if((role.equals("JEFATURA")||role.equals("DIRECCION"))&&!heads.add(scope))throw invalid("mas de una jefatura o direccion en "+scope);
+            }
+        }
+        if(distributors>1)throw invalid("solo una persona puede tener la distribucion central");
 
         Path credentials=data.resolve("bootstrap-usuarios.csv");
         if(Files.exists(credentials))throw new IllegalStateException("Existe un archivo de acceso anterior; no se sobreescribe.");
@@ -225,7 +241,13 @@ public class Bootstrap implements ApplicationRunner {
             long tiId=account(ti,ids,csv),authorityId=account(authority,ids,csv);
             db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,'TI',NULL,?,?)",tiId,System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);
             for(var c:granted)db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,'AUTORIDAD',?,?,?)",authorityId,ids.get(c),System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);
-            db.audit(tiId,"CONFIGURACION_INSTITUCIONAL_INICIAL","SISTEMA",0,null,ids.size()+" ambitos, una cuenta TI y una autoridad habilitante. "+basis);
+            int people=0;
+            for(var f:staff.isArray()?staff:List.<tools.jackson.databind.JsonNode>of()){
+                long id=account(f,ids,csv);people++;
+                for(var g:f.path("funciones")){String role=text(g,"funcion",32,true);
+                    db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,?,?,?,?)",id,role,role.equals("DISTRIBUIDOR")?null:ids.get(text(g,"ambito",48,true)),System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);}
+            }
+            db.audit(tiId,"CONFIGURACION_INSTITUCIONAL_INICIAL","SISTEMA",0,null,ids.size()+" ambitos, una cuenta TI, una autoridad habilitante y "+people+" funcionarios. "+basis);
             db.update("INSERT INTO application_marker(code,applied_ms) VALUES('INSTITUTIONAL_BOOTSTRAP',?)",System.currentTimeMillis());
             try{
                 Files.writeString(credentials,csv.toString(),StandardOpenOption.CREATE_NEW);
@@ -233,6 +255,8 @@ public class Bootstrap implements ApplicationRunner {
             }catch(Exception e){throw new IllegalStateException("No fue posible crear el archivo privado de accesos iniciales.");}
         });
     }
+    /** Funciones de ambito que puede traer el archivo inicial (TI y autoridad tienen sus propias entradas). */
+    static final Set<String> STAFF_ROLES=Set.of("ADMINISTRATIVO","PROFESIONAL","JEFATURA","DIRECCION","LECTURA","AUDITORIA");
     private long account(tools.jackson.databind.JsonNode a,Map<String,Long> ids,StringBuilder csv){
         String pass=randomPassword(),username=user(a),name=text(a,"nombre",160,true),email=text(a,"correo",200,false);
         long id=db.insert("INSERT INTO staff(username,name,email,password_hash,home_scope,must_change) VALUES(?,?,?,?,?,TRUE)",username,name,email.isEmpty()?null:email,passwords.encode(pass),ids.get(text(a,"ambito",48,true)));

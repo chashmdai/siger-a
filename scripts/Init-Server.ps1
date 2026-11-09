@@ -3,7 +3,16 @@ param([string]$Root='D:\SIGER-A',[Parameter(Mandatory=$true)][string]$Release,[P
     # Institucional: sin cuentas, sedes ni datos de prueba; requiere -EstructuraInicial y se ejecuta como la cuenta de
     # servicio SIN privilegios administrativos (sera la duena de DPAPI). Pruebas: datos sinteticos como hasta ahora.
     [Parameter(Mandatory=$true)][ValidateSet('Institucional','Pruebas')][string]$Mode,
-    [string]$EstructuraInicial='')
+    [string]$EstructuraInicial='',
+    # Institucional: Validacion (piloto con datos ficticios, nunca recibe entregas reales) o Produccion.
+    [ValidateSet('Validacion','Produccion')][string]$Proposito='',
+    # Prefijo de folio COM compatible con el comprobante del Formulario. Por defecto SIGER (produccion) o SIGERV (validacion).
+    [string]$FolioPrefix='',
+    # Raiz de la instancia de validacion: la produccion debe usar exactamente el mismo JAR validado.
+    [string]$MismoReleaseQue='',
+    # Escuchar en todas las interfaces (no solo 127.0.0.1) para que los funcionarios entren desde sus equipos. El acceso
+    # lo restringe una regla de firewall de TI limitada a sus direcciones; este script no cambia el firewall.
+    [switch]$AccesoRed)
 . (Join-Path $PSScriptRoot 'Common.ps1')
 $Root=[IO.Path]::GetFullPath($Root).TrimEnd('\');$Release=(Resolve-Path $Release).Path;$MySqlHome=(Resolve-Path $MySqlHome).Path
 if($Root -notmatch '^[D-Z]:\\[^\r\n]+$'){throw 'Usa una carpeta nueva de D: u otra unidad de datos; no C: ni la raiz del disco.'}
@@ -14,7 +23,15 @@ if($Mode -eq 'Institucional'){
     $groups=(& "$env:SystemRoot\System32\whoami.exe" /groups /fo csv /nh) -join "`n"
     if($groups -match 'S-1-5-32-544'){throw 'La instancia institucional se inicializa COMO la cuenta de servicio de SIGER, sin privilegios administrativos (runas /user:<cuenta>). Esa cuenta sera la duena de la custodia DPAPI.'}
     if(-not $EstructuraInicial -or -not(Test-Path -LiteralPath $EstructuraInicial -PathType Leaf)){throw 'El modo Institucional exige -EstructuraInicial con el archivo de ambitos reales, TI y autoridad habilitante (ver docs\INSTALACION_VM.md).'}
-}elseif($EstructuraInicial){throw '-EstructuraInicial solo corresponde al modo Institucional.'}
+    if(-not $Proposito){throw 'El modo Institucional exige -Proposito Validacion o Produccion.'}
+}elseif($EstructuraInicial -or $Proposito){throw '-EstructuraInicial y -Proposito solo corresponden al modo Institucional.'}
+if(-not $FolioPrefix){$FolioPrefix=if($Proposito -eq 'Validacion'){'SIGERV'}elseif($Proposito -eq 'Produccion'){'SIGER'}else{'COMP'}}
+if($FolioPrefix -cnotmatch '^[A-Z][A-Z0-9]{1,15}$'){throw 'FolioPrefix debe ser [A-Z][A-Z0-9]{1,15} (compatible con el comprobante del Formulario).'}
+if($MismoReleaseQue){
+    $validated=Get-Content -LiteralPath (Join-Path $MismoReleaseQue 'config\instance.json') -Raw|ConvertFrom-Json
+    $candidate=(Get-Content (Join-Path (Resolve-Path $Release).Path 'manifest.json') -Raw|ConvertFrom-Json).jarSha256
+    if([string]$validated.jarSha256 -ine [string]$candidate){throw 'El release indicado no es el mismo que se valido (SHA-256 del JAR distinto).'}
+}
 if($MySqlPort -lt 1024 -or $WebPort -lt 1024 -or $MySqlPort -eq $WebPort -or $MySqlPort -in @(3306,33060,1433,13316) -or $WebPort -in @(80,443,8080,3389)){throw 'Elige puertos propios no reservados para servicios existentes.'}
 Free-Port $MySqlPort;Free-Port $WebPort
 $jar=Join-Path $Release 'app\siger-a.jar';$manifest=Get-Content (Join-Path $Release 'manifest.json') -Raw | ConvertFrom-Json
@@ -40,30 +57,27 @@ $secretObject=[PSCustomObject]@{Owner=(ConvertTo-SecureString $owner -AsPlainTex
 $secretObject | Export-Clixml (Join-Path $Root 'config\secrets.clixml')
 $ini=Join-Path $Root 'mysql\my.ini';$data=(Join-Path $Root 'mysql\data').Replace('\','/');$base=$MySqlHome.Replace('\','/')
 @("[mysqld]","basedir=$base","datadir=$data","tmpdir=$((Join-Path $Root 'mysql\tmp').Replace('\','/'))",'bind-address=127.0.0.1',"port=$MySqlPort",'mysqlx=OFF','skip-name-resolve=ON',"pid-file=$data/siger-a.pid","log-error=$data/mysql-error.log",'innodb-buffer-pool-size=256M','max-connections=20','innodb-flush-log-at-trx-commit=1','require-secure-transport=ON','local-infile=OFF','character-set-server=utf8mb4','collation-server=utf8mb4_0900_ai_ci') | Set-Content -Encoding ASCII $ini
-& $mysql "--defaults-file=$ini" --initialize-insecure
-if($LASTEXITCODE -ne 0){throw 'MySQL no se inicializo. Revisa el log privado; no repitas sobre el datadir creado.'}
+if((Invoke-Native {& $mysql "--defaults-file=$ini" --initialize-insecure}) -ne 0){throw 'MySQL no se inicializo. Revisa el log privado; no repitas sobre el datadir creado.'}
 $init=Join-Path $Root 'tmp\init-users.sql'
 $sql=@("ALTER USER 'root'@'localhost' IDENTIFIED BY '$owner';","CREATE USER 'siger_a_owner'@'127.0.0.1' IDENTIFIED BY '$owner';","GRANT ALL PRIVILEGES ON *.* TO 'siger_a_owner'@'127.0.0.1' WITH GRANT OPTION;","CREATE DATABASE $schema CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;","CREATE USER 'siger_a_app'@'127.0.0.1' IDENTIFIED BY '$app';","GRANT SELECT,INSERT,UPDATE,DELETE ON $schema.* TO 'siger_a_app'@'127.0.0.1';","CREATE USER 'siger_a_migrator'@'127.0.0.1' IDENTIFIED BY '$migrator';","GRANT ALL PRIVILEGES ON $schema.* TO 'siger_a_migrator'@'127.0.0.1';","CREATE USER 'siger_a_backup'@'127.0.0.1' IDENTIFIED BY '$backup';","GRANT SELECT,SHOW VIEW,TRIGGER,EVENT ON $schema.* TO 'siger_a_backup'@'127.0.0.1';")
 [IO.File]::WriteAllLines($init,$sql,[Text.Encoding]::ASCII)
-$settings=[PSCustomObject]@{namespace='SIGER-A-2026';root=$Root;mysqlHome=$MySqlHome;mysqlPort=$MySqlPort;webPort=$WebPort;javaHome=$JavaHome;activeJar=$jar;jarSha256=$manifest.jarSha256;database=$schema;mode=$Mode.ToUpperInvariant();ownerSid=$me.User.Value;createdUtc=(Get-Date).ToUniversalTime().ToString('o')}
+$settings=[PSCustomObject]@{namespace='SIGER-A-2026';root=$Root;mysqlHome=$MySqlHome;mysqlPort=$MySqlPort;webPort=$WebPort;javaHome=$JavaHome;activeJar=$jar;jarSha256=$manifest.jarSha256;database=$schema;mode=$Mode.ToUpperInvariant();purpose=$(if($Proposito){$Proposito.ToUpperInvariant()}else{'PRUEBAS'});folioPrefix=$FolioPrefix;bindAddress=$(if($AccesoRed){'0.0.0.0'}else{'127.0.0.1'});ownerSid=$me.User.Value;createdUtc=(Get-Date).ToUniversalTime().ToString('o')}
 $settings | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $Root 'config\instance.json')
 $started=$null;$client=$null
 try {
     $started=Start-Process -FilePath $mysql -ArgumentList @("`"--defaults-file=$ini`"","`"--init-file=$init`"") -PassThru -WindowStyle Hidden
     $client=MySql-ClientFile $settings $secretObject 'owner'
     $ready=$false
-    for($i=0;$i -lt 60;$i++){Start-Sleep -Seconds 1;& $mysqlClient "--defaults-file=$client" --batch --skip-column-names -e 'SELECT 1' *> $null;if($LASTEXITCODE -eq 0){$ready=$true;break}}
+    for($i=0;$i -lt 60;$i++){Start-Sleep -Seconds 1;if((Invoke-Native {& $mysqlClient "--defaults-file=$client" --batch --skip-column-names -e 'SELECT 1'} -Quiet) -eq 0){$ready=$true;break}}
     if(-not $ready){throw 'MySQL propio no estuvo disponible; revisar su log privado. No se intervino MySQL80.'}
 } finally { if(Test-Path $init){Remove-Item $init};if($client -and (Test-Path $client)){Remove-Item $client} }
 # Certificado HTTPS SOLO localhost; no se instala confianza global.
 $passFile=Join-Path $Root 'tmp\keytool-pass.txt';$keytool=Join-Path $JavaHome 'bin\keytool.exe';$store=Join-Path $Root 'config\https.p12'
 try {
     [IO.File]::WriteAllText($passFile,$tls,[Text.Encoding]::ASCII)
-    & $keytool -genkeypair -alias siger-a-local -keyalg RSA -keysize 3072 -validity 365 -dname 'CN=localhost,OU=SIGER' -ext 'SAN=dns:localhost,ip:127.0.0.1' -storetype PKCS12 -keystore $store "-storepass:file" $passFile -noprompt
-    if($LASTEXITCODE -ne 0){throw 'No se creo el certificado HTTPS local.'}
+    if((Invoke-Native {& $keytool -genkeypair -alias siger-a-local -keyalg RSA -keysize 3072 -validity 365 -dname 'CN=localhost,OU=SIGER' -ext 'SAN=dns:localhost,ip:127.0.0.1' -storetype PKCS12 -keystore $store "-storepass:file" $passFile -noprompt} -Quiet) -ne 0){throw 'No se creo el certificado HTTPS local.'}
     [IO.File]::WriteAllText($passFile,$trust,[Text.Encoding]::ASCII)
-    & $keytool -importcert -alias mysql-local-ca -file (Join-Path $Root 'mysql\data\ca.pem') -keystore (Join-Path $Root 'config\mysql-trust.p12') -storetype PKCS12 '-storepass:file' $passFile -noprompt
-    if($LASTEXITCODE -ne 0){throw 'No se creo el truststore de MySQL.'}
+    if((Invoke-Native {& $keytool -importcert -alias mysql-local-ca -file (Join-Path $Root 'mysql\data\ca.pem') -keystore (Join-Path $Root 'config\mysql-trust.p12') -storetype PKCS12 '-storepass:file' $passFile -noprompt} -Quiet) -ne 0){throw 'No se creo el truststore de MySQL.'}
 } finally {if(Test-Path $passFile){Remove-Item $passFile}}
 Copy-Item $PSScriptRoot (Join-Path $Root 'scripts') -Recurse
 # La estructura inicial queda en config\ (ACL privada) y la aplica la primera migracion, una sola vez.

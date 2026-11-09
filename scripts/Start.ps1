@@ -4,6 +4,7 @@ param([string]$Root='D:\SIGER-A',[int]$WaitSeconds=120)
 $s=Read-Settings $Root;$journal=Join-Path $Root 'config\update-state.json';$update=$null
 if(Test-Path $journal){$update=Get-Content $journal -Raw|ConvertFrom-Json;if($update.phase -notin @('PENDING_START','START_FAILED','COMPLETE')){throw "Arranque bloqueado por actualizacion: $($update.phase). No se inicia el JAR anterior."}}
 if(-not(Test-Path (Join-Path $Root 'config\initialized.marker'))){throw 'Falta inicializacion validada.'}
+if(Test-Path (Join-Path $Root 'config\piloto-cerrado.json')){throw 'Instancia de validacion cerrada: se conserva como evidencia y no se vuelve a iniciar.'}
 Require-Java25 $s.javaHome
 if((Get-SigerFileHash $s.activeJar -Algorithm SHA256).Hash -ine $s.jarSha256){throw 'JAR alterado.'}
 $manifestPath=Join-Path (Split-Path (Split-Path $s.activeJar -Parent) -Parent) 'manifest.json'
@@ -23,7 +24,7 @@ if($services){
     $client=MySql-ClientFile $s $secret 'owner'
     try{
         $ok=$false
-        for($i=0;$i -lt 30;$i++){& (Join-Path $s.mysqlHome 'bin\mysql.exe') "--defaults-file=$client" --batch -e 'SELECT 1' *> $null;if($LASTEXITCODE -eq 0){$ok=$true;break};Start-Sleep 1}
+        for($i=0;$i -lt 30;$i++){if((Invoke-Native {& (Join-Path $s.mysqlHome 'bin\mysql.exe') "--defaults-file=$client" --batch -e 'SELECT 1'} -Quiet) -eq 0){$ok=$true;break};Start-Sleep 1}
         if(-not $ok){throw 'MySQL propio no responde.'};Require-OwnMySql $s $client
     }finally{Remove-Item -LiteralPath $client}
     if(-not(App-Running $s)){

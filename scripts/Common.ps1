@@ -61,11 +61,23 @@ function App-Running($Settings) {
     return $null -ne (Own-Process $processId (Join-Path $Settings.javaHome 'bin\java.exe') $Settings.activeJar)
 }
 
+# Windows PowerShell 5.1 convierte la salida de error de un programa nativo en un error terminante cuando se redirige
+# (o cuando PowerShell corre con su salida redirigida) y $ErrorActionPreference es Stop. keytool, mysql, mysqldump y
+# secedit escriben avisos normales en stderr (y mysql un error mientras el motor aun arranca). Aqui se ejecutan con
+# Continue y se decide solo por el codigo de salida. -Quiet descarta la salida.
+function Invoke-Native([scriptblock]$Command,[switch]$Quiet) {
+    $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+    try{
+        if($Quiet){& $Command *> $null}else{& $Command 2>&1 | ForEach-Object {Write-Host ([string]$_)}}
+        return $LASTEXITCODE
+    }finally{$ErrorActionPreference=$old}
+}
 function Invoke-SigerSql($Settings,[string]$Client,[string]$Sql,[string]$Database='') {
     $arguments=@("--defaults-file=$Client",'--batch','--raw','--skip-column-names','--default-character-set=utf8mb4')
     if($Database){if($Database -notmatch '^siger_a_[a-z0-9_]{1,40}$'){throw 'Esquema ajeno.'};$arguments+="--database=$Database"}
     $arguments+=@('-e',$Sql)
-    $result=& (Join-Path $Settings.mysqlHome 'bin\mysql.exe') @arguments
+    $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+    try{$result=& (Join-Path $Settings.mysqlHome 'bin\mysql.exe') @arguments 2>$null}finally{$ErrorActionPreference=$old}
     if($LASTEXITCODE -ne 0){throw 'Consulta del motor propio fallida. Revisa el error local sin publicar secretos.'}
     return $result
 }

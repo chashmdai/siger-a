@@ -17,8 +17,7 @@ try {
     $counts | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $Destination 'table-counts.csv')
     Remove-Item -LiteralPath $client;$client=MySql-ClientFile $s $secret 'backup'
     $dump=Join-Path $Destination 'siger-a.sql'
-    & (Join-Path $s.mysqlHome 'bin\mysqldump.exe') "--defaults-file=$client" --single-transaction --no-tablespaces --set-gtid-purged=OFF --hex-blob --default-character-set=utf8mb4 "--result-file=$dump" $s.database
-    if($LASTEXITCODE -ne 0){throw 'Dump incompleto. No hay respaldo valido.'}
+    if((Invoke-Native {& (Join-Path $s.mysqlHome 'bin\mysqldump.exe') "--defaults-file=$client" --single-transaction --no-tablespaces --set-gtid-purged=OFF --hex-blob --default-character-set=utf8mb4 "--result-file=$dump" $s.database}) -ne 0){throw 'Dump incompleto. No hay respaldo valido.'}
     Copy-Item (Join-Path $Root 'data\documents') (Join-Path $Destination 'documents') -Recurse
     Copy-Item (Join-Path $Root 'config') (Join-Path $Destination 'config-private') -Recurse
     $hashes=Get-ChildItem $Destination -File -Recurse | ForEach-Object {[PSCustomObject]@{Path=$_.FullName.Substring($Destination.Length+1);SHA256=(Get-SigerFileHash $_.FullName -Algorithm SHA256).Hash}}

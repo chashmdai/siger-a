@@ -98,8 +98,7 @@ if($HttpsPfx){
     $src=Join-Path $Root ('tmp\pfx-'+[Guid]::NewGuid().ToString('N')+'.txt');$dst=Join-Path $Root ('tmp\p12-'+[Guid]::NewGuid().ToString('N')+'.txt')
     try{
         [IO.File]::WriteAllText($src,(Secret-Text $pfxPassword),[Text.Encoding]::ASCII);[IO.File]::WriteAllText($dst,(Secret-Text $secret.Tls),[Text.Encoding]::ASCII)
-        & (Join-Path $s.javaHome 'bin\keytool.exe') -importkeystore -noprompt -srckeystore $HttpsPfx -srcstoretype PKCS12 '-srcstorepass:file' $src -destkeystore $candidate -deststoretype PKCS12 '-deststorepass:file' $dst *> $null
-        if($LASTEXITCODE -ne 0){throw 'keytool no pudo importar el PFX.'}
+        if((Invoke-Native {& (Join-Path $s.javaHome 'bin\keytool.exe') -importkeystore -noprompt -srckeystore $HttpsPfx -srcstoretype PKCS12 '-srcstorepass:file' $src -destkeystore $candidate -deststoretype PKCS12 '-deststorepass:file' $dst} -Quiet) -ne 0){throw 'keytool no pudo importar el PFX.'}
     }finally{foreach($f in @($src,$dst)){if(Test-Path -LiteralPath $f){Remove-Item -LiteralPath $f}}}
     if($PSCmdlet.ShouldProcess($store,'Reemplazar el certificado HTTPS (se conserva el anterior)')){
         $previous=Join-Path $config ('https-anterior-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.p12')

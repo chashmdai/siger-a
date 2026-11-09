@@ -1,5 +1,11 @@
 # Instalacion aislada en DDN-SIGER
 
+> Procedimiento abreviado (datos de TI, validacion, cierre del piloto, produccion y sustitucion de SMR): `docs/DESPLIEGUE_VM.md`.
+> Instancias institucionales: `Init-Server.ps1 -Mode Institucional -Proposito Validacion|Produccion` (la validacion nunca recibe entregas
+> reales; `-MismoReleaseQue` exige el mismo JAR validado; `-AccesoRed` escucha en todas las interfaces). Secretos entre equipos:
+> `Export-SecretPackage.ps1` (equipo de SMR) e `Import-SecretPackage.ps1` (VM, reprotege con DPAPI). Sonda sin reclamar:
+> `Invoke-FormularioPull.ps1 -SoloComprobar`. Activacion: `Set-Integration.ps1`. Cierre del piloto: `Close-Validation.ps1`.
+
 ## Condicion de entrada
 
 Compilar primero en el PC. No ejecutar esta instalacion sobre un paquete cuyo build haya fallado. Los scripts estan preparados para Windows PowerShell 5.1, pero **no se ejecutaron en Windows durante la preparacion de esta entrega**: revisaremos juntos la primera ejecucion.

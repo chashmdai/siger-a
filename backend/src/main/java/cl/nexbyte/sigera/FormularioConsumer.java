@@ -29,6 +29,9 @@ final class FormularioConsumer {
         boolean clean(){return !busy&&incidents.isEmpty();}
     }
 
+    /** Sonda sin reclamar entregas (comprobacion previa a la activacion). */
+    FormularioClient.Probe probe()throws FormularioClient.Failure{return client.probe();}
+
     /** Ciclo manual: lease propio de 15 minutos que se libera al terminar. */
     Cycle run(){return run(UUID.randomUUID().toString(),LOCK_MS,true);}
 

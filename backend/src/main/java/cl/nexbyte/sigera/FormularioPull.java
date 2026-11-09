@@ -30,8 +30,9 @@ class FormularioPull {
     private static final Logger LOG=LoggerFactory.getLogger(FormularioPull.class);
 
     @Bean FormularioConsumer formularioConsumer(Environment env,FormularioReception reception,Documents documents,FormularioKeys keys,Db db){
-        boolean once=env.getProperty("siger.formulario.pull.run-once",Boolean.class,false),automatic=env.getProperty("siger.formulario.pull.automatic",Boolean.class,false);
-        if(once==automatic)throw new IllegalStateException("Consumidor del Formulario: elige exactamente un modo (run-once o automatic).");
+        boolean once=env.getProperty("siger.formulario.pull.run-once",Boolean.class,false),automatic=env.getProperty("siger.formulario.pull.automatic",Boolean.class,false),
+            probe=env.getProperty("siger.formulario.pull.probe",Boolean.class,false);
+        if((once?1:0)+(automatic?1:0)+(probe?1:0)!=1)throw new IllegalStateException("Consumidor del Formulario: elige exactamente un modo (run-once, automatic o probe).");
         // Esquema V8 presente antes de contactar el origen (el proceso manual no migra).
         try{db.count("SELECT COUNT(*) FROM formulario_consumer_lock WHERE id=1");db.count("SELECT COUNT(*) FROM formulario_reception WHERE id=0");}
         catch(RuntimeException e){throw new IllegalStateException("El esquema no tiene la migracion V8 del consumidor del Formulario.");}
@@ -88,6 +89,30 @@ class FormularioPull {
         private final FormularioAutomatic automatic;
         FormularioAutomaticStart(FormularioAutomatic automatic){this.automatic=automatic;}
         @EventListener(ApplicationReadyEvent.class) void ready(){automatic.start();}
+    }
+
+    /**
+     * Comprobacion previa a la activacion (siger.formulario.pull.probe=true, proceso sin web ni tareas): la creacion del
+     * consumidor ya valido esquema, claves de custodia, identidad ACK, prefijo de folio, ambito receptor, CA y Bearer;
+     * aqui solo se hace la sonda HEAD que no reclama ni confirma entregas. Codigo de salida distinto de cero si falla.
+     */
+    @Bean @ConditionalOnProperty(name="siger.formulario.pull.probe",havingValue="true")
+    FormularioProbe formularioProbe(FormularioConsumer consumer,FormularioReception reception,ConfigurableApplicationContext context,Environment env){
+        if(context instanceof WebServerApplicationContext||env.getProperty("siger.scheduling",Boolean.class,true))throw new IllegalStateException("La sonda del Formulario se ejecuta sin servidor web ni tareas programadas.");
+        return new FormularioProbe(consumer,reception,context);
+    }
+    static final class FormularioProbe {
+        private final FormularioConsumer consumer;private final FormularioReception reception;private final ConfigurableApplicationContext context;
+        FormularioProbe(FormularioConsumer consumer,FormularioReception reception,ConfigurableApplicationContext context){this.consumer=consumer;this.reception=reception;this.context=context;}
+        @EventListener(ApplicationReadyEvent.class) void ready(){
+            String result;boolean ok;
+            try{var p=consumer.probe();ok=p.ready();result="sinCredencial="+p.absent()+" credencialInvalida="+p.invalid()+" credencialConfigurada="+p.valid();}
+            catch(FormularioClient.Failure f){ok=false;result="error="+f.code;}
+            int pending=reception.pendingAcks(20).size();
+            LOG.info("Sonda del Formulario: {} acksPendientes={} resultado={}",result,pending,ok?"LISTO":"NO_LISTO");
+            context.close();
+            if(!ok)throw new IllegalStateException("Sonda del Formulario no acreditada: "+result);
+        }
     }
 
     static final class FormularioRunOnce {

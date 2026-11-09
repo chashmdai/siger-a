@@ -41,6 +41,18 @@ foreach($case in $cases){
     $got=$null;try{$got=Get-InstanceMode $case.settings}catch{$got=$null}
     if($got -ne $case.expected){throw ('Modo de instancia: se esperaba '+$(if($case.expected){$case.expected}else{'rechazo'})+' y se obtuvo '+$(if($got){$got}else{'rechazo'})+' para '+($case.settings|ConvertTo-Json -Compress)+'.')}
 }
+# Proposito institucional: obligatorio y cerrado; las entregas reales del Formulario solo en PRODUCCION.
+$purposes=@(
+    @{settings=[PSCustomObject]@{mode='INSTITUCIONAL';purpose='VALIDACION'};expected='VALIDACION';pull=$false},
+    @{settings=[PSCustomObject]@{mode='INSTITUCIONAL';purpose='PRODUCCION'};expected='PRODUCCION';pull=$true},
+    @{settings=[PSCustomObject]@{mode='PRUEBAS';purpose='PRODUCCION'};expected='PRUEBAS';pull=$false},
+    @{settings=[PSCustomObject]@{mode='INSTITUCIONAL'};expected=$null;pull=$false},
+    @{settings=[PSCustomObject]@{mode='INSTITUCIONAL';purpose='produccion'};expected=$null;pull=$false})
+foreach($case in $purposes){
+    $got=$null;try{$got=Get-InstancePurpose $case.settings}catch{$got=$null}
+    $pull=$true;try{Require-ProductionPull $case.settings}catch{$pull=$false}
+    if($got -ne $case.expected -or $pull -ne $case.pull){throw ('Proposito de instancia inesperado para '+($case.settings|ConvertTo-Json -Compress)+'.')}
+}
 # Un modo desconocido detiene Set-SigerEnvironment antes de definir variables del proceso.
 try{Set-SigerEnvironment ([PSCustomObject]@{mode='OTRO';root='X:\no-existe';mysqlPort=1;webPort=2;database='siger_a_x'}) $null;throw 'Set-SigerEnvironment acepto un modo desconocido.'}
 catch{if($_.Exception.Message -like 'Set-SigerEnvironment acepto*'){throw}}

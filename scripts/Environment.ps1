@@ -10,7 +10,10 @@ function Set-SigerEnvironment($Settings,$Secrets,[switch]$Migration,[switch]$See
     $env:SIGER_DB_TRUSTSTORE=([Uri](Join-Path $Settings.root 'config\mysql-trust.p12')).AbsoluteUri
     $env:SIGER_DB_TRUST_PASSWORD=Secret-Text $Secrets.Trust
     $env:SIGER_DATA=Join-Path $Settings.root 'data';$env:SIGER_TEMP=Join-Path $Settings.root 'data\tmp'
-    $env:SIGER_BIND='127.0.0.1';$env:SIGER_PORT=[string]$Settings.webPort;$env:SIGER_HTTPS='true'
+    # Solo local (127.0.0.1) salvo bindAddress 0.0.0.0 (Init-Server -AccesoRed); el acceso lo restringe el firewall de TI.
+    $bind=$Settings.PSObject.Properties['bindAddress'];$bindValue=if($bind){[string]$bind.Value}else{'127.0.0.1'}
+    if(@('127.0.0.1','0.0.0.0') -notcontains $bindValue){throw "bindAddress no admitido en instance.json ('$bindValue'): usa 127.0.0.1 o 0.0.0.0."}
+    $env:SIGER_BIND=$bindValue;$env:SIGER_PORT=[string]$Settings.webPort;$env:SIGER_HTTPS='true'
     $env:SIGER_KEYSTORE=([Uri](Join-Path $Settings.root 'config\https.p12')).AbsoluteUri
     $env:SIGER_TLS_PASSWORD=Secret-Text $Secrets.Tls
     $env:SIGER_MIGRATE=if($Migration){'true'}else{'false'}
@@ -23,8 +26,12 @@ function Set-SigerEnvironment($Settings,$Secrets,[switch]$Migration,[switch]$See
     $env:SIGER_FOLIO_PREFIX=if($prefix -and $prefix.Value){[string]$prefix.Value}else{$null}
     # Modo de la instancia: la de pruebas lo anuncia en pantalla y admite la liberacion manual de archivos de prueba;
     # la institucional no muestra etiqueta y solo libera originales tras un analisis antivirus del servidor.
+    $purpose=Get-InstancePurpose $Settings
     if($instanceMode -eq 'PRUEBAS'){
         $env:SIGER_ENVIRONMENT_LABEL="Entorno de pruebas $([char]0xB7) Datos sint$([char]0xE9)ticos";$env:SIGER_DOCUMENTS_SYNTHETIC_RELEASE='true'
+    }elseif($purpose -eq 'VALIDACION'){
+        # Validacion institucional: cuentas reales, datos ficticios ingresados por funcionarios; se anuncia en pantalla.
+        $env:SIGER_ENVIRONMENT_LABEL="Validaci$([char]0xF3)n institucional $([char]0xB7) Datos ficticios, no ingresar casos reales";$env:SIGER_DOCUMENTS_SYNTHETIC_RELEASE='false'
     }else{$env:SIGER_ENVIRONMENT_LABEL=$null;$env:SIGER_DOCUMENTS_SYNTHETIC_RELEASE='false'}
     # Motor antivirus (config\antivirus.json: {"engine":"CLAMAV"|"DEFENDER","executable":"...","database":"..."}).
     $av=Join-Path $Settings.root 'config\antivirus.json'
@@ -48,8 +55,21 @@ function Get-InstanceMode($Settings){
     if($value -ceq 'INSTITUCIONAL' -or $value -ceq 'PRUEBAS'){return $value}
     throw "Modo de instancia desconocido en instance.json ('$value'). Se admiten INSTITUCIONAL y PRUEBAS; no se inicia con un modo dudoso."
 }
+# Proposito de una instancia institucional: VALIDACION (piloto con datos ficticios; nunca recibe entregas reales del
+# Formulario) o PRODUCCION. Falla cerrado si falta o es desconocido. Las instancias de pruebas son PRUEBAS.
+function Get-InstancePurpose($Settings){
+    if((Get-InstanceMode $Settings) -eq 'PRUEBAS'){return 'PRUEBAS'}
+    $purpose=$Settings.PSObject.Properties['purpose']
+    $value=if($purpose){[string]$purpose.Value}else{''}
+    if($value -ceq 'VALIDACION' -or $value -ceq 'PRODUCCION'){return $value}
+    throw "Proposito de instancia ausente o desconocido en instance.json ('$value'). Se admiten VALIDACION y PRODUCCION."
+}
+# Recibir entregas reales del Formulario (ciclo o automatico) solo en produccion; la sonda se permite en cualquiera.
+function Require-ProductionPull($Settings){
+    if((Get-InstancePurpose $Settings) -ne 'PRODUCCION'){throw 'Esta instancia no es de produccion: no recibe entregas reales del Formulario. La sonda (-SoloComprobar) si esta permitida.'}
+}
 function Clear-SigerEnvironment {
-    foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO','SIGER_FORMULARIO_TRUSTED_KEYS','SIGER_FOLIO_PREFIX','SIGER_SCHEDULING','SIGER_FORMULARIO_PULL_ENABLED','SIGER_FORMULARIO_PULL_RUN_ONCE','SIGER_FORMULARIO_PULL_ORIGIN','SIGER_FORMULARIO_PULL_TOKEN','SIGER_FORMULARIO_PULL_TOKEN_FILE','SIGER_FORMULARIO_PULL_CA_FILE','SIGER_FORMULARIO_PULL_SCOPE','SIGER_FORMULARIO_ACK_KEY_ID','SIGER_FORMULARIO_ACK_PRIVATE_KEY_FILE','SIGER_FORMULARIO_ACK_PUBLIC_KEY_FILE','SIGER_FORMULARIO_PULL_AUTOMATIC','SIGER_FORMULARIO_PULL_SINGLE_CONSUMER','SIGER_FORMULARIO_ACK_PRIVATE_KEY','SIGER_FORMULARIO_ACK_PUBLIC_KEY','SIGER_MAIL_MODE','SIGER_GRAPH_TENANT','SIGER_GRAPH_CLIENT','SIGER_GRAPH_SENDER','SIGER_GRAPH_CLIENT_SECRET','SIGER_MAIL_ALLOWED_DOMAINS','SIGER_MAIL_LINK','SIGER_STOP_FILE','SIGER_LOG_FILE','SIGER_ENVIRONMENT_LABEL','SIGER_DOCUMENTS_SYNTHETIC_RELEASE','SIGER_AV_ENGINE','SIGER_AV_EXECUTABLE','SIGER_AV_DATABASE','SIGER_BOOTSTRAP_FILE')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
+    foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO','SIGER_FORMULARIO_TRUSTED_KEYS','SIGER_FOLIO_PREFIX','SIGER_SCHEDULING','SIGER_FORMULARIO_PULL_ENABLED','SIGER_FORMULARIO_PULL_RUN_ONCE','SIGER_FORMULARIO_PULL_ORIGIN','SIGER_FORMULARIO_PULL_TOKEN','SIGER_FORMULARIO_PULL_TOKEN_FILE','SIGER_FORMULARIO_PULL_CA_FILE','SIGER_FORMULARIO_PULL_SCOPE','SIGER_FORMULARIO_ACK_KEY_ID','SIGER_FORMULARIO_ACK_PRIVATE_KEY_FILE','SIGER_FORMULARIO_ACK_PUBLIC_KEY_FILE','SIGER_FORMULARIO_PULL_AUTOMATIC','SIGER_FORMULARIO_PULL_SINGLE_CONSUMER','SIGER_FORMULARIO_ACK_PRIVATE_KEY','SIGER_FORMULARIO_ACK_PUBLIC_KEY','SIGER_MAIL_MODE','SIGER_GRAPH_TENANT','SIGER_GRAPH_CLIENT','SIGER_GRAPH_SENDER','SIGER_GRAPH_CLIENT_SECRET','SIGER_MAIL_ALLOWED_DOMAINS','SIGER_MAIL_LINK','SIGER_STOP_FILE','SIGER_LOG_FILE','SIGER_ENVIRONMENT_LABEL','SIGER_DOCUMENTS_SYNTHETIC_RELEASE','SIGER_AV_ENGINE','SIGER_AV_EXECUTABLE','SIGER_AV_DATABASE','SIGER_BOOTSTRAP_FILE','SIGER_FORMULARIO_PULL_PROBE')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
 }
 
 # --- Integraciones (configuracion en config\, secretos DPAPI de la cuenta del servicio) -----------------------
@@ -67,6 +87,7 @@ function Get-FormularioPullConfig($Settings) {
     if(@('MANUAL','AUTOMATICO') -notcontains $mode){throw 'mode en formulario-pull.json debe ser MANUAL o AUTOMATICO.'}
     $single=$pull.PSObject.Properties['consumidorUnicoConfirmado'] -and $pull.consumidorUnicoConfirmado -eq $true
     if($mode -eq 'AUTOMATICO' -and -not $single){throw 'El modo AUTOMATICO exige "consumidorUnicoConfirmado": true en formulario-pull.json, despues de detener con autorizacion el consumidor del Formulario de SMR.'}
+    if($mode -eq 'AUTOMATICO'){Require-ProductionPull $Settings}
     $prefix=$Settings.PSObject.Properties['folioPrefix']
     if(-not $prefix -or [string]$prefix.Value -cnotmatch '^[A-Z][A-Z0-9]{1,15}$'){throw 'Define en instance.json un folioPrefix compatible con el comprobante del Formulario ([A-Z][A-Z0-9]{1,15}).'}
     if(-not(Test-Path -LiteralPath (Join-Path $config 'formulario-trusted-keys.json') -PathType Leaf)){throw 'Falta config\formulario-trusted-keys.json con la clave publica de custodia del Formulario.'}
@@ -88,9 +109,10 @@ function Get-FormularioPullConfig($Settings) {
     if($pull.PSObject.Properties['caFile'] -and [string]$pull.caFile){$ca=Join-Path $config ([IO.Path]::GetFileName([string]$pull.caFile));if(-not(Test-Path -LiteralPath $ca -PathType Leaf)){throw 'No existe el certificado de CA indicado en formulario-pull.json.'}}
     return [PSCustomObject]@{Mode=$mode;Origin=[string]$pull.origin;Scope=[string]$pull.scope;AckKeyId=$keyId;Token=$token;Identity=$identity;Private=$private;Public=$public;Ca=$ca}
 }
-function Set-FormularioPullEnvironment($Pull,[switch]$RunOnce) {
+function Set-FormularioPullEnvironment($Pull,[switch]$RunOnce,[switch]$Probe) {
     $env:SIGER_FORMULARIO_PULL_ENABLED='true'
-    if($RunOnce){$env:SIGER_FORMULARIO_PULL_RUN_ONCE='true'}else{$env:SIGER_FORMULARIO_PULL_AUTOMATIC='true';$env:SIGER_FORMULARIO_PULL_SINGLE_CONSUMER='true'}
+    if($Probe){$env:SIGER_FORMULARIO_PULL_PROBE='true'}
+    elseif($RunOnce){$env:SIGER_FORMULARIO_PULL_RUN_ONCE='true'}else{$env:SIGER_FORMULARIO_PULL_AUTOMATIC='true';$env:SIGER_FORMULARIO_PULL_SINGLE_CONSUMER='true'}
     $env:SIGER_FORMULARIO_PULL_ORIGIN=$Pull.Origin;$env:SIGER_FORMULARIO_PULL_SCOPE=$Pull.Scope
     $env:SIGER_FORMULARIO_PULL_TOKEN=Secret-Text (Import-Clixml -LiteralPath $Pull.Token)
     $env:SIGER_FORMULARIO_PULL_CA_FILE=$Pull.Ca

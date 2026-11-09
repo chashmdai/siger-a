@@ -45,7 +45,7 @@ if($check.PSObject.Properties['defender'] -and @('NO_CONFIGURADO','NO_APLICA','O
 
 # "Iniciar sesion como servicio": se lee siempre; se concede solo con la opcion explicita.
 function Get-LogonRight([string]$Policy){
-    & secedit.exe /export /areas USER_RIGHTS /cfg $Policy *> $null
+    $null=Invoke-Native {& secedit.exe /export /areas USER_RIGHTS /cfg $Policy} -Quiet
     return @(Get-Content -LiteralPath $Policy -ErrorAction SilentlyContinue | Where-Object {$_ -like 'SeServiceLogonRight*'})
 }
 $policy=Join-Path $Root ('tmp\derechos-'+[Guid]::NewGuid().ToString('N')+'.inf');$database=[IO.Path]::ChangeExtension($policy,'.sdb')
@@ -64,8 +64,7 @@ if(-not $right -and $ConcederInicioComoServicio){
         $line=Get-LogonRight $policy
         $entry=if($line.Count -gt 0){$line[0].TrimEnd()+",*$sid"}else{"SeServiceLogonRight = *$sid"}
         @('[Unicode]','Unicode=yes','[Version]','signature="$CHICAGO$"','Revision=1','[Privilege Rights]',$entry)|Set-Content -LiteralPath $policy -Encoding Unicode
-        & secedit.exe /configure /db $database /cfg $policy /areas USER_RIGHTS *> $null
-        if($LASTEXITCODE -ne 0){throw 'secedit no aplico el derecho.'}
+        if((Invoke-Native {& secedit.exe /configure /db $database /cfg $policy /areas USER_RIGHTS} -Quiet) -ne 0){throw 'secedit no aplico el derecho.'}
         $right=(Get-LogonRight $policy)[0] -match [regex]::Escape('*'+$sid)
     }finally{foreach($f in @($policy,$database)){if(Test-Path -LiteralPath $f){Remove-Item -LiteralPath $f}}}
 }
@@ -77,8 +76,7 @@ $hostHash=(Get-SigerFileHash $exe -Algorithm SHA256).Hash
 
 # Motor propio con su my.ini, ejecutado tambien con la cuenta de servicio (duena del datadir).
 $ini=Join-Path $Root 'mysql\my.ini'
-& (Join-Path $s.mysqlHome 'bin\mysqld.exe') --install $db "--defaults-file=$ini"
-if($LASTEXITCODE -ne 0){throw 'No se registro el servicio del motor propio. Revisa el mensaje de mysqld.'}
+if((Invoke-Native {& (Join-Path $s.mysqlHome 'bin\mysqld.exe') --install $db "--defaults-file=$ini"}) -ne 0){throw 'No se registro el servicio del motor propio. Revisa el mensaje de mysqld.'}
 $account=if($net.Domain){"$($net.Domain)\$($net.UserName)"}else{".\$($net.UserName)"}
 $change=Invoke-CimMethod -InputObject (Get-CimInstance Win32_Service -Filter "Name='$db'") -MethodName Change -Arguments @{StartName=$account;StartPassword=$net.Password;StartMode='Automatic'}
 $net=$null

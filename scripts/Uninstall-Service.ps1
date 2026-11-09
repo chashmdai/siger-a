@@ -11,8 +11,7 @@ if($svc.App.Status -ne 'Stopped' -or $svc.MySql.Status -ne 'Stopped'){throw 'Det
 if(-not $PSCmdlet.ShouldProcess("$($svc.Info.serviceName), $($svc.Info.mysqlServiceName)",'Retirar el registro de los servicios')){return}
 & sc.exe delete ([string]$svc.Info.serviceName) | Out-Null
 if($LASTEXITCODE -ne 0){throw 'No se retiro el servicio de la aplicacion.'}
-& (Join-Path $s.mysqlHome 'bin\mysqld.exe') --remove ([string]$svc.Info.mysqlServiceName)
-if($LASTEXITCODE -ne 0){throw 'No se retiro el servicio del motor propio.'}
+if((Invoke-Native {& (Join-Path $s.mysqlHome 'bin\mysqld.exe') --remove ([string]$svc.Info.mysqlServiceName)}) -ne 0){throw 'No se retiro el servicio del motor propio.'}
 $file=Join-Path $Root 'config\service.json'
 Move-Item -LiteralPath $file -Destination (Join-Path $Root ('config\service-retirado-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.json'))
 Write-Host 'Registro de servicios retirado. Datos, configuracion y logs se conservan.'

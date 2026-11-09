@@ -1,0 +1,19 @@
+{
+  "fundamento": "EJEMPLO: reemplazar por la resolucion o acto que designa a TI, a la autoridad habilitante y a los funcionarios",
+  "ambitos": [
+    {"codigo": "DEF", "nombre": "Defensoria", "unidad": "DEF", "sede": "CENTRAL"},
+    {"codigo": "UGI", "nombre": "Gestion Institucional", "unidad": "UGI", "sede": "CENTRAL"},
+    {"codigo": "UPR-REQ", "nombre": "Requerimientos / Atencion de Personas", "unidad": "UPR", "area": "REQ", "sede": "CENTRAL"},
+    {"codigo": "UPR-PD", "nombre": "Proteccion de Derechos", "unidad": "UPR", "area": "PD", "sede": "CENTRAL"}
+  ],
+  "ti": {"usuario": "nombre.apellido.ti", "nombre": "Nombre Apellido (TI)", "correo": "persona.ti@defensorianinez.cl", "ambito": "UGI"},
+  "autoridad": {"usuario": "nombre.apellido.autoridad", "nombre": "Nombre Apellido (autoridad habilitante)", "correo": "autoridad@defensorianinez.cl", "ambito": "DEF", "ambitos": ["*"]},
+  "funcionarios": [
+    {"usuario": "nombre.distribucion", "nombre": "Nombre Apellido", "correo": "distribucion@defensorianinez.cl", "ambito": "UPR-REQ",
+     "funciones": [{"funcion": "DISTRIBUIDOR"}, {"funcion": "ADMINISTRATIVO", "ambito": "UPR-REQ"}]},
+    {"usuario": "nombre.jefatura.req", "nombre": "Nombre Apellido", "correo": "jefatura.req@defensorianinez.cl", "ambito": "UPR-REQ",
+     "funciones": [{"funcion": "JEFATURA", "ambito": "UPR-REQ"}, {"funcion": "PROFESIONAL", "ambito": "UPR-REQ"}]},
+    {"usuario": "nombre.profesional.req", "nombre": "Nombre Apellido", "correo": "profesional.req@defensorianinez.cl", "ambito": "UPR-REQ",
+     "funciones": [{"funcion": "PROFESIONAL", "ambito": "UPR-REQ"}]}
+  ]
+}

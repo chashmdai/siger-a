@@ -22,5 +22,15 @@ if(Test-Path $pidfile){
 if($AlsoMySql){
     if(App-Running $s){throw 'SIGER debe estar detenido antes de parar su motor.'}
     $secret=Import-Clixml (Join-Path $Root 'config\secrets.clixml');$client=MySql-ClientFile $s $secret 'owner'
-    try {if($PSCmdlet.ShouldProcess("127.0.0.1:$($s.mysqlPort)",'Apagar MySQL propio con autenticacion')){& (Join-Path $s.mysqlHome 'bin\mysqladmin.exe') "--defaults-file=$client" shutdown;if($LASTEXITCODE -ne 0){throw 'No se pudo confirmar la parada MySQL.'}}}finally{Remove-Item $client}
+    try {if($PSCmdlet.ShouldProcess("127.0.0.1:$($s.mysqlPort)",'Apagar MySQL propio con autenticacion')){if((Invoke-Native {& (Join-Path $s.mysqlHome 'bin\mysqladmin.exe') "--defaults-file=$client" shutdown}) -ne 0){throw 'No se pudo confirmar la parada MySQL.'}}}finally{Remove-Item $client}
+    # mysqladmin vuelve al aceptar la orden; el motor termina despues de vaciar sus archivos. Se espera a que salga su
+    # propio proceso (mismo ejecutable y my.ini) para que el cierre del piloto, el retiro de servicios o un respaldo no
+    # actuen con el motor aun escribiendo. Nunca se fuerza su termino.
+    $exe=Join-Path $s.mysqlHome 'bin\mysqld.exe';$ini=Join-Path $Root 'mysql\my.ini'
+    for($i=0;$i -lt 120;$i++){
+        $alive=@(Get-CimInstance Win32_Process -Filter "Name='mysqld.exe'" -ErrorAction SilentlyContinue|Where-Object{$_.ExecutablePath -ieq $exe -and $_.CommandLine -and $_.CommandLine.IndexOf($ini,[StringComparison]::OrdinalIgnoreCase) -ge 0})
+        if($alive.Count -eq 0){break};Start-Sleep 1
+    }
+    if($alive.Count -gt 0){throw 'El motor propio acepto la parada pero su proceso sigue activo tras 120 s. Revisa mysql\data\mysql-error.log; no se fuerza su termino.'}
+    Write-Host 'Motor propio detenido.'
 }

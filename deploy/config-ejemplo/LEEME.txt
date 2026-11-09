@@ -1,0 +1,16 @@
+Configuracion de ejemplo de SIGER (sin secretos). Ver docs\DESPLIEGUE_VM.md.
+
+estructura-inicial.json
+  Plantilla del archivo que entrega TI para Init-Server.ps1 -Mode Institucional -EstructuraInicial.
+  Contiene SOLO datos institucionales reales: ambitos, la cuenta TI, la autoridad habilitante y, opcionalmente,
+  los funcionarios con sus funciones. Las claves temporales se generan en la VM (data\bootstrap-usuarios.csv).
+  - unidad: UPR, UPD, UEP, UGI, REG, DAI, GAB, DEF o AUD.
+  - funciones de funcionarios: ADMINISTRATIVO, PROFESIONAL, JEFATURA, DIRECCION, LECTURA, AUDITORIA (con "ambito")
+    o DISTRIBUIDOR (central, sin ambito, una sola persona). Una jefatura o direccion por ambito.
+  - TI administra cuentas sin acceso a expedientes; la autoridad concede funciones nuevas por la interfaz.
+
+antivirus.json
+  Opcional. Sin este archivo los originales quedan en cuarentena (no se liberan). Copiar a config\ y reiniciar.
+
+Los archivos formulario-pull.json, correo-graph.json y los secretos (*.clixml) los crea Import-SecretPackage.ps1 en
+la VM. Nunca se copian secretos en este paquete.

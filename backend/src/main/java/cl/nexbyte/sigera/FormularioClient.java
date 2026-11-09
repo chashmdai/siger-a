@@ -75,6 +75,26 @@ final class FormularioClient {
         catch(SSLException e){throw new Failure(0,"TLS_NO_VERIFICADO");}
         catch(IOException e){throw new Failure(0,"ORIGEN_NO_DISPONIBLE");}
     }
+    /** Codigos HTTP de la sonda: sin credencial, con una invalida y con la configurada. */
+    record Probe(int absent,int invalid,int valid){
+        /** El origen exige credencial y acepta la configurada (cualquier respuesta distinta de 401/403 y de 5xx). */
+        boolean ready(){return absent==401&&invalid==401&&valid!=401&&valid!=403&&valid<500&&valid>=200;}
+    }
+    /**
+     * Sonda SIN reclamar ni confirmar entregas (misma que usaba SMR): HEAD a un adjunto de una operacion inexistente
+     * (UUID cero) con reserva cero. Comprueba DNS, TLS con la CA configurada, ruta, sin redirecciones, y que el Bearer
+     * es aceptado. No crea, reserva ni modifica nada en el Formulario.
+     */
+    Probe probe()throws Failure{
+        String zero="00000000-0000-0000-0000-000000000000",path=origin+ROOT+"/"+zero+"/adjuntos/"+zero;
+        int[] codes=new int[3];String[] auth={null,"Bearer credencial-sintetica-invalida","Bearer "+token};
+        for(int i=0;i<3;i++){
+            var b=HttpRequest.newBuilder(URI.create(path)).timeout(Duration.ofSeconds(10)).header("User-Agent","SIGER/0.4.0").header("X-Reserva",zero).method("HEAD",HttpRequest.BodyPublishers.noBody());
+            if(auth[i]!=null)b.header("Authorization",auth[i]);
+            codes[i]=send(b.build(),HttpResponse.BodyHandlers.discarding()).statusCode();
+        }
+        return new Probe(codes[0],codes[1],codes[2]);
+    }
     private static byte[] read(InputStream in,int max)throws IOException{
         try(in){byte[] out=in.readNBytes(max+1);if(out.length>max)throw new IOException("Respuesta excesiva");return out;}
     }

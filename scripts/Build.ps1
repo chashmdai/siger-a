@@ -50,6 +50,7 @@ try {
     Copy-Item (Join-Path $project 'backend\target\siger-a.jar') (Join-Path $release 'app\siger-a.jar')
     Copy-Item $PSScriptRoot (Join-Path $release 'scripts') -Recurse
     Copy-Item (Join-Path $project 'docs') (Join-Path $release 'docs') -Recurse
+    Copy-Item (Join-Path $project 'deploy\config-ejemplo') (Join-Path $release 'config-ejemplo') -Recurse
     if ($IncludeJava) { New-Item -ItemType Directory -Force -Path (Join-Path $release 'runtime') | Out-Null; Copy-Item $JavaHome (Join-Path $release 'runtime\java25') -Recurse }
     New-Item -ItemType Directory -Force -Path (Join-Path $release 'build-info') | Out-Null
     Copy-Item (Join-Path $project 'frontend\package-lock.json') (Join-Path $release 'build-info\package-lock.json')
@@ -57,6 +58,10 @@ try {
     if (Test-Path (Join-Path $project '.tools\java25-manifest.json')) { Copy-Item (Join-Path $project '.tools\java25-manifest.json') (Join-Path $release 'build-info\java25-manifest.json') }
     $hash=(Get-SigerFileHash (Join-Path $release 'app\siger-a.jar') -Algorithm SHA256).Hash.ToLower()
     @{name='SIGER';version='0.4.0';createdUtc=(Get-Date).ToUniversalTime().ToString('o');jarSha256=$hash;java=$javaText.Trim();node=$nodeText;automatedTestsExecuted=(-not $SkipChecks);databaseTarget='MySQL independiente';integrations='Formulario PULL/ACK, correo Graph y servicio Windows inactivos hasta configurarlos';schema=10} | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $release 'manifest.json')
+    # Manifiesto SHA-256 de todos los archivos del paquete (sin secretos: ninguno se incluye).
+    $sums=Get-ChildItem -LiteralPath $release -Recurse -File | Sort-Object FullName | ForEach-Object { (Get-SigerFileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower()+'  '+$_.FullName.Substring($release.Length+1).Replace('\','/') }
+    [IO.File]::WriteAllLines((Join-Path $release 'SHA256SUMS.txt'),[string[]]$sums,(New-Object Text.UTF8Encoding($false)))
+    foreach($forbidden in @('*.clixml','*.dpapi','*.pem','*.p12','*.pfx','*.sigerpkg','bootstrap-usuarios*.csv')){if(Get-ChildItem -LiteralPath $release -Recurse -File -Filter $forbidden){throw "El paquete contiene un archivo no permitido ($forbidden). No se genera el ZIP."}}
     Compress-Archive -Path $release -DestinationPath ($release+'.zip')
     Write-Host ('Paquete generado: ' + $release + '.zip')
     Write-Host ('JAR SHA-256: ' + $hash)
