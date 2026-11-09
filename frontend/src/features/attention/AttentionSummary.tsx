@@ -1,5 +1,6 @@
 import type {AttentionData} from './schema';
 import {optionLabel} from './schema';
+import {fullName} from './adult/adultForm.ts';
 import {Callout, Facts} from '../../components/Primitives';
 import {Icon} from '../../components/Icon';
 
@@ -19,7 +20,7 @@ export function AttentionSummary({form}: {form: AttentionData}) {
         <h3><Icon name="message" size={18}/>Motivo inicial</h3>
         <blockquote className="preserve">{String(form.motive) || 'Sin motivo registrado.'}</blockquote>
         <Facts items={[
-          ['Persona requirente', String(form.presenter_name) || 'Sin identificar'],
+          ['Persona requirente', (form.modality === 'NNA' ? '' : fullName(form)) || String(form.presenter_name) || 'Sin identificar'],
           ['Modalidad', form.modality === 'NNA' ? 'Escucha directa a NNA' : 'General o persona adulta'],
           ['Contacto', optionLabel('safe_contact', form.safe_contact) || 'Por verificar'],
           ['Personas relacionadas', form.people.length === 0 ? 'Ninguna agregada' : form.people.length === 1 ? '1 persona' : `${form.people.length} personas`],

@@ -24,6 +24,7 @@ import {Handoffs} from './Handoffs';
 import {PreparedFiles} from './PreparedFiles';
 import {OriginalUpload} from './OriginalUpload';
 import {Preview} from './Preview';
+import {adultProblems, upgrade} from './adult/adultForm.ts';
 
 type Pending = {type: string; id: number | null; revision: number | null; data: Row; key: string};
 
@@ -41,7 +42,10 @@ const NEXT_STEP: Record<string, ['info' | 'warn', string, string]> = {
 export default function Attention({ctx, row, completed}: {ctx: Context; row?: Row; completed?: (r: Result) => void}) {
   const info = row ? obj(row, 'attention') : {};
   const isNew = !row;
-  const [form, setForm] = useState<AttentionData>(() => ({...emptyForm(), ...(row ? obj(info, 'form') : {})}) as AttentionData);
+  // Version guardada: se conserva intacta; el borrador en pantalla se prepara como ficha 1.1 (ver upgrade).
+  const saved = row ? obj(info, 'form') : {};
+  const [form, setForm] = useState<AttentionData>(() => upgrade({...emptyForm(), ...saved}) as AttentionData);
+  const [touched, setTouched] = useState<Set<string>>(() => new Set()), [attempted, setAttempted] = useState(false);
   const [editing, setEditing] = useState(isNew), [scope, setScope] = useState(String(ctx.user.home_scope)), [channel, setChannel] = useState('PRESENCIAL'), [received, setReceived] = useState(localTime());
   const [step, setStep] = useState(1), [dirty, setDirty] = useState(false), [reason, setReason] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(false), [preview, setPreview] = useState<Row | null>(null);
   const [attachments, setAttachments] = useState<string[]>([]), [unprepared, setUnprepared] = useState(false);
@@ -72,7 +76,9 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
 
   const change = (key: string, value: string) => {setForm(old => ({...old, [key]: value})); setDirty(true);};
   const setPeople = (update: (people: Person[]) => Person[]) => {setForm(old => ({...old, people: update(old.people)})); setDirty(true);};
-  const c = controls(form, change, setPeople);
+  const problems = adultProblems(form, saved);
+  const touch = (key: string) => setTouched(old => old.has(key) ? old : new Set(old).add(key));
+  const c = controls(form, change, setPeople, saved, problems, key => attempted || touched.has(key), touch);
 
   function goStep(n: number) {
     setStep(n);
@@ -106,6 +112,7 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
     e.preventDefault();
     if (unprepared) {setError('Prepara el archivo seleccionado o retíralo antes de guardar.'); return;}
     if (!String(form.motive).trim()) {setError('Escribe un motivo breve. No necesitas RUN ni todos los datos personales.'); goStep(1); return;}
+    if (Object.keys(problems).length) {setAttempted(true); setError('Revisa los datos marcados en Primer abordaje. Puedes dejarlos en blanco si aún no se conocen.'); goStep(1); return;}
     if (isNew && (!scope || !received || Number.isNaN(new Date(received).getTime()))) {setError('Selecciona el ámbito y una fecha de recepción válida.'); goStep(1); return;}
     if (!isNew && !reason.trim()) {setError('Indica el motivo de la complementación.'); return;}
     const data: Row = {form};

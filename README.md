@@ -4,7 +4,7 @@ SIGER (Defensoria de la Ninez) gestiona Comunicaciones, Solicitudes, Requerimien
 
 ## Estado real
 
-- Codigo compilado y probado en el PC de preparacion (Windows Server 2022): 71 pruebas JUnit en 19 clases, incluida una prueba de integracion sobre un MySQL 8.4.3 aislado y desechable (`MySql84IntegrationTest`, solo con `-Dsiger.mysql.base=...`; V1-V10, ciclo PULL/ACK con productor sintetico, outbox con Graph falso, inicializacion institucional), y el JAR real con el perfil `mysql` (TLS VERIFY_CA): migracion, salud y parada ordenada.
+- Codigo compilado y probado en el PC de preparacion (Windows Server 2022): 77 pruebas JUnit en 20 clases y 10 pruebas del frontend (`npm test`, node --test sin dependencias nuevas), incluida una prueba de integracion sobre un MySQL 8.4.3 aislado y desechable (`MySql84IntegrationTest`, solo con `-Dsiger.mysql.base=...`; V1-V10, ciclo PULL/ACK con productor sintetico, outbox con Graph falso, inicializacion institucional), y el JAR real con el perfil `mysql` (TLS VERIFY_CA): migracion, salud y parada ordenada.
 - **No es una puesta en produccion acreditada.** No se han ejecutado aun en la VM: la instalacion institucional, el registro de servicios, un PULL real con el Formulario, un envio real por Graph ni el analisis antivirus con el motor institucional.
 - Integraciones existentes e **inactivas hasta configurarlas**: consumidor PULL/ACK del Formulario Publico (manual o automatico), correo institucional por Microsoft Graph con outbox, servicio permanente de Windows y analisis antivirus para liberar originales.
 

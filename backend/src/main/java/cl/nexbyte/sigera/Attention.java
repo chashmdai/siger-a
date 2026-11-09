@@ -41,10 +41,22 @@ public class Attention {
     private String optionalChoice(Input in,String key,String...values){
         String value=in.text(key,40,false);if(!value.isEmpty())require(Set.of(values).contains(value),"Valor no permitido: "+key);return value;
     }
-    /** Esquema pequeno y cerrado, no almacenamiento arbitrario de JSON del navegador. */
-    private Map<String,Object> normalize(Input envelope){
+    /** Campos de la ficha 1.1: identificacion estructurada de la persona adulta (todos opcionales). */
+    static final List<String> ADULT_KEYS=List.of("presenter_first_name","presenter_middle_name","presenter_last_name","presenter_second_last_name",
+        "presenter_run_number","presenter_run_dv","presenter_birth_date","presenter_document_kind","presenter_document_number");
+    /**
+     * Esquema pequeno y cerrado, no almacenamiento arbitrario de JSON del navegador. 1.0 se acepta tal como antes;
+     * 1.1 agrega la identificacion y el contacto estructurados de la persona adulta. previous es la ficha vigente:
+     * un valor historico identico se conserva sin revalidarse (los datos anteriores nunca se reescriben).
+     */
+    private Map<String,Object> normalize(Input envelope,Map<String,Object> previous){
         var input=new Input(childMap(envelope,"form"));var out=new LinkedHashMap<String,Object>();
+        String version=input.values().containsKey("schema_version")?input.text("schema_version",8,true):"1.0";
+        require(version.equals("1.0")||version.equals("1.1"),"Version de ficha desconocida.");
         Set<String> allowed=new HashSet<>(List.of("schema_version","modality","course","people"));
+        if(version.equals("1.1")){
+            for(String key:ADULT_KEYS){int limit=switch(key){case "presenter_run_number"->12;case "presenter_run_dv"->1;case "presenter_birth_date"->10;case "presenter_document_number"->40;default->100;};out.put(key,input.text(key,limit,false));allowed.add(key);}
+        }
         String[] shortFields={"presenter_name","identity_document","identity_type","relationship","contact_email","contact_phone","presenter_domicile","region","commune","preferred_name","pronouns","supports","court","rit","ruc","guardian_name","nationality","group_description","approximate_count"};
         String[] longFields={"motive","story","request_text","observations","orientation","actions","commitments","institutions","safety_note","participation_note","child_message","identity_note","priority_note"};
         for(String key:shortFields){int limit=switch(key){case "presenter_name","contact_email"->200;case "identity_document"->100;case "contact_phone"->80;default->500;};out.put(key,input.text(key,limit,false));allowed.add(key);}
@@ -61,9 +73,9 @@ public class Attention {
         choices.put("children_scope",new String[]{"INDIVIDUAL","VARIOS","GRUPO","POR_IDENTIFICAR"});
         choices.forEach((key,values)->{out.put(key,optionalChoice(input,key,values));allowed.add(key);});
         require(input.values().keySet().stream().allMatch(allowed::contains),"La ficha contiene campos no reconocidos.");
-        require(!input.values().containsKey("schema_version")||input.text("schema_version",8,true).equals("1.0"),"Version de ficha desconocida.");
         String mode=input.choice("modality","GENERAL","NNA");out.put("modality",mode);
-        out.put("schema_version","1.0");out.put("course",input.choice("course","EN_ATENCION","SEGUIMIENTO"));
+        out.put("schema_version",version);out.put("course",input.choice("course","EN_ATENCION","SEGUIMIENTO"));
+        if(version.equals("1.1"))adult(out,mode,previous);
         Object rawPeople=input.values().getOrDefault("people",List.of());
         if(!(rawPeople instanceof List<?> people)||people.size()>30)throw new Problem(400,"La ficha admite hasta 30 personas; para grupos usa la descripcion colectiva.");
         var normalized=new ArrayList<Map<String,Object>>();
@@ -79,6 +91,53 @@ public class Attention {
         }
         out.put("people",normalized);return out;
     }
+
+    /**
+     * Reglas 1.1 de la persona adulta. Todo es opcional (solo el motivo es indispensable). Vacio nunca es error; un
+     * valor igual al de la version vigente se conserva aunque no siga el formato nuevo. En la modalidad NNA los campos
+     * de contacto y nacionalidad conservan el texto libre de siempre. El nombre y el documento resumidos que usa la COM
+     * se derivan de las partes estructuradas cuando existen.
+     */
+    private void adult(Map<String,Object> out,String mode,Map<String,Object> previous){
+        var errors=new ArrayList<String>();
+        java.util.function.Predicate<String> kept=key->!s(out,key).isEmpty()&&s(out,key).equals(s(previous,key));
+        java.util.function.BiConsumer<String,String> check=(key,problem)->{if(problem!=null&&!kept.test(key))errors.add(problem);};
+        Map<String,String> nameLabels=Map.of("presenter_first_name","Primer nombre","presenter_middle_name","Segundo nombre","presenter_last_name","Primer apellido","presenter_second_last_name","Segundo apellido");
+        for(String key:List.of("presenter_first_name","presenter_middle_name","presenter_last_name","presenter_second_last_name")){
+            out.put(key,AdultIdentity.normalizeName(s(out,key)));String p=AdultIdentity.nameProblem(s(out,key));check.accept(key,p==null?null:nameLabels.get(key)+": "+p+".");
+        }
+        String birth=AdultIdentity.birthProblem(s(out,"presenter_birth_date"),AdultIdentity.today());check.accept("presenter_birth_date",birth==null?null:"Fecha de nacimiento: "+birth+".");
+        String type=s(out,"identity_type"),number=s(out,"presenter_run_number").replaceAll("[.\\s]",""),dv=s(out,"presenter_run_dv").toUpperCase(Locale.ROOT);
+        out.put("presenter_run_number",number);out.put("presenter_run_dv",dv);
+        if(!number.isEmpty()||!dv.isEmpty()){
+            if(!type.equals("RUN"))errors.add("El RUN corresponde a la identificacion RUN chileno.");
+            else if(number.isEmpty()||dv.isEmpty())errors.add("Completa el numero y el digito verificador del RUN, o deja el RUN en blanco.");
+            else if(!AdultIdentity.validRun(number,dv))errors.add("El numero y el digito verificador del RUN no coinciden.");
+        }
+        String kind=s(out,"presenter_document_kind");out.put("presenter_document_number",AdultIdentity.normalizeDocument(s(out,"presenter_document_number")));
+        if(!kind.isEmpty()||!s(out,"presenter_document_number").isEmpty()){
+            if(!type.equals("OTRO"))errors.add("El documento extranjero corresponde a la identificacion Documento extranjero u otro.");
+            if(!kind.isEmpty()&&!AdultIdentity.DOCUMENT_KINDS.contains(kind))errors.add("Tipo de documento no permitido.");
+            String doc=AdultIdentity.documentProblem(s(out,"presenter_document_number"));check.accept("presenter_document_number",doc==null?null:"Numero de documento: "+doc+".");
+        }
+        if(mode.equals("GENERAL")){
+            out.put("contact_email",AdultIdentity.trim(s(out,"contact_email")));
+            String phone=s(out,"contact_phone"),email=s(out,"contact_email"),region=s(out,"region"),commune=s(out,"commune"),nationality=s(out,"nationality");
+            if(!phone.isEmpty()&&!AdultIdentity.validMobile(phone))check.accept("contact_phone","Celular: escribe los ocho digitos despues de +56 9.");
+            if(!email.isEmpty()&&!AdultIdentity.validEmail(email))check.accept("contact_email","Correo: revisa el formato.");
+            if(!region.isEmpty()&&!AdultIdentity.validRegion(region))check.accept("region","Region: selecciona una region del listado.");
+            if(!commune.isEmpty()&&!(AdultIdentity.validRegion(region)&&AdultIdentity.validCommune(region,commune)))check.accept("commune","Comuna: selecciona una comuna de la region indicada.");
+            if(!nationality.isEmpty()&&!AdultIdentity.validNationality(nationality))check.accept("nationality","Nacionalidad: selecciona un pais o la opcion Otra / situacion especial.");
+            String derived=type.equals("RUN")&&!number.isEmpty()&&!dv.isEmpty()?AdultIdentity.formatRun(number,dv)
+                :type.equals("OTRO")&&!s(out,"presenter_document_number").isEmpty()?documentLabel(kind)+" "+s(out,"presenter_document_number"):"";
+            if(!derived.isEmpty())out.put("identity_document",derived);
+            else if(!s(out,"identity_document").isEmpty()&&!kept.test("identity_document"))errors.add("Registra el documento en los campos de RUN o de documento extranjero.");
+            String name=String.join(" ",List.of(s(out,"presenter_first_name"),s(out,"presenter_middle_name"),s(out,"presenter_last_name"),s(out,"presenter_second_last_name")).stream().filter(x->!x.isEmpty()).toList());
+            if(!name.isEmpty())out.put("presenter_name",name);
+        }
+        if(!errors.isEmpty())throw new Problem(400,String.join(" ",errors));
+    }
+    private static String documentLabel(String kind){return switch(kind){case "PASAPORTE"->"Pasaporte";case "IDENTIDAD_EXTRANJERA"->"Documento de identidad extranjero";case "OTRO"->"Otro documento";default->"Documento";};}
     public Workflow.Result run(Actor a,String type,long id,Long expected,Input in){
         if(type.equals("ATTENTION_CREATE"))return create(a,in);
         var r=req(id);require(exists(id),"Este REQ no procede de una ficha de primera atencion.");revision(r,expected);
@@ -93,7 +152,7 @@ public class Attention {
     }
     private Workflow.Result create(Actor a,Input in){
         long scope=in.id("scope_id");access.scope(scope);if(!a.registrar(scope))Problem.denied();
-        var data=normalize(in);long received=in.instant("received_at",true);require(received<=now(),"La recepcion no puede ser futura.");
+        var data=normalize(in,Map.of());long received=in.instant("received_at",true);require(received<=now(),"La recepcion no puede ser futura.");
         String channel=in.choice("channel",Lifecycle.CHANNELS);
         String subject=in.text("subject",240,false);if(subject.isBlank())subject=s(data,"motive").replaceAll("\\s+"," ");if(subject.length()>240)subject=subject.substring(0,240);
         String safety=(s(data,"safe_contact").equals("NO_CONTACTAR")?"NO CONTACTAR. ":s(data,"safe_contact").equals("VERIFICAR")?"Verificar antes de contactar. ":"")+s(data,"safety_note");
@@ -115,7 +174,7 @@ public class Attention {
         db.update("INSERT INTO attention_revision(requirement_id,requirement_revision,author_id,registered_ms,reason,data_json) VALUES(?,?,?,?,?,?)",req,revision,a.id(),now(),reason,data);
     }
     private Workflow.Result save(Actor a,Map<String,Object> r,Input in){
-        long id=n(r,"id");var data=normalize(in);String reason=in.text("reason",2000,true),serialized=json.writeValueAsString(data);
+        long id=n(r,"id");var data=normalize(in,decode(s(db.one("SELECT data_json FROM attention_record WHERE requirement_id=?",id),"data_json")));String reason=in.text("reason",2000,true),serialized=json.writeValueAsString(data);
         boolean follow=s(data,"course").equals("SEGUIMIENTO");boolean was=b(db.one("SELECT followup_required FROM attention_record WHERE requirement_id=?",id),"followup_required");
         db.update("UPDATE attention_record SET modality=?,data_json=?,followup_required=?,updated_by=?,updated_ms=? WHERE requirement_id=?",s(data,"modality"),serialized,follow,a.id(),now(),id);
         db.update("UPDATE requirement SET revision=revision+1 WHERE id=?",id);

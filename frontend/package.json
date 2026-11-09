@@ -1,7 +1,7 @@
 {
   "name":"siger-a-front","private":true,"version":"0.4.0","type":"module",
   "engines":{"node":">=24 <25"},
-  "scripts":{"dev":"vite --host 127.0.0.1","typecheck":"tsc --noEmit","build":"tsc --noEmit && vite build"},
+  "scripts":{"dev":"vite --host 127.0.0.1","typecheck":"tsc --noEmit","test":"node --test \"tests/*.test.ts\" \"tests/*.test.mjs\"","build":"tsc --noEmit && vite build"},
   "dependencies":{"react":"19.3.0","react-dom":"19.3.0"},
   "devDependencies":{"@types/react":"19.2.14","@types/react-dom":"19.2.3","@vitejs/plugin-react":"6.1.2","typescript":"6.0.3","vite":"8.3.4"}
 }

@@ -7,21 +7,29 @@ import {Callout, EmptyState} from '../../components/Primitives';
 import {PERSON_ROLE_LABELS} from '../../lib/labels';
 import type {AttentionData, Person} from './schema';
 import {LABELS, MAX_PEOPLE, OPTIONS, PERSON_FIELDS, PERSON_LABELS, PERSON_ROLES, emptyPerson} from './schema';
+import {AdultContact, AdultPresenter} from './adult/AdultSections';
 
 /** Controles enlazados a la ficha en edicion; cada cambio marca la pantalla con cambios sin guardar. */
 export type Controls = {
   form: AttentionData;
+  /** Version guardada (datos historicos: un valor igual no se revalida). */
+  previous: Record<string, unknown>;
   change: (key: string, value: string) => void;
+  /** Mensaje del campo, visible tras salir de el o intentar guardar. */
+  error: (key: string) => string | undefined;
+  touch: (key: string) => void;
   setPeople: (update: (people: Person[]) => Person[]) => void;
   input: (key: string, type?: string, help?: string, max?: number) => ReactNode;
   area: (key: string, help?: string, required?: boolean) => ReactNode;
   select: (key: string, help?: string) => ReactNode;
 };
 
-export function controls(form: AttentionData, change: Controls['change'], setPeople: Controls['setPeople']): Controls {
+export function controls(form: AttentionData, change: Controls['change'], setPeople: Controls['setPeople'],
+  previous: Record<string, unknown> = {}, errors: Record<string, string> = {}, shown: (key: string) => boolean = () => false, touch: (key: string) => void = () => {}): Controls {
   const value = (key: string) => String(form[key] ?? '');
   return {
-    form, change, setPeople,
+    form, previous, change, setPeople, touch,
+    error: key => errors[key] && shown(key) ? errors[key] : undefined,
     input: (key, type = 'text', help, max = 500) => <LabeledField label={LABELS[key] ?? key} help={help}><input type={type} maxLength={max} value={value(key)} onChange={e => change(key, e.target.value)}/></LabeledField>,
     area: (key, help, required = false) => <LabeledField label={LABELS[key] ?? key} help={help} required={required}><textarea rows={key === 'motive' || key === 'story' ? 4 : 3} required={required} maxLength={key === 'safety_note' ? 1000 : 12000} value={value(key)} onChange={e => change(key, e.target.value)}/></LabeledField>,
     select: (key, help) => <LabeledField label={LABELS[key] ?? key} help={help}><select value={value(key)} onChange={e => change(key, e.target.value)}><option value="">No registrado</option>{OPTIONS[key].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></LabeledField>,
@@ -54,7 +62,9 @@ export function FirstContact({c, intake}: {c: Controls; intake?: ReactNode}) {
     <FormSection title="Motivo inicial" icon="message" lead="Es lo único necesario para comenzar. Un resumen preliminar basta; no se exige un relato completo.">
       <div className="motive-field">{c.area('motive', undefined, true)}</div>
     </FormSection>
-    <FormSection title={nna ? 'NNA que solicita atención' : 'Persona requirente'} icon="user" lead="Completa solo lo que la persona entregue. Los datos pueden quedar pendientes.">
+    {!nna && <AdultPresenter c={c}/>}
+    {!nna && <AdultContact c={c}/>}
+    {nna && <FormSection title="NNA que solicita atención" icon="user" lead="Completa solo lo que la persona entregue. Los datos pueden quedar pendientes.">
       <div className="form-grid">
         {c.input('presenter_name', 'text', 'Puede quedar pendiente.', 200)}
         {c.select('identity_type')}
@@ -66,8 +76,8 @@ export function FirstContact({c, intake}: {c: Controls; intake?: ReactNode}) {
         {c.input('pronouns')}
       </div>
       {c.input('supports', 'text', 'Por ejemplo: intérprete, lengua de señas, lectura fácil.')}
-    </FormSection>
-    <FormSection title="Contacto seguro" icon="lock" lead="Registra cómo y cuándo es seguro contactar. En esta fase no se envían correos ni mensajes reales.">
+    </FormSection>}
+    {nna && <FormSection title="Contacto seguro" icon="lock" lead="Registra cómo y cuándo es seguro contactar. En esta fase no se envían correos ni mensajes reales.">
       <div className="form-grid">
         {c.input('contact_phone', 'tel', undefined, 80)}
         {c.input('contact_email', 'email', undefined, 200)}
@@ -77,7 +87,7 @@ export function FirstContact({c, intake}: {c: Controls; intake?: ReactNode}) {
       </div>
       {c.area('safety_note', 'Por ejemplo: no llamar al teléfono del hogar; solo contactar en horario escolar.')}
       {form.safe_contact === 'NO_CONTACTAR' && <Callout tone="warn">Quedará destacado en la ficha que no se debe contactar por estos medios.</Callout>}
-    </FormSection>
+    </FormSection>}
     <FormSection title="NNA y personas relacionadas" icon="people" lead="No es un registro maestro de personas ni requiere RUN. Un acompañante no es automáticamente representante.">
       {c.select('children_scope')}
       {form.children_scope === 'GRUPO' && <div className="form-grid">{c.input('group_description')}{c.input('approximate_count')}</div>}

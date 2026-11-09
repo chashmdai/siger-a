@@ -5,10 +5,11 @@ import {CHANNEL_LABELS, humanize, PERSON_ROLE_LABELS} from '../../lib/labels';
 import {Icon} from '../../components/Icon';
 import {useExit} from '../../components/useExit';
 import {LABELS, optionLabel, OPTIONS, PREVIEW_PERSON_LABELS} from './schema';
+import {displayValue} from './adult/adultForm.ts';
 import emblem from '../../assets/emblema-320.png';
 
 /** Valor visible de un campo: etiqueta de la opcion cerrada o el texto registrado. */
-const shown = (key: string, value: string) => key === 'modality' ? (value === 'NNA' ? 'Atención directa a NNA' : 'Persona adulta o atención general') : OPTIONS[key] ? optionLabel(key, value) : value;
+const shown = (key: string, value: string) => key === 'modality' ? (value === 'NNA' ? 'Atención directa a NNA' : 'Persona adulta o atención general') : OPTIONS[key] ? optionLabel(key, value) : displayValue(key, value);
 
 /** Ficha completa o version anterior, imprimible. Solo muestra los campos informados. */
 export function Preview({data, close}: {data: Row; close: () => void}) {
@@ -35,9 +36,9 @@ export function Preview({data, close}: {data: Row; close: () => void}) {
           {data.author_name != null && <div><dt>Registrado por</dt><dd>{text(data, 'author_name')}</dd></div>}
           {data.reason != null && <div><dt>Motivo de la versión</dt><dd>{text(data, 'reason')}</dd></div>}
         </dl>
-        <p className="muted">Solo se muestran los campos informados; los ausentes permanecen sin informar.</p>
+        <p className="muted">Solo se muestran los campos informados; los ausentes permanecen sin informar. Los datos de identificación y contacto son declarados: no se verificaron con ClaveÚnica, Registro Civil ni PISEE.</p>
         <dl className="preview-fields">
-          {Object.entries(LABELS).filter(([k]) => text(f, k)).map(([k, l]) => <div key={k}><dt>{l}</dt><dd className="preserve">{shown(k, text(f, k)).replaceAll('_', ' ')}</dd></div>)}
+          {Object.entries(LABELS).filter(([k]) => text(f, k)).map(([k, l]) => <div key={k}><dt>{l}</dt><dd className="preserve">{OPTIONS[k] || k === 'modality' ? shown(k, text(f, k)).replaceAll('_', ' ') : shown(k, text(f, k))}</dd></div>)}
         </dl>
         {list(f, 'people').map((p, i) => <section key={i} className="preview-person">
           <h3>Persona relacionada {i + 1}</h3>

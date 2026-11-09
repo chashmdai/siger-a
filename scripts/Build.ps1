@@ -35,6 +35,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Fallo npm ci.' }
         & $npm run build
         if ($LASTEXITCODE -ne 0) { throw 'Fallo TypeScript/Vite. No se empaqueta una version anterior.' }
+        if (-not $SkipChecks) { & $npm test; if ($LASTEXITCODE -ne 0) { throw 'Fallaron las pruebas del frontend.' } }
     } finally { Pop-Location }
     Push-Location $project
     try {
