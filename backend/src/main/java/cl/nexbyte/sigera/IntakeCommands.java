@@ -81,14 +81,18 @@ public class IntakeCommands {
      * procedencia) y guarda personas, atributos con procedencia, discrepancias y respuestas integras en
      * external_person/external_attribute/external_field. No inventa datos. No crea SOL, REQ ni Caso ni avisa.
      * Idempotente por (origen, identificador): el mismo original devuelve la COM existente.
-     * Solo se invoca desde Workflow.conserveExternal (transaccion y lock global); no es un comando
-     * despachable desde run(). La confianza en la fuente es responsabilidad del receptor tecnico
+     * Solo se invoca desde Workflow.conserveExternal o FormularioReception (transaccion y lock global); no es
+     * un comando despachable desde run(). La confianza en la fuente es responsabilidad del receptor tecnico
      * que la invoque, no de las facultades de registro manual de un funcionario.
      */
     Result conserveExternal(Actor a,long scope,String document){
         access.scope(scope);
         // Huellas y sello de custodia se verifican antes de cualquier lectura o escritura de COM, incluso al repetir.
-        var o=ExternalOriginal.parse(document,formularioKeys.keys());
+        return conserveExternal(a,scope,ExternalOriginal.parse(document,formularioKeys.keys()));
+    }
+    /** Mismo registro para un original ya verificado por ExternalOriginal.parse (consumidor PULL). */
+    Result conserveExternal(Actor a,long scope,ExternalOriginal o){
+        access.scope(scope);
         var previous=db.rows("SELECT communication_id,content_hash,provenance_hash FROM communication_original WHERE source=? AND external_id=?",o.source(),o.externalId());
         if(!previous.isEmpty()){
             var p=previous.getFirst();

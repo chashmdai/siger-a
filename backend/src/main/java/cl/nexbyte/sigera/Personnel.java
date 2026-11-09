@@ -24,12 +24,12 @@ public class Personnel {
             }
             case "STAFF_UPDATE" -> {
                 ti(a);require(id!=a.id()||in.flag("enabled"),"No puedes desactivar tu propia sesion.");
-                db.one("SELECT id FROM staff WHERE id=?",id);
+                db.one("SELECT id FROM staff WHERE id=? AND technical=FALSE",id);
                 db.update("UPDATE staff SET name=?,email=?,enabled=?,security_version=security_version+1 WHERE id=?",in.text("name",160,true),in.text("email",200,false),in.flag("enabled"),id);
                 audit(a,"CUENTA_ACTUALIZADA","USUARIO",id,null,in.reason());return Workflow.done("USUARIO",id);
             }
             case "STAFF_RESET" -> {
-                ti(a);db.one("SELECT id FROM staff WHERE id=?",id);String pass=password(in.text("password",72,true));
+                ti(a);db.one("SELECT id FROM staff WHERE id=? AND technical=FALSE",id);String pass=password(in.text("password",72,true));
                 db.update("UPDATE staff SET password_hash=?,must_change=TRUE,security_version=security_version+1 WHERE id=?",passwords.encode(pass),id);
                 audit(a,"CLAVE_TEMPORAL_REPUESTA","USUARIO",id,null,in.reason());return Workflow.done("USUARIO",id);
             }

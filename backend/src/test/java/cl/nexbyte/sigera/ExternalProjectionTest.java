@@ -175,6 +175,8 @@ class ExternalProjectionTest {
         invalid(c->((ObjectNode)c.withArrayProperty("personas").get(0)).put("runNumero","11111111"));                             // RUN CU inconsistente
         invalid(c->c.withObjectProperty("datos").withArrayProperty("personas").addObject().put("personaId","fantasma").putObject("detalles"));
         invalid(c->c.withObjectProperty("datos").withArrayProperty("adjuntos").add(UUID.randomUUID().toString()));                        // referencia sin descriptor
+        invalid(c->{String id=UUID.randomUUID().toString();c.withObjectProperty("datos").withArrayProperty("adjuntos").add(id);          // tipo MIME sobre el limite de columna
+            var d=c.withArrayProperty("adjuntos").addObject();d.put("id",id);d.put("nombre","a.pdf");d.put("tamanio",1);d.put("sha256","a".repeat(64));d.put("tipo","application/"+"x".repeat(250));d.put("estado","VALIDADO");});
         invalid(c->c.put("aceptaCanalDigital",false));                                                                    // adulto sin canal digital
         invalid(c->c.withObjectProperty("datos").withObjectProperty("campos").put("motivo",1));
         // Fuente y nivel deben coincidir con el contrato (CU autenticada, SRCeI contrastado, declaracion no contrastada).

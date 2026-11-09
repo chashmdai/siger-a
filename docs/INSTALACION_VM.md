@@ -40,6 +40,32 @@ Las Comunicaciones externas del Formulario solo se aceptan si su sello de custod
 - Quien pueda escribir el archivo puede agregar una clave confiable: protegerlo como un secreto de integridad. Retirar una clave exige reiniciar y no invalida originales ya conservados.
 - Este archivo no activa ningun consumidor PULL/ACK ni conexion con SMR.
 
+### Consumidor del Formulario Publico (PULL/ACK, inactivo por defecto)
+
+El servicio nunca consume la cola del Formulario: no hay tarea programada, endpoint ni comando de funcionario para hacerlo. Un ciclo (concilia ACK pendientes, reclama a lo mas una entrega, la valida, descarga y custodia sus originales con SHA-256, registra COM + originales + comprobante en un COMMIT y recien entonces confirma) se ejecuta solo a mano con `scripts\Invoke-FormularioPull.ps1`, en un proceso aparte sin servidor web ni tareas, que termina al acabar el ciclo. No crea SOL, REQ ni Caso.
+
+Archivos en `config\` (fuera del repositorio, con la ACL privada de la raiz; el script rechaza permisos mas amplios en la privada y en la credencial):
+
+| Archivo | Contenido |
+|---|---|
+| `formulario-trusted-keys.json` | Clave publica de custodia del Formulario (ver arriba). |
+| `formulario-pull.json` | `{"origin":"https://formulario.defensorianinez.gob.cl","scope":"<codigo del ambito receptor>","ackKeyId":"<keyId del ACK>","caFile":""}`. `caFile` es opcional (certificado PEM de CA en `config\`); vacio usa la confianza del JDK. |
+| `formulario-pull-token.clixml` | Bearer entregado privadamente, protegido con DPAPI de la cuenta que ejecuta el servicio: `Read-Host -AsSecureString \| Export-Clixml D:\SIGER-A\config\formulario-pull-token.clixml`. |
+| `formulario-ack-private.pem` / `formulario-ack-public.pem` | Par Ed25519 del comprobante institucional, generado una vez con `scripts\New-FormularioAckKey.ps1 -Root D:\SIGER-A`. Solo la publica (con su keyId) se entrega al operador del Formulario. |
+
+`instance.json` debe incluir `"folioPrefix"` compatible con el folio del comprobante (`[A-Z][A-Z0-9]{1,15}`, por ejemplo `COMA`): el prefijo por defecto `COM-A` no lo es y el consumidor no arranca con el. El prefijo aplica a todas las COM nuevas (manuales y externas) y requiere reiniciar el servicio; las COM existentes conservan su folio.
+
+Reglas que el procedimiento no puede verificar por si solo:
+
+- **Un solo consumidor por cola.** El Bearer da acceso a la misma cola que el consumidor del Formulario de SMR. Antes de cada ciclo debe estar detenido, con autorizacion, el consumidor de SMR; de lo contrario las entregas se reparten entre ambos sistemas. El script exige `-ConsumidorUnicoConfirmado`. El lease `formulario_consumer_lock` solo impide dos ciclos simultaneos de SIGER A.
+- Los originales descargados quedan en cuarentena como cualquier original de ingreso; su descarga sigue la regla vigente de liberacion.
+- Un ciclo con incidentes termina con codigo distinto de cero y deja el detalle tecnico (sin datos ciudadanos ni credenciales) en `logs\formulario-pull-<fecha>.*.log` y en `formulario_reception`. No se reintenta automaticamente: diagnosticar antes de repetir.
+- Un ACK pendiente (respuesta perdida, reserva vencida) se concilia en el ciclo siguiente con el mismo comprobante, UUID institucional y folio; nunca se crea otra COM. Rotar la clave ACK con ACK pendientes los bloquea para revision.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Invoke-FormularioPull.ps1' -Root 'D:\SIGER-A' -ConsumidorUnicoConfirmado
+```
+
 ## Paso 1. Consulta previa
 
 En PowerShell elevada de la VM, verificar que los puertos siguen disponibles:

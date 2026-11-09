@@ -27,7 +27,7 @@ public class Bootstrap implements ApplicationRunner {
         Files.createDirectories(data.resolve("tmp"));Files.createDirectories(data.resolve("documents"));
         if(Files.isSymbolicLink(data)||Files.isSymbolicLink(data.resolve("documents")))throw new IllegalStateException("Raiz de datos no debe ser enlace.");
         if(seed){
-            if(db.count("SELECT COUNT(*) FROM staff")==0)seed();
+            if(db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE")==0)seed();
             reconcileDemoOrganization(); // Actualiza solo cuentas sinteticas; nunca nombres de funcionarios reales.
         }
         if(migrate)ctx.close();
@@ -49,7 +49,7 @@ public class Bootstrap implements ApplicationRunner {
         if(Files.exists(credentials))throw new IllegalStateException("Existe un archivo de acceso anterior; no se sobreescribe.");
         var csv=new StringBuilder("usuario,nombre,clave_temporal\n");
         tx.executeWithoutResult(status->{
-            db.lock();if(db.count("SELECT COUNT(*) FROM staff")>0)return;
+            db.lock();if(db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE")>0)return;
             String[][] units={{"UPR","Proteccion de Derechos y Representacion Judicial"},{"UPD","Promocion y Difusion de Derechos"},{"UEP","Estudios Publicaciones y Estadisticas"},{"UGI","Gestion Institucional"},{"REG","Sedes Regionales"},{"DAI","Desarrollo y Analisis Institucional"},{"GAB","Gabinete"},{"DEF","Defensoria"},{"AUD","Auditoria"}};
             for(var u:units)db.update("INSERT INTO org_unit(code,name) VALUES(?,?)",u[0],u[1]);
             String[][] scopes={{"UPR","Direccion UPR","UPR",""},{"UPD","Direccion UPD","UPD",""},{"UEP","Direccion UEP","UEP",""},{"UPR-REQ","Requerimientos / Atencion de Personas","UPR","REQ"},{"UPR-NCE","NNA bajo cuidado del Estado","UPR","NCE"},{"UPR-RJ","Representacion Judicial","UPR","RJ"},{"UPR-PD","Proteccion de Derechos","UPR","PD"},{"UPD-EDU","Educacion","UPD","EDU"},{"UPD-DIF","Difusion","UPD","DIF"},{"UPD-PAR","Participacion","UPD","PAR"},{"UEP-EST","Estudios","UEP","EST"},{"UEP-OBS","Observatorio de Derechos","UEP","OBS"},{"UGI","Gestion Institucional","UGI",""},{"REG-DEMO","Sede sintetica - no oficial","REG",""}};

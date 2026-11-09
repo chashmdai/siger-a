@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-SIGER A (Nexbyte, Defensoria de la Ninez de Chile) es un monolito Spring Boot 4.1.1 / Java 25 con el frontend React 19 + TypeScript 6 + Vite 8 empaquetado dentro del mismo JAR. Usa MySQL independiente en la VM y H2 para pruebas locales. Esta es la fase A, con datos manuales y sinteticos. SMR, PULL/ACK, Graph y correo corresponden a la fase B y aun no estan integrados. La documentacion y los mensajes al usuario estan en espanol.
+SIGER A (Nexbyte, Defensoria de la Ninez de Chile) es un monolito Spring Boot 4.1.1 / Java 25 con el frontend React 19 + TypeScript 6 + Vite 8 empaquetado dentro del mismo JAR. Usa MySQL independiente en la VM y H2 para pruebas locales. Esta es la fase A, con datos manuales y sinteticos. Graph y correo corresponden a la fase B y aun no estan integrados; el consumidor PULL/ACK del Formulario existe pero solo se ejecuta a mano (ver abajo). La documentacion y los mensajes al usuario estan en espanol.
 
 ## Comandos
 
@@ -56,7 +56,9 @@ Las lecturas usan endpoints GET en `Api.java`: `Queries` (detalle autorizado, ca
 
 **`Attention`** (0.4.0): primera atencion progresiva sobre COM+REQ. Comprende la ficha JSON validada con lista cerrada de campos (`attention_record`), versiones con autor y motivo (`attention_revision`) y entregas con aceptar/devolver/retirar (`attention_handoff`). Se ejecuta dentro de la transaccion de `Workflow`; no es un motor aparte.
 
-**Comunicaciones externas (Formulario Publico via SMR)**: `Workflow.conserveExternal` es una entrada interna (no es un comando de `run()`; `/api/commands` la rechaza para cualquier sesion), reservada al futuro receptor tecnico; PULL/ACK aun no existe. `ExternalOriginal.parse` valida el contrato (reglas portadas de `EntregaCompleta.validar` de SMR), recalcula huellas y verifica el sello Ed25519 con `FormularioKeys` (`siger.formulario-trusted-keys`; sin claves se rechaza todo) antes de escribir. El texto firmado queda inmutable en `communication_original`; `ExternalProjection` calcula una vez, al crear, la COM (sin textos de procedencia) y `external_person`/`external_attribute`/`external_field` (procedencia, discrepancias, diccionario SRCeI, edad al ingreso). Un reenvio idempotente no reproyecta. La ficha COM entrega la proyeccion solo tras `comForRead`, nunca el JSON original.
+**Comunicaciones externas (Formulario Publico via SMR)**: `Workflow.conserveExternal` es una entrada interna (no es un comando de `run()`; `/api/commands` la rechaza para cualquier sesion), y conserva el original sin descargar sus adjuntos. `ExternalOriginal.parse` valida el contrato (reglas portadas de `EntregaCompleta.validar` de SMR), recalcula huellas y verifica el sello Ed25519 con `FormularioKeys` (`siger.formulario-trusted-keys`; sin claves se rechaza todo) antes de escribir. El texto firmado queda inmutable en `communication_original`; `ExternalProjection` calcula una vez, al crear, la COM (sin textos de procedencia) y `external_person`/`external_attribute`/`external_field` (procedencia, discrepancias, diccionario SRCeI, edad al ingreso). Un reenvio idempotente no reproyecta. La ficha COM entrega la proyeccion solo tras `comForRead`, nunca el JSON original.
+
+**Consumidor del Formulario (PULL/ACK, V8)**: inactivo salvo `siger.formulario.pull.enabled=true` y `run-once=true` en un proceso sin web y con `siger.scheduling=false` (`FormularioPull`, lanzado solo por `scripts/Invoke-FormularioPull.ps1`); sin planificador, endpoint ni comando de funcionario. `FormularioConsumer` hace un ciclo: concilia ACK pendientes, reclama una entrega (`FormularioClient`: HTTPS, sin redirecciones, Bearer solo al origen), valida con `ExternalOriginal.parse`, custodia los originales por streaming con tamano y SHA-256 firmados (`Documents.custodyExternal`, clave derivada de UUID), y `FormularioReception.register` crea en un COMMIT la COM, los `document_item` INGRESO en cuarentena (+ `external_document`), el comprobante `FormularioAck` y la reserva con ACK pendiente (`formulario_reception`). Confirma solo tras el COMMIT y una nueva verificacion de la custodia; despues del COMMIT nunca informa fallo. La version del ACK sigue al canal (NNA 1.1, publico 1.0). Registra con la identidad tecnica `sistema:formulario-publico` (`staff.technical`): sin sesion, sin funciones, fuera de listas y de la administracion de cuentas. El folio del comprobante exige `siger.folio-prefix` `[A-Z][A-Z0-9]{1,15}`. Solo un consumidor por cola: el de SMR debe estar detenido (no lo verifica SIGER A).
 
 **`Documents`**: originales privados bajo `siger.data` (por defecto `./var`), en cuarentena y separados de los documentos de gestion. Las descargas se sirven como attachment con `Content-Security-Policy: sandbox`.
 
@@ -75,11 +77,11 @@ Las lecturas usan endpoints GET en `Api.java`: `Queries` (detalle autorizado, ca
 
 ## Base de datos y perfiles
 
-- Migraciones Flyway en `backend/src/main/resources/db/migration`. **V1 a V7 no se modifican nunca**; cada cambio se agrega como `V8__...` aditivo, compatible con H2 y MySQL.
+- Migraciones Flyway en `backend/src/main/resources/db/migration`. **V1 a V8 no se modifican nunca**; cada cambio se agrega como `V9__...` aditivo, compatible con H2 y MySQL.
 - `MigrationGuard` rechaza migrar MySQL si el esquema no coincide con `siger_a_*` o si detecta tablas de SMR o del SIGER anterior, y solo admite los motores MySQL/H2.
 - Hay tres perfiles. `application.properties` (VM) toma todo de variables `SIGER_*` y mantiene Flyway desactivado salvo `SIGER_MIGRATE=true`. `local` usa H2 en archivo `./var/local-db` con semillas y sin TLS. `test` usa H2 en memoria.
 - La version `0.4.0` esta fija en `backend/pom.xml`, `frontend/package.json`, `Api.health()` y el manifiesto de `scripts/Build.ps1`. Al subir de version hay que cambiarla en todos esos lugares.
-- `scripts/Start.ps1` exige que el health responda `schema -eq 7` y la version del manifiesto. Cada migracion nueva obliga a actualizar ese chequeo (V6: original de Comunicacion externa; V7: su proyeccion normalizada).
+- `scripts/Start.ps1` exige que el health responda `schema -eq 8` y la version del manifiesto. Cada migracion nueva obliga a actualizar ese chequeo (V6: original de Comunicacion externa; V7: su proyeccion normalizada; V8: consumidor PULL/ACK del Formulario).
 - El pool Hikari se ajusta con `SIGER_DB_POOL_MAX` (por defecto 6). Un comando retiene su conexion mientras espera el lock global.
 
 ## Reglas de dominio que no deben romperse

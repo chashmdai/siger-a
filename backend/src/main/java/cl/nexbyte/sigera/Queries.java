@@ -24,7 +24,7 @@ public class Queries {
         boolean registrar=a.grants().stream().anyMatch(g->g.scope()!=null&&a.registrar(g.scope()));
         Map<Long,Actor> actors=new HashMap<>();for(var candidate:access.enabledActors())actors.put(candidate.id(),candidate);
         // Directorio minimo de funcionarios, nunca hashes, correos privados o credenciales.
-        result.put("people",db.rows("SELECT id,name,home_scope,enabled FROM staff ORDER BY name").stream().map(u->{
+        result.put("people",db.rows("SELECT id,name,home_scope,enabled FROM staff WHERE technical=FALSE ORDER BY name").stream().map(u->{
             var person=new LinkedHashMap<>(u);
             Actor candidate=b(u,"enabled")?actors.get(n(u,"id")):null;
             if(candidate!=null){
@@ -171,7 +171,7 @@ public class Queries {
     public Map<String,Object> administration(Actor a){
         boolean ti=a.role("TI"),authority=a.role("AUTORIDAD");if(!ti&&!authority&&!a.role("AUDITORIA"))Problem.denied();
         Map<String,Object> result=new LinkedHashMap<>();
-        result.put("users",ti||authority?db.rows("SELECT id,username,name,email,enabled,home_scope,must_change FROM staff ORDER BY id"):List.of());
+        result.put("users",ti||authority?db.rows("SELECT id,username,name,email,enabled,home_scope,must_change FROM staff WHERE technical=FALSE ORDER BY id"):List.of());
         result.put("grants",authority?db.rows("SELECT id,user_id,role_code,scope_id,valid_from,valid_until,revoked_at,basis FROM role_assignment ORDER BY id").stream().filter(g->g.get("scope_id")==null?s(g,"role_code").equals("DISTRIBUIDOR"):a.authority(n(g,"scope_id"))).toList():List.of());
         result.put("quarantine",ti?db.rows("SELECT id,size_bytes,sha256,created_ms,quarantined FROM document_item WHERE quarantined=TRUE ORDER BY id"):List.of());
         result.put("audit",db.rows("SELECT e.*,u.name AS actor FROM audit_event e JOIN staff u ON u.id=e.actor_id WHERE e.scope_id IN ("+BoardQueries.ids(BoardQueries.grants(a,"AUDITORIA"))+")"+(ti?" OR e.resource_type IN ('USUARIO','SISTEMA','AMBITO')":"")+" ORDER BY e.id DESC LIMIT 300"));

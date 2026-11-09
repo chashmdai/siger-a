@@ -1,0 +1,24 @@
+{
+  "reserva": "30000000-0000-4000-8000-000000000001",
+  "recepcion": {
+    "registro": {
+      "version": "1.1",
+      "emisor": "SIGER_DDN",
+      "hecho": "COMUNICACION_REGISTRADA",
+      "operacionPublicaId": "10000000-0000-4000-8000-000000000001",
+      "comunicacionId": "60000000-0000-4000-8000-000000000001",
+      "numeroFolio": 1,
+      "folio": "COM-000001",
+      "registradaEn": "2026-11-04T12:00:00Z",
+      "canalOrigen": "FORMULARIO_WEB_NNA",
+      "sha256": "1116dda2013a9ae22bd26a8bb298359ca7d83e98a45bfec34e1d698c553b6fb6",
+      "huellaProcedencia": "4fd1dd380ac13cf8b1eaba03e8212be44711560cdb35405a32baf07340e30dc7"
+    },
+    "comprobante": {
+      "algoritmo": "Ed25519",
+      "keyId": "SMR_FIXTURE_ACK",
+      "payload": "eyJ2ZXJzaW9uIjoiMS4xIiwiZW1pc29yIjoiU0lHRVJfREROIiwiaGVjaG8iOiJDT01VTklDQUNJT05fUkVHSVNUUkFEQSIsIm9wZXJhY2lvblB1YmxpY2FJZCI6IjEwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsImNvbXVuaWNhY2lvbklkIjoiNjAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwibnVtZXJvRm9saW8iOjEsImZvbGlvIjoiQ09NLTAwMDAwMSIsInJlZ2lzdHJhZGFFbiI6IjIwMjYtMTEtMDRUMTI6MDA6MDBaIiwiY2FuYWxPcmlnZW4iOiJGT1JNVUxBUklPX1dFQl9OTkEiLCJzaGEyNTYiOiIxMTE2ZGRhMjAxM2E5YWUyMmJkMjZhOGJiMjk4MzU5Y2E3ZDgzZTk4YTQ1YmZlYzM0ZTFkNjk4YzU1M2I2ZmI2IiwiaHVlbGxhUHJvY2VkZW5jaWEiOiI0ZmQxZGQzODBhYzEzY2Y4YjFlYWJhMDNlODIxMmJlNDQ3MTE1NjBjZGIzNTQwNWEzMmJhZjA3MzQwZTMwZGM3In0",
+      "firma": "0w4K-PBxkGHnLxWrcbpqIalyt-ErM7BVYpCNBy1LNLl5Wi666H81mmhZ494rJ27rXOHwprz5g5E2VfN5gyh8Bw"
+    }
+  }
+}

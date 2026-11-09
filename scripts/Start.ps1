@@ -29,7 +29,7 @@ try{
     $health=$null
     for($i=0;$i -lt $WaitSeconds;$i++){
         if(-not(App-Running $s)){throw 'El proceso termino antes de estar listo. Revisa el primer error del log privado.'}
-        try{$h=Invoke-SigerHealth $s $secret;if($h.status -eq 'UP' -and $h.version -eq $manifest.version -and [int]$h.schema -eq 7){$health=$h;break}}catch{}
+        try{$h=Invoke-SigerHealth $s $secret;if($h.status -eq 'UP' -and $h.version -eq $manifest.version -and [int]$h.schema -eq 8){$health=$h;break}}catch{}
         Start-Sleep -Seconds 1
     }
     if(-not $health){throw 'No se acredito salud HTTPS/version dentro del tiempo de espera. No se informa arranque correcto.'}

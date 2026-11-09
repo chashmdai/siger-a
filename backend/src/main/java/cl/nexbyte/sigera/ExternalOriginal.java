@@ -25,7 +25,10 @@ import tools.jackson.databind.json.JsonMapper;
  */
 record ExternalOriginal(String source,String externalId,String version,String kind,String channel,long receivedMs,
         String contentHash,String provenanceHash,String custodyKeyId,String document,String documentSha256,long documentBytes,
-        ExternalProjection projection) {
+        ExternalProjection projection,List<Attachment> attachments) {
+
+    /** Descriptor firmado de un original ciudadano (comunicacion.adjuntos), ya validado por contract(). */
+    record Attachment(String id,String name,long size,String sha256,String type) { }
 
     /** Emisor del sello de custodia y origen de la cola de SMR. */
     static final String SOURCE="FORMULARIO_PUBLICO_DDN";
@@ -83,7 +86,12 @@ record ExternalOriginal(String source,String externalId,String version,String ki
         verifySeal(custody,trusted,id,received,notice,content,provenance);
         if(received.toEpochMilli()>System.currentTimeMillis())throw new Problem(400,"La fecha de recepcion del documento original es futura.");
         return new ExternalOriginal(SOURCE,id,version,kind,"NNA".equals(kind)?"FORMULARIO_WEB_NNA":"FORMULARIO_WEB_PUBLICO",received.toEpochMilli(),
-            content,provenance,keyId,document,sha256(bytes),bytes.length,ExternalProjection.of(com,received));
+            content,provenance,keyId,document,sha256(bytes),bytes.length,ExternalProjection.of(com,received),attachments(com));
+    }
+    private static List<Attachment> attachments(JsonNode com){
+        var out=new ArrayList<Attachment>();
+        for(var a:com.path("adjuntos"))out.add(new Attachment(UUID.fromString(a.path("id").asString()).toString(),a.path("nombre").asString(),a.path("tamanio").asLong(),a.path("sha256").asString(),a.path("tipo").asString()));
+        return List.copyOf(out);
     }
 
     private static final Set<String> ROLES=Set.of("PRESENTADOR","AFECTADO_NNA","ADULTO_RELACIONADO","PERSONA_SENALADA");
@@ -156,7 +164,7 @@ record ExternalOriginal(String source,String externalId,String version,String ki
             String id=a.path("id").asString(),name=a.path("nombre").asString(),type=a.path("tipo").asString();
             if(!ids.add(UUID.fromString(id).toString())||!a.path("nombre").isString()||name.isBlank()||name.length()>180||name.codePoints().anyMatch(Character::isISOControl)
                 ||!a.path("tamanio").canConvertToExactIntegral()||!a.path("sha256").isString()||!a.path("sha256").asString().matches("[a-f0-9]{64}")
-                ||!type.matches("[a-z0-9.+-]+/[a-z0-9.+-]+")||!"VALIDADO".equals(a.path("estado").asString()))fail();
+                ||type.length()>MAX_KEY||!type.matches("[a-z0-9.+-]+/[a-z0-9.+-]+")||!"VALIDADO".equals(a.path("estado").asString()))fail();
             long size=a.path("tamanio").asLong();
             if(size<1||size>250L*1024*1024)fail();
             total=Math.addExact(total,size);

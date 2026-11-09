@@ -18,6 +18,17 @@ function Private-Directory([string]$Path) {
     foreach($sid in $ids){$rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow');$acl.AddAccessRule($rule)}
     Set-Acl -LiteralPath $Path -AclObject $acl
 }
+function Require-PrivateFile([string]$Path) {
+    # Credenciales y claves: archivo real (no enlace) accesible solo por la cuenta actual, SYSTEM y Administradores.
+    if(-not(Test-Path -LiteralPath $Path -PathType Leaf)){throw "Falta el archivo privado $(Split-Path $Path -Leaf)."}
+    if((Get-Item -LiteralPath $Path).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Un archivo privado no puede ser un enlace.'}
+    $allowed=@([Security.Principal.WindowsIdentity]::GetCurrent().User.Value,'S-1-5-18','S-1-5-32-544')
+    foreach($rule in (Get-Acl -LiteralPath $Path).Access){
+        if($rule.AccessControlType -ne 'Allow'){continue}
+        try{$sid=$rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value}catch{$sid=''}
+        if($allowed -notcontains $sid){throw "Permisos demasiado amplios en $(Split-Path $Path -Leaf). Restringe el acceso antes de continuar."}
+    }
+}
 function Free-Port([int]$Port) {
     if(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue){throw "Puerto $Port ocupado. No se detiene ningun proceso ajeno."}
 }

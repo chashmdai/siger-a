@@ -106,6 +106,54 @@ public class Documents {
             used[0]=true;return Map.<String,Object>of("id",id,"name",stored.name(),"sha256",stored.hash(),"quarantined",true);
         });}catch(Exception e){used[0]=false;throw e;}finally{if(!used[0])Files.deleteIfExists(stored.path());}
     }
+    // --- Originales ciudadanos del Formulario (consumidor PULL) -------------------------------------
+    /**
+     * Clave de almacenamiento derivada solo de UUID firmados (operacion y adjunto), nunca del nombre ciudadano:
+     * un reintento despues de un corte encuentra el mismo archivo y lo verifica en vez de descargarlo otra vez.
+     */
+    static String externalKey(String operation,String attachment){
+        String op=UUID.fromString(operation).toString(),file=UUID.fromString(attachment).toString();
+        return UUID.nameUUIDFromBytes(("SIGER_FORMULARIO_ADJUNTO\0"+op+"\0"+file).getBytes(java.nio.charset.StandardCharsets.UTF_8))+".bin";
+    }
+    /**
+     * Custodia por streaming: escribe en un temporal, corta al superar el tamano firmado, exige tamano y SHA-256
+     * exactos del descriptor, fuerza a disco y publica con movimiento atomico. Un archivo ya publicado se verifica
+     * completo y nunca se reemplaza. Fuera de transaccion: el registro en SQL ocurre despues.
+     */
+    void custodyExternal(String key,long size,String sha256,InputStream input)throws IOException{
+        Path dest=path(key);
+        if(Files.exists(dest,LinkOption.NOFOLLOW_LINKS)){if(!externalIntact(key,size,sha256))throw new IOException("Original custodiado alterado.");return;}
+        Files.createDirectories(directory);if(Files.isSymbolicLink(directory))throw new IOException("Almacen no valido.");
+        Path tmp=directory.resolve(key+"."+UUID.randomUUID()+".tmp");
+        try{
+            MessageDigest digest;try{digest=MessageDigest.getInstance("SHA-256");}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}
+            long count=0;
+            try(var output=java.nio.channels.FileChannel.open(tmp,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)){
+                byte[] buffer=new byte[65536];
+                for(int n;(n=input.read(buffer))!=-1;){
+                    count=Math.addExact(count,n);if(count>size)throw new IOException("Original mayor que el tamano firmado.");
+                    digest.update(buffer,0,n);var bytes=java.nio.ByteBuffer.wrap(buffer,0,n);while(bytes.hasRemaining())output.write(bytes);
+                }
+                if(count!=size||!HexFormat.of().formatHex(digest.digest()).equals(sha256))throw new IOException("Original no corresponde al descriptor firmado.");
+                output.force(true);
+            }
+            try{Files.move(tmp,dest,StandardCopyOption.ATOMIC_MOVE);}
+            catch(FileAlreadyExistsException race){if(!externalIntact(key,size,sha256))throw new IOException("Original custodiado alterado.");}
+        }finally{Files.deleteIfExists(tmp);}
+    }
+    /** Comprobacion completa (existencia, tamano y SHA-256) de un original custodiado. */
+    boolean externalIntact(String key,long size,String sha256)throws IOException{
+        Path p=path(key);
+        if(!Files.isRegularFile(p,LinkOption.NOFOLLOW_LINKS)||Files.size(p)!=size)return false;
+        MessageDigest digest;try{digest=MessageDigest.getInstance("SHA-256");}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}
+        try(var in=Files.newInputStream(p,LinkOption.NOFOLLOW_LINKS)){byte[] b=new byte[65536];for(int n;(n=in.read(b))!=-1;)digest.update(b,0,n);}
+        return HexFormat.of().formatHex(digest.digest()).equals(sha256);
+    }
+    /** Comprobacion breve dentro de la transaccion de registro (la completa se hace antes y antes de cada ACK). */
+    boolean externalPresent(String key,long size){
+        try{Path p=path(key);return Files.isRegularFile(p,LinkOption.NOFOLLOW_LINKS)&&Files.size(p)==size;}catch(IOException e){return false;}
+    }
+
     private static String column(String kind){return switch(kind){case "COM"->"communication_id";case "REQ"->"requirement_id";case "CAS"->"case_id";default->throw new Problem(400,"Contexto invalido.");};}
     private Path path(String key){require(key.matches("[a-f0-9-]{36}\\.bin"),"Clave documental invalida.");Path p=directory.resolve(key).normalize();require(p.startsWith(directory)&&!Files.isSymbolicLink(p),"Almacen invalido.");return p;}
     public record Download(Path path,String name,long size) { }

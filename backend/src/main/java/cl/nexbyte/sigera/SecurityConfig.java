@@ -54,7 +54,7 @@ public class SecurityConfig {
         r.setStatus(204);
     }
     @Bean UserDetailsService users(Db db){return username->{
-        var rows=db.rows("SELECT * FROM staff WHERE username=?",username);
+        var rows=db.rows("SELECT * FROM staff WHERE username=? AND technical=FALSE",username);
         if(rows.isEmpty())throw new UsernameNotFoundException("Credenciales invalidas");
         var u=rows.getFirst();return new Principal(n(u,"id"),s(u,"username"),s(u,"password_hash"),n(u,"security_version"),b(u,"enabled"));
     };}

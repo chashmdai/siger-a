@@ -29,7 +29,7 @@ public class Access {
     private static final String EFFECTIVE_SUBSTITUTIONS="SELECT d.titular_id,d.substitute_id,ss.scope_id,ss.role_code FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id JOIN substitution_scope ss ON ss.substitution_id=x.id JOIN role_assignment g ON g.id=ss.grant_id JOIN staff u ON u.id=d.substitute_id JOIN staff t ON t.id=d.titular_id JOIN org_scope sc ON sc.id=ss.scope_id JOIN org_scope root ON root.id=d.scope_id WHERE d.enabled=TRUE AND u.enabled=TRUE AND t.enabled=TRUE AND sc.enabled=TRUE AND root.enabled=TRUE AND g.revoked_at IS NULL AND g.valid_from<=? AND (g.valid_until IS NULL OR g.valid_until>?) AND x.ended_ms IS NULL AND x.from_ms<=? AND x.until_ms>?";
 
     public Actor actor(String username) {
-        var u=db.one(STAFF_COLUMNS+" WHERE username=?",username);
+        var u=db.one(STAFF_COLUMNS+" WHERE username=? AND technical=FALSE",username);
         if(!b(u,"enabled"))throw new Problem(401,"Cuenta inactiva.");
         long now=System.currentTimeMillis();
         var grants=db.rows(GRANTS+" AND g.user_id=?",now,now,n(u,"id"));
@@ -42,7 +42,7 @@ public class Access {
         Map<Long,List<Map<String,Object>>> grants=new HashMap<>();
         for(var g:db.rows(GRANTS,now,now))grants.computeIfAbsent(n(g,"user_id"),k->new ArrayList<>()).add(g);
         var substitutions=db.rows(EFFECTIVE_SUBSTITUTIONS,now,now,now,now);
-        return db.rows(STAFF_COLUMNS+" WHERE enabled=TRUE ORDER BY username").stream()
+        return db.rows(STAFF_COLUMNS+" WHERE enabled=TRUE AND technical=FALSE ORDER BY username").stream()
             .map(u->resolve(u,grants.getOrDefault(n(u,"id"),List.of()),substitutions)).toList();
     }
     private Actor resolve(Map<String,Object> u,List<Map<String,Object>> grantRows,List<Map<String,Object>> effective) {
