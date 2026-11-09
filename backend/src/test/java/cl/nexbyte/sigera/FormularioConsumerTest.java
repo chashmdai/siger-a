@@ -19,6 +19,8 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -34,10 +36,10 @@ import static cl.nexbyte.sigera.FormularioDocs.*;
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,properties={
     "spring.datasource.url=jdbc:h2:mem:sigera_formulario_pull;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
     "siger.data=./target/formulario-pull-${random.uuid}",
-    "siger.folio-prefix=COMA",
-    "siger.formulario-trusted-keys="+ExternalOriginalTest.TRUST})
+    "siger.folio-prefix=COMA"})
 @ActiveProfiles("test")
 class FormularioConsumerTest {
+    @DynamicPropertySource static void trustedKeys(DynamicPropertyRegistry registry){FormularioDocs.trustedKeys(registry);}
     static final JsonMapper JSON=JsonMapper.builder().build();
     static final String TOKEN="token-sintetico-de-prueba-0123456789abcdef";
     @Autowired Db db;@Autowired FormularioReception reception;@Autowired Documents documents;@Autowired FormularioKeys keys;

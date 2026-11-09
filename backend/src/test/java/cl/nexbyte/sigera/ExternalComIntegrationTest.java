@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.node.ObjectNode;
 import static org.junit.jupiter.api.Assertions.*;
 import static cl.nexbyte.sigera.Db.*;
@@ -13,10 +15,10 @@ import static cl.nexbyte.sigera.FormularioDocs.*;
 
 /** COM externa normalizada en H2: Unicode, 30 personas, sin escrituras si es invalida y ficha solo para autorizados. */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,properties={
-    "spring.datasource.url=jdbc:h2:mem:sigera_external_com;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-    "siger.formulario-trusted-keys="+ExternalOriginalTest.TRUST})
+    "spring.datasource.url=jdbc:h2:mem:sigera_external_com;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1"})
 @ActiveProfiles("test")
 class ExternalComIntegrationTest {
+    @DynamicPropertySource static void trustedKeys(DynamicPropertyRegistry registry){FormularioDocs.trustedKeys(registry);}
     @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired Queries queries;@Autowired BoardQueries boards;
 
     long staff(String username,long scope,String role){

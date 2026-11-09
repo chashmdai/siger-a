@@ -3,32 +3,51 @@ package cl.nexbyte.sigera;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.*;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Instant;
 import java.util.*;
+import org.springframework.test.context.DynamicPropertyRegistry;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Documentos sinteticos del contrato Formulario completo 1.0/1.1, sellados con la clave de prueba PRUEBA_SIGER
- * (src/test/resources/smr). Mismo algoritmo de huellas y sello que el Formulario; sin datos reales.
+ * Documentos sinteticos del contrato Formulario completo 1.0/1.1, sellados con la clave de prueba PRUEBA_SIGER.
+ * Mismo algoritmo de huellas y sello que el Formulario; sin datos reales. El par PRUEBA_SIGER se genera en memoria
+ * en cada ejecucion (ninguna clave privada se versiona) y su publica se agrega, junto a la publica sintetica de SMR
+ * (FORM_FIXTURE_PUBLIC, versionada), a un archivo de confianza temporal bajo target/ que las pruebas configuran como
+ * siger.formulario-trusted-keys con {@link #trustedKeys}.
  */
 final class FormularioDocs {
     static final JsonMapper JSON=JsonMapper.builder().build();
     static final String CU="CLAVE_UNICA_USERINFO",SRCEI="SRCEI",DECL="DECLARACION_CIUDADANA",SIN="SIN_DATO";
     static final String AUTH="IDENTIDAD_AUTENTICADA",CONTR="CONTRASTADO_EN_FUENTE",NOCONTR="DECLARADO_NO_CONTRASTADO";
     static final String EVIDENCE="50000000-0000-4000-8000-000000000001";
-    private static final PrivateKey KEY=load();
+    static final String KEY_ID="PRUEBA_SIGER";
+    private static final KeyPair PAIR=generate();
+    private static final Path TRUST_FILE=writeTrust();
     private FormularioDocs(){}
 
-    private static PrivateKey load(){
-        try{
-            String pem=Files.readString(Path.of("src/test/resources/smr/clave-firma-prueba-siger.pem")).replace("-----BEGIN PRIVATE KEY-----","").replace("-----END PRIVATE KEY-----","");
-            return KeyFactory.getInstance("Ed25519").generatePrivate(new PKCS8EncodedKeySpec(Base64.getMimeDecoder().decode(pem)));
-        }catch(Exception e){throw new IllegalStateException(e);}
+    private static KeyPair generate(){
+        try{return KeyPairGenerator.getInstance("Ed25519").generateKeyPair();}
+        catch(GeneralSecurityException e){throw new IllegalStateException(e);}
     }
-    static Map<String,PublicKey> trust(){return new FormularioKeys(ExternalOriginalTest.TRUST).keys();}
+    /** Publica sintetica de SMR (ExternalOriginalTest.TRUST) + publica PRUEBA_SIGER de esta ejecucion. */
+    private static Path writeTrust(){
+        try{
+            var keys=(ObjectNode)JSON.readTree(Files.readString(Path.of(ExternalOriginalTest.TRUST)));
+            if(keys.has(KEY_ID))throw new IllegalStateException("La confianza versionada no debe incluir "+KEY_ID);
+            keys.put(KEY_ID,"-----BEGIN PUBLIC KEY-----\n"+Base64.getEncoder().encodeToString(PAIR.getPublic().getEncoded())+"\n-----END PUBLIC KEY-----\n");
+            Path dir=Files.createDirectories(Path.of("target"));
+            Path file=Files.createTempFile(dir,"claves-formulario-prueba-",".json");
+            file.toFile().deleteOnExit();
+            Files.write(file,JSON.writeValueAsBytes(keys));
+            return file;
+        }catch(java.io.IOException e){throw new IllegalStateException(e);}
+    }
+    /** Ruta del archivo de confianza de esta ejecucion (siger.formulario-trusted-keys). */
+    static String trustFile(){return TRUST_FILE.toString();}
+    static void trustedKeys(DynamicPropertyRegistry registry){registry.add("siger.formulario-trusted-keys",FormularioDocs::trustFile);}
+    static Map<String,PublicKey> trust(){return new FormularioKeys(trustFile()).keys();}
 
     static ObjectNode attr(String valor,String fuente,String nivel){return attr(valor,null,fuente,nivel);}
     static ObjectNode attr(String valor,String codigo,String fuente,String nivel){
@@ -77,11 +96,11 @@ final class FormularioDocs {
             seal.put("tipoRecepcion","CUSTODIA_PUBLICA");seal.put("huellaContenido",content);seal.put("huellaProcedencia",provenance);
             seal.put("emisor","FORMULARIO_PUBLICO_DDN");seal.put("avisoVersion",com.path("avisoVersion").asString());
             byte[] payload=JSON.writeValueAsBytes(seal);
-            var signer=Signature.getInstance("Ed25519");signer.initSign(KEY);signer.update(payload);
+            var signer=Signature.getInstance("Ed25519");signer.initSign(PAIR.getPrivate());signer.update(payload);
             var root=JSON.createObjectNode();
             root.set("comunicacion",com);root.put("sha256",content);root.put("huellaProcedencia",provenance);
             var c=root.putObject("custodia");
-            c.put("algoritmo","Ed25519");c.put("keyId","PRUEBA_SIGER");
+            c.put("algoritmo","Ed25519");c.put("keyId",KEY_ID);
             c.put("payload",Base64.getUrlEncoder().withoutPadding().encodeToString(payload));
             c.put("firma",Base64.getUrlEncoder().withoutPadding().encodeToString(signer.sign()));
             return new String(JSON.writeValueAsBytes(root),StandardCharsets.UTF_8);

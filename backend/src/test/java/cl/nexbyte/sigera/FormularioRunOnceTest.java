@@ -36,7 +36,7 @@ class FormularioRunOnceTest {
             assertTrue(service.getBeanProvider(FormularioConsumer.class).stream().findAny().isEmpty());
             var props=new ArrayList<>(List.of("spring.datasource.url="+DB,"siger.data="+dir.resolve("data"),
                 "siger.scheduling=false","siger.formulario.pull.enabled=true","siger.formulario.pull.run-once=true",
-                "siger.folio-prefix=COMA","siger.formulario-trusted-keys="+ExternalOriginalTest.TRUST,
+                "siger.folio-prefix=COMA","siger.formulario-trusted-keys="+FormularioDocs.trustFile(),
                 "siger.formulario.pull.origin="+producer.origin(),"siger.formulario.pull.loopback-http=true","siger.formulario.pull.token-file="+token,
                 "siger.formulario.pull.scope=UPR-REQ","siger.formulario.ack.key-id=SIGER_A_PRUEBA",
                 "siger.formulario.ack.private-key-file="+priv,"siger.formulario.ack.public-key-file="+pub));

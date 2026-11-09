@@ -5,9 +5,11 @@ Ambos usan el mismo identificador de operacion con contenido distinto (escenario
 
 La clave publica sintetica `claves-formulario-sinteticas.json` es `fixture-productor-public.pem` de SMR (misma procedencia), con keyId FORM_FIXTURE_PUBLIC. No es una clave institucional.
 
-`clave-firma-prueba-siger.pem` es una clave Ed25519 generada solo para las pruebas de SIGER A (keyId `PRUEBA_SIGER`,
-publica incluida en `claves-formulario-sinteticas.json`). Firma documentos sinteticos construidos por las pruebas;
-no es una clave del Formulario ni institucional y nunca debe configurarse fuera de las pruebas.
+La clave de prueba `PRUEBA_SIGER` no se versiona: `FormularioDocs` genera el par Ed25519 en memoria en cada ejecucion,
+firma con ese par los documentos sinteticos que construyen las pruebas y escribe un archivo de confianza temporal en `target/`
+(esta publica sintetica de SMR mas la publica `PRUEBA_SIGER` de esa ejecucion), que las pruebas configuran como
+`siger.formulario-trusted-keys`. Los vectores de SMR siguen verificandose solo con `claves-formulario-sinteticas.json`.
+Ninguna de estas claves es del Formulario ni institucional, y nunca deben configurarse fuera de las pruebas.
 
 `ack-solicitud-1.0.json` y `ack-solicitud-1.1.json` son copia sin cambios de
 `formulario-web/docs/smr-ejemplos` (commit bbed7ad): ACK sinteticos del productor (keyId SMR_FIXTURE_ACK, solo clave publica),
