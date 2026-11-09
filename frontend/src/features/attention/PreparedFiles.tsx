@@ -39,7 +39,7 @@ export function PreparedFiles({ctx, scope, selected, select, disabled, pendingFi
   }
   return <fieldset disabled={disabled || busy} className="panel form-section">
     <legend className="sr-only">Originales aportados durante el ingreso</legend>
-    <div className="panel-head"><div><h2><Icon name="upload"/>Originales aportados</h2><p>Opcionales. Máximo 25 MiB por archivo; quedan en cuarentena. Solo datos sintéticos en esta candidata.</p></div></div>
+    <div className="panel-head"><div><h2><Icon name="upload"/>Originales aportados</h2><p>Opcionales. Máximo 25 MiB por archivo; quedan en cuarentena hasta su revisión.</p></div></div>
     <div className="file-picker">
       <input key={epoch} type="file" aria-label="Elegir archivo original" onChange={e => {setFile(e.target.files?.[0] ?? null); pendingFile(Boolean(e.target.files?.length)); key.current = crypto.randomUUID();}}/>
       <button type="button" disabled={!file} onClick={() => void prepare()}><Busy busy={busy} label="Preparando…" idle={<><Icon name="upload" size={18}/>Preparar adjunto</>}/></button>

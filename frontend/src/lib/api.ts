@@ -45,9 +45,14 @@ async function send<T>(path: string, options: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+/** Etiqueta de entorno que define el servidor (vacia en el servicio institucional). */
+let environmentLabel = '';
+export const environment = () => environmentLabel;
+
 export async function session() {
   const s = await request<Session>('/session');
   csrf = s.csrf;
+  environmentLabel = (s.environment ?? '').trim();
   return s;
 }
 

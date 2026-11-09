@@ -13,7 +13,7 @@ public class MigrationGuard implements Callback {
             var c=context.getConnection();String url=c.getMetaData().getURL();
             if(url.startsWith("jdbc:mysql:")){
                 String catalog=c.getCatalog();
-                if(catalog==null||!catalog.matches("siger_a_[a-z0-9_]{1,40}"))throw new IllegalStateException("Migracion denegada: esquema no exclusivo SIGER A.");
+                if(catalog==null||!catalog.matches("siger_a_[a-z0-9_]{1,40}"))throw new IllegalStateException("Migracion denegada: esquema no exclusivo de SIGER.");
                 try(var statement=c.createStatement();var result=statement.executeQuery("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('communication_registry','institutional_inbox','core_case')")){
                     result.next();if(result.getInt(1)>0)throw new IllegalStateException("Migracion denegada: se detectaron tablas SMR/SIGER anterior.");
                 }

@@ -18,7 +18,8 @@ public class Access {
         public boolean authority(long scope) { return at("AUTORIDAD",scope); }
     }
     private final Db db;
-    public Access(Db db) { this.db=db; }
+    private final MailOutbox mail;
+    public Access(Db db,MailOutbox mail) { this.db=db; this.mail=mail; }
 
     // --- Funciones efectivas ---------------------------------------------------------------
     // Una sola regla resuelve una cuenta (cada solicitud) o todo el personal habilitado
@@ -214,8 +215,10 @@ public class Access {
     public Map<String,Object> caseForWrite(Actor a,long id) { var r=caseForRead(a,id);if(!caseWrite(a,r))Problem.denied();return r; }
     public Map<String,Object> reqForRead(Actor a,long id) { var r=db.one("SELECT * FROM requirement WHERE id=?",id);if(!reqRead(a,r))Problem.denied();return r; }
     public Map<String,Object> comForRead(Actor a,long id) { var r=db.one("SELECT * FROM communication WHERE id=?",id);if(!comRead(a,r))Problem.denied();return r; }
+    /** Aviso interno; con correo Graph activo, su correo se encola en la misma transaccion (MailOutbox). */
     public void notice(long user,String text,String kind,long id) {
-        db.update("INSERT INTO inbox_notice(user_id,at_ms,text_value,resource_type,resource_id) VALUES(?,?,?,?,?)",user,System.currentTimeMillis(),text,kind,id);
+        long notice=db.insert("INSERT INTO inbox_notice(user_id,at_ms,text_value,resource_type,resource_id) VALUES(?,?,?,?,?)",user,System.currentTimeMillis(),text,kind,id);
+        mail.enqueue(notice,user);
     }
     // --- Avisos a funciones efectivas (incluye subrogancias vigentes) ------------------------
     private void notifyWhere(java.util.function.Predicate<Actor> recipient,String text,String kind,long id) {

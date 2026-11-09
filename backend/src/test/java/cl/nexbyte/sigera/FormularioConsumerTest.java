@@ -44,6 +44,7 @@ class FormularioConsumerTest {
     static final String TOKEN="token-sintetico-de-prueba-0123456789abcdef";
     @Autowired Db db;@Autowired FormularioReception reception;@Autowired Documents documents;@Autowired FormularioKeys keys;
     @Autowired Access access;@Autowired UserDetailsService users;@Autowired ApplicationContext context;@Autowired Personnel personnel;
+    @Autowired Integrations integrations;
 
     static KeyPair ackKeys;static FormularioAck ack;static long scope;
     Producer producer;FormularioConsumer consumer;
@@ -105,9 +106,18 @@ class FormularioConsumerTest {
             .withProperty("siger.folio-prefix","COMA").withProperty("siger.formulario.pull.scope","FRM-REC")
             .withProperty("siger.formulario.ack.key-id","SIGER_A_PRUEBA").withProperty("siger.formulario.ack.private-key-file",priv.toString())
             .withProperty("siger.formulario.ack.public-key-file",pub.toString()).withProperty("siger.formulario.pull.origin",producer.origin())
-            .withProperty("siger.formulario.pull.token-file",token.toString()).withProperty("siger.formulario.pull.loopback-http","true");
+            .withProperty("siger.formulario.pull.token-file",token.toString()).withProperty("siger.formulario.pull.loopback-http","true")
+            .withProperty("siger.formulario.pull.run-once","true");
         var config=new FormularioPull();
         assertNotNull(config.formularioConsumer(complete.get(),reception,documents,keys,db));
+        // Identidad ACK reutilizada (descifrada de DPAPI por el lanzador) como texto PEM en variables del proceso.
+        var fromText=complete.get().withProperty("siger.formulario.ack.private-key-file","").withProperty("siger.formulario.ack.public-key-file","")
+            .withProperty("siger.formulario.ack.private-key",Files.readString(priv).lines().collect(java.util.stream.Collectors.joining(new String(new char[]{13,10})))).withProperty("siger.formulario.ack.public-key",Files.readString(pub));
+        assertNotNull(config.formularioConsumer(fromText,reception,documents,keys,db));
+        assertThrows(IllegalStateException.class,()->config.formularioConsumer(fromText.withProperty("siger.formulario.ack.public-key",Files.readString(priv)),reception,documents,keys,db));
+        // Exactamente un modo: ni ninguno ni ciclo manual y automatico a la vez.
+        assertThrows(IllegalStateException.class,()->config.formularioConsumer(complete.get().withProperty("siger.formulario.pull.run-once","false"),reception,documents,keys,db));
+        assertThrows(IllegalStateException.class,()->config.formularioConsumer(complete.get().withProperty("siger.formulario.pull.automatic","true"),reception,documents,keys,db));
         // Prefijo de folio por defecto (COM-A) incompatible con el folio del comprobante del Formulario.
         assertThrows(IllegalStateException.class,()->config.formularioConsumer(complete.get().withProperty("siger.folio-prefix","COM-A"),reception,documents,keys,db));
         // Sin claves de custodia confiables, ambito inexistente, credencial ausente u origen sin TLS: no se crea.
@@ -301,6 +311,92 @@ class FormularioConsumerTest {
         assertEquals(1,count("SELECT COUNT(*) FROM communication WHERE external_id=?",operation(doc)));
     }
 
+    // --- Consumidor automatico permanente (mismo ciclo, con lease propio, pausa, espera y latido) -------------
+    FormularioAutomatic automatic(FormularioConsumer c){return new FormularioAutomatic(c,reception,integrations,1_000,60_000,2_000);}
+    Map<String,Object> status(){return db.one("SELECT * FROM integration_status WHERE name='FORMULARIO_PULL'");}
+    Object lockHolder(){return db.one("SELECT holder FROM formulario_consumer_lock WHERE id=1").get("holder");}
+
+    @Test void automaticoDrenaConservaExclusividadRespetaPausaYSeDetieneOrdenado()throws Exception{
+        String doc=adultWithFile(original());producer.offer(doc,Map.of(attachment(doc),original()));
+        var auto=automatic(consumer);
+        try{
+            // Entrega recibida y confirmada: drena de inmediato; cola vacia: sondeo normal.
+            assertEquals(FormularioAutomatic.DRAIN_MS,auto.tick());
+            assertEquals("RECIBIENDO",s(status(),"state"));assertEquals(1,producer.acks.size());
+            assertEquals("CONFIRMADA",s(db.one("SELECT state FROM formulario_reception WHERE operation_id=?",operation(doc)),"state"));
+            assertEquals(1_000,auto.tick());
+            assertEquals("ESPERANDO_ENTREGAS",s(status(),"state"));assertNotNull(status().get("last_success_ms"));assertEquals(0,n(status(),"failures"));
+            // El lease sigue siendo del proceso automatico entre ciclos: un ciclo manual u otro proceso automatico quedan fuera.
+            assertEquals(auto.holder,lockHolder());
+            assertTrue(consumer.run().busy());
+            int before=producer.requests.get();
+            assertEquals(1_000,automatic(consumer).tick());
+            assertEquals("OCUPADO",s(status(),"state"));assertEquals(before,producer.requests.get());
+            // Pausa auditada de TI: no contacta el origen y libera el lease; al reanudar vuelve a operar.
+            db.update("UPDATE integration_control SET paused=TRUE WHERE name='FORMULARIO_PULL'");
+            assertTrue(integrations.paused(Integrations.FORMULARIO));
+            assertEquals(1_000,auto.tick());
+            assertEquals("PAUSADO",s(status(),"state"));assertEquals(before,producer.requests.get());assertNull(lockHolder());
+            db.update("UPDATE integration_control SET paused=FALSE WHERE name='FORMULARIO_PULL'");
+            assertEquals(1_000,auto.tick());assertEquals("ESPERANDO_ENTREGAS",s(status(),"state"));
+            assertEquals(1,count("SELECT COUNT(*) FROM communication WHERE external_id=?",operation(doc)));
+        }finally{db.update("UPDATE integration_control SET paused=FALSE WHERE name='FORMULARIO_PULL'");auto.stop();}
+        assertEquals("DETENIDO",s(status(),"state"));assertNull(lockHolder());
+    }
+
+    @Test void automaticoEsperaCrecienteAnteIncidentesYTrasReinicioConciliaSinDuplicar()throws Exception{
+        var rejected=automatic(consumer(producer.origin(),"credencial-rechazada-0123456789abcdefghij"));
+        try{
+            assertEquals(10_000,rejected.tick());assertEquals(20_000,rejected.tick());assertEquals(40_000,rejected.tick());
+            var st=status();assertEquals("DEGRADADO",s(st,"state"));assertEquals(3,n(st,"failures"));assertEquals("RECLAMO_HTTP_401",s(st,"last_error"));
+        }finally{rejected.stop();}
+        // Proceso que cae despues del COMMIT: ACK sin respuesta y lease sin liberar.
+        String doc=adultWithFile(original());producer.offer(doc,Map.of(attachment(doc),original()));
+        producer.ackOutcome.add(500);
+        var crashed=automatic(consumer);
+        assertEquals(FormularioAutomatic.MIN_BACKOFF_MS,crashed.tick());
+        assertEquals(crashed.holder,lockHolder());
+        var restarted=automatic(consumer);
+        try{
+            // El proceso nuevo espera a que venza el lease del anterior; no consume en paralelo.
+            assertEquals(1_000,restarted.tick());assertEquals("OCUPADO",s(status(),"state"));
+            db.update("UPDATE formulario_consumer_lock SET until_ms=1 WHERE id=1");
+            db.update("UPDATE formulario_reception SET ack_next_ms=0 WHERE operation_id=?",operation(doc));
+            assertEquals(1_000,restarted.tick());
+            assertEquals(restarted.holder,lockHolder());
+            assertEquals("CONFIRMADA",s(db.one("SELECT state FROM formulario_reception WHERE operation_id=?",operation(doc)),"state"));
+            assertEquals(2,producer.acks.size());assertEquals(producer.acks.get(0),producer.acks.get(1));
+            assertEquals(1,count("SELECT COUNT(*) FROM communication WHERE external_id=?",operation(doc)));
+        }finally{restarted.stop();}
+    }
+
+    @Test void automaticoQuePierdeElLeaseNoRegistraNiConfirma()throws Exception{
+        String doc=adultWithFile(original());producer.offer(doc,Map.of(attachment(doc),original()));
+        var auto=automatic(consumer);
+        // Otro proceso toma el lease mientras se reclama (p. ej. vencio durante una pausa larga del proceso).
+        producer.onClaim=()->db.update("UPDATE formulario_consumer_lock SET holder='otro-proceso',until_ms=? WHERE id=1",System.currentTimeMillis()+60_000);
+        try{
+            assertEquals(FormularioAutomatic.MIN_BACKOFF_MS,auto.tick());
+            assertEquals("EXCLUSION_PERDIDA",s(status(),"last_error"));
+            assertEquals(0,count("SELECT COUNT(*) FROM communication WHERE external_id=?",operation(doc)));
+            assertEquals(0,count("SELECT COUNT(*) FROM formulario_reception WHERE operation_id=?",operation(doc)));
+            // Sin ACK ni informe de fallo: la reserva vence en el Formulario y la entrega se reintenta.
+            assertTrue(producer.acks.isEmpty());assertTrue(producer.failures.isEmpty());
+            assertEquals("otro-proceso",lockHolder());
+        }finally{producer.onClaim=null;db.update("UPDATE formulario_consumer_lock SET holder=NULL,until_ms=0 WHERE id=1");auto.stop();}
+    }
+
+    @Test void automaticoEnSegundoPlanoRecibeYSeDetieneOrdenado()throws Exception{
+        String doc=adultWithFile(original());producer.offer(doc,Map.of(attachment(doc),original()));
+        var auto=automatic(consumer);
+        auto.start();
+        try{long end=System.currentTimeMillis()+20_000;while(producer.acks.isEmpty()&&System.currentTimeMillis()<end)Thread.sleep(50);}
+        finally{auto.stop();}
+        assertEquals(1,producer.acks.size());
+        assertEquals("CONFIRMADA",s(db.one("SELECT state FROM formulario_reception WHERE operation_id=?",operation(doc)),"state"));
+        assertEquals("DETENIDO",s(status(),"state"));assertNull(lockHolder());
+    }
+
     @Test void transporteYCredencial()throws Exception{
         // Lote vacio solo con 200 bien formado; 401 es un fallo, no un lote vacio.
         var empty=consumer.run();assertTrue(empty.clean());assertEquals(0,empty.claimed());
@@ -336,6 +432,8 @@ class FormularioConsumerTest {
         final Deque<Integer> ackOutcome=new ArrayDeque<>();
         final AtomicInteger downloads=new AtomicInteger(),requests=new AtomicInteger();
         volatile String redirectTo;volatile boolean expireBeforeAck;
+        /** Se ejecuta al entregar una reserva (antes de responder): simula sucesos concurrentes del lado de SIGER. */
+        volatile Runnable onClaim;
         String document,state="VACIA",accepted;UUID lease;long until;int attempt;
 
         Producer(PublicKey ackTrust)throws IOException{
@@ -363,6 +461,7 @@ class FormularioConsumerTest {
                     if("PENDIENTE".equals(state)||"RESERVADA".equals(state)&&until<=now){
                         lease=UUID.randomUUID();until=now+300000;attempt++;state="RESERVADA";
                         out="{\"entregas\":[{\"reserva\":\""+lease+"\",\"venceEn\":"+until+",\"intento\":"+attempt+",\"entrega\":"+document+"}]}";
+                        if(onClaim!=null)onClaim.run();
                     }
                     send(x,200,out.getBytes(StandardCharsets.UTF_8));return;
                 }

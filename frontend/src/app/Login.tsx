@@ -11,12 +11,12 @@ import emblem from '../assets/emblema-320.png';
 /** Marco de las pantallas sin sesion: identidad institucional sobre blanco y formulario. */
 function AuthFrame({children}: {children: ReactNode}) {
   return <div className="auth">
-    <div className="environment auth-environment" role="note"><span className="environment-dot" aria-hidden="true"/>Candidata de pruebas · Datos sintéticos</div>
+    {api.environment() && <div className="environment auth-environment" role="note"><span className="environment-dot" aria-hidden="true"/>{api.environment()}</div>}
     <div className="auth-card">
-      <section className="auth-brand" aria-label="SIGER A">
+      <section className="auth-brand" aria-label="SIGER">
         <img src={emblem} alt="Emblema de la Defensoría de la Niñez" width={150} height={147}/>
         <Thread/>
-        <h1>SIGER A</h1>
+        <h1>SIGER</h1>
         <p className="auth-tagline">Gestión de Comunicaciones, Solicitudes, Requerimientos y Casos</p>
         <p className="auth-institution">Defensoría de la Niñez</p>
         <ul className="auth-points">
@@ -34,7 +34,7 @@ function AuthFrame({children}: {children: ReactNode}) {
 export function Splash({error}: {error: string}) {
   return <div className="splash" role="status">
     <img src={emblem} alt="" width={84} height={82}/>
-    <p>{error ? 'No fue posible conectar con SIGER A.' : 'Conectando con SIGER A…'}</p>
+    <p>{error ? 'No fue posible conectar con SIGER.' : 'Conectando con SIGER…'}</p>
     {error && <ErrorMessage>{error}</ErrorMessage>}
   </div>;
 }

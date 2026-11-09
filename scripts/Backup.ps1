@@ -2,7 +2,7 @@
 param([string]$Root='D:\SIGER-A',[Parameter(Mandatory=$true)][string]$Destination)
 . (Join-Path $PSScriptRoot 'Common.ps1')
 $s=Read-Settings $Root
-if(App-Running $s){throw 'Deten SIGER A antes del respaldo para conservar SQL y documentos coherentes.'}
+if(App-Running $s){throw 'Deten SIGER antes del respaldo para conservar SQL y documentos coherentes.'}
 $Destination=[IO.Path]::GetFullPath($Destination).TrimEnd('\')
 if(Test-Path $Destination){throw 'El respaldo necesita una carpeta nueva; nunca sobreescribe.'}
 Private-Directory $Destination

@@ -105,3 +105,18 @@ function Invoke-SigerHealth($Settings,$Secrets) {
     $password=Secret-Text $Secrets.Tls
     return ([SigerLocalHealth]::Read("https://localhost:$($Settings.webPort)/api/health",(Join-Path $Settings.root 'config\https.p12'),$password) | ConvertFrom-Json)
 }
+
+# Servicios Windows de la instancia (Install-Service.ps1). Sin config\service.json la instancia se opera con Start/Stop.
+function Get-SigerServices($Settings) {
+    $file=Join-Path $Settings.root 'config\service.json'
+    if(-not(Test-Path -LiteralPath $file -PathType Leaf)){return $null}
+    $info=Get-Content -LiteralPath $file -Raw|ConvertFrom-Json
+    $app=Get-Service -Name ([string]$info.serviceName) -ErrorAction SilentlyContinue
+    $db=Get-Service -Name ([string]$info.mysqlServiceName) -ErrorAction SilentlyContinue
+    if(-not $app -or -not $db){throw 'config\service.json existe pero los servicios no estan registrados. Revisa la instalacion; no se inicia por otra via.'}
+    foreach($pair in @(@($info.serviceName,$Settings.root),@($info.mysqlServiceName,(Join-Path $Settings.root 'mysql\my.ini')))){
+        $cim=Get-CimInstance Win32_Service -Filter "Name='$($pair[0])'"
+        if(-not $cim -or $cim.PathName.IndexOf([string]$pair[1],[StringComparison]::OrdinalIgnoreCase) -lt 0){throw "El servicio $($pair[0]) registrado no corresponde a esta instancia. No se interviene."}
+    }
+    return [PSCustomObject]@{App=$app;MySql=$db;Info=$info}
+}

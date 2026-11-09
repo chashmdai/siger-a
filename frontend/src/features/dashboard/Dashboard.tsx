@@ -71,8 +71,8 @@ export default function Dashboard({ctx, version}: {ctx: Context; version: number
         <a className="button" href="#com?filter=mine"><Icon name="mail" size={18}/>Mis registros</a>
       </div>}
       {role === 'overview' && <Callout tone="neutral">COM, SOL, REQ y Caso no son equivalentes: un REQ puede contener varios Casos. Los conteos se calculan sobre tu alcance autorizado, no sobre una página de resultados.</Callout>}
-      {role === 'technical' && <Panel title="Estado de la candidata" icon="info">
-        <p>Versión 0.4.0. SMR y correo real desactivados. La cuarentena no equivale a un análisis antivirus.</p>
+      {role === 'technical' && <Panel title="Estado del sistema" icon="info">
+        <p>Versión 0.4.0. El estado del consumidor del Formulario y del correo institucional está en Auditoría y operación. La cuarentena no equivale a un análisis antivirus.</p>
         <p>Utiliza el diagnóstico y los respaldos de la instancia antes de una actualización.</p>
         <a className="button sm" href="#auditoria">Ver operación autorizada<Icon name="arrowRight" size={16}/></a>
       </Panel>}

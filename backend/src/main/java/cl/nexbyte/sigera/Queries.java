@@ -9,7 +9,8 @@ import static cl.nexbyte.sigera.Db.*;
 @Service
 public class Queries {
     final Db db;final Access access;final Attention attention;
-    public Queries(Db db,Access access,Attention attention){this.db=db;this.access=access;this.attention=attention;}
+    private final Integrations integrations;
+    public Queries(Db db,Access access,Attention attention,Integrations integrations){this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;}
     public Map<String,Object> workspace(Actor a){
         // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales.
         var notices=db.rows("SELECT * FROM inbox_notice WHERE user_id=? ORDER BY id DESC LIMIT 20",a.id());
@@ -173,6 +174,8 @@ public class Queries {
         Map<String,Object> result=new LinkedHashMap<>();
         result.put("users",ti||authority?db.rows("SELECT id,username,name,email,enabled,home_scope,must_change FROM staff WHERE technical=FALSE ORDER BY id"):List.of());
         result.put("grants",authority?db.rows("SELECT id,user_id,role_code,scope_id,valid_from,valid_until,revoked_at,basis FROM role_assignment ORDER BY id").stream().filter(g->g.get("scope_id")==null?s(g,"role_code").equals("DISTRIBUIDOR"):a.authority(n(g,"scope_id"))).toList():List.of());
+        // Operacion de integraciones para TI: estado, pausa y contadores agregados; sin documentos ni contenidos.
+        result.put("integrations",ti?integrations.overview():Map.of());
         result.put("quarantine",ti?db.rows("SELECT id,size_bytes,sha256,created_ms,quarantined FROM document_item WHERE quarantined=TRUE ORDER BY id"):List.of());
         result.put("audit",db.rows("SELECT e.*,u.name AS actor FROM audit_event e JOIN staff u ON u.id=e.actor_id WHERE e.scope_id IN ("+BoardQueries.ids(BoardQueries.grants(a,"AUDITORIA"))+")"+(ti?" OR e.resource_type IN ('USUARIO','SISTEMA','AMBITO')":"")+" ORDER BY e.id DESC LIMIT 300"));
         return result;

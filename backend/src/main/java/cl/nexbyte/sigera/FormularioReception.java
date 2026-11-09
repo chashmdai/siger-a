@@ -144,9 +144,20 @@ class FormularioReception {
             System.currentTimeMillis(),operation));
     }
 
-    /** Exclusion entre ciclos de SIGER A (lease en SQL). No coordina con consumidores de otros sistemas. */
+    /**
+     * Exclusion entre procesos de SIGER (lease en SQL): toma el lease libre o vencido, o lo renueva si ya es del mismo
+     * titular. No coordina con consumidores de otros sistemas.
+     */
     boolean acquire(String holder,long until){
-        return Boolean.TRUE.equals(tx.execute(status->db.update("UPDATE formulario_consumer_lock SET holder=?,until_ms=? WHERE id=1 AND (holder IS NULL OR until_ms<?)",holder,until,System.currentTimeMillis())==1));
+        return Boolean.TRUE.equals(tx.execute(status->db.update("UPDATE formulario_consumer_lock SET holder=?,until_ms=? WHERE id=1 AND (holder IS NULL OR until_ms<? OR holder=?)",holder,until,System.currentTimeMillis(),holder)==1));
+    }
+    /** Renueva solo un lease propio y vigente; nunca toma uno libre ni ajeno. */
+    boolean renew(String holder,long until){
+        return Boolean.TRUE.equals(tx.execute(status->db.update("UPDATE formulario_consumer_lock SET until_ms=? WHERE id=1 AND holder=? AND until_ms>?",until,holder,System.currentTimeMillis())==1));
+    }
+    /** El titular conserva un lease vigente (antes de reclamar, registrar o confirmar). */
+    boolean holds(String holder){
+        return db.count("SELECT COUNT(*) FROM formulario_consumer_lock WHERE id=1 AND holder=? AND until_ms>?",holder,System.currentTimeMillis())==1;
     }
     void release(String holder){
         tx.executeWithoutResult(status->db.update("UPDATE formulario_consumer_lock SET holder=NULL,until_ms=0 WHERE id=1 AND holder=?",holder));

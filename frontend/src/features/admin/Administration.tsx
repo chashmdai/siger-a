@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {request} from '../../lib/api';
 import type {Row} from '../../lib/rows';
-import {bool, list, localTime, number, text, when} from '../../lib/rows';
+import {bool, list, localTime, number, obj, text, when} from '../../lib/rows';
 import {has} from '../../lib/access';
 import {nameOf, scopeOf} from '../../lib/catalog';
 import {choose, person, reason, scopeField} from '../../lib/fields';
@@ -10,6 +10,9 @@ import {Table} from '../../components/Table';
 import {Icon} from '../../components/Icon';
 import {ErrorMessage, PageHeader, Panel} from '../../components/Primitives';
 import {humanize, ROLE_LABELS} from '../../lib/labels';
+
+const INTEGRATIONS: [string, string][] = [['FORMULARIO_PULL', 'Consumidor del Formulario Público'], ['CORREO_GRAPH', 'Correo institucional (Microsoft Graph)']];
+const MODE_LABELS: Record<string, string> = {DESACTIVADO: 'Desactivado', MANUAL: 'Ciclo manual', AUTOMATICO: 'Automático', GRAPH: 'Graph'};
 
 const GRANTABLE_ROLES = ['ADMINISTRATIVO', 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'AUTORIDAD', 'LECTURA', 'AUDITORIA', 'DISTRIBUIDOR'];
 
@@ -59,6 +62,19 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
   const revoke = (g: Row) => choose(ctx, 'Revocar función', 'GRANT_REVOKE', g, [...(g.scope_id ? [] : [scopeField(ctx.catalog, 'scope_id', 'Ámbito central de tu autoridad')]), reason]);
   const release = (d: Row) => choose(ctx, 'Habilitar descarga de archivo sintético', 'DOC_RELEASE', d, [{key: 'synthetic_review', label: 'Confirmo que es un archivo sintético revisado externamente; no certifico un antivirus', type: 'checkbox', required: true}, reason], 'No usar esta liberación manual para documentos ciudadanos reales.');
 
+  // Pausar o reanudar no cancela un ciclo en curso: el trabajador lo respeta en su ciclo siguiente.
+  const control = (r: Row, name: string) => {
+    const paused = bool(r, 'paused');
+    choose(ctx, (paused ? 'Reanudar ' : 'Pausar ') + name.toLowerCase(), paused ? 'INTEGRATION_RESUME' : 'INTEGRATION_PAUSE', r,
+      [{key: 'reason', label: 'Motivo (queda auditado)', type: 'textarea', required: true, max: 1000}],
+      paused ? 'El trabajador vuelve a operar en su siguiente ciclo.' : 'El ciclo en curso termina normalmente; no se inician ciclos nuevos hasta reanudar.');
+  };
+  const resolve = (m: Row) => choose(ctx, 'Resolver correo ambiguo', 'MAIL_RESOLVE', m, [
+    {key: 'decision', label: 'Decisión', type: 'select', required: true, options: [{value: 'DESCARTAR', label: 'Descartar: no volver a enviarlo'}, {value: 'REENVIAR', label: 'Reenviar: el destinatario podría recibirlo dos veces'}]},
+    reason,
+  ], 'El intento pudo haber salido o no. Antes de reenviar, consulta al destinatario o el registro de envío del buzón.');
+  const integrations = obj(data, 'integrations');
+
   return <>
     <PageHeader eyebrow={<><Icon name={auditOnly ? 'activity' : 'shield'} size={14}/>Administración</>} title={auditOnly ? 'Auditoría y operación' : 'Personas y funciones'}
       lead={auditOnly ? 'Trazabilidad y cuarentena dentro de tus facultades. Consultar no concede acceso a los expedientes.' : 'TI crea cuentas. La autoridad habilitada concede funciones dentro de su alcance; nadie puede otorgarse privilegios a sí mismo.'}
@@ -87,6 +103,25 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
         ]}/>
       </Panel>}
     </>}
+    {auditOnly && ti && Object.keys(integrations).length > 0 && <Panel title='Integraciones permanentes' icon='activity' description='Estado técnico sin datos de expedientes. Un ciclo con incidentes reintenta con espera creciente; un correo ambiguo nunca se reenvía sin tu decisión.'>
+      <Table rows={INTEGRATIONS.map(([key, label]) => ({...obj(integrations, key), key, label}))} columns={[
+        {name: 'Integración', render: r => <span className='cell-strong'>{text(r, 'label')}</span>},
+        {name: 'Modo', render: r => <span className='chip'>{MODE_LABELS[text(r, 'mode')] ?? text(r, 'mode')}</span>},
+        {name: 'Estado', render: r => bool(r, 'paused') ? <span className='chip'>Pausada</span> : humanize(text(obj(r, 'status'), 'state'))},
+        {name: 'Último ciclo', render: r => <span className='nowrap'>{when(obj(r, 'status').last_cycle_ms)}</span>},
+        {name: 'Último éxito', render: r => <span className='nowrap'>{when(obj(r, 'status').last_success_ms)}</span>},
+        {name: 'Incidente', render: r => text(obj(r, 'status'), 'last_error') ? <code>{text(obj(r, 'status'), 'last_error')}</code> : <span className='muted'>Sin incidentes</span>},
+        {name: 'Contadores', render: r => Object.entries(obj(r, 'counts')).map(([k, v]) => humanize(k) + ': ' + String(v)).join(' · ') || '—'},
+        {name: 'Control', render: r => <button className='sm' onClick={() => control(r, text(r, 'label'))}>{bool(r, 'paused') ? 'Reanudar' : 'Pausar'}</button>},
+      ]}/>
+      {list(obj(integrations, 'CORREO_GRAPH'), 'ambiguous').length > 0 && <Table rows={list(obj(integrations, 'CORREO_GRAPH'), 'ambiguous')} columns={[
+        {name: 'Correo', render: m => '#' + text(m, 'id')},
+        {name: 'Destinatario', render: m => <code>{text(m, 'username')}</code>},
+        {name: 'Referencia', render: m => <code>{text(m, 'correlation_id')}</code>},
+        {name: 'Desde', render: m => <span className='nowrap'>{when(m.updated_ms)}</span>},
+        {name: 'Decisión', render: m => <button className='sm' onClick={() => resolve(m)}>Resolver</button>},
+      ]}/>}
+    </Panel>}
     {auditOnly && ti && <Panel title='Cuarentena documental' icon='lock' count={list(data, 'quarantine').length} description='TI ve identificador, tamaño y huella, no el contenido del expediente. No existe análisis antivirus automático en esta entrega.'>
       <Table rows={list(data, 'quarantine')} emptyIcon='checkCircle' empty='Sin archivos en cuarentena' columns={[
         {name: 'ID', render: d => text(d, 'id')},

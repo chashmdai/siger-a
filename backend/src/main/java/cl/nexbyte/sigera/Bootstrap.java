@@ -37,7 +37,7 @@ public class Bootstrap implements ApplicationRunner {
         try(var c=source.getConnection()){
             String url=c.getMetaData().getURL();
             if(url.startsWith("jdbc:mysql:")){
-                String name=c.getCatalog();if(name==null||!name.matches("siger_a_[a-z0-9_]{1,40}"))throw new IllegalStateException("Esquema MySQL no exclusivo SIGER A.");
+                String name=c.getCatalog();if(name==null||!name.matches("siger_a_[a-z0-9_]{1,40}"))throw new IllegalStateException("Esquema MySQL no exclusivo de SIGER.");
             }else if(!url.startsWith("jdbc:h2:"))throw new IllegalStateException("Motor no permitido.");
             if(!s(db.one("SELECT namespace FROM app_meta WHERE id=1"),"namespace").equals("SIGER_A_2026"))throw new IllegalStateException("Esquema ajeno.");
             // Sin esta comprobacion la instancia arranca "UP" sobre una base de solo lectura y falla en el primer ingreso.

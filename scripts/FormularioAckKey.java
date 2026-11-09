@@ -4,7 +4,7 @@ import java.security.KeyPairGenerator;
 import java.util.Base64;
 
 /**
- * Genera el par Ed25519 del comprobante institucional (ACK) de SIGER A para el Formulario.
+ * Genera el par Ed25519 del comprobante institucional (ACK) de SIGER para el Formulario.
  * Uso: java FormularioAckKey.java <privada.pem> <publica.pem>. No sobrescribe archivos existentes;
  * la privada hereda los permisos del directorio de configuracion privado y nunca se imprime.
  */

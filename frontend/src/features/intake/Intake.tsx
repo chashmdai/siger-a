@@ -153,7 +153,7 @@ export default function Intake({ctx, completed}: {ctx: Context; completed: (r: R
           </Section>
           <Section n={5} lead="Se preparan en almacenamiento privado y se incorporan con la COM al confirmar. Siempre quedan en cuarentena.">
             <div className="file-picker">
-              <input type="file" key={fileEpoch} aria-label="Original sintético, máximo 25 MiB" onChange={e => {setFile(e.target.files?.[0] ?? null); uploadKey.current = crypto.randomUUID();}}/>
+              <input type="file" key={fileEpoch} aria-label="Original, máximo 25 MiB" onChange={e => {setFile(e.target.files?.[0] ?? null); uploadKey.current = crypto.randomUUID();}}/>
               <button type="button" disabled={!file} onClick={() => void prepare()}><Icon name="upload" size={18}/>Preparar adjunto</button>
               {file && <button type="button" className="ghost" onClick={clearFile}>Retirar archivo elegido</button>}
             </div>

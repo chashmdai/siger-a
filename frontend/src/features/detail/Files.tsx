@@ -71,7 +71,7 @@ export function Files({row, kind, ctx, editable}: {row: Row; kind: string; ctx: 
       description="Los originales se guardan en cuarentena con huella SHA-256. No hay antivirus ni visor integrados; solo personal autorizado libera archivos sintéticos tras una revisión externa.">
       <DocumentTable documents={documents} includeSource={false} empty="Sin documentos cargados"/>
       {editable && <details className="upload-box">
-        <summary><Icon name="upload" size={18}/>{kind === 'CAS' ? 'Adjuntar documento de gestión' : 'Cargar original sintético'}<small>Máximo 25 MiB</small></summary>
+        <summary><Icon name="upload" size={18}/>{kind === 'CAS' ? 'Adjuntar documento de gestión' : 'Cargar original'}<small>Máximo 25 MiB</small></summary>
         <form onSubmit={upload}>
           <label>Archivo<input key={epoch} type="file" required onChange={e => {setFile(e.target.files?.[0] ?? null); setUploadKey(crypto.randomUUID());}}/></label>
           {kind !== 'COM' && <div className="form-grid">

@@ -14,7 +14,7 @@ $mysql=Join-Path $MySqlHome 'bin\mysqld.exe';$mysqlClient=Join-Path $MySqlHome '
 if(-not(Test-Path $mysql) -or -not(Test-Path $mysqlClient)){throw 'MySqlHome debe contener una distribucion ZIP completa.'}
 $mysqlVersion=(& $mysql --version | Out-String)
 if($LASTEXITCODE -ne 0 -or $mysqlVersion -notmatch 'Ver 8\.(0|4)\.'){throw 'Se requiere MySQL 8.0/8.4 x64. Revisa tambien el runtime Visual C++ instalado.'}
-if(-not $PSCmdlet.ShouldProcess($Root,'Crear instancia aislada SIGER A, MySQL propio y usuarios sinteticos')){return}
+if(-not $PSCmdlet.ShouldProcess($Root,'Crear instancia aislada SIGER, MySQL propio y usuarios sinteticos')){return}
 Private-Directory $Root
 foreach($d in @('config','data','data\documents','data\tmp','logs','tmp','run','mysql','mysql\data','mysql\tmp','releases')){New-Item -ItemType Directory -Force -Path (Join-Path $Root $d)|Out-Null}
 $tag='initial-'+(Get-Date -Format 'yyyyMMdd-HHmmss');$installed=Join-Path $Root "releases\$tag"
@@ -45,7 +45,7 @@ try {
 $passFile=Join-Path $Root 'tmp\keytool-pass.txt';$keytool=Join-Path $JavaHome 'bin\keytool.exe';$store=Join-Path $Root 'config\https.p12'
 try {
     [IO.File]::WriteAllText($passFile,$tls,[Text.Encoding]::ASCII)
-    & $keytool -genkeypair -alias siger-a-local -keyalg RSA -keysize 3072 -validity 365 -dname 'CN=localhost,OU=Pruebas SIGER A' -ext 'SAN=dns:localhost,ip:127.0.0.1' -storetype PKCS12 -keystore $store "-storepass:file" $passFile -noprompt
+    & $keytool -genkeypair -alias siger-a-local -keyalg RSA -keysize 3072 -validity 365 -dname 'CN=localhost,OU=SIGER' -ext 'SAN=dns:localhost,ip:127.0.0.1' -storetype PKCS12 -keystore $store "-storepass:file" $passFile -noprompt
     if($LASTEXITCODE -ne 0){throw 'No se creo el certificado HTTPS local.'}
     [IO.File]::WriteAllText($passFile,$trust,[Text.Encoding]::ASCII)
     & $keytool -importcert -alias mysql-local-ca -file (Join-Path $Root 'mysql\data\ca.pem') -keystore (Join-Path $Root 'config\mysql-trust.p12') -storetype PKCS12 '-storepass:file' $passFile -noprompt

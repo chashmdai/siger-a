@@ -16,18 +16,22 @@ import org.springframework.context.event.EventListener;
 import org.springframework.core.env.Environment;
 
 /**
- * Activacion explicita del consumidor del Formulario. Sin siger.formulario.pull.enabled=true y
- * siger.formulario.pull.run-once=true no existe ningun bean de red: no se lee la credencial ni se contacta el origen.
- * Con ambas, se ejecuta UN ciclo en un proceso sin servidor web ni tareas programadas y luego se cierra el contexto;
- * no hay planificador, endpoint ni comando de funcionario que lo dispare. Codigo de salida distinto de cero si el
- * ciclo no termino limpio.
+ * Activacion explicita del consumidor del Formulario. Sin siger.formulario.pull.enabled=true no existe ningun bean de
+ * red: no se lee la credencial ni se contacta el origen. Con enabled=true se elige exactamente un modo:
+ * - run-once=true: UN ciclo en un proceso sin servidor web ni tareas programadas, que luego cierra el contexto
+ *   (scripts\Invoke-FormularioPull.ps1); codigo de salida distinto de cero si el ciclo no termino limpio;
+ * - automatic=true: consumidor permanente dentro del servicio (FormularioAutomatic), que exige ademas
+ *   single-consumer-confirmed=true: el operador declara que ningun otro sistema (SMR) consume la misma cola.
+ * En ningun modo hay endpoint ni comando de funcionario que reclame entregas.
  */
 @Configuration
-@ConditionalOnProperty(name={"siger.formulario.pull.enabled","siger.formulario.pull.run-once"},havingValue="true")
+@ConditionalOnProperty(name="siger.formulario.pull.enabled",havingValue="true")
 class FormularioPull {
     private static final Logger LOG=LoggerFactory.getLogger(FormularioPull.class);
 
     @Bean FormularioConsumer formularioConsumer(Environment env,FormularioReception reception,Documents documents,FormularioKeys keys,Db db){
+        boolean once=env.getProperty("siger.formulario.pull.run-once",Boolean.class,false),automatic=env.getProperty("siger.formulario.pull.automatic",Boolean.class,false);
+        if(once==automatic)throw new IllegalStateException("Consumidor del Formulario: elige exactamente un modo (run-once o automatic).");
         // Esquema V8 presente antes de contactar el origen (el proceso manual no migra).
         try{db.count("SELECT COUNT(*) FROM formulario_consumer_lock WHERE id=1");db.count("SELECT COUNT(*) FROM formulario_reception WHERE id=0");}
         catch(RuntimeException e){throw new IllegalStateException("El esquema no tiene la migracion V8 del consumidor del Formulario.");}
@@ -36,11 +40,17 @@ class FormularioPull {
         if(!prefix.matches(FormularioAck.PREFIX))throw new IllegalStateException("El prefijo de folio COM no es compatible con el comprobante del Formulario ([A-Z][A-Z0-9]{1,15}).");
         var scopes=db.rows("SELECT id FROM org_scope WHERE code=? AND enabled=TRUE",required(env,"siger.formulario.pull.scope"));
         if(scopes.size()!=1)throw new IllegalStateException("Ambito receptor del Formulario inexistente o deshabilitado.");
-        var ack=FormularioAck.load(required(env,"siger.formulario.ack.key-id"),Path.of(required(env,"siger.formulario.ack.private-key-file")),Path.of(required(env,"siger.formulario.ack.public-key-file")));
+        var ack=ackKeys(env);
         String ca=env.getProperty("siger.formulario.pull.ca-file","");
         var client=new FormularioClient(URI.create(required(env,"siger.formulario.pull.origin")),token(env),ca.isBlank()?null:Path.of(ca),
             env.getProperty("siger.formulario.pull.loopback-http",Boolean.class,false));
         return new FormularioConsumer(client,reception,documents,keys,ack,Db.n(scopes.getFirst(),"id"));
+    }
+    /** Par ACK desde variables del proceso (PEM descifrado por el lanzador desde DPAPI) o desde archivos privados. */
+    private static FormularioAck ackKeys(Environment env){
+        String keyId=required(env,"siger.formulario.ack.key-id"),privatePem=env.getProperty("siger.formulario.ack.private-key","");
+        if(!privatePem.isBlank())return FormularioAck.fromPem(keyId,privatePem,required(env,"siger.formulario.ack.public-key"));
+        return FormularioAck.load(keyId,Path.of(required(env,"siger.formulario.ack.private-key-file")),Path.of(required(env,"siger.formulario.ack.public-key-file")));
     }
     private static String required(Environment env,String key){
         String v=env.getProperty(key,"");if(v.isBlank())throw new IllegalStateException("Falta configuracion del consumidor del Formulario: "+key);return v;
@@ -56,10 +66,28 @@ class FormularioPull {
         return value;
     }
 
-    @Bean FormularioRunOnce formularioRunOnce(FormularioConsumer consumer,ConfigurableApplicationContext context,Environment env){
+    @Bean @ConditionalOnProperty(name="siger.formulario.pull.run-once",havingValue="true")
+    FormularioRunOnce formularioRunOnce(FormularioConsumer consumer,ConfigurableApplicationContext context,Environment env){
         if(context instanceof WebServerApplicationContext)throw new IllegalStateException("El ciclo manual del Formulario se ejecuta sin servidor web (spring.main.web-application-type=none).");
         if(env.getProperty("siger.scheduling",Boolean.class,true))throw new IllegalStateException("El ciclo manual del Formulario requiere siger.scheduling=false.");
         return new FormularioRunOnce(consumer,context);
+    }
+
+    @Bean(destroyMethod="stop") @ConditionalOnProperty(name="siger.formulario.pull.automatic",havingValue="true")
+    FormularioAutomatic formularioAutomatic(FormularioConsumer consumer,FormularioReception reception,Integrations integrations,Environment env){
+        if(!env.getProperty("siger.formulario.pull.single-consumer-confirmed",Boolean.class,false))
+            throw new IllegalStateException("El consumidor automatico exige siger.formulario.pull.single-consumer-confirmed=true: confirma que el consumidor de SMR esta detenido.");
+        return new FormularioAutomatic(consumer,reception,integrations,
+            env.getProperty("siger.formulario.pull.poll-ms",Long.class,15_000L),env.getProperty("siger.formulario.pull.lease-ms",Long.class,120_000L),
+            env.getProperty("siger.formulario.pull.stop-wait-ms",Long.class,60_000L));
+    }
+    /** Arranca el ciclo permanente cuando la aplicacion esta lista (migraciones y semillas ya aplicadas). */
+    @Bean @ConditionalOnProperty(name="siger.formulario.pull.automatic",havingValue="true")
+    FormularioAutomaticStart formularioAutomaticStart(FormularioAutomatic automatic){return new FormularioAutomaticStart(automatic);}
+    static final class FormularioAutomaticStart {
+        private final FormularioAutomatic automatic;
+        FormularioAutomaticStart(FormularioAutomatic automatic){this.automatic=automatic;}
+        @EventListener(ApplicationReadyEvent.class) void ready(){automatic.start();}
     }
 
     static final class FormularioRunOnce {

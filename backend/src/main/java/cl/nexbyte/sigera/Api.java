@@ -18,11 +18,16 @@ import static cl.nexbyte.sigera.Db.*;
 public class Api {
     final Attention attention;final BoardQueries boards;volatile boolean ready;
     final Access access;final Workflow flow;final Queries queries;final Documents documents;final Db db;final PasswordEncoder passwords;
-    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention){this.attention=attention;this.access=access;this.flow=flow;this.queries=queries;this.documents=documents;this.db=db;this.passwords=passwords;this.boards=boards;}
+    final Integrations integrations;final String environment;
+    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,
+               @org.springframework.beans.factory.annotation.Value("${siger.environment-label:}")String environment){
+        this.attention=attention;this.access=access;this.flow=flow;this.queries=queries;this.documents=documents;this.db=db;this.passwords=passwords;this.boards=boards;
+        this.integrations=integrations;this.environment=environment.strip();
+    }
     private String name(Authentication auth){if(auth==null||!(auth.getPrincipal() instanceof SecurityConfig.Principal))throw new Problem(401,"Inicia sesion.");return auth.getName();}
     @GetMapping("/session") public Map<String,Object> session(Authentication auth,CsrfToken csrf){
         Map<String,Object> result=new LinkedHashMap<>();result.put("csrf",Map.of("token",csrf.getToken(),"header",csrf.getHeaderName()));
-        boolean logged=auth!=null&&auth.getPrincipal() instanceof SecurityConfig.Principal;result.put("authenticated",logged);result.put("environment","SIGER A - PRUEBAS SINTETICAS");
+        boolean logged=auth!=null&&auth.getPrincipal() instanceof SecurityConfig.Principal;result.put("authenticated",logged);result.put("environment",environment);
         if(logged){var a=access.actor(name(auth));result.put("user",Map.of("id",a.id(),"username",a.username(),"name",a.name(),"home_scope",a.homeScope(),"must_change",a.mustChange(),"grants",a.grants(),"substitutions",a.substitutions()));}
         return result;
     }
@@ -47,7 +52,9 @@ public class Api {
             if(!ready)return ResponseEntity.status(503).body(Map.of("status","STARTING","version","0.4.0"));
             Problem.require(db.count("SELECT COUNT(*) FROM app_meta WHERE namespace='SIGER_A_2026'")==1,"Instancia no disponible.");
             var last=db.one("SELECT version FROM flyway_schema_history WHERE success=TRUE AND version IS NOT NULL ORDER BY installed_rank DESC LIMIT 1");
-            return ResponseEntity.ok(Map.of("status","UP","version","0.4.0","schema",s(last,"version")));
+            // Codigos de estado de las integraciones (sin contadores, errores ni datos) para Estado.ps1 y monitoreo local.
+            return ResponseEntity.ok(Map.of("status","UP","version","0.4.0","schema",s(last,"version"),
+                "integrations",Map.of("formulario",integrations.health(Integrations.FORMULARIO),"correo",integrations.health(Integrations.CORREO))));
         }catch(RuntimeException e){return ResponseEntity.status(503).body(Map.of("status","UNAVAILABLE","version","0.4.0"));}
     }
     @GetMapping("/dashboard") public Map<String,Object> dashboard(Authentication a){return boards.dashboard(access.actor(name(a)));}

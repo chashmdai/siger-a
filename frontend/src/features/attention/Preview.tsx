@@ -22,7 +22,7 @@ export function Preview({data, close}: {data: Row; close: () => void}) {
         <div className="preview-brand">
           <img src={emblem} alt="" width={44} height={43}/>
           <div>
-            <p className="eyebrow">SIGER A · Candidata de pruebas · Datos sintéticos</p>
+            <p className="eyebrow">SIGER · Vista previa de la ficha</p>
             <h2 id="preview-title">Ficha de atención {text(data, 'folio')}</h2>
           </div>
         </div>

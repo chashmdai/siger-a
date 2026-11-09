@@ -36,7 +36,7 @@ public class Db {
     public void lock() { jdbc.queryForObject("SELECT id FROM operation_lock WHERE id=1 FOR UPDATE", Integer.class); }
 
     /** Mensaje visible cuando la base no admite escrituras (sin detalles tecnicos ni SQL). */
-    public static final String READ_ONLY_MESSAGE = "La base de datos de SIGER A no admite escrituras en este momento. No se registro la operacion; avisa al equipo tecnico.";
+    public static final String READ_ONLY_MESSAGE = "La base de datos de SIGER no admite escrituras en este momento. No se registro la operacion; avisa al equipo tecnico.";
 
     /**
      * Base abierta solo para lectura: H2 cuando el proceso no puede escribir el archivo (90097),
@@ -59,7 +59,7 @@ public class Db {
         try (var st = c.createStatement()) {
             st.executeUpdate("UPDATE operation_lock SET id=id WHERE id=1");
         } catch (java.sql.SQLException e) {
-            if (readOnly(e)) throw new IllegalStateException("La base de datos se abrio en modo solo lectura. Revisa que la cuenta que ejecuta SIGER A pueda escribir el archivo o el esquema de la base (por ejemplo var\\local-db.mv.db creado desde una consola de administrador).", e);
+            if (readOnly(e)) throw new IllegalStateException("La base de datos se abrio en modo solo lectura. Revisa que la cuenta que ejecuta SIGER pueda escribir el archivo o el esquema de la base (por ejemplo var\\local-db.mv.db creado desde una consola de administrador).", e);
             throw e;
         } finally {
             c.rollback();

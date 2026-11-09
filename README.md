@@ -1,4 +1,4 @@
-# SIGER A - fuente 0.4.0
+# SIGER - fuente 0.4.0
 
 Monolito institucional: Java 25 / Spring Boot 4.1.1, React 19 / TypeScript y base propia H2 local o MySQL independiente. Fase A manual y sintetica; SMR/PULL/ACK es fase B, todavia no integrado. El frontend se empaqueta dentro del JAR.
 

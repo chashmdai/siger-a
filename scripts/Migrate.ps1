@@ -2,7 +2,7 @@
 param([string]$Root='D:\SIGER-A',[switch]$Initial,[string]$BackupDirectory,[string]$CandidateJar,[string]$CandidateSha256)
 . (Join-Path $PSScriptRoot 'Environment.ps1')
 $s=Read-Settings $Root
-if(App-Running $s){throw 'Deten solo SIGER A antes de migrar.'}
+if(App-Running $s){throw 'Deten solo SIGER antes de migrar.'}
 if(-not $Initial){
     if(-not $BackupDirectory){throw 'Se requiere BackupDirectory antes de migrar.'}
     $backup=Test-SigerBackup $BackupDirectory

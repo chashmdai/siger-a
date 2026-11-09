@@ -63,7 +63,7 @@ public class Workflow {
             case "CASE_NOTE","CASE_ASSIGN","CASE_ACK","CASE_MEMBER_ADD","CASE_MEMBER_REMOVE","CASE_REQUEST_CLOSE","CASE_WITHDRAW_CLOSE","CASE_CLOSE","CASE_RETURN","CASE_WAIT","CASE_RESUME","CASE_MATTER",
                  "NOTE_RECTIFY","TASK_CREATE","TASK_EDIT","TASK_COMPLETE","TASK_CANCEL","TASK_ATTEMPT" -> cases.run(a,type,id,expected,in);
             case "NOTICE_READ" -> readNotice(a,id);
-            case "STAFF_CREATE","STAFF_UPDATE","STAFF_RESET","GRANT_CREATE","GRANT_REVOKE","SCOPE_CREATE","DESIGNATE","SUBSTITUTE_ACTIVATE","SUBSTITUTE_END","DOC_RELEASE" -> personnel.run(a,type,id,expected,in);
+            case "STAFF_CREATE","STAFF_UPDATE","STAFF_RESET","GRANT_CREATE","GRANT_REVOKE","SCOPE_CREATE","DESIGNATE","SUBSTITUTE_ACTIVATE","SUBSTITUTE_END","DOC_RELEASE","INTEGRATION_PAUSE","INTEGRATION_RESUME","MAIL_RESOLVE" -> personnel.run(a,type,id,expected,in);
             default -> throw new Problem(400,"Comando desconocido.");
         };
         db.update("INSERT INTO command_log(command_key,actor_id,payload_hash,result_kind,result_id,result_message,created_ms) VALUES(?,?,?,?,?,?,?)",

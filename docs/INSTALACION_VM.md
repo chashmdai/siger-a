@@ -35,14 +35,14 @@ No usar C: para runtime/datos por su escaso espacio. No apuntar MySqlHome al dat
 
 Las Comunicaciones externas del Formulario solo se aceptan si su sello de custodia Ed25519 verifica con una clave publica confiable del operador. Copiar el mismo archivo que SMR usa como `institucional.comprobante.trusted-keys` (formato `{"keyId":"-----BEGIN PUBLIC KEY-----..."}`, hasta 20 claves) a `config\formulario-trusted-keys.json` dentro de la raiz de la instancia, con la misma ACL de `config/`. `Environment.ps1` lo entrega como `SIGER_FORMULARIO_TRUSTED_KEYS`.
 
-- Sin el archivo, SIGER A rechaza todo original externo (comportamiento por defecto).
+- Sin el archivo, SIGER rechaza todo original externo (comportamiento por defecto).
 - Un archivo presente pero invalido detiene el arranque: corregirlo o retirarlo.
 - Quien pueda escribir el archivo puede agregar una clave confiable: protegerlo como un secreto de integridad. Retirar una clave exige reiniciar y no invalida originales ya conservados.
 - Este archivo no activa ningun consumidor PULL/ACK ni conexion con SMR.
 
 ### Consumidor del Formulario Publico (PULL/ACK, inactivo por defecto)
 
-El servicio nunca consume la cola del Formulario: no hay tarea programada, endpoint ni comando de funcionario para hacerlo. Un ciclo (concilia ACK pendientes, reclama a lo mas una entrega, la valida, descarga y custodia sus originales con SHA-256, registra COM + originales + comprobante en un COMMIT y recien entonces confirma) se ejecuta solo a mano con `scripts\Invoke-FormularioPull.ps1`, en un proceso aparte sin servidor web ni tareas, que termina al acabar el ciclo. No crea SOL, REQ ni Caso.
+Por defecto el servicio no consume la cola del Formulario y no hay endpoint ni comando de funcionario para hacerlo; el modo permanente se describe en "Operacion permanente 24/7". Un ciclo (concilia ACK pendientes, reclama a lo mas una entrega, la valida, descarga y custodia sus originales con SHA-256, registra COM + originales + comprobante en un COMMIT y recien entonces confirma) se ejecuta solo a mano con `scripts\Invoke-FormularioPull.ps1`, en un proceso aparte sin servidor web ni tareas, que termina al acabar el ciclo. No crea SOL, REQ ni Caso.
 
 Archivos en `config\` (fuera del repositorio, con la ACL privada de la raiz; el script rechaza permisos mas amplios en la privada y en la credencial):
 
@@ -57,7 +57,7 @@ Archivos en `config\` (fuera del repositorio, con la ACL privada de la raiz; el 
 
 Reglas que el procedimiento no puede verificar por si solo:
 
-- **Un solo consumidor por cola.** El Bearer da acceso a la misma cola que el consumidor del Formulario de SMR. Antes de cada ciclo debe estar detenido, con autorizacion, el consumidor de SMR; de lo contrario las entregas se reparten entre ambos sistemas. El script exige `-ConsumidorUnicoConfirmado`. El lease `formulario_consumer_lock` solo impide dos ciclos simultaneos de SIGER A.
+- **Un solo consumidor por cola.** El Bearer da acceso a la misma cola que el consumidor del Formulario de SMR. Antes de cada ciclo debe estar detenido, con autorizacion, el consumidor de SMR; de lo contrario las entregas se reparten entre ambos sistemas. El script exige `-ConsumidorUnicoConfirmado`. El lease `formulario_consumer_lock` solo impide dos ciclos simultaneos de SIGER.
 - Los originales descargados quedan en cuarentena como cualquier original de ingreso; su descarga sigue la regla vigente de liberacion.
 - Un ciclo con incidentes termina con codigo distinto de cero y deja el detalle tecnico (sin datos ciudadanos ni credenciales) en `logs\formulario-pull-<fecha>.*.log` y en `formulario_reception`. No se reintenta automaticamente: diagnosticar antes de repetir.
 - Un ACK pendiente (respuesta perdida, reserva vencida) se concilia en el ciclo siguiente con el mismo comprobante, UUID institucional y folio; nunca se crea otra COM. Rotar la clave ACK con ACK pendientes los bloquea para revision.
@@ -122,7 +122,7 @@ El PID de la aplicacion se contrasta contra su ejecutable/ruta. En Windows esta 
 
 ## Respaldo y actualizacion
 
-Con SIGER A parado y su motor propio disponible:
+Con SIGER parado y su motor propio disponible:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Backup.ps1' -Root 'D:\SIGER-A' -Destination 'D:\Respaldos-SIGER-A\PRUEBA-001'
@@ -162,7 +162,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-A-FEC
 
 Solo informa `completed=true` tras validar hashes de copia, importacion SQL, conteos y documentos restaurados. No arranca otra aplicacion, no cambia instance.json ni sobreescribe la base activa. Conserva carpeta/esquema del ensayo para revision; su eliminacion posterior es una operacion expresa, no automatica.
 
-La restauracion comparte el motor dedicado y por tanto consume recursos de esa VM; hacerla en una ventana acordada sin usuarios en SIGER A. No acredita recuperacion desde otro host ni descifrado DPAPI con otro usuario. No entregar dumps/configuracion a terceros.
+La restauracion comparte el motor dedicado y por tanto consume recursos de esa VM; hacerla en una ventana acordada sin usuarios en SIGER. No acredita recuperacion desde otro host ni descifrado DPAPI con otro usuario. No entregar dumps/configuracion a terceros.
 
 ### Actualizacion y recuperacion de error
 
@@ -171,3 +171,97 @@ El actualizador exige respaldo completo 0.3.1 de la instancia/version activa y u
 MIGRATION_FAILED/PROMOTION_FAILED bloquean inicio ambiguo. START_FAILED permite reintentar la misma candidata tras diagnostico. No borrar el diario, hacer repair o cambiar al JAR anterior para forzar verde: una migracion parcialmente aplicada puede no ser reversible. Conservar respaldo, descriptor previo, error y logs; recuperar sobre otra copia o corregir hacia delante con evidencia. La copia previa no equivale a un rollback automatico.
 
 Los scripts siguen sin ejecutarse aqui sobre Windows/MySQL. Su primera validacion es parte de la prueba guiada, no una evidencia ya obtenida.
+
+## Operacion permanente 24/7 (V9)
+
+Esta seccion prepara SIGER para operar como servicio permanente. Nada de lo descrito se activa solo: cada paso es una orden explicita del operador. El esquema sube a V9 (`Migrate.ps1` con respaldo previo; `Start.ps1` exige esquema 9).
+
+### Servicios de Windows (SIGER y su MySQL propio)
+
+`Install-Service.ps1` (PowerShell elevada) registra dos servicios **sin iniciarlos**:
+
+- `SIGERMySQL`: el motor propio de la instancia (`mysqld --install` con su `mysql\my.ini`), inicio automatico. Corre como LocalSystem, que ya figura en la ACL privada del datadir.
+- `SIGER`: un host propio (`service\SigerService.exe`, compilado en ese momento desde `scripts\SigerService.cs` con el compilador de .NET Framework de Windows; sin binarios de terceros) que ejecuta `scripts\Service.ps1`. Inicio automatico diferido, dependiente de `SIGERMySQL`, recuperacion con reinicio a los 30 s, 60 s y 5 min.
+
+La cuenta del servicio debe ser **la misma que inicializo la instancia**: DPAPI (`config\*.clixml`) solo descifra con ella. El script lo comprueba, no cambia directivas y avisa si la cuenta no tiene el derecho "Iniciar sesion como servicio" (lo concede TI). La contrasena pasa al administrador de servicios como objeto, nunca como argumento.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Install-Service.ps1' -Root 'D:\SIGER-A' -ServiceCredential (Get-Credential 'DOMINIO\cuenta-de-la-instancia')
+```
+
+Con los servicios registrados, `Start.ps1`, `Stop.ps1`, `Start-MySql.ps1` y `Estado.ps1` operan sobre ellos (mismas ordenes de siempre). `Backup.ps1`, `Migrate.ps1` y `Update.ps1` siguen exigiendo SIGER detenido (`Stop.ps1`). `Uninstall-Service.ps1` retira solo el registro, con los servicios detenidos; no borra datos.
+
+Comportamiento del servicio:
+
+- **Parada ordenada**: el host crea `run\stop.request`; SIGER cierra su contexto, termina el ciclo del Formulario o del correo en curso, libera sus leases y sale. Si no termina en 180 s, el host termina su arbol de procesos (Job Object). `Stop.ps1` sin servicio usa la misma solicitud antes de detener el proceso.
+- **Caida**: si Java termina sin solicitud de parada, el host sale con error y Windows aplica la recuperacion. Un `OutOfMemoryError` termina la JVM (`-XX:+ExitOnOutOfMemoryError`) para que se reinicie limpia.
+- **Reinicio del equipo**: `SIGERMySQL` inicia primero; `Service.ps1` espera hasta 120 s a que acepte conexiones y repite todas las comprobaciones de `Start.ps1` (JAR, actualizacion, motor propio).
+- **Logs**: `logs\siger.log` rotativo (20 MB, 30 archivos, tope 1 GB) y `logs\service-<fecha>.*.log` para errores tempranos de la JVM. El registro de eventos Application (origen `SIGER`) anota caidas.
+
+### Consumidor automatico del Formulario
+
+Con `"mode":"AUTOMATICO"` en `config\formulario-pull.json` el servicio consume la cola de forma permanente con el mismo ciclo del modo manual: concilia ACK pendientes, reclama una entrega, valida, custodia los originales, registra en un COMMIT y confirma despues. Agrega:
+
+- **Exclusividad**: lease SQL del proceso, renovado por un latido y conservado entre ciclos; ningun otro proceso de SIGER (ni `Invoke-FormularioPull.ps1`, que rechaza el modo AUTOMATICO) consume en paralelo. Si el lease se pierde, el ciclo se detiene sin reclamar, registrar ni confirmar.
+- **Espera**: sondeo cada 15 s, drenaje inmediato tras una entrega y espera creciente de 10 s a 5 min ante incidentes.
+- **Recuperacion**: tras una caida o reinicio, el lease vencido se retoma y los ACK pendientes se concilian con el mismo comprobante; nunca se crea otra COM.
+- **Pausa** auditada por TI desde Auditoria y operacion, sin reiniciar.
+
+La exclusividad con **otros sistemas no es verificable por SIGER**: el modo AUTOMATICO exige declarar `"consumidorUnicoConfirmado": true` despues de detener con autorizacion el consumidor del Formulario de SMR (ver el procedimiento de sustitucion abajo).
+
+```json
+{"origin":"https://formulario.defensorianinez.gob.cl","scope":"<ambito receptor>","caFile":"formulario-ca.pem","mode":"AUTOMATICO","consumidorUnicoConfirmado":true}
+```
+
+### Correo institucional (Microsoft Graph)
+
+Con `config\correo-graph.json` en modo `GRAPH` y el secreto en `config\graph-client-secret.clixml`, cada aviso interno genera su correo en el mismo COMMIT (outbox `mail_outbox`). El servicio lo envia con OAuth client_credentials y `sendMail` (`https://login.microsoftonline.com` y `https://graph.microsoft.com`, fijos, sin redirecciones):
+
+```json
+{"mode":"GRAPH","tenant":"<GUID del tenant>","client":"<GUID de la aplicacion>","sender":"<buzon remitente>","allowedDomains":["defensorianinez.cl"],"link":"https://<host institucional de SIGER>"}
+```
+
+- El correo lleva solo el texto generico del aviso, el enlace opcional y una referencia; nunca datos de expedientes. El destinatario se resuelve en cada intento desde su cuenta vigente: cuenta inactiva, sin correo, dominio no permitido o aviso ya leido en SIGER se suprimen sin enviar.
+- Cada intento queda registrado **antes** de la red (`mail_attempt`). 202 = aceptado por Graph (no es entrega). 429 o fallo sin conexion se reintentan con espera, hasta 8 intentos; un 4xx se rechaza.
+- **Envio ambiguo**: un 5xx, una respuesta perdida o un intento interrumpido por caida quedan `AMBIGUO` y **nunca se reenvian solos**. TI decide en Auditoria y operacion reenviar (el destinatario podria recibirlo dos veces) o descartar; la decision queda auditada.
+- Activar el correo no envia avisos anteriores. Con `"mode":"DESACTIVADO"` o sin archivo no hay correo.
+
+Se eliminaron las restricciones de laboratorio heredadas de SMR (allowlist de un solo destinatario, presupuesto de cuatro intentos, asunto "[SIGER LAB]" y texto de prueba). Se conservan las salvaguardas: dominio institucional obligatorio, intento durable, AMBIGUO sin reenvio y pausa auditada.
+
+### Reutilizar credenciales existentes (SMR, Graph, certificado)
+
+`Import-Integrations.ps1` copia a `config\` lo compatible, descifrando con DPAPI de la cuenta actual solo en memoria y volviendo a proteger con DPAPI. Solo **lee** SMR; no lo detiene ni modifica; no sobrescribe archivos existentes ni imprime secretos.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Import-Integrations.ps1' -Root 'D:\SIGER-A' -SmrRoot '<raiz de SMR>' -FormularioBearer -AckIdentity -FormularioTrust -FormularioCa
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Import-Integrations.ps1' -Root 'D:\SIGER-A' -GraphSecretPrompt
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Import-Integrations.ps1' -Root 'D:\SIGER-A' -HttpsPfx '<certificado.pfx>'
+```
+
+| Opcion | Origen | Destino |
+|---|---|---|
+| `-FormularioBearer` | `instances\recepcion\private\producer-token.dpapi` de SMR | `formulario-pull-token.clixml` |
+| `-AckIdentity` | `secrets\ack-identity.dpapi` de SMR (keyId y par Ed25519 que el Formulario ya confia) | `formulario-ack-identity.clixml`; tiene prioridad sobre los PEM |
+| `-FormularioTrust` | `config\formulario-signing-trust.json` de SMR | `formulario-trusted-keys.json` |
+| `-FormularioCa` | `config\public-edge-root-ca.crt` de SMR (PEM) | `formulario-ca.pem` |
+| `-GraphSecretFile` / `-GraphSecretPrompt` | archivo de secreto existente o entrada privada | `graph-client-secret.clixml` |
+| `-HttpsPfx` | PFX vigente con clave privada | `https.p12` (conserva la clave del keystore; guarda el anterior) |
+
+DPAPI exige que SMR y SIGER usen la misma cuenta de Windows; si no, el script lo informa y no importa nada. Reutilizar la identidad ACK de SMR evita instalar otra clave en el Formulario, pero obliga a que SMR **no** vuelva a confirmar entregas mientras SIGER consume. El certificado HTTPS se usa tras reiniciar; el enlace sigue en 127.0.0.1 (abrir la red es otra decision).
+
+### Monitoreo
+
+- `Estado.ps1`: servicios, salud HTTPS, esquema y estado de cada integracion (`DESACTIVADO`, `MANUAL`, `INICIANDO`, `ESPERANDO_ENTREGAS`, `RECIBIENDO`, `OCUPADO`, `PAUSADO`, `DEGRADADO`, `DETENIDO`; correo: `OPERATIVO`, `ENVIANDO`, `PAUSADO`, `DEGRADADO`).
+- `/api/health` (solo localhost) incluye esos codigos, sin contadores ni datos.
+- Auditoria y operacion (TI): ultimo ciclo y exito, incidente, ACK pendientes o bloqueados, estado del outbox y correos ambiguos con su resolucion. No muestra documentos ni contenidos.
+- Un estado `DEGRADADO` persistente, ACK bloqueados o correos ambiguos requieren revision; no editar tablas ni borrar leases para limpiarlos.
+
+### Procedimiento de sustitucion del consumidor de SMR
+
+1. **Preparar sin consumir**: respaldo (`Backup.ps1`), actualizacion y migracion a V9 (`Update.ps1`), `folioPrefix` compatible y distinto del de SMR en `instance.json`, importacion de credenciales (`Import-Integrations.ps1`) y `formulario-pull.json` en `"mode":"MANUAL"`. Registrar los servicios si corresponde. SIGER sigue sin consumir.
+2. **Ventana autorizada**: acordar con el responsable del Formulario y con quien opera SMR una ventana sin usuarios. Pausar o cerrar el ingreso publico solo a traves de su responsable.
+3. **Drenar SMR**: pausar el consumidor automatico de SMR con su control auditado (`Windows-Control-Consumidor-QA.ps1 -Accion pausar` o el equivalente de su instalacion), esperar `PAUSADO_POR_CONTROL` y comprobar **cero ACK pendientes** en SMR. Con ACK pendientes en SMR no se continua: los concilia SMR, no SIGER.
+4. **Detener el consumidor de SMR** con autorizacion y comprobar que no queda proceso ni tarea que reclame la cola. La recepcion historica y la consulta de SMR pueden seguir disponibles; solo se detiene su consumo.
+5. **Activar SIGER**: en `formulario-pull.json` poner `"mode":"AUTOMATICO"` y `"consumidorUnicoConfirmado": true`, y reiniciar SIGER (`Stop.ps1` y `Start.ps1`). Comprobar con `Estado.ps1` que el Formulario pasa a `ESPERANDO_ENTREGAS` y, en Auditoria y operacion, sondeos correctos sin incidentes.
+6. **Primera entrega**: con autorizacion, una entrega real controlada; verificar COM unica, folio, originales con SHA-256, comprobante, ACK confirmado (`formulario_reception` en `CONFIRMADA`) y estado CONFIRMADA en el Formulario. Despues reabrir el ingreso publico.
+7. **Reversion** (si fuera necesaria): pausar el consumidor de SIGER (TI) y esperar a que termine su ciclo; comprobar cero ACK pendientes en SIGER (`ACK_PENDIENTE` y `ACK_BLOQUEADO` en cero); volver `formulario-pull.json` a `"mode":"MANUAL"` y reiniciar SIGER; solo entonces reactivar el consumidor de SMR. Nunca hay dos consumidores activos, y no se borran COM, originales, recepciones ni leases para revertir.

@@ -4,6 +4,7 @@ import type {User} from '../lib/access';
 import {initials, ROLE_LABELS} from '../lib/labels';
 import {Icon} from '../components/Icon';
 import {useExit} from '../components/useExit';
+import {environment} from '../lib/api';
 import type {MenuGroup} from './menu';
 import emblem from '../assets/emblema-320.png';
 
@@ -15,9 +16,9 @@ export const activePath = (view: string) => DETAIL_BOARD[view.split('/')[0]] ?? 
 export const rolesOf = (user: User) => [...new Set(user.grants.map(g => ROLE_LABELS[g.role] ?? g.role))].join(' · ') || 'Sin funciones vigentes';
 
 export function Brand() {
-  return <a className="brand" href="#inicio" aria-label="SIGER A, ir al inicio">
+  return <a className="brand" href="#inicio" aria-label="SIGER, ir al inicio">
     <img src={emblem} alt="" width={42} height={41}/>
-    <span className="brand-name"><strong>SIGER A</strong><span>Defensoría de la Niñez</span></span>
+    <span className="brand-name"><strong>SIGER</strong><span>Defensoría de la Niñez</span></span>
   </a>;
 }
 
@@ -108,7 +109,7 @@ export function Shell({groups, view, user, refresh, logout, palette, message, cl
   return <>
     <a className="skip-link" href="#contenido" onClick={e => {e.preventDefault(); document.getElementById('contenido')?.focus();}}>Saltar al contenido</a>
     <Progress/>
-    <div className="environment" role="note"><span className="environment-dot" aria-hidden="true"/>Candidata de pruebas · Datos sintéticos<span className="hide-narrow"> · Sin recepción pública ni correo real</span></div>
+    {environment() && <div className="environment" role="note"><span className="environment-dot" aria-hidden="true"/>{environment()}</div>}
     <div className="app">
       <aside className="sidebar-slot" aria-label="Menú lateral"><Sidebar {...{groups, view, user, refresh, logout, palette}}/></aside>
       <div className="workspace">

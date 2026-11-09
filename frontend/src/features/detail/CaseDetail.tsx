@@ -37,7 +37,7 @@ export function CaseDetail({r, ctx}: {r: Row; ctx: Context}) {
     main={<>
       {!write && <Callout tone="neutral">Consulta autorizada. Poder leer no concede facultad de gestionar, reasignar ni cerrar.</Callout>}
       {state === 'EN_REVISION' && <Callout tone="warn" role="status" title="En revisión de cierre">El responsable solicitó terminar este Caso; aún no está cerrado y la jefatura debe decidir. Mientras siga pendiente, el responsable puede retirar su solicitud y volver a gestión.</Callout>}
-      {bool(r, 'own_substitution') && !closed && <Callout tone="warn">Ejerces subrogancia sobre tu propio Caso: puedes solicitar el término, pero no autoconfirmarlo. La revisión excepcional por un tercero sigue pendiente en esta candidata.</Callout>}
+      {bool(r, 'own_substitution') && !closed && <Callout tone="warn">Ejerces subrogancia sobre tu propio Caso: puedes solicitar el término, pero no autoconfirmarlo. La revisión excepcional por un tercero aún no está disponible.</Callout>}
       <ActionBar label="Gestión">
         {owner && unacknowledged && <button className="primary" onClick={() => choice('Acusar asignación', 'CASE_ACK', [], 'La responsabilidad ya es efectiva. Este acuse es manual y no registra una actuación.')}><Icon name="check" size={18}/>Acusar asignación</button>}
         {!closed && write && <>

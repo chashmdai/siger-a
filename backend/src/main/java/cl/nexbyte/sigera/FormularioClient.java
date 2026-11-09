@@ -66,7 +66,7 @@ final class FormularioClient {
     private static String id(String uuid){var u=UUID.fromString(uuid).toString();if(!u.equals(uuid))throw new IllegalArgumentException();return u;}
     private HttpRequest.Builder request(String suffix,Duration timeout){
         return HttpRequest.newBuilder(URI.create(origin+ROOT+suffix)).timeout(timeout)
-            .header("User-Agent","SIGER-A/0.4.0").header("Authorization","Bearer "+token);
+            .header("User-Agent","SIGER/0.4.0").header("Authorization","Bearer "+token);
     }
     private <T> HttpResponse<T> send(HttpRequest request,HttpResponse.BodyHandler<T> handler)throws Failure{
         try{return http.send(request,handler);}

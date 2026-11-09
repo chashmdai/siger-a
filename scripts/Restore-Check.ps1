@@ -2,7 +2,7 @@
 param([string]$Root='D:\SIGER-A',[Parameter(Mandatory=$true)][string]$BackupDirectory,[Parameter(Mandatory=$true)][string]$Destination)
 . (Join-Path $PSScriptRoot 'Common.ps1')
 $s=Read-Settings $Root;$backup=Test-SigerBackup $BackupDirectory
-if(App-Running $s){throw 'Deten SIGER A antes del ensayo. El motor propio se mantiene encendido.'}
+if(App-Running $s){throw 'Deten SIGER antes del ensayo. El motor propio se mantiene encendido.'}
 $BackupDirectory=(Resolve-Path $BackupDirectory).Path
 $Destination=[IO.Path]::GetFullPath($Destination).TrimEnd('\')
 if($Destination -notmatch '^[D-Z]:\\[^\r\n]+$' -or (Test-Path $Destination)){throw 'Usa una carpeta NUEVA en unidad de datos; nunca encima de una instancia.'}

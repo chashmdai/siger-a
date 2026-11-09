@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $project 'var\tmp') | Out-N
 $localDb=Join-Path $project 'var\local-db.mv.db'
 if(Test-Path $localDb){
   try{$probe=[IO.File]::Open($localDb,'Open','ReadWrite','ReadWrite');$probe.Close()}
-  catch{throw ("Esta consola no puede escribir {0}. Fue creada con otros permisos (por ejemplo, desde una consola de administrador). Ejecuta Run-Local con la misma elevacion con que se creo, o concede Modificar a tu cuenta sobre la carpeta var. No se inicio SIGER A." -f $localDb)}
+  catch{throw ("Esta consola no puede escribir {0}. Fue creada con otros permisos (por ejemplo, desde una consola de administrador). Ejecuta Run-Local con la misma elevacion con que se creo, o concede Modificar a tu cuenta sobre la carpeta var. No se inicio SIGER." -f $localDb)}
 }
 Push-Location $project
 try { & (Join-Path $JavaHome 'bin\java.exe') '-Xms128m' '-Xmx1024m' '-Djava.io.tmpdir=./var/tmp' '-jar' $jar '--spring.profiles.active=local' "--server.port=$Port" }

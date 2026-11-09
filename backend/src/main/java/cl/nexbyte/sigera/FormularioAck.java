@@ -54,6 +54,18 @@ final class FormularioAck {
     }
     static FormularioAck load(String keyId,Path privatePem,Path publicPem){
         try{
+            if(Files.size(privatePem)>MAX_PEM||Files.size(publicPem)>MAX_PEM)throw new java.io.IOException();
+            return fromPem(keyId,Files.readString(privatePem,StandardCharsets.US_ASCII),Files.readString(publicPem,StandardCharsets.US_ASCII));
+        }catch(IllegalStateException e){throw e;}
+        catch(Exception e){throw new IllegalStateException("Claves del comprobante institucional invalidas o ilegibles.");}
+    }
+    /**
+     * Par desde texto PEM (PKCS#8 / SPKI), por ejemplo una identidad ACK existente que el lanzador descifra desde DPAPI
+     * y entrega solo al proceso. Mismas validaciones que desde archivos.
+     */
+    static FormularioAck fromPem(String keyId,String privatePem,String publicPem){
+        try{
+            if(privatePem.length()>MAX_PEM||publicPem.length()>MAX_PEM)throw new java.io.IOException();
             var factory=KeyFactory.getInstance("Ed25519");
             var priv=factory.generatePrivate(new PKCS8EncodedKeySpec(pem(privatePem,"PRIVATE KEY")));
             var pub=factory.generatePublic(new X509EncodedKeySpec(pem(publicPem,"PUBLIC KEY")));
@@ -61,9 +73,8 @@ final class FormularioAck {
         }catch(IllegalStateException e){throw e;}
         catch(Exception e){throw new IllegalStateException("Claves del comprobante institucional invalidas o ilegibles.");}
     }
-    private static byte[] pem(Path file,String label)throws java.io.IOException{
-        if(Files.size(file)>MAX_PEM)throw new java.io.IOException();
-        String body=Files.readString(file,StandardCharsets.US_ASCII).strip();
+    private static byte[] pem(String text,String label)throws java.io.IOException{
+        String body=text.strip();
         String begin="-----BEGIN "+label+"-----",end="-----END "+label+"-----";
         if(!body.startsWith(begin)||!body.endsWith(end))throw new java.io.IOException();
         return Base64.getMimeDecoder().decode(body.substring(begin.length(),body.length()-end.length()));

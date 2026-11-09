@@ -2,7 +2,7 @@
 param([string]$Root='D:\SIGER-A',[Parameter(Mandatory=$true)][string]$Release,[Parameter(Mandatory=$true)][string]$BackupDirectory)
 . (Join-Path $PSScriptRoot 'Common.ps1')
 $s=Read-Settings $Root
-if(App-Running $s){throw 'Deten solo SIGER A antes de actualizar.'}
+if(App-Running $s){throw 'Deten solo SIGER antes de actualizar.'}
 $backup=Test-SigerBackup $BackupDirectory
 if($backup.sourceRoot -ine $s.root -or $backup.database -ne $s.database -or $backup.jarSha256 -ine $s.jarSha256){throw 'Falta respaldo de esta version e instancia.'}
 $Release=(Resolve-Path $Release).Path;$m=Get-Content (Join-Path $Release 'manifest.json') -Raw | ConvertFrom-Json

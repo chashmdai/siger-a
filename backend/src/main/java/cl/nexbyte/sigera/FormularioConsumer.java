@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Un ciclo manual del consumidor del Formulario (RecuperarFormulario de SMR como referencia):
+ * Un ciclo del consumidor del Formulario, manual o automatico (RecuperarFormulario de SMR como referencia):
  * 1) concilia los ACK pendientes con su reserva y el mismo comprobante; 2) reclama a lo mas una entrega;
  * 3) la valida (ExternalOriginal: contrato, huellas y sello Ed25519) antes de tocar SQL; 4) descarga y custodia sus
  * originales con tamano y SHA-256 firmados; 5) registra COM, originales, comprobante y ACK pendiente en un COMMIT;
@@ -29,27 +29,43 @@ final class FormularioConsumer {
         boolean clean(){return !busy&&incidents.isEmpty();}
     }
 
-    Cycle run(){
-        String holder=UUID.randomUUID().toString();
-        if(!reception.acquire(holder,System.currentTimeMillis()+LOCK_MS))return new Cycle(true,0,0,0,0,List.of("CICLO_EN_CURSO"));
+    /** Ciclo manual: lease propio de 15 minutos que se libera al terminar. */
+    Cycle run(){return run(UUID.randomUUID().toString(),LOCK_MS,true);}
+
+    /**
+     * Un ciclo con el lease del titular dado. El consumidor automatico conserva su lease entre ciclos (lo renueva
+     * su latido) para que ningun otro proceso de SIGER consuma la misma cola; si lo pierde, el ciclo se detiene sin
+     * reclamar, registrar ni confirmar (falla cerrado).
+     */
+    Cycle run(String holder,long leaseMs,boolean release){
+        if(!reception.acquire(holder,System.currentTimeMillis()+leaseMs))return new Cycle(true,0,0,0,0,List.of("CICLO_EN_CURSO"));
         var incidents=new ArrayList<String>();int reconciled=0,claimed=0,registered=0,confirmed=0;
         try{
-            for(var p:reception.pendingAcks(10))if(confirm(p.operation(),UUID.fromString(p.lease()),p.receipt(),p.communication(),incidents))reconciled++;
+            for(var p:reception.pendingAcks(10)){
+                if(!owned(holder,incidents))return new Cycle(false,reconciled,0,0,0,List.copyOf(incidents));
+                if(confirm(p.operation(),UUID.fromString(p.lease()),p.receipt(),p.communication(),incidents))reconciled++;
+            }
+            if(!owned(holder,incidents))return new Cycle(false,reconciled,0,0,0,List.copyOf(incidents));
             List<FormularioClient.Claim> batch;
             try{batch=client.claim();}catch(FormularioClient.Failure f){incidents.add(f.code);return new Cycle(false,reconciled,0,0,0,List.copyOf(incidents));}
             for(var c:batch){
                 claimed++;
-                var r=receive(c,incidents);
+                var r=receive(c,holder,incidents);
                 if(r==null)continue;
                 if(r.created())registered++;
+                if(!owned(holder,incidents))break;
                 if(confirm(c.operation(),c.lease(),r.receipt(),r.communication(),incidents))confirmed++;
             }
             return new Cycle(false,reconciled,claimed,registered,confirmed,List.copyOf(incidents));
-        }finally{reception.release(holder);}
+        }finally{if(release)reception.release(holder);}
+    }
+    private boolean owned(String holder,List<String> incidents){
+        if(reception.holds(holder))return true;
+        incidents.add("EXCLUSION_PERDIDA");return false;
     }
 
     /** Valida, custodia y registra. Devuelve null si no hubo COMMIT (y en ese caso se informa el fallo contractual). */
-    private FormularioReception.Registered receive(FormularioClient.Claim c,List<String> incidents){
+    private FormularioReception.Registered receive(FormularioClient.Claim c,String holder,List<String> incidents){
         ExternalOriginal o;
         try{
             // Configuracion propia (clave no instalada) o reloj: no son defectos del documento; no van a cuarentena.
@@ -72,6 +88,8 @@ final class FormularioConsumer {
             }catch(FormularioClient.Failure f){fail(c,"TRANSITORIO",f.code,incidents);return null;}
             catch(java.io.IOException|RuntimeException e){fail(c,"RECEPTOR_NO_DISPONIBLE","CUSTODIA_LOCAL_FALLIDA",incidents);return null;}
         }
+        // Sin lease vigente no se registra: la reserva vence en el Formulario y la entrega se reintenta.
+        if(!owned(holder,incidents))return null;
         try{
             return reception.register(o,scope,c.lease(),c.until(),c.attempt(),ack);
         }catch(RuntimeException e){
