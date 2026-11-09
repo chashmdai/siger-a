@@ -76,10 +76,10 @@ public class IntakeCommands {
 
     /**
      * COM institucional para un original externo (Formulario completo recibido por SMR). El texto
-     * recibido se guarda tal cual en communication_original; la COM toma origen, identificador, canal,
-     * fecha de recepcion y la identificacion del presentador con su procedencia (ExternalPresenter).
-     * Asunto y relato quedan como rotulo de sistema hasta su normalizacion: no se inventan datos
-     * ciudadanos. No crea SOL, REQ ni Caso ni avisa.
+     * recibido se guarda tal cual en communication_original. La proyeccion normalizada (ExternalProjection)
+     * completa la COM (presentador, identificacion, contacto, domicilio, asunto y relato, sin textos de
+     * procedencia) y guarda personas, atributos con procedencia, discrepancias y respuestas integras en
+     * external_person/external_attribute/external_field. No inventa datos. No crea SOL, REQ ni Caso ni avisa.
      * Idempotente por (origen, identificador): el mismo original devuelve la COM existente.
      * Solo se invoca desde Workflow.conserveExternal (transaccion y lock global); no es un comando
      * despachable desde run(). La confianza en la fuente es responsabilidad del receptor tecnico
@@ -96,14 +96,25 @@ public class IntakeCommands {
                 "Ya existe un original con ese identificador de origen y un contenido distinto. No se registro la operacion.");
             return done("COM",n(p,"communication_id"));
         }
-        String subject="NNA".equals(o.kind())?"Formulario web NNA":"Formulario web adulto";
-        // Proyeccion del presentador (con su procedencia) solo al crear; un reenvio sale antes y no la toca.
-        long com=db.insert("INSERT INTO communication(external_source,external_id,channel,received_ms,created_ms,created_by,origin_scope,presenter,identity_document,subject,body) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            o.source(),o.externalId(),o.channel(),o.receivedMs(),now(),a.id(),scope,o.identification().presenter(),o.identification().identityDocument(),subject,
-            "Comunicacion recibida por Formulario web. El documento original se conserva integro; en esta ficha solo se proyecta la identificacion del presentador.");
+        // Proyeccion solo al crear; un reenvio sale antes y no toca una COM ya registrada ni sus correcciones.
+        var p=o.projection();var c=p.com();
+        long com=db.insert("INSERT INTO communication(external_source,external_id,channel,received_ms,created_ms,created_by,origin_scope,presenter,contact,identity_document,subject,body) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            o.source(),o.externalId(),o.channel(),o.receivedMs(),now(),a.id(),scope,c.presenter(),c.contact(),c.identityDocument(),c.subject(),c.body());
+        db.update("UPDATE communication SET contact_email=?,contact_phone=?,contact_restrictions=?,presenter_domicile=? WHERE id=?",
+            c.contactEmail(),c.contactPhone(),c.contactRestrictions(),c.presenterDomicile(),com);
         life.comFolio(com);
         db.update("INSERT INTO communication_original(communication_id,source,external_id,document_version,document_kind,received_ms,content_hash,provenance_hash,custody_key_id,document,document_sha256,document_bytes,stored_ms,stored_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             com,o.source(),o.externalId(),o.version(),o.kind(),o.receivedMs(),o.contentHash(),o.provenanceHash(),o.custodyKeyId(),o.document(),o.documentSha256(),o.documentBytes(),now(),a.id());
+        for(var person:p.persons()){
+            long id=db.insert("INSERT INTO external_person(communication_id,person_key,person_index,person_role,authenticated,given_names,given_names_source,surnames,surnames_source,run_number,run_dv,run_source,run_valid,identification_type,foreign_document_type,foreign_document_number,birth_date,birth_date_source,age_at_intake,declared_age,registry_state,registry_checked_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                com,person.key(),person.index(),person.role(),person.authenticated(),person.givenNames(),person.givenSource(),person.surnames(),person.surnameSource(),
+                person.runNumber(),person.runDv(),person.runSource(),person.runValid(),person.identificationType(),person.foreignType(),person.foreignNumber(),
+                person.birthDate(),person.birthSource(),person.ageAtIntake(),person.declaredAge(),person.registryState(),person.registryCheckedMs());
+            for(var x:person.attributes())db.update("INSERT INTO external_attribute(person_id,attr_key,discrepancy,value_text,code_text,meaning,source,level_code,observed_ms,evidence) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                id,x.key(),x.discrepancy(),x.value(),x.code(),x.meaning(),x.source(),x.level(),x.observedMs(),x.evidence());
+        }
+        for(var f:p.fields())db.update("INSERT INTO external_field(communication_id,field_group,person_key,item,field_key,value_text) VALUES(?,?,?,?,?,?)",
+            com,f.group(),f.personKey(),f.item(),f.key(),f.value());
         life.changed(a,"COM_ORIGINAL_CONSERVADO","COM",com,scope,"Origen "+o.source()+" "+o.externalId());
         return done("COM",com);
     }

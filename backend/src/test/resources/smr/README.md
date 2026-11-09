@@ -4,3 +4,7 @@ se extrajo solo el objeto `entrega` de cada respuesta. No contienen datos ciudad
 Ambos usan el mismo identificador de operacion con contenido distinto (escenarios independientes).
 
 La clave publica sintetica `claves-formulario-sinteticas.json` es `fixture-productor-public.pem` de SMR (misma procedencia), con keyId FORM_FIXTURE_PUBLIC. No es una clave institucional.
+
+`clave-firma-prueba-siger.pem` es una clave Ed25519 generada solo para las pruebas de SIGER A (keyId `PRUEBA_SIGER`,
+publica incluida en `claves-formulario-sinteticas.json`). Firma documentos sinteticos construidos por las pruebas;
+no es una clave del Formulario ni institucional y nunca debe configurarse fuera de las pruebas.

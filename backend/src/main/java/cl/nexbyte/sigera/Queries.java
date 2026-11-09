@@ -95,6 +95,8 @@ public class Queries {
                 out.put("requirements",db.rows("SELECT * FROM requirement WHERE communication_id=?",id).stream().filter(r->access.reqRead(a,r)).map(r->reqSummary(a,r)).toList());
                 out.put("links",db.rows("SELECT l.id,l.requirement_id,l.state,l.returned_ms,r.folio FROM communication_link l JOIN requirement r ON r.id=l.requirement_id WHERE l.communication_id=?",id));
                 out.put("documents",documents(a,"COM",id));
+                // Solo en la ficha autorizada (comForRead): datos de identificacion y registrales del Formulario.
+                if(c.get("external_source")!=null)out.put("external",external(id));
             }
             case "SOL" -> {
                 var s=db.one("SELECT * FROM solicitation WHERE id=?",id);if(!solVisible(a,s))Problem.denied();scope=n(s,"destination_scope");out=new LinkedHashMap<>(s);
@@ -138,6 +140,25 @@ public class Queries {
         // Lectores por materia reciben historia del Caso autorizado, no auditoria transversal.
         return db.rows("SELECT e.id,e.at_ms,e.action,e.note,u.name AS actor FROM audit_event e JOIN staff u ON u.id=e.actor_id WHERE e.resource_type=? AND e.resource_id=? AND e.action NOT IN ('CONSULTA','DESCARGA','DENEGADO') ORDER BY e.id DESC LIMIT 100",kind,id);
     }
+    /**
+     * Proyeccion de una COM externa para su ficha: metadatos del original (sin el JSON), personas con sus
+     * atributos y discrepancias con procedencia, y respuestas. La edad actual se calcula al consultar.
+     */
+    private Map<String,Object> external(long com){
+        var out=new LinkedHashMap<String,Object>();
+        out.put("original",db.one("SELECT source,external_id,document_version,document_kind,received_ms,content_hash,provenance_hash,custody_key_id,document_sha256,document_bytes,stored_ms FROM communication_original WHERE communication_id=?",com));
+        var today=java.time.LocalDate.now(ExternalProjection.ZONE);
+        out.put("persons",db.rows("SELECT * FROM external_person WHERE communication_id=? ORDER BY person_index",com).stream().map(p->{
+            var m=new LinkedHashMap<String,Object>(p);
+            var born=ExternalProjection.date(s(p,"birth_date"));
+            m.put("current_age",born==null?null:ExternalProjection.age(born,today));
+            m.put("attributes",db.rows("SELECT attr_key,discrepancy,value_text,code_text,meaning,source,level_code,observed_ms,evidence FROM external_attribute WHERE person_id=? ORDER BY id",n(p,"id")));
+            return m;
+        }).toList());
+        out.put("fields",db.rows("SELECT field_group,person_key,item,field_key,value_text FROM external_field WHERE communication_id=? ORDER BY id",com));
+        return out;
+    }
+
     /** Original de COM y COM hijas admitidas expresamente para este Caso; sin copiar archivos. */
     private List<Map<String,Object>> incomingDocuments(long caseId){
         return db.rows("SELECT d.id,d.name,d.size_bytes,d.sha256,d.created_ms,d.uploaded_by,d.reserved,d.quarantined,cm.folio AS source_folio FROM document_item d JOIN communication cm ON cm.id=d.communication_id WHERE d.communication_id=(SELECT r.communication_id FROM requirement r JOIN case_record c ON c.requirement_id=r.id WHERE c.id=?) OR d.communication_id IN (SELECT l.communication_id FROM communication_link l WHERE l.target_case_id=? AND l.state='ADMITIDA' AND l.returned_ms IS NULL) ORDER BY d.id",caseId,caseId);

@@ -326,3 +326,9 @@ blockquote { margin: 0 0 1rem; padding: .75rem 1rem; font-size: 1rem; line-heigh
   .preview-fields > div { background: none; }
   .environment, .sidebar, .topbar, .toasts, .progress, .save-bar { display: none !important; }
 }
+
+/* COM externa (Formulario Publico): una tarjeta por persona del documento. */
+.external-person { padding: 1rem 0; border-top: 1px solid var(--line); }
+.external-person:first-child { border-top: 0; padding-top: 0; }
+.external-person h3 { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 0 0 .75rem; }
+.external-person .table-block, .external-person .callout { margin-top: .75rem; }

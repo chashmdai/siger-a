@@ -25,7 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 record ExternalOriginal(String source,String externalId,String version,String kind,String channel,long receivedMs,
         String contentHash,String provenanceHash,String custodyKeyId,String document,String documentSha256,long documentBytes,
-        ExternalPresenter identification) {
+        ExternalProjection projection) {
 
     /** Emisor del sello de custodia y origen de la cola de SMR. */
     static final String SOURCE="FORMULARIO_PUBLICO_DDN";
@@ -74,6 +74,7 @@ record ExternalOriginal(String source,String externalId,String version,String ki
                 if(!p.path("id").isString()||person.isBlank()||sources.has(person)||!p.path("atributos").isObject()||!p.path("discrepancias").isObject())throw new IllegalArgumentException();
                 sources.set(person,WRITER.createArrayNode().add(p.path("atributos")).add(p.path("discrepancias")));
             }
+            contract(com,kind,version);
         }catch(RuntimeException e){
             throw new Problem(400,INVALID);
         }
@@ -82,8 +83,79 @@ record ExternalOriginal(String source,String externalId,String version,String ki
         verifySeal(custody,trusted,id,received,notice,content,provenance);
         if(received.toEpochMilli()>System.currentTimeMillis())throw new Problem(400,"La fecha de recepcion del documento original es futura.");
         return new ExternalOriginal(SOURCE,id,version,kind,"NNA".equals(kind)?"FORMULARIO_WEB_NNA":"FORMULARIO_WEB_PUBLICO",received.toEpochMilli(),
-            content,provenance,keyId,document,sha256(bytes),bytes.length,ExternalPresenter.project(com));
+            content,provenance,keyId,document,sha256(bytes),bytes.length,ExternalProjection.of(com,received));
     }
+
+    private static final Set<String> ROLES=Set.of("PRESENTADOR","AFECTADO_NNA","ADULTO_RELACIONADO","PERSONA_SENALADA");
+    private static final Set<String> SOURCES=Set.of("CLAVE_UNICA_USERINFO","SRCEI","DECLARACION_CIUDADANA","SIN_DATO");
+    private static final String CU="CLAVE_UNICA_USERINFO";
+    private static final int MAX_KEY=255;
+
+    /**
+     * Reglas semanticas del contrato, portadas de EntregaCompleta.validar (SMR 02d4184): la firma prueba origen, no
+     * conformidad. Tipo de ingreso y autenticacion, roles, presentador unico, procedencias y niveles compatibles,
+     * referencias internas y descriptores de adjuntos (limites 1.0/1.1). Campos opcionales ausentes y campos
+     * desconocidos de comunicacion se admiten y se conservan. Agrega los limites de largo de las columnas de SIGER A
+     * para identificadores y claves (64/255), muy por sobre lo que emite el Formulario.
+     */
+    static void contract(JsonNode com,String kind,String version){
+        var datos=com.path("datos");
+        if(!com.path("aceptaCanalDigital").isBoolean()||!datos.isObject()||!datos.path("campos").isObject()
+            ||!com.path("personas").isArray()||com.path("personas").size()>30||!com.path("adjuntos").isArray()
+            ||!datos.path("personas").isArray()||!datos.path("instituciones").isArray()||!datos.path("adjuntos").isArray())fail();
+        UUID.fromString(com.path("recorridoId").asString());
+        if(!"NNA".equals(kind)&&!com.path("aceptaCanalDigital").asBoolean())fail();
+        var persons=new HashSet<String>();int presenters=0;
+        for(var p:com.path("personas")){
+            String person=p.path("id").asString();
+            if(person.isBlank()||person.length()>64||!persons.add(person)||!p.path("atributos").isObject()||!p.path("discrepancias").isObject()||!p.path("autenticada").isBoolean())fail();
+            boolean presenter="PRESENTADOR".equals(p.path("rol").asString()),auth=p.path("autenticada").asBoolean();
+            if(presenter)presenters++;
+            if(!ROLES.contains(p.path("rol").asString()))fail();
+            if(auth)for(var key:List.of("runNumero","runDv","nombres","apellidos"))
+                if(!CU.equals(p.path("atributos").path(key).path("fuente").asString())||!p.path("atributos").path(key).path("valor").isString()||p.path("atributos").path(key).path("valor").asString().isBlank())fail();
+            if(auth!=(presenter&&"ADULTO_CU".equals(kind)))fail();
+            if(auth)for(var key:List.of("runNumero","runDv"))if(!p.path(key).equals(p.path("atributos").path(key).path("valor")))fail();
+            for(var group:List.of(p.path("atributos"),p.path("discrepancias")))for(var entry:group.properties()){
+                var a=entry.getValue();String source=a.path("fuente").asString(),level=a.path("nivel").asString();
+                if(entry.getKey().length()>MAX_KEY||!a.isObject()||!SOURCES.contains(source)||CU.equals(source)&&!auth)fail();
+                if(!a.path("nivel").isString()||level.isBlank()||level.length()>64||"IDENTIDAD_AUTENTICADA".equals(level)&&!CU.equals(source))fail();
+                for(var key:List.of("valor","codigo"))if(!a.has(key)||!(a.path(key).isNull()||a.path(key).isString()))fail();
+                if(a.path("codigo").isString()&&a.path("codigo").asString().length()>MAX_KEY)fail();
+                UUID.fromString(a.path("evidencia").asString());
+                Instant.parse(a.path("observadoEn").asString());
+            }
+        }
+        if(presenters!=1)fail();
+        for(var entry:datos.path("campos").properties())if(entry.getKey().length()>MAX_KEY||!entry.getValue().isString())fail();
+        var details=new HashSet<String>();
+        for(var detail:datos.path("personas")){
+            String person=detail.path("personaId").asString();
+            if(!persons.contains(person)||!details.add(person)||!detail.path("detalles").isObject())fail();
+            for(var v:detail.path("detalles").properties())if(v.getKey().length()>MAX_KEY||!v.getValue().isString())fail();
+        }
+        for(var institution:datos.path("instituciones")){
+            if(!institution.isObject())fail();
+            for(var v:institution.properties())if(v.getKey().length()>MAX_KEY||!(v.getValue().isString()||v.getValue().isNull()))fail();
+        }
+        var ids=new HashSet<String>();long total=0;
+        if(com.path("adjuntos").size()>12)fail();
+        for(var a:com.path("adjuntos")){
+            String id=a.path("id").asString(),name=a.path("nombre").asString(),type=a.path("tipo").asString();
+            if(!ids.add(UUID.fromString(id).toString())||!a.path("nombre").isString()||name.isBlank()||name.length()>180||name.codePoints().anyMatch(Character::isISOControl)
+                ||!a.path("tamanio").canConvertToExactIntegral()||!a.path("sha256").isString()||!a.path("sha256").asString().matches("[a-f0-9]{64}")
+                ||!type.matches("[a-z0-9.+-]+/[a-z0-9.+-]+")||!"VALIDADO".equals(a.path("estado").asString()))fail();
+            long size=a.path("tamanio").asLong();
+            if(size<1||size>250L*1024*1024)fail();
+            total=Math.addExact(total,size);
+            if("1.0".equals(version)&&size>10L*1024*1024)fail();
+        }
+        if(total>250L*1024*1024||"1.0".equals(version)&&(ids.size()>5||total>25L*1024*1024))fail();
+        var refs=new HashSet<String>();
+        for(var a:datos.path("adjuntos"))if(!a.isString()||!refs.add(UUID.fromString(a.asString()).toString()))fail();
+        if(!refs.equals(ids))fail();
+    }
+    private static void fail(){throw new IllegalArgumentException();}
 
     /**
      * Sello de custodia: la clave sale solo del conjunto confiable (por keyId); la firma Ed25519 cubre los

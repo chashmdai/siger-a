@@ -1,5 +1,7 @@
 import type {Row} from '../../lib/rows';
-import {bool, list, number, text, when} from '../../lib/rows';
+import {bool, list, number, obj, text, when} from '../../lib/rows';
+import {SOURCE_LABELS} from '../../lib/formulario';
+import {ExternalCom} from './ExternalCom';
 import {solicitationPeople} from '../../lib/catalog';
 import {choose, reason, routingFields} from '../../lib/fields';
 import {CHANNEL_LABELS, humanize, PERSON_ROLE_LABELS} from '../../lib/labels';
@@ -18,6 +20,10 @@ export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
   const assume = () => choose(ctx, 'Asumir ingreso propio', 'COM_ASSUME', r, [{key: 'responsible_id', label: 'Profesional encargado de la unidad', type: 'select', required: true, options: solicitationPeople(ctx.catalog, number(r, 'origin_scope'))}, reason], 'La jefatura asume directamente un ingreso de su competencia, sin enviarlo artificialmente a central.');
   const restrictions = text(r, 'contact_restrictions');
   const continuity = list(r, 'solicitations').length + list(r, 'requirements').length + list(r, 'links').length;
+  // COM del Formulario Publico: proyeccion autorizada que entrega el servidor (sin el documento original).
+  const external = obj(r, 'external'), isExternal = Object.keys(external).length > 0;
+  const presenter = list(external, 'persons').find(p => text(p, 'person_role') === 'PRESENTADOR') ?? {};
+  const identitySource = text(presenter, 'run_number') && bool(presenter, 'run_valid') ? humanize(presenter.run_source, SOURCE_LABELS) : text(presenter, 'foreign_document_number') ? 'Documento extranjero declarado' : '';
   return <DetailGrid
     main={<>
       <ActionBar>
@@ -28,8 +34,9 @@ export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
         {bool(r, 'can_assume') && <button onClick={assume}><Icon name="check" size={18}/>Asumir como jefatura</button>}
       </ActionBar>
       <Panel title="Relato original" icon="message" description="Tal como se registró al recibirlo.">
-        <p className="preserve reading">{text(r, 'body') || 'Sin relato registrado.'}</p>
+        <p className="preserve reading">{text(r, 'body') || (isExternal ? 'El tipo de presentación no incluye un relato.' : 'Sin relato registrado.')}</p>
       </Panel>
+      {isExternal && <ExternalCom external={external}/>}
       {list(r, 'persons').length > 0 && <Panel title="Personas relacionadas" icon="people" count={list(r, 'persons').length} description="Datos declarados en el ingreso; no constituyen un registro maestro.">
         <Table rows={list(r, 'persons')} columns={[
           {name: 'Rol', render: p => humanize(p.person_role, PERSON_ROLE_LABELS)},
@@ -56,12 +63,21 @@ export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
         ]}/>
       </Panel>
       <Panel title="Requiriente y contacto" icon="user">
-        <Facts stacked items={[
+        <Facts stacked items={isExternal ? [
+          ['Persona que presenta', text(r, 'presenter')],
+          ['Identificación', text(r, 'identity_document')],
+          ['Fuente de la identificación', identitySource],
+          ['Domicilio o residencia informada', text(r, 'presenter_domicile')],
+          ['Correo', text(r, 'contact_email')],
+          ['Teléfono', text(r, 'contact_phone')],
+          ['Medios de contacto', text(r, 'contact')],
+        ] : [
           ['Requiriente', text(r, 'presenter')],
           ['Identificación declarada', text(r, 'identity_document')],
           ['Domicilio del requiriente', text(r, 'presenter_domicile')],
           ['Contacto', [text(r, 'contact'), text(r, 'contact_email'), text(r, 'contact_phone')].filter(Boolean).join(' · ')],
         ]}/>
+        {isExternal && <p className="muted">Disponer de un correo o teléfono no implica autorización para contactar. Revisa las indicaciones de contacto.</p>}
         {restrictions && <Callout tone="warn" title="Indicaciones de contacto seguro"><p className="preserve">{restrictions}</p></Callout>}
       </Panel>
     </>}/>;

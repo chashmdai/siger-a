@@ -31,6 +31,15 @@ El release incluye Java si se construyo con `-IncludeJava`; no necesita Node, Ma
 
 No usar C: para runtime/datos por su escaso espacio. No apuntar MySqlHome al datadir de otro motor ni copiar configuraciones de MySQL80.
 
+### Claves confiables del Formulario Publico (opcional)
+
+Las Comunicaciones externas del Formulario solo se aceptan si su sello de custodia Ed25519 verifica con una clave publica confiable del operador. Copiar el mismo archivo que SMR usa como `institucional.comprobante.trusted-keys` (formato `{"keyId":"-----BEGIN PUBLIC KEY-----..."}`, hasta 20 claves) a `config\formulario-trusted-keys.json` dentro de la raiz de la instancia, con la misma ACL de `config/`. `Environment.ps1` lo entrega como `SIGER_FORMULARIO_TRUSTED_KEYS`.
+
+- Sin el archivo, SIGER A rechaza todo original externo (comportamiento por defecto).
+- Un archivo presente pero invalido detiene el arranque: corregirlo o retirarlo.
+- Quien pueda escribir el archivo puede agregar una clave confiable: protegerlo como un secreto de integridad. Retirar una clave exige reiniciar y no invalida originales ya conservados.
+- Este archivo no activa ningun consumidor PULL/ACK ni conexion con SMR.
+
 ## Paso 1. Consulta previa
 
 En PowerShell elevada de la VM, verificar que los puertos siguen disponibles:

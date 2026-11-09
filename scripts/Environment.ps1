@@ -13,7 +13,10 @@ function Set-SigerEnvironment($Settings,$Secrets,[switch]$Migration,[switch]$See
     $env:SIGER_TLS_PASSWORD=Secret-Text $Secrets.Tls
     $env:SIGER_MIGRATE=if($Migration){'true'}else{'false'}
     $env:SIGER_SEED_DEMO=if($Seed){'true'}else{'false'}
+    # Claves publicas confiables del Formulario (opcional). Sin archivo, SIGER A rechaza todo original externo.
+    $keys=Join-Path $Settings.root 'config\formulario-trusted-keys.json'
+    $env:SIGER_FORMULARIO_TRUSTED_KEYS=if(Test-Path -LiteralPath $keys -PathType Leaf){$keys}else{$null}
 }
 function Clear-SigerEnvironment {
-    foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
+    foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO','SIGER_FORMULARIO_TRUSTED_KEYS')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
 }

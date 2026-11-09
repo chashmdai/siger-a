@@ -150,10 +150,18 @@ class ExternalOriginalTest {
         assertEquals("10000000-0000-4000-8000-000000000001",s(c,"external_id"));
         assertEquals("FORMULARIO_WEB_NNA",s(c,"channel"));
         assertEquals("NUEVA",s(c,"state"));
-        // Presentador proyectado con su procedencia; el vector NNA no trae RUN, asi que no hay identificacion.
-        assertEquals("PERSONA SINTETICA (declarado)",s(c,"presenter"));
+        // Valores normalizados sin textos de procedencia; el vector NNA no trae RUN ni medio de contacto seguro.
+        assertEquals("PERSONA SINTETICA",s(c,"presenter"));
         assertNull(c.get("identity_document"));
-        assertNull(c.get("contact"));
+        assertEquals("Contacto principal: No tiene una forma segura de contacto",s(c,"contact"));
+        assertEquals("No aceptó comunicaciones por canal digital en el Formulario.\nNo tiene una forma segura de contacto.",s(c,"contact_restrictions"));
+        assertEquals("Metropolitana de Santiago",s(c,"presenter_domicile"));
+        assertEquals("Formulario web NNA",s(c,"subject"));assertEquals("Relato sintetico completo",s(c,"body"));
+        // Procedencia estructurada: persona, atributos con fuente/nivel y respuestas integras.
+        var person=db.one("SELECT * FROM external_person WHERE communication_id=?",com);
+        assertEquals("PRESENTADOR",s(person,"person_role"));assertEquals("DECLARACION_CIUDADANA",s(person,"given_names_source"));assertEquals(12,n(person,"declared_age"));
+        assertEquals(3,db.count("SELECT COUNT(*) FROM external_attribute WHERE person_id=? AND source='DECLARACION_CIUDADANA' AND level_code='DECLARADO_NO_CONTRASTADO'",n(person,"id")));
+        assertEquals(3,db.count("SELECT COUNT(*) FROM external_field WHERE communication_id=? AND field_group='CAMPO'",com));
         var o=db.one("SELECT * FROM communication_original WHERE communication_id=?",com);
         assertEquals(document,s(o,"document"));
         assertEquals(ExternalOriginal.sha256(document.getBytes(StandardCharsets.UTF_8)),s(o,"document_sha256"));

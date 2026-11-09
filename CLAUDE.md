@@ -56,6 +56,8 @@ Las lecturas usan endpoints GET en `Api.java`: `Queries` (detalle autorizado, ca
 
 **`Attention`** (0.4.0): primera atencion progresiva sobre COM+REQ. Comprende la ficha JSON validada con lista cerrada de campos (`attention_record`), versiones con autor y motivo (`attention_revision`) y entregas con aceptar/devolver/retirar (`attention_handoff`). Se ejecuta dentro de la transaccion de `Workflow`; no es un motor aparte.
 
+**Comunicaciones externas (Formulario Publico via SMR)**: `Workflow.conserveExternal` es una entrada interna (no es un comando de `run()`; `/api/commands` la rechaza para cualquier sesion), reservada al futuro receptor tecnico; PULL/ACK aun no existe. `ExternalOriginal.parse` valida el contrato (reglas portadas de `EntregaCompleta.validar` de SMR), recalcula huellas y verifica el sello Ed25519 con `FormularioKeys` (`siger.formulario-trusted-keys`; sin claves se rechaza todo) antes de escribir. El texto firmado queda inmutable en `communication_original`; `ExternalProjection` calcula una vez, al crear, la COM (sin textos de procedencia) y `external_person`/`external_attribute`/`external_field` (procedencia, discrepancias, diccionario SRCeI, edad al ingreso). Un reenvio idempotente no reproyecta. La ficha COM entrega la proyeccion solo tras `comForRead`, nunca el JSON original.
+
 **`Documents`**: originales privados bajo `siger.data` (por defecto `./var`), en cuarentena y separados de los documentos de gestion. Las descargas se sirven como attachment con `Content-Security-Policy: sandbox`.
 
 **Arranque**: `Bootstrap` crea semillas sinteticas si `siger.seed-demo=true` y la tabla `staff` esta vacia, y escribe las claves iniciales en `var/bootstrap-usuarios.csv`. `SecurityConfig` usa sesion con CSRF (`HttpSessionCsrfTokenRepository`) y login por `POST /api/login`. `TaskReminders` es un `@Scheduled`.
@@ -73,11 +75,11 @@ Las lecturas usan endpoints GET en `Api.java`: `Queries` (detalle autorizado, ca
 
 ## Base de datos y perfiles
 
-- Migraciones Flyway en `backend/src/main/resources/db/migration`. **V1 a V6 no se modifican nunca**; cada cambio se agrega como `V7__...` aditivo, compatible con H2 y MySQL.
+- Migraciones Flyway en `backend/src/main/resources/db/migration`. **V1 a V7 no se modifican nunca**; cada cambio se agrega como `V8__...` aditivo, compatible con H2 y MySQL.
 - `MigrationGuard` rechaza migrar MySQL si el esquema no coincide con `siger_a_*` o si detecta tablas de SMR o del SIGER anterior, y solo admite los motores MySQL/H2.
 - Hay tres perfiles. `application.properties` (VM) toma todo de variables `SIGER_*` y mantiene Flyway desactivado salvo `SIGER_MIGRATE=true`. `local` usa H2 en archivo `./var/local-db` con semillas y sin TLS. `test` usa H2 en memoria.
 - La version `0.4.0` esta fija en `backend/pom.xml`, `frontend/package.json`, `Api.health()` y el manifiesto de `scripts/Build.ps1`. Al subir de version hay que cambiarla en todos esos lugares.
-- `scripts/Start.ps1` exige que el health responda `schema -eq 6` y la version del manifiesto. Cada migracion nueva obliga a actualizar ese chequeo (V6: original de Comunicacion externa).
+- `scripts/Start.ps1` exige que el health responda `schema -eq 7` y la version del manifiesto. Cada migracion nueva obliga a actualizar ese chequeo (V6: original de Comunicacion externa; V7: su proyeccion normalizada).
 - El pool Hikari se ajusta con `SIGER_DB_POOL_MAX` (por defecto 6). Un comando retiene su conexion mientras espera el lock global.
 
 ## Reglas de dominio que no deben romperse
