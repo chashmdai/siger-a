@@ -1,0 +1,101 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+SIGER A (Nexbyte, Defensoria de la Ninez de Chile) es un monolito Spring Boot 4.1.1 / Java 25 con el frontend React 19 + TypeScript 6 + Vite 8 empaquetado dentro del mismo JAR. Usa MySQL independiente en la VM y H2 para pruebas locales. Esta es la fase A, con datos manuales y sinteticos. SMR, PULL/ACK, Graph y correo corresponden a la fase B y aun no estan integrados. La documentacion y los mensajes al usuario estan en espanol.
+
+## Comandos
+
+Las herramientas son portables y viven en `.tools/` (`java25`, `apache-maven-3.9.11`, `node-v24.22.0-win-x64`). No se instalan globalmente ni se modifican PATH ni JAVA_HOME de forma persistente. Si faltan, ejecutar `scripts\Get-Tools.ps1`.
+
+```powershell
+# Build completo: chequea scripts, npm ci + tsc + vite build, Maven clean verify (con tests) y genera release\SIGER-A-<fecha>.zip
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -IncludeJava
+#   -SkipChecks omite los tests (un build asi no acredita pruebas)
+
+# Ejecutar en local (requiere backend\target\siger-a.jar): perfil local, H2 en var\local-db, http://localhost:18543
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-Local.ps1
+```
+
+Para iterar sin pasar por Build.ps1, en una sesion de PowerShell:
+
+```powershell
+$env:JAVA_HOME='C:\siger-a\.tools\java25'; $env:PATH="C:\siger-a\.tools\node-v24.22.0-win-x64;$env:JAVA_HOME\bin;$env:PATH"
+.\mvnw.cmd -B -ntp -f backend\pom.xml test                                   # todos los JUnit
+.\mvnw.cmd -B -ntp -f backend\pom.xml test -Dtest=RulesTest                  # una clase
+.\mvnw.cmd -B -ntp -f backend\pom.xml test -Dtest=Attention040Test#metodo    # un metodo
+cd frontend; npm run typecheck   # tsc --noEmit (no hay linter configurado)
+cd frontend; npm run build       # genera frontend\dist
+cd frontend; npm run dev         # Vite en 127.0.0.1:5173, proxy de /api a 127.0.0.1:18543 (el backend debe estar corriendo)
+```
+
+`backend/pom.xml` copia `../frontend/dist` a `static/` en la fase `process-resources`. Por eso hay que ejecutar `npm run build` antes de `mvnw package`; si no, el JAR queda sin la UI o con una version anterior.
+
+Los tests usan `@SpringBootTest` + `@ActiveProfiles("test")` (H2 en memoria `MODE=MySQL`, Flyway activo, sin semillas). `WorkflowTest` inserta por SQL su propio organigrama, cuentas y grants sinteticos y ejecuta comandos con `flow.run(...)`. Los que usan `siger.seed-demo=true` necesitan un nombre de H2 propio y `siger.data=./target/...-${random.uuid}`: el bootstrap no sobrescribe un `bootstrap-usuarios.csv` existente y fallaria al repetir sin `clean`.
+
+## Arquitectura
+
+El backend es un solo paquete plano `cl.nexbyte.sigera`, sin capas JPA ni entidades: SQL directo mediante `Db` (envoltorio de JdbcTemplate que devuelve `Map<String,Object>` con claves en minusculas, con helpers estaticos `n/s/b/nullableId`). El SQL debe funcionar igual en H2 `MODE=MySQL` y en MySQL.
+
+**Toda escritura de negocio pasa por `POST /api/commands` → `Workflow.run`.** El comando es `{key: UUID, type, id, revision, data}`. Dentro de una sola transaccion, `run`:
+1. toma un lock global (`Db.lock()`: `SELECT ... FROM operation_lock FOR UPDATE`);
+2. resuelve el `Actor` desde la sesion (nunca desde el cliente) y bloquea si `must_change`;
+3. aplica idempotencia con `command_log`: la misma clave y el mismo hash devuelven el resultado previo, y la misma clave con otros datos es un conflicto;
+4. despacha por `type` al servicio del dominio: `IntakeCommands` (COM_*, SOL_*, LINK_*), `RequirementCommands` (REQ_*, FLOW_*, REOPEN_*), `CaseCommands` (CASE_*, NOTE_RECTIFY, TASK_*), `Attention` (ATTENTION_*), `Personnel` (STAFF_/GRANT_/SCOPE_/SUBSTITUTE_*, DOC_RELEASE);
+5. registra el resultado.
+
+Un comando nuevo se agrega al `switch` de `Workflow.run` y al `run()` del servicio de su dominio. Las transiciones compartidas (crear REQ o Caso, asignar, cerrar Caso, constancias, folios, listas de canales, materias y resultados) están en `Lifecycle`; hay que reutilizarlas, no duplicarlas. Las mutaciones usan concurrencia optimista: el cliente envia `revision` y se valida con `Db.revision(row, expected)`. Las acciones relevantes se registran con `db.audit(...)` en `audit_event`. El frontend reutiliza la misma `key` al reintentar una operacion incierta.
+
+Las lecturas usan endpoints GET en `Api.java`: `Queries` (detalle autorizado, catalogo, workspace, administracion) y `BoardQueries` (bandejas paginadas `/worklist/{kind}`, contadores, dashboard). Los conteos se limitan siempre al alcance del actor.
+
+**Permisos (`Access`)**: un `Actor` tiene `grants` (rol + ambito `org_scope`) vigentes. Una subrogancia activa traslada temporalmente al subrogante los grants del titular, en los mismos ambitos, y el titular conserva su cartera personal como PROFESIONAL. `actor(username)` y `enabledActors()` comparten `resolve()`. Para avisar o filtrar a "todos los que cumplen X" se usa `enabledActors()` o `notifyWhere`/`notifyReceivers`/`notifyHeads`, nunca un bucle de `actor()` por cuenta: corre dentro del lock global. Hay helpers como `head(scope)`, `professional(scope)`, `registrar(scope)`, `authority(scope)` y `solReceiver(...)`. Toda verificacion de permiso se hace en el servidor; el frontend (`lib/access.ts: has/headAt/authorityAt`) solo decide que botones mostrar.
+
+**Errores**: `Problem(status, mensaje)`. `Problem.require` → 409, `Problem.denied()` → 403. `ApiErrors` devuelve `{message}`, audita las denegaciones 403/404 y nunca registra SQL ni datos ciudadanos en el log. Los mensajes van en espanol y son visibles al funcionario. `Input` valida la entrada (`text(key,max,required)`, `id`, `choice`, `instant`, `reason`) y no acepta estado, autor ni rol enviados por el navegador.
+
+**`Rules`**: reglas de cierre puras (cierre de Caso por nivel o jefatura, cierre de REQ, derivacion), cubiertas por `RulesTest`.
+
+**`Attention`** (0.4.0): primera atencion progresiva sobre COM+REQ. Comprende la ficha JSON validada con lista cerrada de campos (`attention_record`), versiones con autor y motivo (`attention_revision`) y entregas con aceptar/devolver/retirar (`attention_handoff`). Se ejecuta dentro de la transaccion de `Workflow`; no es un motor aparte.
+
+**`Documents`**: originales privados bajo `siger.data` (por defecto `./var`), en cuarentena y separados de los documentos de gestion. Las descargas se sirven como attachment con `Content-Security-Policy: sandbox`.
+
+**Arranque**: `Bootstrap` crea semillas sinteticas si `siger.seed-demo=true` y la tabla `staff` esta vacia, y escribe las claves iniciales en `var/bootstrap-usuarios.csv`. `SecurityConfig` usa sesion con CSRF (`HttpSessionCsrfTokenRepository`) y login por `POST /api/login`. `TaskReminders` es un `@Scheduled`.
+
+**Frontend** (`frontend/src`, sin router ni librerias de estado):
+- `App.tsx` maneja el ruteo por hash (`#inicio`, `#COM/123`, `#REQ/…`, `#CAS/…`, `#FLUJO/…`; ver `app/routes.ts`) y la carga de sesion, catalogo y workspace. `app/menu.ts` arma la navegacion por funcion.
+- `lib/api.ts` incluye `request()` (agrega el header CSRF y emite el evento `siger-session` ante 401/428), `command()` y las llamadas de documentos. `lib/rows.ts` tiene los accesores de fila (`text`, `number`…) y las fechas (`when`, `localTime`). `lib/catalog.ts` resuelve ambitos y personas. `lib/fields.ts` contiene los campos de dialogo y las listas de valores; usar `fixedSelect`, `decision` y `choose` en vez de literales.
+- Un comando se abre con `ctx.act(...)` y se confirma en `components/ActionDialog`, que conserva la clave idempotente por dialogo.
+- Las pantallas viven en `features/`: `attention` (ficha progresiva; `schema.ts` replica la lista cerrada de campos de `Attention.normalize` en el backend), `intake`, `detail` (una ficha por tipo, mas `actions.ts`), `dashboard`, `worklist` y `admin`.
+- Al partir JSX en varias lineas se pierden los espacios entre elementos de la misma linea (`</strong> <Status/>`). Esos casos quedan en una sola linea o con `{' '}`.
+- No se guardan datos sensibles en localStorage.
+- Diseno visual (decisiones en `docs/DISENO_0_4_0.md`): tokens en `src/styles/tokens.css` y estilos en `base`, `layout`, `components` y `screens` (sin librerias de UI). El armazon esta en `app/Shell.tsx` (barra lateral, cajon movil y avisos) y `app/CommandPalette.tsx` (Ctrl+K, rutas `#req?q=…`). Las piezas compartidas son `components/Primitives.tsx` (PageHeader, Panel, Callout, EmptyState, Facts, Busy), `Icon.tsx` (iconos propios), `Choice.tsx` (ChipRadios, ChoiceCards) y `useExit.ts` (salida animada). En las fichas: `features/detail/parts.tsx` (DetailHeader con la cadena COM→SOL→REQ→Caso, ActionBar y DetailGrid).
+- Los textos visibles llevan ortografia completa. Los codigos que se envian al servidor no cambian: las etiquetas salen de `lib/labels.ts` (`humanize`, `labeled`, `ACTION_LABELS`). Una sola accion `primary` por grupo. El estado nunca se comunica solo por color. Respetar `prefers-reduced-motion` y el contraste (`--field-line` para los bordes de campos).
+- El escudo (`src/assets/emblema-*.png`, derivado sin alterar de `brand/`) va siempre sobre fondo blanco. Cabin (OFL) se sirve desde el JAR, sin fuentes remotas. La CSP del backend no admite estilos ni recursos externos.
+
+## Base de datos y perfiles
+
+- Migraciones Flyway en `backend/src/main/resources/db/migration`. **V1 a V5 no se modifican nunca**; cada cambio se agrega como `V6__...` aditivo, compatible con H2 y MySQL.
+- `MigrationGuard` rechaza migrar MySQL si el esquema no coincide con `siger_a_*` o si detecta tablas de SMR o del SIGER anterior, y solo admite los motores MySQL/H2.
+- Hay tres perfiles. `application.properties` (VM) toma todo de variables `SIGER_*` y mantiene Flyway desactivado salvo `SIGER_MIGRATE=true`. `local` usa H2 en archivo `./var/local-db` con semillas y sin TLS. `test` usa H2 en memoria.
+- La version `0.4.0` esta fija en `backend/pom.xml`, `frontend/package.json`, `Api.health()` y el manifiesto de `scripts/Build.ps1`. Al subir de version hay que cambiarla en todos esos lugares.
+- `scripts/Start.ps1` exige que el health responda `schema -eq 5` y la version del manifiesto. Una migracion V6 obliga a actualizar ese chequeo.
+- El pool Hikari se ajusta con `SIGER_DB_POOL_MAX` (por defecto 6). Un comando retiene su conexion mientras espera el lock global.
+
+## Reglas de dominio que no deben romperse
+
+La fuente de verdad es `docs/DECISIONES_FUNCIONALES.md`; el alcance y lo pendiente estan en `docs/ALCANCE_Y_PENDIENTES.md`. Los invariantes clave son:
+- La cadena es COM (lo recibido) → SOL (a una jefatura) → REQ (nace al asumir la SOL) → Caso(s) bajo el mismo REQ. Un ingreso externo por clasificar no crea REQ ni Caso.
+- La primera atencion directa crea COM+REQ en un solo acto, sin SOL ni Caso. Entregar no transfiere la jefatura principal ni crea un Caso. Para dar seguimiento, la jefatura abre un Caso en el mismo REQ.
+- La complejidad se asigna por REQ (BAJA/MEDIANA/ALTA), y no tener clasificacion no equivale a BAJA. El profesional solo cierra Casos BAJA; los demas niveles pasan a revision de jefatura. El subrogante no confirma su propio Caso.
+- Una tarea no terminal bloquea el cierre del Caso. Cerrar un Caso no cierra el REQ, que la jefatura principal cierra de forma expresa.
+- Una derivacion aceptada crea el sucesor y cierra el origen en la misma transaccion. Una colaboracion crea un Caso paralelo. Una transferencia cambia solo al principal.
+- Los roles son concesiones dentro de un ambito. TI no obtiene acceso a expedientes por administrar cuentas, y la historia conserva al actor real.
+
+## Operacion y archivos sensibles
+
+- `var/` (DB local, documentos, `bootstrap-usuarios.csv`), `release/` y `.tools/` estan en `.gitignore`. Se conservan entre actualizaciones y no se borran ni se comparten. Tampoco se borran `frontend/package-lock.json` ni `frontend/node_modules`.
+- H2 abre en solo lectura, sin avisar, un archivo que el proceso no puede escribir (por ejemplo, `var\local-db.mv.db` creado desde una consola elevada y usado luego sin elevacion). `Bootstrap` llama a `Db.requireWritable` y aborta el arranque en ese caso, y `Run-Local.ps1` lo verifica antes de iniciar. El ingreso solo queda abierto si se audita (`SecurityConfig.loginSucceeded`). Detalle en `docs/INCIDENTE_LOGIN_0_4_0.md`.
+- Una instancia en ejecucion bloquea `backend\target\siger-a.jar` y `mvnw clean` falla. No se detiene la instancia del usuario: se compila en una copia del proyecto.
+- Los scripts de `scripts/` deben funcionar en Windows PowerShell 5.1. `Check-Scripts.ps1` los parsea en cada build. Evitar `Get-FileHash` (usar `Hash.ps1` / `Get-SigerFileHash`), asignar `$HOME` y `ConvertFrom-Json -AsHashtable`.
+- `SOURCE_SHA256.txt` es el manifiesto de hashes de la entrega fuente y queda desactualizado al editar archivos.
+- Instalacion en la VM: `docs/INSTALACION_VM.md`. No se toca Java 8, MySQL80, Tomcat, SQL Server, SMR ni el firewall existentes.
+- Las pruebas manuales por version estan en `docs/PRUEBAS_MANUALES_0_4_0.md`, y la evidencia de verificacion en `docs/VERIFICACION.md`. La consolidacion del backend (cambios, mediciones y pendientes) esta en `docs/CONSOLIDACION_0_4_0.md`.

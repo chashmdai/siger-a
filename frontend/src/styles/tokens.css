@@ -1,0 +1,90 @@
+/*
+ * Tokens de SIGER A. Paleta derivada de la guia de identidad (docs/MANUAL_IDENTIDAD_DDN_SIGER_A.md):
+ * azul profundo institucional para la accion principal y colores del emblema solo como acentos.
+ * Cabin (OFL) se distribuye dentro del JAR: no hay fuentes remotas en tiempo de ejecucion.
+ */
+@font-face {
+  font-family: 'Cabin';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 700;
+  src: url('../assets/fonts/cabin-latin-wght.woff2') format('woff2-variations'), url('../assets/fonts/cabin-latin-wght.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --font: 'Cabin', system-ui, 'Segoe UI', Arial, sans-serif;
+
+  /* Tinta y superficies */
+  --ink-900: #102a35;
+  --ink-800: #1d3a47;
+  --ink-700: #2f4955;
+  --ink-600: #4a626d;
+  --ink-500: #5b6f79;
+  --line: #dce5ea;
+  --line-strong: #b9c8d0;
+  --field-line: #7d929c; /* borde de campos: contraste 3:1 sobre blanco y gris claro */
+  --bg: #f3f6f8;
+  --surface: #ffffff;
+  --surface-2: #f8fafb;
+  --surface-3: #eef3f6;
+
+  /* Accion institucional */
+  --primary: #146a8b;
+  --primary-strong: #0e5470;
+  --primary-ink: #0b4a63;
+  --primary-soft: #e5f1f6;
+  --primary-tint: #f1f8fb;
+  --ring: 0 0 0 3px rgba(20, 106, 139, .32);
+
+  /* Emblema: acentos, nunca fondo de texto largo */
+  --ddn-celeste: #34aad7;
+  --ddn-naranja: #f15a31;
+  --ddn-verde: #8ec044;
+  --ddn-amarillo: #f5d70f;
+  --ddn-durazno: #f7a541;
+  --ddn-rosado: #e44d7f;
+  --ddn-magenta: #9e1f63;
+
+  /* Semantica operativa (siempre acompanada de texto) */
+  --warn-bg: #fff5de;
+  --warn-line: #efc46a;
+  --warn-ink: #6f4700;
+  --ok-bg: #e8f5ec;
+  --ok-line: #9fd0b0;
+  --ok-ink: #1b5a35;
+  --danger-bg: #fdebed;
+  --danger-line: #f0a9b0;
+  --danger-ink: #9c1f2b;
+  --info-bg: #e6f2f8;
+  --info-line: #a9d0e2;
+  --info-ink: #0b4a63;
+
+  /* Tipos de registro: color de apoyo, el texto del tipo siempre visible */
+  --kind-com-bg: #e3f3fa;  --kind-com-ink: #0a5878;
+  --kind-sol-bg: #fff0d9;  --kind-sol-ink: #7f4500;
+  --kind-req-bg: #e8f4da;  --kind-req-ink: #355d10;
+  --kind-cas-bg: #f8e5ef;  --kind-cas-ink: #85184f;
+  --kind-flujo-bg: #fde8e1; --kind-flujo-ink: #9a3412;
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --shadow-1: 0 1px 2px rgba(16, 42, 53, .06), 0 1px 1px rgba(16, 42, 53, .03);
+  --shadow-2: 0 6px 18px -8px rgba(16, 42, 53, .18), 0 2px 4px rgba(16, 42, 53, .05);
+  --shadow-3: 0 28px 60px -16px rgba(16, 42, 53, .32), 0 8px 18px -8px rgba(16, 42, 53, .14);
+
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --fast: 140ms;
+  --base: 220ms;
+  --slow: 380ms;
+
+  --sidebar: 268px;
+  --content-max: 1360px;
+  --gutter: clamp(16px, 3vw, 40px);
+
+  color-scheme: light;
+}

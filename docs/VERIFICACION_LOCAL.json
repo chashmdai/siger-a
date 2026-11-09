@@ -1,0 +1,29 @@
+{
+  "version": "0.4.0",
+  "date": "2026-11-08",
+  "source_base": "0.3.1",
+  "executed": {
+    "java_syntax_files": 22,
+    "java_version_used": "21",
+    "typescript_syntax_files": 12,
+    "typescript_version_used": "5.8.3",
+    "auxiliary_types": "pass; simplified dependency signatures",
+    "domain_assertions": 34,
+    "domain_harness": "actual domain services + JDBC/Jackson doubles + SQLite model; not native Spring",
+    "node_lock_parser_fixture": "pass: BOM, empty and case-sensitive keys",
+    "json_xml": "pass",
+    "v1_v4_bytes": "unchanged"
+  },
+  "not_executed": [
+    "Java25 Maven verify",
+    "12 JUnit methods with Spring/H2",
+    "npm ci + TS6 React19 Vite8 build",
+    "H2/MySQL native V5 upgrade",
+    "PowerShell Windows 5.1/7 scripts",
+    "integrated browser with backend",
+    "VM installation",
+    "SMR Graph or other real providers"
+  ],
+  "junit_methods_in_source": 12,
+  "production_qualified": false
+}
