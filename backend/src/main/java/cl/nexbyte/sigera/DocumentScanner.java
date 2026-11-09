@@ -51,24 +51,82 @@ public class DocumentScanner {
     boolean configured(){return !engine.equals("NONE");}
     String engine(){return engine;}
 
-    Verdict scan(Path file,Path work){
+    /**
+     * Analiza un original. workRoot es el directorio temporal de la instancia: ClamAV recibe una subcarpeta propia que
+     * se elimina siempre al terminar (finally), tambien ante error, interrupcion o tiempo excedido.
+     */
+    Verdict scan(Path file,Path workRoot){
         if(!configured())return new Verdict("ERROR",null,engine,null,"SIN_MOTOR");
+        Path work=null;
         try{
             String version=signatures();
             if(version==null)return new Verdict("ERROR",null,engine,null,"MOTOR_NO_OPERATIVO_O_FIRMAS_DESACTUALIZADAS");
             List<String> command;
             if(engine.equals("CLAMAV")){
-                Files.createDirectories(work);
+                work=Files.createDirectories(workRoot.resolve("av-"+UUID.randomUUID()));
                 command=List.of(executable.toString(),"--database="+database,"--tempdir="+work,"--max-filesize=25M","--max-scansize=50M","--max-files=2000",
                     "--max-recursion=16","--max-scantime=45000","--alert-exceeds-max=yes","--no-summary","--official-db-only=yes","--bytecode-unsigned=no",file.toString());
             }else command=List.of(executable.toString(),"-Scan","-ScanType","3","-File",file.toString(),"-DisableRemediation");
             var out=runner.run(command,timeoutMs);
-            // ClamAV: 0 limpio, 1 detectado (incluye limites excedidos). Defender: 0 sin amenazas, 2 amenaza.
-            int infected=engine.equals("CLAMAV")?1:2;
-            String verdict=out.exitCode()==0?"LIMPIO":out.exitCode()==infected?"INFECTADO":"ERROR";
-            return new Verdict(verdict,out.exitCode(),engine,version,verdict.equals("ERROR")?"ANALISIS_INCOMPLETO":null);
+            if(engine.equals("DEFENDER"))return defender(file,out,version);
+            if(out.exitCode()==0)return new Verdict("LIMPIO",0,engine,version,null);
+            if(out.exitCode()!=1)return new Verdict("ERROR",out.exitCode(),engine,version,"ANALISIS_INCOMPLETO");
+            return clamFound(file,out.text(),version);
         }catch(InterruptedException e){Thread.currentThread().interrupt();return new Verdict("ERROR",null,engine,null,"ANALISIS_INTERRUMPIDO");}
         catch(IOException|RuntimeException e){return new Verdict("ERROR",null,engine,null,"ANALISIS_NO_EJECUTADO");}
+        finally{delete(work);}
+    }
+
+    /**
+     * ClamAV termina con 1 tanto ante malware como cuando --alert-exceeds-max marca un limite excedido
+     * (Heuristics.Limits.Exceeded.*). Solo una firma de deteccion distinta, informada para ESTE archivo, es una deteccion
+     * acreditada (INFECTADO, permanente). Limites excedidos o una salida 1 sin resultado legible son ERROR: el original
+     * sigue en cuarentena y puede volver a analizarse, pero no queda marcado como infectado.
+     */
+    private Verdict clamFound(Path file,String text,String version){
+        String prefix=file.toString()+": ";boolean limits=false;String signature=null;
+        for(String line:text.split("\\R")){
+            line=line.strip();
+            if(!line.startsWith(prefix)||!line.endsWith(" FOUND"))continue;
+            String name=line.substring(prefix.length(),line.length()-" FOUND".length()).strip();
+            if(!name.matches("[A-Za-z0-9._:-]{1,200}"))continue;
+            if(name.startsWith("Heuristics.Limits.Exceeded"))limits=true;
+            else if(signature==null)signature=name;
+        }
+        if(signature!=null){String detail="FIRMA:"+signature;return new Verdict("INFECTADO",1,engine,version,detail.substring(0,Math.min(64,detail.length())));}
+        return new Verdict("ERROR",1,engine,version,limits?"LIMITES_EXCEDIDOS":"ANALISIS_INCOMPLETO");
+    }
+
+    /**
+     * MpCmdRun usa el codigo 2 tanto para "amenaza encontrada" como para fallos del motor (p. ej. hr=0x800106ba con el
+     * servicio inactivo, verificado en Windows Server 2022). Por eso el codigo solo no acredita nada: LIMPIO exige 0 y
+     * "found no threats" para este archivo; INFECTADO exige 2 y "found N threats" (N>0) sin mensaje de fallo. Todo lo
+     * demas es ERROR y el original sigue en cuarentena sin quedar marcado como infectado.
+     */
+    private Verdict defender(Path file,Output out,String version){
+        String text=out.text();
+        var failure=java.util.regex.Pattern.compile("Failed with hr = (0x[0-9A-Fa-f]{8})").matcher(text);
+        if(failure.find())return new Verdict("ERROR",out.exitCode(),engine,version,"MOTOR_FALLIDO_"+failure.group(1).toLowerCase(Locale.ROOT));
+        String scanned="Scanning "+file+" found ";
+        int at=text.indexOf(scanned);
+        if(at<0)return new Verdict("ERROR",out.exitCode(),engine,version,"ANALISIS_INCOMPLETO");
+        String rest=text.substring(at+scanned.length());
+        if(out.exitCode()==0&&rest.startsWith("no threats"))return new Verdict("LIMPIO",0,engine,version,null);
+        var threats=java.util.regex.Pattern.compile("^([0-9]{1,6}) threats").matcher(rest);
+        if(out.exitCode()==2&&threats.find()&&Integer.parseInt(threats.group(1))>0){
+            var name=java.util.regex.Pattern.compile("Threat\\s*:\\s*([A-Za-z0-9!/:._-]{1,200})").matcher(text);
+            String detail=name.find()?"AMENAZA:"+name.group(1):"DETECCION_DEFENDER";
+            return new Verdict("INFECTADO",2,engine,version,detail.substring(0,Math.min(64,detail.length())));
+        }
+        return new Verdict("ERROR",out.exitCode(),engine,version,"ANALISIS_INCOMPLETO");
+    }
+
+    /** Elimina la carpeta temporal del analisis y su contenido; nunca sale de ella ni sigue enlaces. */
+    private static void delete(Path work){
+        if(work==null||!Files.isDirectory(work,java.nio.file.LinkOption.NOFOLLOW_LINKS))return;
+        try(var walk=Files.walk(work)){
+            for(var p:walk.sorted(Comparator.reverseOrder()).toList())if(p.startsWith(work))try{Files.deleteIfExists(p);}catch(IOException ignored){}
+        }catch(IOException|RuntimeException ignored){}
     }
 
     /** Version de firmas vigente o null si el motor no esta operativo o sus firmas superan la antiguedad maxima. */

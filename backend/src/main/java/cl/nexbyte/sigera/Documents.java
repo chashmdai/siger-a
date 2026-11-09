@@ -52,7 +52,7 @@ public class Documents {
         DocumentScanner.Verdict v;
         if(!expected.equals(storedHash(s(d,"storage_key"),n(d,"size_bytes"))))v=new DocumentScanner.Verdict("ERROR",null,scanner.engine(),null,"INTEGRIDAD_PREVIA_FALLIDA");
         else{
-            v=scanner.scan(path(s(d,"storage_key")),directory.getParent().resolve("tmp").resolve("av-"+UUID.randomUUID()));
+            v=scanner.scan(path(s(d,"storage_key")),directory.getParent().resolve("tmp"));
             // El motor o la proteccion en tiempo real pudieron alterar o retirar el archivo: el veredicto no vale.
             if(!expected.equals(storedHash(s(d,"storage_key"),n(d,"size_bytes")))&&!v.verdict().equals("INFECTADO"))
                 v=new DocumentScanner.Verdict("ERROR",v.exitCode(),v.engine(),v.engineVersion(),"INTEGRIDAD_POSTERIOR_FALLIDA");

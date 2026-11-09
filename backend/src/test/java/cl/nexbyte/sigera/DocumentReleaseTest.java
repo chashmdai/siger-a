@@ -32,6 +32,10 @@ class DocumentReleaseTest {
     /** Respuestas del motor falso: version de firmas y codigo de salida del analisis. */
     static final AtomicReference<String> VERSION=new AtomicReference<>();
     static final AtomicReference<Integer> EXIT=new AtomicReference<>(0);
+    /** Salida del analisis; %s es la ruta analizada (como la imprime clamscan). */
+    static final AtomicReference<String> OUTPUT=new AtomicReference<>("");
+    /** Accion durante el analisis (p. ej. dejar archivos en --tempdir o fallar), para probar la limpieza. */
+    static final AtomicReference<java.util.function.Consumer<List<String>>> DURING=new AtomicReference<>(c->{});
     static final List<List<String>> COMMANDS=Collections.synchronizedList(new ArrayList<>());
     static String freshVersion(){return "ClamAV 1.4.1/27450/"+LocalDateTime.now().minusHours(2).format(java.time.format.DateTimeFormatter.ofPattern("EEE MMM d HH:mm:ss yyyy",Locale.ENGLISH));}
     static MockEnvironment clamav()throws Exception{
@@ -42,7 +46,8 @@ class DocumentReleaseTest {
     static DocumentScanner.Output fake(List<String> command,long timeout){
         COMMANDS.add(command);
         if(command.contains("--version"))return new DocumentScanner.Output(0,VERSION.get());
-        return new DocumentScanner.Output(EXIT.get(),"");
+        DURING.get().accept(command);
+        return new DocumentScanner.Output(EXIT.get(),OUTPUT.get().replace("%s",command.getLast()));
     }
     @TestConfiguration static class FakeEngine {
         @Bean @Primary DocumentScanner fakeScanner()throws Exception{return new DocumentScanner(clamav(),DocumentReleaseTest::fake,Clock.systemUTC());}
@@ -52,7 +57,7 @@ class DocumentReleaseTest {
     static long scope,ti,other;
 
     @BeforeEach void setup(){
-        VERSION.set(freshVersion());EXIT.set(0);COMMANDS.clear();
+        VERSION.set(freshVersion());EXIT.set(0);OUTPUT.set("");DURING.set(c->{});COMMANDS.clear();
         if(scope==0){
             db.update("INSERT INTO org_unit VALUES('DOC','Unidad documental')");
             scope=db.insert("INSERT INTO org_scope(code,name,unit_code,area_code,site_code) VALUES('DOC-1','Documentos','DOC','A','CENTRAL')");
@@ -90,7 +95,10 @@ class DocumentReleaseTest {
 
     @Test void deteccionErrorFirmasViejasOAlteracionNuncaLiberan()throws Exception{
         long infected=original("archivo con deteccion");
-        EXIT.set(1);assertEquals("INFECTADO",documents.scan("ti.doc",infected).get("verdict"));
+        EXIT.set(1);OUTPUT.set("%s: Win.Test.EICAR_HDB-1 FOUND");
+        var found=documents.scan("ti.doc",infected);
+        assertEquals("INFECTADO",found.get("verdict"));assertEquals("FIRMA:Win.Test.EICAR_HDB-1",found.get("detail"));
+        OUTPUT.set("");
         EXIT.set(0);assertEquals("LIMPIO",documents.scan("ti.doc",infected).get("verdict"));
         assertEquals(409,assertThrows(Problem.class,()->release(infected,Map.of("reason","x"))).status); // una deteccion es permanente
         assertTrue(quarantined(infected));
@@ -119,6 +127,69 @@ class DocumentReleaseTest {
         assertThrows(Problem.class,()->release(old,Map.of("reason","x")));
         for(long id:List.of(infected,error,stale,altered,old))assertTrue(quarantined(id));
         assertEquals(1,db.count("SELECT COUNT(*) FROM audit_event WHERE action='DOCUMENTO_INFECTADO_DETECTADO' AND resource_id=?",infected));
+    }
+
+    @Test void limitesExcedidosOSalidaIncompletaNoSonDeteccionPermanente()throws Exception{
+        // ClamAV sale con 1 tambien cuando --alert-exceeds-max marca un limite: queda en cuarentena, sin deteccion.
+        long limits=original("archivo que excede limites");
+        EXIT.set(1);OUTPUT.set("%s: Heuristics.Limits.Exceeded.MaxFileSize FOUND");
+        var r=documents.scan("ti.doc",limits);
+        assertEquals("ERROR",r.get("verdict"));assertEquals("LIMITES_EXCEDIDOS",r.get("detail"));
+        assertThrows(Problem.class,()->release(limits,Map.of("reason","x")));
+        assertTrue(quarantined(limits));
+        // Salida 1 sin resultado legible, o con una firma informada para otro archivo: analisis incompleto.
+        long unreadable=original("salida sin resultado");
+        OUTPUT.set("LibClamAV Error: cli_scanfile: error inesperado");
+        r=documents.scan("ti.doc",unreadable);assertEquals("ERROR",r.get("verdict"));assertEquals("ANALISIS_INCOMPLETO",r.get("detail"));
+        long other=original("firma de otro archivo");
+        OUTPUT.set("C:\\otro\\archivo.bin: Win.Test.EICAR_HDB-1 FOUND");
+        r=documents.scan("ti.doc",other);assertEquals("ERROR",r.get("verdict"));assertEquals("ANALISIS_INCOMPLETO",r.get("detail"));
+        // Ninguno queda marcado como infectado: un analisis limpio posterior permite liberar.
+        assertEquals(0,db.count("SELECT COUNT(*) FROM document_scan WHERE document_id IN (?,?,?) AND verdict='INFECTADO'",limits,unreadable,other));
+        assertEquals(0,db.count("SELECT COUNT(*) FROM audit_event WHERE action='DOCUMENTO_INFECTADO_DETECTADO' AND resource_id IN (?,?,?)",limits,unreadable,other));
+        EXIT.set(0);OUTPUT.set("");
+        for(long id:List.of(limits,unreadable,other)){
+            assertEquals("LIMPIO",documents.scan("ti.doc",id).get("verdict"));
+            release(id,Map.of("reason","Analisis limpio posterior"));
+            assertFalse(quarantined(id));
+        }
+        // Defender: MpCmdRun devuelve 2 tanto ante amenaza como ante fallo del motor (hr=0x800106ba con el servicio
+        // inactivo, observado en este equipo): solo el texto de deteccion acredita INFECTADO.
+        Files.createDirectories(ENGINE.resolve("defender"));if(!Files.exists(ENGINE.resolve("defender").resolve("MpCmdRun.exe")))Files.writeString(ENGINE.resolve("defender").resolve("MpCmdRun.exe"),"");
+        var defender=new DocumentScanner(new MockEnvironment().withProperty("siger.documents.av.engine","DEFENDER").withProperty("siger.documents.av.executable",ENGINE.resolve("defender").resolve("MpCmdRun.exe").toString()),
+            (c,t)->c.contains("-Command")?new DocumentScanner.Output(0,"1.400.0.0|"+Instant.now().minusSeconds(3600)):new DocumentScanner.Output(EXIT.get(),OUTPUT.get().replace("%s",c.get(c.indexOf("-File")+1))),Clock.systemUTC());
+        Path x=Path.of("x.bin");
+        EXIT.set(2);OUTPUT.set("CmdTool: Failed with hr = 0x800106ba. Check C:\\Users\\u\\AppData\\Local\\Temp\\MpCmdRun.log for more information");
+        var v=defender.scan(x,ENGINE);assertEquals("ERROR",v.verdict());assertEquals("MOTOR_FALLIDO_0x800106ba",v.detail());
+        OUTPUT.set("");v=defender.scan(x,ENGINE);assertEquals("ERROR",v.verdict());assertEquals("ANALISIS_INCOMPLETO",v.detail()); // codigo 2 sin texto
+        OUTPUT.set("Scan starting...\nScan finished.\nScanning %s found 1 threats.\n\nThreat information\nThreat                  : Virus:DOS/EICAR_Test_File\n");
+        v=defender.scan(x,ENGINE);assertEquals("INFECTADO",v.verdict());assertEquals("AMENAZA:Virus:DOS/EICAR_Test_File",v.detail());
+        OUTPUT.set("Scan starting...\nScan finished.\nScanning C:\\otro.bin found 1 threats.\n");
+        assertEquals("ERROR",defender.scan(x,ENGINE).verdict()); // deteccion de otro archivo
+        EXIT.set(0);OUTPUT.set("Scan starting...\nScan finished.\nScanning %s found no threats.\n");
+        assertEquals("LIMPIO",defender.scan(x,ENGINE).verdict());
+        OUTPUT.set("");assertEquals("ERROR",defender.scan(x,ENGINE).verdict()); // 0 sin confirmacion textual
+        EXIT.set(1);OUTPUT.set("");assertEquals("ERROR",defender.scan(x,ENGINE).verdict());
+    }
+
+    @Test void carpetaTemporalDelAnalisisSeEliminaSiempre()throws Exception{
+        Path tmp=documents.directory.getParent().resolve("tmp");
+        java.util.function.Supplier<Long> leftovers=()->{try(var l=Files.list(Files.createDirectories(tmp))){return l.filter(p->p.getFileName().toString().startsWith("av-")).count();}catch(Exception e){throw new IllegalStateException(e);}};
+        // El motor deja archivos en --tempdir: se eliminan al terminar.
+        DURING.set(c->{Path work=Path.of(c.stream().filter(a->a.startsWith("--tempdir=")).findFirst().orElseThrow().substring(10));
+            assertTrue(Files.isDirectory(work));
+            try{Files.writeString(work.resolve("clamav-resto.tmp"),"x");Files.createDirectories(work.resolve("sub")).resolve("a.tmp").toFile().createNewFile();}catch(Exception e){throw new IllegalStateException(e);}});
+        assertEquals("LIMPIO",documents.scan("ti.doc",original("con temporales")).get("verdict"));
+        assertEquals(0L,leftovers.get());
+        // Tambien si el analisis falla (excepcion del motor o tiempo excedido).
+        DURING.set(c->{throw new IllegalStateException("motor caido");});
+        var r=documents.scan("ti.doc",original("motor que falla"));
+        assertEquals("ERROR",r.get("verdict"));assertEquals("ANALISIS_NO_EJECUTADO",r.get("detail"));
+        assertEquals(0L,leftovers.get());
+        // Firmas antiguas: no se crea carpeta.
+        DURING.set(c->{});VERSION.set("ClamAV 1.4.1/27000/"+LocalDateTime.now().minusDays(10).format(java.time.format.DateTimeFormatter.ofPattern("EEE MMM d HH:mm:ss yyyy",Locale.ENGLISH)));
+        documents.scan("ti.doc",original("sin analisis"));
+        assertEquals(0L,leftovers.get());
     }
 
     @Test void sinMotorConfiguradoNoHayAnalisisNiLiberacion(){

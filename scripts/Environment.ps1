@@ -1,6 +1,8 @@
 ﻿# Dot-source desde Start/Service/Migrate/Invoke. Secretos DPAPI solo en el proceso; nunca argumentos Java.
 . (Join-Path $PSScriptRoot 'Common.ps1')
 function Set-SigerEnvironment($Settings,$Secrets,[switch]$Migration,[switch]$Seed) {
+    # Primero el modo: un descriptor dudoso detiene todo antes de exponer variables al proceso.
+    $instanceMode=Get-InstanceMode $Settings
     $env:SPRING_PROFILES_ACTIVE='mysql'
     $env:SIGER_DB_URL="jdbc:mysql://127.0.0.1:$($Settings.mysqlPort)/$($Settings.database)?sslMode=VERIFY_CA&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
     $env:SIGER_DB_USER=if($Migration){'siger_a_migrator'}else{'siger_a_app'}
@@ -21,7 +23,7 @@ function Set-SigerEnvironment($Settings,$Secrets,[switch]$Migration,[switch]$See
     $env:SIGER_FOLIO_PREFIX=if($prefix -and $prefix.Value){[string]$prefix.Value}else{$null}
     # Modo de la instancia: la de pruebas lo anuncia en pantalla y admite la liberacion manual de archivos de prueba;
     # la institucional no muestra etiqueta y solo libera originales tras un analisis antivirus del servidor.
-    if((Get-InstanceMode $Settings) -eq 'PRUEBAS'){
+    if($instanceMode -eq 'PRUEBAS'){
         $env:SIGER_ENVIRONMENT_LABEL="Entorno de pruebas $([char]0xB7) Datos sint$([char]0xE9)ticos";$env:SIGER_DOCUMENTS_SYNTHETIC_RELEASE='true'
     }else{$env:SIGER_ENVIRONMENT_LABEL=$null;$env:SIGER_DOCUMENTS_SYNTHETIC_RELEASE='false'}
     # Motor antivirus (config\antivirus.json: {"engine":"CLAMAV"|"DEFENDER","executable":"...","database":"..."}).
@@ -32,11 +34,19 @@ function Set-SigerEnvironment($Settings,$Secrets,[switch]$Migration,[switch]$See
         $env:SIGER_AV_DATABASE=if($cfg.PSObject.Properties['database']){[string]$cfg.database}else{$null}
     }else{$env:SIGER_AV_ENGINE=$null;$env:SIGER_AV_EXECUTABLE=$null;$env:SIGER_AV_DATABASE=$null}
 }
-# PRUEBAS si el descriptor no lo indica (instancias anteriores eran de datos sinteticos).
+# Modo de la instancia, fallando cerrado ante cualquier valor desconocido, vacio o mal escrito. Compatibilidad
+# explicita: un descriptor anterior a los modos (sin "mode" ni "ownerSid", creado por Init-Server de 0.4.0 previo) es
+# una instancia de PRUEBAS, porque esas versiones solo creaban datos sinteticos. Un descriptor con ownerSid y sin modo
+# es inconsistente y no se interpreta.
 function Get-InstanceMode($Settings){
     $mode=$Settings.PSObject.Properties['mode']
-    if($mode -and [string]$mode.Value -eq 'INSTITUCIONAL'){return 'INSTITUCIONAL'}
-    return 'PRUEBAS'
+    if(-not $mode){
+        if($Settings.PSObject.Properties['ownerSid']){throw 'instance.json tiene ownerSid pero no indica "mode". No se asume ningun modo; corrige el descriptor.'}
+        return 'PRUEBAS'
+    }
+    $value=[string]$mode.Value
+    if($value -ceq 'INSTITUCIONAL' -or $value -ceq 'PRUEBAS'){return $value}
+    throw "Modo de instancia desconocido en instance.json ('$value'). Se admiten INSTITUCIONAL y PRUEBAS; no se inicia con un modo dudoso."
 }
 function Clear-SigerEnvironment {
     foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO','SIGER_FORMULARIO_TRUSTED_KEYS','SIGER_FOLIO_PREFIX','SIGER_SCHEDULING','SIGER_FORMULARIO_PULL_ENABLED','SIGER_FORMULARIO_PULL_RUN_ONCE','SIGER_FORMULARIO_PULL_ORIGIN','SIGER_FORMULARIO_PULL_TOKEN','SIGER_FORMULARIO_PULL_TOKEN_FILE','SIGER_FORMULARIO_PULL_CA_FILE','SIGER_FORMULARIO_PULL_SCOPE','SIGER_FORMULARIO_ACK_KEY_ID','SIGER_FORMULARIO_ACK_PRIVATE_KEY_FILE','SIGER_FORMULARIO_ACK_PUBLIC_KEY_FILE','SIGER_FORMULARIO_PULL_AUTOMATIC','SIGER_FORMULARIO_PULL_SINGLE_CONSUMER','SIGER_FORMULARIO_ACK_PRIVATE_KEY','SIGER_FORMULARIO_ACK_PUBLIC_KEY','SIGER_MAIL_MODE','SIGER_GRAPH_TENANT','SIGER_GRAPH_CLIENT','SIGER_GRAPH_SENDER','SIGER_GRAPH_CLIENT_SECRET','SIGER_MAIL_ALLOWED_DOMAINS','SIGER_MAIL_LINK','SIGER_STOP_FILE','SIGER_LOG_FILE','SIGER_ENVIRONMENT_LABEL','SIGER_DOCUMENTS_SYNTHETIC_RELEASE','SIGER_AV_ENGINE','SIGER_AV_EXECUTABLE','SIGER_AV_DATABASE','SIGER_BOOTSTRAP_FILE')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}

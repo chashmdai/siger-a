@@ -38,6 +38,10 @@ try{$check=$line.Trim()|ConvertFrom-Json}catch{throw 'La comprobacion de la cuen
 if($check.administrator){throw 'La cuenta de servicio pertenece a Administradores. SIGER debe ejecutarse con una cuenta sin privilegios administrativos.'}
 if(-not $check.dpapi){throw 'La cuenta de servicio no descifra config\secrets.clixml. Inicializa la instancia con esa cuenta.'}
 if(-not $check.instanceOwner -or $check.sid -ne $sid){throw 'La comprobacion no corresponde a la cuenta de servicio indicada.'}
+# Defender configurado pero no utilizable por la cuenta: SIGER funciona, pero ningun original real podra liberarse.
+if($check.PSObject.Properties['defender'] -and @('NO_CONFIGURADO','NO_APLICA','OPERATIVO') -notcontains [string]$check.defender){
+    Write-Warning "Defender no es utilizable por la cuenta de servicio ($($check.defender)). Los originales permaneceran en cuarentena hasta resolverlo con TI; no se elevan privilegios."
+}
 
 # "Iniciar sesion como servicio": se lee siempre; se concede solo con la opcion explicita.
 function Get-LogonRight([string]$Policy){
