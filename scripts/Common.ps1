@@ -16,7 +16,7 @@ function Private-Directory([string]$Path) {
     $acl.SetAccessRuleProtection($true,$false)
     $ids=@([Security.Principal.WindowsIdentity]::GetCurrent().User, (New-Object Security.Principal.SecurityIdentifier('S-1-5-18')), (New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')))
     foreach($sid in $ids){$rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow');$acl.AddAccessRule($rule)}
-    Set-Acl -LiteralPath $Path -AclObject $acl
+    $current=Get-Acl -LiteralPath $Path; $signature={param($d) @($d.Access | ForEach-Object { "{0}|{1}|{2}|{3}|{4}|{5}" -f $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value,[int]$_.FileSystemRights,[int]$_.AccessControlType,[int]$_.InheritanceFlags,[int]$_.PropagationFlags,$_.IsInherited } | Sort-Object) -join ";" }; if($current.AreAccessRulesProtected -and ((& $signature $current) -ceq (& $signature $acl))){return}; Set-Acl -LiteralPath $Path -AclObject $acl
 }
 function Require-PrivateFile([string]$Path) {
     # Credenciales y claves: archivo real (no enlace) accesible solo por la cuenta actual, SYSTEM y Administradores.
@@ -83,9 +83,34 @@ function Invoke-SigerSql($Settings,[string]$Client,[string]$Sql,[string]$Databas
 }
 function Require-OwnMySql($Settings,[string]$Client) {
     $pidfile=Join-Path $Settings.root 'mysql\data\siger-a.pid'
-    if(-not(Test-Path $pidfile)){throw 'No se identifica el proceso MySQL propio. No se interviene otro motor.'}
-    $p=Own-Process ([int](Get-Content $pidfile -Raw).Trim()) (Join-Path $Settings.mysqlHome 'bin\mysqld.exe') (Join-Path $Settings.root 'mysql\my.ini')
+    if(-not(Test-Path -LiteralPath $pidfile -PathType Leaf)){throw 'No se identifica el proceso MySQL propio. No se interviene otro motor.'}
+    $dbpid=0
+    if(-not [int]::TryParse((Get-Content -LiteralPath $pidfile -Raw).Trim(),[ref]$dbpid) -or $dbpid -le 0){throw 'PID del MySQL propio invalido.'}
+    $exe=Join-Path $Settings.mysqlHome 'bin\mysqld.exe'
+    $ini=Join-Path $Settings.root 'mysql\my.ini'
+    $p=Get-CimInstance Win32_Process -Filter "ProcessId=$dbpid" -ErrorAction SilentlyContinue
     if(-not $p){throw 'MySQL propio no esta activo.'}
+    if($p.ExecutablePath -and $p.CommandLine){
+        $null=Own-Process $dbpid $exe $ini
+    }else{
+        # En la cuenta de servicio, WMI puede ocultar ruta y argumentos del proceso hijo.
+        # Solo se admite el fallback si el servicio, su identidad y su configuracion
+        # coinciden con config\service.json y con el PID hijo del archivo propio.
+        $services=Get-SigerServices $Settings
+        if(-not $services){throw 'MySQL sin ruta de proceso verificable y sin servicio propio registrado.'}
+        $info=$services.Info
+        $name=[string]$info.mysqlServiceName
+        $wqlName=$name.Replace("'","''")
+        $svc=Get-CimInstance Win32_Service -Filter "Name='$wqlName'" -ErrorAction SilentlyContinue
+        if(-not $svc -or $svc.State -ne 'Running'){throw 'Servicio MySQL propio no esta activo.'}
+        $actualSid=''
+        try{$actualSid=(New-Object Security.Principal.NTAccount([string]$svc.StartName)).Translate([Security.Principal.SecurityIdentifier]).Value}catch{}
+        $registeredPath=([string]$svc.PathName).Replace('"','').Trim()
+        $expectedPath="$exe --defaults-file=$ini $name"
+        if(-not $actualSid -or $actualSid -ne [string]$info.accountSid -or $registeredPath -ine $expectedPath -or $p.Name -ine 'mysqld.exe' -or [int]$p.ParentProcessId -ne [int]$svc.ProcessId){
+            throw 'No se acredito el MySQL propio mediante el servicio Windows.'
+        }
+    }
     $port=(Invoke-SigerSql $Settings $Client 'SELECT @@port' | Out-String).Trim()
     $dir=(Invoke-SigerSql $Settings $Client 'SELECT @@datadir' | Out-String).Trim().Replace('/','\').TrimEnd('\')
     if($port -ne [string]$Settings.mysqlPort -or $dir -ine (Join-Path $Settings.root 'mysql\data').TrimEnd('\')){throw 'El motor conectado no corresponde a esta instancia.'}
@@ -110,7 +135,7 @@ function Test-SigerBackup([string]$Directory) {
 function Save-InstanceJson($Value,[string]$Path) {
     $temp=$Path+'.new'
     [IO.File]::WriteAllText($temp,($Value | ConvertTo-Json -Depth 8),(New-Object Text.UTF8Encoding($false)))
-    if(Test-Path -LiteralPath $Path){[IO.File]::Replace($temp,$Path,$null)}else{[IO.File]::Move($temp,$Path)}
+    if(Test-Path -LiteralPath $Path){[IO.File]::Replace($temp,$Path,($Path+'.bak-atomic-'+[guid]::NewGuid().ToString('N')))}else{[IO.File]::Move($temp,$Path)}
 }
 function Invoke-SigerHealth($Settings,$Secrets) {
     if(-not('SigerLocalHealth' -as [type])){Add-Type -Path (Join-Path $PSScriptRoot 'HealthProbe.cs')}

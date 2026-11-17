@@ -51,7 +51,7 @@ function Get-LogonRight([string]$Policy){
 $policy=Join-Path $Root ('tmp\derechos-'+[Guid]::NewGuid().ToString('N')+'.inf');$database=[IO.Path]::ChangeExtension($policy,'.sdb')
 $right=$false
 try{
-    $line=Get-LogonRight $policy
+    $line=@(Get-LogonRight $policy)
     $right=$line.Count -gt 0 -and $line[0] -match [regex]::Escape('*'+$sid)
 }finally{foreach($f in @($policy,$database)){if(Test-Path -LiteralPath $f){Remove-Item -LiteralPath $f}}}
 
@@ -61,7 +61,7 @@ if(-not $PSCmdlet.ShouldProcess("$app, $db ($($ServiceCredential.UserName))",'Re
 
 if(-not $right -and $ConcederInicioComoServicio){
     try{
-        $line=Get-LogonRight $policy
+        $line=@(Get-LogonRight $policy)
         $entry=if($line.Count -gt 0){$line[0].TrimEnd()+",*$sid"}else{"SeServiceLogonRight = *$sid"}
         @('[Unicode]','Unicode=yes','[Version]','signature="$CHICAGO$"','Revision=1','[Privilege Rights]',$entry)|Set-Content -LiteralPath $policy -Encoding Unicode
         if((Invoke-Native {& secedit.exe /configure /db $database /cfg $policy /areas USER_RIGHTS} -Quiet) -ne 0){throw 'secedit no aplico el derecho.'}

@@ -30,8 +30,8 @@ function Set-SigerEnvironment($Settings,$Secrets,[switch]$Migration,[switch]$See
     if($instanceMode -eq 'PRUEBAS'){
         $env:SIGER_ENVIRONMENT_LABEL="Entorno de pruebas $([char]0xB7) Datos sint$([char]0xE9)ticos";$env:SIGER_DOCUMENTS_SYNTHETIC_RELEASE='true'
     }elseif($purpose -eq 'VALIDACION'){
-        # Validacion institucional: cuentas reales, datos ficticios ingresados por funcionarios; se anuncia en pantalla.
-        $env:SIGER_ENVIRONMENT_LABEL="Validaci$([char]0xF3)n institucional $([char]0xB7) Datos ficticios, no ingresar casos reales";$env:SIGER_DOCUMENTS_SYNTHETIC_RELEASE='false'
+        # Solo la validacion institucional expresamente autorizada puede recibir comunicaciones reales.
+        if(Test-ValidationPullAuthorized $Settings){$env:SIGER_ENVIRONMENT_LABEL="Validacion institucional - recepcion real controlada";$env:SIGER_DOCUMENTS_SYNTHETIC_RELEASE='false'}else{$env:SIGER_ENVIRONMENT_LABEL="Validaci$([char]0xF3)n institucional $([char]0xB7) Datos ficticios, no ingresar casos reales";$env:SIGER_DOCUMENTS_SYNTHETIC_RELEASE='false'}
     }else{$env:SIGER_ENVIRONMENT_LABEL=$null;$env:SIGER_DOCUMENTS_SYNTHETIC_RELEASE='false'}
     # Motor antivirus (config\antivirus.json: {"engine":"CLAMAV"|"DEFENDER","executable":"...","database":"..."}).
     $av=Join-Path $Settings.root 'config\antivirus.json'
@@ -64,9 +64,19 @@ function Get-InstancePurpose($Settings){
     if($value -ceq 'VALIDACION' -or $value -ceq 'PRODUCCION'){return $value}
     throw "Proposito de instancia ausente o desconocido en instance.json ('$value'). Se admiten VALIDACION y PRODUCCION."
 }
-# Recibir entregas reales del Formulario (ciclo o automatico) solo en produccion; la sonda se permite en cualquiera.
+# La habilitacion de recepcion real en validacion es explicita y solo admite un booleano JSON real.
+function Test-ValidationPullAuthorized($Settings){
+    if((Get-InstanceMode $Settings) -ne 'INSTITUCIONAL' -or (Get-InstancePurpose $Settings) -ne 'VALIDACION'){return $false}
+    $flag=$Settings.PSObject.Properties['validacionPullAutorizada']
+    if(-not $flag){return $false}
+    return (($flag.Value -is [bool]) -and ($flag.Value -eq $true))
+}
+# El corte de cualquier consumidor paralelo de SMR debe confirmarse operativamente.
+# Esta bandera declara la autorizacion; NO verifica por red que SMR este desconectado.
 function Require-ProductionPull($Settings){
-    if((Get-InstancePurpose $Settings) -ne 'PRODUCCION'){throw 'Esta instancia no es de produccion: no recibe entregas reales del Formulario. La sonda (-SoloComprobar) si esta permitida.'}
+    if((Get-InstancePurpose $Settings) -eq 'PRODUCCION'){return}
+    if(Test-ValidationPullAuthorized $Settings){return}
+    throw 'Recepcion real bloqueada: requiere PRODUCCION o validacion institucional expresamente autorizada y consumidor SMR detenido.'
 }
 function Clear-SigerEnvironment {
     foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO','SIGER_FORMULARIO_TRUSTED_KEYS','SIGER_FOLIO_PREFIX','SIGER_SCHEDULING','SIGER_FORMULARIO_PULL_ENABLED','SIGER_FORMULARIO_PULL_RUN_ONCE','SIGER_FORMULARIO_PULL_ORIGIN','SIGER_FORMULARIO_PULL_TOKEN','SIGER_FORMULARIO_PULL_TOKEN_FILE','SIGER_FORMULARIO_PULL_CA_FILE','SIGER_FORMULARIO_PULL_SCOPE','SIGER_FORMULARIO_ACK_KEY_ID','SIGER_FORMULARIO_ACK_PRIVATE_KEY_FILE','SIGER_FORMULARIO_ACK_PUBLIC_KEY_FILE','SIGER_FORMULARIO_PULL_AUTOMATIC','SIGER_FORMULARIO_PULL_SINGLE_CONSUMER','SIGER_FORMULARIO_ACK_PRIVATE_KEY','SIGER_FORMULARIO_ACK_PUBLIC_KEY','SIGER_MAIL_MODE','SIGER_GRAPH_TENANT','SIGER_GRAPH_CLIENT','SIGER_GRAPH_SENDER','SIGER_GRAPH_CLIENT_SECRET','SIGER_MAIL_ALLOWED_DOMAINS','SIGER_MAIL_LINK','SIGER_STOP_FILE','SIGER_LOG_FILE','SIGER_ENVIRONMENT_LABEL','SIGER_DOCUMENTS_SYNTHETIC_RELEASE','SIGER_AV_ENGINE','SIGER_AV_EXECUTABLE','SIGER_AV_DATABASE','SIGER_BOOTSTRAP_FILE','SIGER_FORMULARIO_PULL_PROBE')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}

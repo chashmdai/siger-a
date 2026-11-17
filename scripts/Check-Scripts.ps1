@@ -41,11 +41,14 @@ foreach($case in $cases){
     $got=$null;try{$got=Get-InstanceMode $case.settings}catch{$got=$null}
     if($got -ne $case.expected){throw ('Modo de instancia: se esperaba '+$(if($case.expected){$case.expected}else{'rechazo'})+' y se obtuvo '+$(if($got){$got}else{'rechazo'})+' para '+($case.settings|ConvertTo-Json -Compress)+'.')}
 }
-# Proposito institucional: obligatorio y cerrado; las entregas reales del Formulario solo en PRODUCCION.
+# Proposito institucional: la recepcion real exige PRODUCCION o una VALIDACION expresamente autorizada.
 $purposes=@(
     @{settings=[PSCustomObject]@{mode='INSTITUCIONAL';purpose='VALIDACION'};expected='VALIDACION';pull=$false},
+    @{settings=[PSCustomObject]@{mode='INSTITUCIONAL';purpose='VALIDACION';validacionPullAutorizada=$false};expected='VALIDACION';pull=$false},
+    @{settings=[PSCustomObject]@{mode='INSTITUCIONAL';purpose='VALIDACION';validacionPullAutorizada=$true};expected='VALIDACION';pull=$true},
+    @{settings=[PSCustomObject]@{mode='INSTITUCIONAL';purpose='VALIDACION';validacionPullAutorizada='true'};expected='VALIDACION';pull=$false},
     @{settings=[PSCustomObject]@{mode='INSTITUCIONAL';purpose='PRODUCCION'};expected='PRODUCCION';pull=$true},
-    @{settings=[PSCustomObject]@{mode='PRUEBAS';purpose='PRODUCCION'};expected='PRUEBAS';pull=$false},
+    @{settings=[PSCustomObject]@{mode='PRUEBAS';purpose='PRODUCCION';validacionPullAutorizada=$true};expected='PRUEBAS';pull=$false},
     @{settings=[PSCustomObject]@{mode='INSTITUCIONAL'};expected=$null;pull=$false},
     @{settings=[PSCustomObject]@{mode='INSTITUCIONAL';purpose='produccion'};expected=$null;pull=$false})
 foreach($case in $purposes){
