@@ -3,6 +3,7 @@ package cl.nexbyte.sigera;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.boot.info.BuildProperties;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
@@ -18,11 +19,11 @@ import static cl.nexbyte.sigera.Db.*;
 public class Api {
     final Attention attention;final BoardQueries boards;volatile boolean ready;
     final Access access;final Workflow flow;final Queries queries;final Documents documents;final Db db;final PasswordEncoder passwords;
-    final Integrations integrations;final String environment;
+    final Integrations integrations;final String environment;final String releaseVersion;
     public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,
-               @org.springframework.beans.factory.annotation.Value("${siger.environment-label:}")String environment){
+               @org.springframework.beans.factory.annotation.Value("${siger.environment-label:}")String environment,BuildProperties buildProperties){
         this.attention=attention;this.access=access;this.flow=flow;this.queries=queries;this.documents=documents;this.db=db;this.passwords=passwords;this.boards=boards;
-        this.integrations=integrations;this.environment=environment.strip();
+        this.integrations=integrations;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
     }
     private String name(Authentication auth){if(auth==null||!(auth.getPrincipal() instanceof SecurityConfig.Principal))throw new Problem(401,"Inicia sesion.");return auth.getName();}
     @GetMapping("/session") public Map<String,Object> session(Authentication auth,CsrfToken csrf){
@@ -49,13 +50,13 @@ public class Api {
     public void ready(){ready=true;}
     @GetMapping("/health") public ResponseEntity<Map<String,Object>> health(){
         try{
-            if(!ready)return ResponseEntity.status(503).body(Map.of("status","STARTING","version","0.4.0"));
+            if(!ready)return ResponseEntity.status(503).body(Map.of("status","STARTING","version",releaseVersion));
             Problem.require(db.count("SELECT COUNT(*) FROM app_meta WHERE namespace='SIGER_A_2026'")==1,"Instancia no disponible.");
             var last=db.one("SELECT version FROM flyway_schema_history WHERE success=TRUE AND version IS NOT NULL ORDER BY installed_rank DESC LIMIT 1");
             // Codigos de estado de las integraciones (sin contadores, errores ni datos) para Estado.ps1 y monitoreo local.
-            return ResponseEntity.ok(Map.of("status","UP","version","0.4.0","schema",s(last,"version"),
+            return ResponseEntity.ok(Map.of("status","UP","version",releaseVersion,"schema",s(last,"version"),
                 "integrations",Map.of("formulario",integrations.health(Integrations.FORMULARIO),"correo",integrations.health(Integrations.CORREO))));
-        }catch(RuntimeException e){return ResponseEntity.status(503).body(Map.of("status","UNAVAILABLE","version","0.4.0"));}
+        }catch(RuntimeException e){return ResponseEntity.status(503).body(Map.of("status","UNAVAILABLE","version",releaseVersion));}
     }
     @GetMapping("/dashboard") public Map<String,Object> dashboard(Authentication a){return boards.dashboard(access.actor(name(a)));}
     @GetMapping("/worklist/{kind}") public Map<String,Object> page(Authentication a,@PathVariable String kind,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="25")int size,@RequestParam(defaultValue="")String q,@RequestParam(defaultValue="all")String filter,@RequestParam(required=false)Long scope){return boards.page(access.actor(name(a)),kind,page,size,q,filter,scope);}

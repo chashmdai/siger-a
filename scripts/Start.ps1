@@ -8,7 +8,9 @@ if(Test-Path (Join-Path $Root 'config\piloto-cerrado.json')){throw 'Instancia de
 Require-Java25 $s.javaHome
 if((Get-SigerFileHash $s.activeJar -Algorithm SHA256).Hash -ine $s.jarSha256){throw 'JAR alterado.'}
 $manifestPath=Join-Path (Split-Path (Split-Path $s.activeJar -Parent) -Parent) 'manifest.json'
-$manifest=Get-Content $manifestPath -Raw|ConvertFrom-Json
+if(-not(Test-Path -LiteralPath $manifestPath -PathType Leaf)){throw 'No existe manifest.json del JAR activo.'}
+$manifest=Get-Content -LiteralPath $manifestPath -Raw|ConvertFrom-Json
+if(-not $manifest.PSObject.Properties['version'] -or [string]::IsNullOrWhiteSpace([string]$manifest.version) -or -not $manifest.PSObject.Properties['schema'] -or [string]$manifest.schema -notmatch '^[1-9][0-9]*$' -or [string]$manifest.jarSha256 -ine [string]$s.jarSha256){throw 'Manifiesto de release incompleto o no corresponde al JAR activo.'}
 # La configuracion de integraciones se valida antes de iniciar (un error aqui no deja un servicio en bucle de reinicio).
 $null=Get-FormularioPullConfig $s;$null=Get-GraphMailConfig $s
 $secret=Import-Clixml (Join-Path $Root 'config\secrets.clixml')
@@ -44,10 +46,10 @@ try{
     for($i=0;$i -lt $WaitSeconds;$i++){
         $alive=if($services){(Get-Service -Name $services.Info.serviceName).Status -ne 'Stopped'}else{App-Running $s}
         if(-not $alive){throw 'El proceso termino antes de estar listo. Revisa el primer error del log privado (logs\) y el registro de eventos Application (origen SIGER).'}
-        try{$h=Invoke-SigerHealth $s $secret;if($h.status -eq 'UP' -and $h.version -eq $manifest.version -and [int]$h.schema -eq 10){$health=$h;break}}catch{}
+        try{$h=Invoke-SigerHealth $s $secret;if($h.status -eq 'UP' -and [string]$h.version -ceq [string]$manifest.version -and [string]$h.schema -ceq [string]$manifest.schema){$health=$h;break}}catch{}
         Start-Sleep -Seconds 1
     }
-    if(-not $health){throw 'No se acredito salud HTTPS/version dentro del tiempo de espera. No se informa arranque correcto.'}
+    if(-not $health){throw 'No se acredito salud HTTPS/version/esquema del manifiesto dentro del tiempo de espera. No se informa arranque correcto.'}
     if($update -and $update.phase -ne 'COMPLETE'){$update.phase='COMPLETE';$update.message='Arranque confirmado por HTTPS con certificado local fijado, version y esquema.';Save-InstanceJson $update $journal}
     Write-Host "SIGER $($health.version) disponible; esquema $($health.schema). Abre https://localhost:$($s.webPort) desde RDP."
     Write-Host "Formulario: $($health.integrations.formulario). Correo: $($health.integrations.correo). $(if($services){'Operando como servicio de Windows.'}else{'Iniciado a mano (sin servicio registrado).'})"

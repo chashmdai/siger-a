@@ -17,6 +17,9 @@ $services=Get-SigerServices $s
 if(-not $services){throw 'No hay servicios registrados para esta instancia (Install-Service.ps1).'}
 $secret=Import-Clixml (Join-Path $Root 'config\secrets.clixml')
 $app=[string]$services.Info.serviceName;$db=[string]$services.Info.mysqlServiceName
+$manifestPath=Join-Path (Split-Path (Split-Path $s.activeJar -Parent) -Parent) 'manifest.json'
+$manifest=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+if(-not $manifest.PSObject.Properties['version'] -or -not $manifest.PSObject.Properties['schema']){throw 'Faltan version o esquema en el manifiesto del JAR activo.'}
 $steps=New-Object System.Collections.ArrayList
 function Step([string]$Name,[bool]$Ok,[string]$Detail){$null=$steps.Add([PSCustomObject]@{paso=$Name;ok=$Ok;detalle=$Detail;utc=(Get-Date).ToUniversalTime().ToString('o')});Write-Host ("{0,-34} {1} {2}" -f $Name,$(if($Ok){'OK   '}else{'FALLA'}),$Detail)}
 function Healthy{try{$h=Invoke-SigerHealth $s $secret;return $h.status -eq 'UP'}catch{return $false}}
@@ -32,7 +35,7 @@ $log=Join-Path $Root 'logs\siger.log'
 if((Get-Service $app).Status -ne 'Running'){Start-Service -Name $app}
 $t=Wait-Healthy $WaitSeconds
 Step 'arranque' ($t -ge 0) "salud en $t s"
-$h=Invoke-SigerHealth $s $secret;Step 'version y esquema' ([int]$h.schema -ge 10) "version $($h.version), esquema $($h.schema), formulario $($h.integrations.formulario), correo $($h.integrations.correo)"
+$h=Invoke-SigerHealth $s $secret;Step 'version y esquema' ($h.status -eq 'UP' -and [string]$h.version -ceq [string]$manifest.version -and [string]$h.schema -ceq [string]$manifest.schema) "version $($h.version), esquema $($h.schema), formulario $($h.integrations.formulario), correo $($h.integrations.correo)"
 
 # 2. Parada ordenada: el host pide la parada, SIGER cierra el contexto y libera el lease.
 $before=(Get-Item -LiteralPath $log -ErrorAction SilentlyContinue).Length
