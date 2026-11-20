@@ -3,6 +3,7 @@ import {list, number, text} from './rows';
 import type {Field} from '../components/ActionDialog';
 import type {Context} from '../app/context';
 import {people, scopes} from './catalog';
+import {labeled, MATTER_LABELS} from './labels';
 
 // Campos reutilizados por los dialogos de comandos. El servidor valida nuevamente cada valor.
 
@@ -12,7 +13,10 @@ export const DOCUMENT_TYPES = ['OFICIO', 'INFORME', 'CORREO', 'CONSTANCIA', 'OTR
 export const REMINDERS = [{value: '0', label: 'Avisar una sola vez'}, {value: '24', label: 'Cada 24 horas'}, {value: '48', label: 'Cada 48 horas'}, {value: '168', label: 'Cada 7 días'}];
 
 export const reason: Field = {key: 'reason', label: 'Fundamento o resultado de la decisión', type: 'textarea', required: true, max: 12000};
-export const matter: Field = {key: 'matter', label: 'Materia del Caso (no es complejidad)', type: 'select', options: ['UPR', 'UPD', 'UEP', 'OTRA'].map(v => ({value: v, label: v === 'OTRA' ? 'Otra' : v})), required: true};
+export const matter: Field = {key: 'matter', label: 'Materia del Caso (no es complejidad)', type: 'select', options: labeled(['UPR', 'UPD', 'UEP', 'OTRA'], MATTER_LABELS), required: true};
+/** Materia sugerida de una SOL a una sede y materia del REQ regional (D9). */
+export const REGIONAL_MATTERS = ['UPR', 'UPD', 'UEP'];
+export const reqMatter: Field = {key: 'matter', label: 'Materia del Requerimiento', type: 'select', options: labeled(REGIONAL_MATTERS, MATTER_LABELS), required: true};
 export const objective: Field = {key: 'objective', label: 'Objetivo de esta línea de gestión', type: 'textarea', required: true, max: 3000};
 
 export const person = (catalog: Row, key = 'responsible_id', label = 'Profesional responsable', scopeId?: number): Field => ({key, label, type: 'select', options: people(catalog, scopeId), required: true});
@@ -40,6 +44,10 @@ export function routingFields(catalog: Row): Field[] {
     {key: 'area_scope_id', label: 'Área sugerida (opcional)', type: 'select', dependsOn: 'scope_id',
       options: areas.filter(s => roots.has(text(s, 'unit_code'))).map(s => ({value: number(s, 'id'), label: text(s, 'name') + (text(s, 'code') === 'UPR-REQ' ? ' · llega a la Coordinadora' : ' · recibe la Dirección'), parent: roots.get(text(s, 'unit_code'))})),
       help: 'Solo el área de Requerimientos de UPR llega directamente a su Coordinadora; las demás áreas las recibe la Dirección.'},
+    // Solo una sede admite materia sugerida (el servidor la rechaza en el nivel central): opciones por sede elegida.
+    {key: 'suggested_matter', label: 'Materia sugerida (opcional, solo sedes regionales)', type: 'select', dependsOn: 'scope_id',
+      options: units.filter(s => s.regional === true).flatMap(s => REGIONAL_MATTERS.map(m => ({value: m, label: MATTER_LABELS[m], parent: number(s, 'id')}))),
+      help: 'La Dirección nacional de esa materia podrá leer la SOL y el REQ que nazca de ella, sin gestionarlos. El REQ la hereda al asumirse.'},
   ];
 }
 

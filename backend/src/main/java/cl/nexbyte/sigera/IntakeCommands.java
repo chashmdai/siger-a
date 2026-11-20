@@ -165,12 +165,25 @@ public class IntakeCommands {
         var destination=access.solDestination(in);
         long scope=destination.scope();
         if(access.regional(n(com,"origin_scope")))require(scope==n(com,"origin_scope"),"La distribucion regional se limita a su sede; usa redireccion de SOL posteriormente.");
-        long sol=db.insert("INSERT INTO solicitation(communication_id,destination_scope,requested_area_scope,classification,created_by,created_ms) VALUES(?,?,?,?,?,?)",id,scope,destination.area(),in.reason(),a.id(),now());
+        String matter=suggestedMatter(in,scope);
+        long sol=db.insert("INSERT INTO solicitation(communication_id,destination_scope,requested_area_scope,classification,created_by,created_ms,suggested_matter) VALUES(?,?,?,?,?,?,?)",id,scope,destination.area(),in.reason(),a.id(),now(),matter);
         db.update("UPDATE communication SET state='ENVIADA',revision=revision+1 WHERE id=?",id);
-        life.changed(a,"SOL_DISTRIBUIDA","SOL",sol,scope,in.reason());
+        life.changed(a,"SOL_DISTRIBUIDA","SOL",sol,scope,matterNote(matter)+in.reason());
         access.notifySolReceivers(scope,"Tienes una SOL pendiente de asumir.",sol);
         return done("SOL",sol);
     }
+
+    /**
+     * Materia sugerida (D9), opcional: UPR, UPD o UEP y solo cuando el destino es una sede regional. Abre la lectura
+     * nacional de esa Direccion y la hereda el REQ al asumir la SOL.
+     */
+    private String suggestedMatter(Input in,long destination){
+        if(in.text("suggested_matter",40,false).isBlank())return null;
+        String matter=in.choice("suggested_matter",Lifecycle.REGIONAL_MATTERS);
+        require(access.regional(destination),"La materia sugerida se indica solo cuando el destino es una sede regional.");
+        return matter;
+    }
+    private static String matterNote(String matter){return matter==null?"":"Materia sugerida "+matter+". ";}
 
     private Result sol(Actor a,String type,long id,Long expected,Input in){
         var r=db.one("SELECT * FROM solicitation WHERE id=?",id);
@@ -191,9 +204,11 @@ public class IntakeCommands {
                 var destination=access.solDestination(in);
                 long target=destination.scope();
                 if(returned&&access.regional(n(com,"origin_scope")))require(target==n(com,"origin_scope"),"Coordinacion redistribuye su sede; la jefatura puede redirigir la SOL a otra sede.");
-                require(returned||target!=oldScope||!Objects.equals(destination.area(),nullableId(r,"requested_area_scope")),"El destino y el area sugerida no cambiaron.");
-                db.update("UPDATE solicitation SET destination_scope=?,requested_area_scope=?,classification=?,state='PENDIENTE',revision=revision+1 WHERE id=?",target,destination.area(),reason,id);
-                life.changed(a,"SOL_REDIRIGIDA","SOL",id,target,"Destino anterior "+oldScope+". "+reason);
+                // Redirigir reemplaza la materia sugerida: queda vacia si no se indica o si el destino no es una sede.
+                String matter=suggestedMatter(in,target);
+                require(returned||target!=oldScope||!Objects.equals(destination.area(),nullableId(r,"requested_area_scope"))||!Objects.equals(matter,r.get("suggested_matter")),"El destino, el area y la materia sugerida no cambiaron.");
+                db.update("UPDATE solicitation SET destination_scope=?,requested_area_scope=?,suggested_matter=?,classification=?,state='PENDIENTE',revision=revision+1 WHERE id=?",target,destination.area(),matter,reason,id);
+                life.changed(a,"SOL_REDIRIGIDA","SOL",id,target,"Destino anterior "+oldScope+". "+matterNote(matter)+reason);
                 access.notifySolReceivers(target,"Una SOL fue remitida a tu ambito.",id);
                 return done("SOL",id);
             }
@@ -215,6 +230,8 @@ public class IntakeCommands {
                 long user=in.id("responsible_id");
                 long attentionScope=access.solAttentionScope(a,user,oldScope,nullableId(r,"requested_area_scope"));
                 long req=life.newReq(a,comId,id,oldScope,user,attentionScope);
+                // El REQ hereda la materia sugerida (solo existe en SOL a una sede); la Coordinacion la rectifica con REQ_MATTER.
+                if(r.get("suggested_matter")!=null&&access.regional(oldScope))db.update("UPDATE requirement SET matter=? WHERE id=?",s(r,"suggested_matter"),req);
                 db.update("UPDATE solicitation SET state='ASUMIDA',revision=revision+1 WHERE id=?",id);
                 life.changed(a,"SOL_ASUMIDA","SOL",id,oldScope,reason);
                 access.notice(user,"Se te asigno la atencion de un REQ; si requiere seguimiento debe abrirse un Caso.","REQ",req);

@@ -9,7 +9,7 @@ import static cl.nexbyte.sigera.Db.*;
 public class Access {
     public record Grant(String role, Long scope) { }
     public record Actor(long id, String username, String name, long homeScope, boolean mustChange,
-                        long securityVersion, List<Grant> grants, Set<Long> substitutions) {
+                        long securityVersion, List<Grant> grants, Set<Long> substitutions, Set<String> matters) {
         public boolean role(String role) { return grants.stream().anyMatch(g -> g.role().equals(role)); }
         public boolean at(String role,long scope) { return grants.stream().anyMatch(g -> g.role().equals(role) && Objects.equals(g.scope(),scope)); }
         public boolean head(long scope) { return at("JEFATURA",scope)||at("DIRECCION",scope); }
@@ -19,8 +19,15 @@ public class Access {
         public boolean institutionalReader() { return role(Roles.CONSULTA_INSTITUCIONAL); }
         /** La misma cuenta sin la consulta institucional: distingue lo que lee solo gracias a ella. */
         public Actor withoutInstitutionalReader() {
-            return new Actor(id,username,name,homeScope,mustChange,securityVersion,grants.stream().filter(g->!g.role().equals(Roles.CONSULTA_INSTITUCIONAL)).toList(),substitutions);
+            return new Actor(id,username,name,homeScope,mustChange,securityVersion,grants.stream().filter(g->!g.role().equals(Roles.CONSULTA_INSTITUCIONAL)).toList(),substitutions,matters);
         }
+        /**
+         * Lectura nacional por materia (D9): materias de las Direcciones nacionales (UPR, UPD, UEP) que la cuenta ejerce,
+         * propias o subrogadas. Solo abre registros de sedes; ninguna regla de escritura la considera.
+         */
+        public boolean readsMatter(Object matter) { return matter!=null&&matters.contains(matter.toString()); }
+        /** La misma cuenta sin la lectura por materia (conserva sus funciones): distingue lo que lee solo gracias a ella. */
+        public Actor withoutMatters() { return new Actor(id,username,name,homeScope,mustChange,securityVersion,grants,substitutions,Set.of()); }
     }
     private final Db db;
     private final MailOutbox mail;
@@ -39,7 +46,7 @@ public class Access {
         if(!b(u,"enabled"))throw new Problem(401,"Cuenta inactiva.");
         long now=System.currentTimeMillis();
         var grants=db.rows(GRANTS+" AND g.user_id=?",now,now,n(u,"id"));
-        return resolve(u,grants,db.rows(EFFECTIVE_SUBSTITUTIONS,now,now,now,now));
+        return resolve(u,grants,db.rows(EFFECTIVE_SUBSTITUTIONS,now,now,now,now),nationalRoots());
     }
     public Actor user(long id) { return actor(s(db.one("SELECT username FROM staff WHERE id=?",id),"username")); }
     /** Personal habilitado con sus funciones vigentes, en orden de usuario, con consultas constantes. */
@@ -47,11 +54,18 @@ public class Access {
         long now=System.currentTimeMillis();
         Map<Long,List<Map<String,Object>>> grants=new HashMap<>();
         for(var g:db.rows(GRANTS,now,now))grants.computeIfAbsent(n(g,"user_id"),k->new ArrayList<>()).add(g);
-        var substitutions=db.rows(EFFECTIVE_SUBSTITUTIONS,now,now,now,now);
+        var substitutions=db.rows(EFFECTIVE_SUBSTITUTIONS,now,now,now,now);var roots=nationalRoots();
         return db.rows(STAFF_COLUMNS+" WHERE enabled=TRUE AND technical=FALSE ORDER BY username").stream()
-            .map(u->resolve(u,grants.getOrDefault(n(u,"id"),List.of()),substitutions)).toList();
+            .map(u->resolve(u,grants.getOrDefault(n(u,"id"),List.of()),substitutions,roots)).toList();
     }
-    private Actor resolve(Map<String,Object> u,List<Map<String,Object>> grantRows,List<Map<String,Object>> effective) {
+    /** Materias con lectura nacional (D9) y la Direccion que las ejerce: el ambito raiz central de cada unidad. */
+    static final Set<String> NATIONAL_MATTERS=Set.of("UPR","UPD","UEP");
+    private Map<Long,String> nationalRoots(){
+        var out=new HashMap<Long,String>();
+        for(var r:db.rows("SELECT id,unit_code FROM org_scope WHERE regional=FALSE AND site_code='CENTRAL' AND COALESCE(area_code,'')='' AND unit_code IN ('UPR','UPD','UEP')"))out.put(n(r,"id"),s(r,"unit_code"));
+        return out;
+    }
+    private Actor resolve(Map<String,Object> u,List<Map<String,Object>> grantRows,List<Map<String,Object>> effective,Map<Long,String> roots) {
         long id=n(u,"id");
         var list=new ArrayList<Grant>();
         for(var r:grantRows)list.add(new Grant(s(r,"role_code"),nullableId(r,"scope_id")));
@@ -67,7 +81,10 @@ public class Access {
             }
             if(n(r,"substitute_id")==id){list.add(new Grant(role,scope));substituted.add(scope);}
         }
-        return new Actor(id,s(u,"username"),s(u,"name"),n(u,"home_scope"),b(u,"must_change"),n(u,"security_version"),List.copyOf(list),Set.copyOf(substituted));
+        // Las funciones ya excluyen ambitos deshabilitados; la DIRECCION subrogada tambien traslada la lectura por materia.
+        var matters=new TreeSet<String>();
+        for(var g:list)if(g.role().equals("DIRECCION")&&g.scope()!=null&&roots.containsKey(g.scope()))matters.add(roots.get(g.scope()));
+        return new Actor(id,s(u,"username"),s(u,"name"),n(u,"home_scope"),b(u,"must_change"),n(u,"security_version"),List.copyOf(list),Set.copyOf(substituted),Set.copyOf(matters));
     }
 
     // --- Ambitos y receptores --------------------------------------------------------------
@@ -187,14 +204,25 @@ public class Access {
     }
     public boolean caseRead(Actor a,Map<String,Object> c) {
         long scope=n(c,"scope_id");
-        if(a.institutionalReader()||a.head(scope)||member(a,c)||a.at("LECTURA",scope))return true;
-        if(!regional(scope))return false;
-        for(var g:a.grants())if(g.role().equals("DIRECCION")&&g.scope()!=null){
-            String unit=s(scope(g.scope()),"unit_code");
-            if(Set.of("UPR","UPD").contains(unit)&&unit.equals(s(c,"matter")))return true;
-        }
-        return false;
+        return a.institutionalReader()||a.head(scope)||member(a,c)||a.at("LECTURA",scope)||matterCase(a,c);
     }
+    // --- Lectura nacional por materia (D9) ---------------------------------------------------
+    // Solo en sedes (tambien cerradas, que siguen legibles). Por el REQ o la SOL se lee la cadena completa (COM y sus
+    // originales, primera atencion, registro del REQ y flujos); por un Caso, solo ese Caso y el resumen de su REQ.
+    /** SOL de una sede con materia sugerida de la Direccion (todo estado). */
+    public boolean matterSol(Actor a,Map<String,Object> s) { return a.readsMatter(s.get("suggested_matter"))&&regional(n(s,"destination_scope")); }
+    /** REQ de una sede con materia de la Direccion, con su registro (como reqRecords). */
+    public boolean matterReq(Actor a,Map<String,Object> r) { return a.readsMatter(r.get("matter"))&&regional(n(r,"principal_scope")); }
+    /** Caso de una sede con materia de la Direccion; no abre la COM, sus originales ni la ficha de primera atencion. */
+    public boolean matterCase(Actor a,Map<String,Object> c) { return a.readsMatter(c.get("matter"))&&regional(n(c,"scope_id")); }
+    /** COM de una cadena legible por materia: por su SOL o su REQ, nunca solo por un Caso. */
+    public boolean matterCom(Actor a,long com) {
+        if(a.matters().isEmpty())return false;
+        return db.rows("SELECT * FROM solicitation WHERE communication_id=?",com).stream().anyMatch(s->matterSol(a,s))
+            ||db.rows("SELECT * FROM requirement WHERE communication_id=?",com).stream().anyMatch(r->matterReq(a,r));
+    }
+    /** Lectura amplia del registro del REQ (consulta institucional o materia del REQ): solo lectura, sin reservados. */
+    public boolean reqWideRead(Actor a,Map<String,Object> r) { return a.institutionalReader()||matterReq(a,r); }
     public boolean caseWrite(Actor a,Map<String,Object> c) { return a.head(n(c,"scope_id"))||member(a,c); }
     public boolean reserved(Actor a,Map<String,Object> c) { return a.head(n(c,"scope_id"))||n(c,"responsible_id")==a.id()&&a.professional(n(c,"scope_id")); }
     public boolean reqMain(Actor a,Map<String,Object> r) {
@@ -222,19 +250,19 @@ public class Access {
         return attentionWritable(a,r)&&db.count("SELECT COUNT(*) FROM attention_record WHERE requirement_id=?",n(r,"id"))==1;
     }
     /**
-     * Registro completo del REQ (constancias, cierres y su motivo, documentos e historial): quien lo gestiona o la
-     * consulta institucional. Solo lectura; las escrituras siguen exigiendo reqMain.
+     * Registro completo del REQ (constancias, cierres y su motivo, documentos e historial): quien lo gestiona, la
+     * consulta institucional o la Direccion nacional de su materia (D9). Solo lectura; las escrituras siguen exigiendo reqMain.
      */
-    public boolean reqRecords(Actor a,Map<String,Object> r) { return a.institutionalReader()||reqMain(a,r); }
+    public boolean reqRecords(Actor a,Map<String,Object> r) { return reqWideRead(a,r)||reqMain(a,r); }
     public boolean reqRead(Actor a,Map<String,Object> r) {
-        if(a.institutionalReader()||pendingAttentionRecipient(a,r))return true;
+        if(reqWideRead(a,r)||pendingAttentionRecipient(a,r))return true;
         if(n(r,"created_by")==a.id()&&db.count("SELECT COUNT(*) FROM attention_record WHERE requirement_id=?",n(r,"id"))==1)return true; // Resumen de continuidad, no ficha completa.
         if(reqMain(a,r)||a.at("LECTURA",n(r,"principal_scope")))return true;
         return db.rows("SELECT * FROM case_record WHERE requirement_id=?",n(r,"id")).stream().anyMatch(c->caseRead(a,c));
     }
     public boolean comRead(Actor a,Map<String,Object> c) {
         if(a.institutionalReader()||n(c,"created_by")==a.id())return true;
-        if(canDistribute(a,c))return true;
+        if(canDistribute(a,c)||matterCom(a,n(c,"id")))return true;
         if(db.rows("SELECT destination_scope FROM solicitation WHERE communication_id=? AND state='PENDIENTE'",n(c,"id")).stream().anyMatch(r->solReceiver(a,n(r,"destination_scope"))))return true;
         if(db.rows("SELECT * FROM requirement WHERE communication_id=?",n(c,"id")).stream().anyMatch(r->reqMain(a,r)||pendingAttentionRecipient(a,r)))return true;
         for(var l:db.rows("SELECT * FROM communication_link WHERE communication_id=? AND returned_ms IS NULL",n(c,"id"))){

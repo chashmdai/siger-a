@@ -23,6 +23,9 @@ import static cl.nexbyte.sigera.Db.*;
  * comando de Workflow.run prospera para un lector puro. Combinada con Profesional conserva exactamente sus facultades.
  * G06: las bandejas (BoardQueries.Visibility) coinciden con Access en todas ellas, Inicio tiene su seccion institucional
  * y la ficha avisa cuando se lee solo por la consulta.
+ * R02 (D9): las Direcciones nacionales leen por materia lo de las sedes (segundo fixture en REG-DEMO, materia UPD), con
+ * la misma equivalencia de bandejas, el mismo barrido sin efecto y los reservados excluidos; un Caso de su materia no
+ * abre la COM, sus originales ni la ficha de primera atencion.
  */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,properties={
  "spring.datasource.url=jdbc:h2:mem:sigerainstitutionalreader;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
@@ -38,6 +41,12 @@ class InstitutionalReaderTest {
                 long closedReq,long reopening,long attention,long reservedReqNote,long openReqNote,long handoff,long external,
                 long caseOpenDoc,long caseReservedDoc,long reqOpenDoc,long reqReservedDoc,long designation,long substitution){}
  static Fixture fx;
+ /** Donde se arma un fixture: el nivel central (UPR-REQ) o una sede con materia sugerida (R02). */
+ record Site(String scope,String head,String prof,String admin,String dist,String caseMatter,String matter,String flowTarget){}
+ static final String COORD="coordinacion.regional",PROF_REG="profesional.regional",DIR_UPR="direccion.upr",DIR_UPD="direccion.upd",DIR_UEP="direccion.uep";
+ static final Site CENTRAL=new Site("UPR-REQ",HEAD,PROF,ADMIN,DIST,"UPR",null,"UPD");
+ static final Site REGIONAL=new Site("REG-DEMO",COORD,PROF_REG,PROF_REG,COORD,"UPD","UPD","UEP");
+ static Fixture rx;
 
  long scope(String code){return n(db.one("SELECT id FROM org_scope WHERE code=?",code),"id");}
  long user(String name){return n(db.one("SELECT id FROM staff WHERE username=?",name),"id");}
@@ -57,13 +66,20 @@ class InstitutionalReaderTest {
   return id;
  }
  long com(String subject){return com(ADMIN,subject);}
- long com(String who,String subject){
-  return run(who,"COM_CREATE","communication",null,Map.of("scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",ago(300),"subject",subject,"body","Relato sintetico"));
+ long com(String who,String subject){return com(CENTRAL,who,subject);}
+ long com(Site x,String who,String subject){
+  return run(who,"COM_CREATE","communication",null,Map.of("scope_id",scope(x.scope()),"channel","TELEFONO","received_at",ago(300),"subject",subject,"body","Relato sintetico"));
  }
- long route(long com){
-  run(DIST,"COM_ROUTE","communication",com,Map.of("scope_id",scope("UPR-REQ"),"reason","Clasificacion sintetica"));
+ long route(long com){return route(CENTRAL,com);}
+ /** SOL al ambito del fixture; en una sede, con su materia sugerida. */
+ long route(Site x,long com){
+  var data=new HashMap<String,Object>(Map.of("scope_id",scope(x.scope()),"reason","Clasificacion sintetica"));
+  if(x.matter()!=null)data.put("suggested_matter",x.matter());
+  run(x.dist(),"COM_ROUTE","communication",com,data);
   return n(db.one("SELECT id FROM solicitation WHERE communication_id=?",com),"id");
  }
+ /** En una sede, la Coordinacion registra la materia de un REQ nacido sin SOL o por asuncion propia (REQ_MATTER). */
+ void matter(Site x,long req){if(x.matter()!=null)run(x.head(),"REQ_MATTER","requirement",req,Map.of("matter",x.matter(),"reason","Materia de la sede"));}
  Map<String,Object> note(String body,boolean reserved){return Map.of("effective_at",ago(60),"body",body,"reserved",reserved,"no_followup",true);}
  long upload(String who,String kind,long target,boolean reserved,String name){
   try{
@@ -81,54 +97,67 @@ class InstitutionalReaderTest {
 
  synchronized Fixture fixture(){
   if(fx!=null)return fx;
-  long upr=scope("UPR-REQ");
   if(db.count("SELECT COUNT(*) FROM staff WHERE username=?",READER)==0){staff(READER,"CONSULTA_INSTITUCIONAL");staff(MIXED,"CONSULTA_INSTITUCIONAL","PROFESIONAL@UPR-REQ");}
-  long comNew=com("COM nueva sintetica");
-  long solPending=route(com("COM con SOL pendiente"));
-  long solReturned=route(com("COM con SOL devuelta"));
-  run(HEAD,"SOL_RETURN","solicitation",solReturned,Map.of("reason","Corresponde a otra unidad"));
+  fx=build(CENTRAL);
+  return fx;
+ }
+ /** Mismos expedientes en REG-DEMO con materia UPD: la Coordinacion regional los gestiona y la Direccion UPD los lee (R02). */
+ synchronized Fixture regional(){
+  fixture();
+  if(rx==null)rx=build(REGIONAL);
+  return rx;
+ }
+ Fixture build(Site x){
+  long site=scope(x.scope());String head=x.head(),prof=x.prof(),admin=x.admin(),dist=x.dist();
+  long comNew=com(x,admin,"COM nueva sintetica");
+  long solPending=route(x,com(x,admin,"COM con SOL pendiente"));
+  long solReturned=route(x,com(x,admin,"COM con SOL devuelta"));
+  run(head,"SOL_RETURN","solicitation",solReturned,Map.of("reason","Corresponde a otra unidad"));
   // REQ por SOL asumida, con Caso, constancias (una reservada), tarea, documentos y colaboracion pendiente.
-  long solAssumed=route(com("COM con REQ y Caso"));
-  long req=run(HEAD,"SOL_ASSUME","solicitation",solAssumed,Map.of("responsible_id",user(PROF),"reason","Asumida"));
-  long caseId=run(HEAD,"REQ_CASE_CREATE","requirement",req,Map.of("scope_id",upr,"responsible_id",user(PROF),"objective","Seguimiento sintetico","matter","UPR"));
-  run(PROF,"CASE_NOTE","case_record",caseId,note("Constancia reservada sintetica",true));
-  run(PROF,"CASE_NOTE","case_record",caseId,note("Constancia abierta sintetica",false));
+  long solAssumed=route(x,com(x,admin,"COM con REQ y Caso"));
+  long req=run(head,"SOL_ASSUME","solicitation",solAssumed,Map.of("responsible_id",user(prof),"reason","Asumida"));
+  long caseId=run(head,"REQ_CASE_CREATE","requirement",req,Map.of("scope_id",site,"responsible_id",user(prof),"objective","Seguimiento sintetico","matter",x.caseMatter()));
+  run(prof,"CASE_NOTE","case_record",caseId,note("Constancia reservada sintetica",true));
+  run(prof,"CASE_NOTE","case_record",caseId,note("Constancia abierta sintetica",false));
   long reservedNote=n(db.one("SELECT id FROM management_note WHERE case_id=? AND reserved=TRUE",caseId),"id");
   long openNote=n(db.one("SELECT id FROM management_note WHERE case_id=? AND reserved=FALSE",caseId),"id");
-  run(PROF,"TASK_CREATE","case_record",caseId,Map.of("executor_id",user(PROF),"title","Llamada sintetica"));
+  run(prof,"TASK_CREATE","case_record",caseId,Map.of("executor_id",user(prof),"title","Llamada sintetica"));
   long task=n(db.one("SELECT id FROM task_item WHERE case_id=?",caseId),"id");
-  long caseOpenDoc=upload(PROF,"CAS",caseId,false,"informe-caso.txt"),caseReservedDoc=upload(PROF,"CAS",caseId,true,"reservado-caso.txt");
-  run(HEAD,"FLOW_REQUEST","requirement",req,Map.of("kind","COLABORACION","target_scope",scope("UPD"),"reason","Colaboracion sintetica","objective","Apoyo sintetico"));
+  long caseOpenDoc=upload(prof,"CAS",caseId,false,"informe-caso.txt"),caseReservedDoc=upload(prof,"CAS",caseId,true,"reservado-caso.txt");
+  run(head,"FLOW_REQUEST","requirement",req,Map.of("kind","COLABORACION","target_scope",scope(x.flowTarget()),"reason","Colaboracion sintetica","objective","Apoyo sintetico"));
   long flowId=n(db.one("SELECT id FROM flow_request WHERE requirement_id=?",req),"id");
-  long linked=com("COM propuesta como antecedente");
-  run(DIST,"COM_LINK","communication",linked,Map.of("folio",s(db.one("SELECT folio FROM requirement WHERE id=?",req),"folio"),"reason","Antecedente sintetico"));
+  long linked=com(x,admin,"COM propuesta como antecedente");
+  run(dist,"COM_LINK","communication",linked,Map.of("folio",s(db.one("SELECT folio FROM requirement WHERE id=?",req),"folio"),"reason","Antecedente sintetico"));
   long link=n(db.one("SELECT id FROM communication_link WHERE communication_id=?",linked),"id");
   // REQ cerrado por su jefatura con un Caso cerrado y una peticion de nueva gestion pendiente.
-  long closedReq=run(HEAD,"COM_ASSUME","communication",com(HEAD,"COM de REQ cerrado"),Map.of("responsible_id",user(PROF),"reason","Ingreso propio"));
-  run(HEAD,"REQ_CLASSIFY","requirement",closedReq,Map.of("complexity","BAJA","reason","Clasificacion sintetica"));
-  long closedCase=run(HEAD,"REQ_CASE_CREATE","requirement",closedReq,Map.of("scope_id",upr,"responsible_id",user(PROF),"objective","Gestion breve","matter","UPR"));
-  run(PROF,"CASE_REQUEST_CLOSE","case_record",closedCase,Map.of("reason","Gestion concluida"));
-  run(HEAD,"CASE_CLOSE","case_record",closedCase,Map.of("reason","Cierre confirmado"));
-  run(HEAD,"REQ_CLOSE","requirement",closedReq,Map.of("reason","Motivo de cierre sintetico"));
-  run(PROF,"REOPEN_REQUEST","requirement",closedReq,Map.of("case_id",closedCase,"reason","Nuevos antecedentes"));
+  long closedReq=run(head,"COM_ASSUME","communication",com(x,head,"COM de REQ cerrado"),Map.of("responsible_id",user(prof),"reason","Ingreso propio"));
+  matter(x,closedReq);
+  run(head,"REQ_CLASSIFY","requirement",closedReq,Map.of("complexity","BAJA","reason","Clasificacion sintetica"));
+  long closedCase=run(head,"REQ_CASE_CREATE","requirement",closedReq,Map.of("scope_id",site,"responsible_id",user(prof),"objective","Gestion breve","matter",x.caseMatter()));
+  run(prof,"CASE_REQUEST_CLOSE","case_record",closedCase,Map.of("reason","Gestion concluida"));
+  run(head,"CASE_CLOSE","case_record",closedCase,Map.of("reason","Cierre confirmado"));
+  run(head,"REQ_CLOSE","requirement",closedReq,Map.of("reason","Motivo de cierre sintetico"));
+  run(prof,"REOPEN_REQUEST","requirement",closedReq,Map.of("case_id",closedCase,"reason","Nuevos antecedentes"));
   long reopening=n(db.one("SELECT id FROM reopening WHERE requirement_id=?",closedReq),"id");
   // Primera atencion NNA con dos versiones, constancias del REQ (una reservada), documentos del REQ y entrega pendiente.
-  long att=run(ADMIN,"ATTENTION_CREATE","requirement",null,Map.of("scope_id",upr,"channel","PRESENCIAL","received_at",ago(600),"form",form("EN_ATENCION")));
-  run(ADMIN,"ATTENTION_SAVE","requirement",att,Map.of("form",form("EN_ATENCION"),"reason","Complemento sintetico"));
-  run(ADMIN,"REQ_NOTE","requirement",att,note("Constancia de REQ reservada",true));
-  run(ADMIN,"REQ_NOTE","requirement",att,note("Constancia de REQ abierta",false));
+  long att=run(admin,"ATTENTION_CREATE","requirement",null,Map.of("scope_id",site,"channel","PRESENCIAL","received_at",ago(600),"form",form("EN_ATENCION")));
+  matter(x,att);
+  run(admin,"ATTENTION_SAVE","requirement",att,Map.of("form",form("EN_ATENCION"),"reason","Complemento sintetico"));
+  run(admin,"REQ_NOTE","requirement",att,note("Constancia de REQ reservada",true));
+  run(admin,"REQ_NOTE","requirement",att,note("Constancia de REQ abierta",false));
   long reservedReqNote=n(db.one("SELECT id FROM management_note WHERE requirement_id=? AND case_id IS NULL AND reserved=TRUE",att),"id");
   long openReqNote=n(db.one("SELECT id FROM management_note WHERE requirement_id=? AND case_id IS NULL AND reserved=FALSE",att),"id");
-  long reqOpenDoc=upload(HEAD,"REQ",att,false,"oficio-req.txt"),reqReservedDoc=upload(HEAD,"REQ",att,true,"reservado-req.txt");
-  run(ADMIN,"ATTENTION_SEND","requirement",att,Map.of("recipient_kind","JEFATURA","scope_id",upr,"reason","Requiere decision de jefatura"));
+  long reqOpenDoc=upload(head,"REQ",att,false,"oficio-req.txt"),reqReservedDoc=upload(head,"REQ",att,true,"reservado-req.txt");
+  run(admin,"ATTENTION_SEND","requirement",att,Map.of("recipient_kind","JEFATURA","scope_id",site,"reason","Requiere decision de jefatura"));
   long handoff=n(db.one("SELECT id FROM attention_handoff WHERE requirement_id=?",att),"id");
-  long external=flow.conserveExternal(ADMIN,upr,FormularioDocs.sign(FormularioDocs.cuVulneration())).id();
+  if(x!=CENTRAL)return new Fixture(comNew,solPending,solReturned,solAssumed,req,caseId,reservedNote,openNote,task,flowId,link,closedReq,reopening,att,reservedReqNote,openReqNote,handoff,fx.external(),
+   caseOpenDoc,caseReservedDoc,reqOpenDoc,reqReservedDoc,fx.designation(),fx.substitution());
+  long external=flow.conserveExternal(ADMIN,site,FormularioDocs.sign(FormularioDocs.cuVulneration())).id();
   // Subrogancia predesignada y programada (no vigente): objetivo de SUBSTITUTE_ACTIVATE y SUBSTITUTE_END.
-  long designation=run("ti","DESIGNATE",null,null,Map.of("scope_id",upr,"titular_id",user(HEAD),"substitute_id",user(PROF),"reason","Resolucion sintetica"));
+  long designation=run("ti","DESIGNATE",null,null,Map.of("scope_id",site,"titular_id",user(HEAD),"substitute_id",user(PROF),"reason","Resolucion sintetica"));
   long substitution=run("ti","SUBSTITUTE_ACTIVATE",null,designation,Map.of("from_at",Instant.now().plusSeconds(864000).toString(),"until_at",Instant.now().plusSeconds(950400).toString(),"reason","Feriado legal sintetico"));
-  fx=new Fixture(comNew,solPending,solReturned,solAssumed,req,caseId,reservedNote,openNote,task,flowId,link,closedReq,reopening,att,reservedReqNote,openReqNote,handoff,external,
+  return new Fixture(comNew,solPending,solReturned,solAssumed,req,caseId,reservedNote,openNote,task,flowId,link,closedReq,reopening,att,reservedReqNote,openReqNote,handoff,external,
    caseOpenDoc,caseReservedDoc,reqOpenDoc,reqReservedDoc,designation,substitution);
-  return fx;
  }
 
  Map<String,Object> detail(String who,String kind,long id){return queries.detail(access.actor(who),kind,id);}
@@ -239,10 +268,11 @@ class InstitutionalReaderTest {
   return out;
  }
 
- @Test void ningunComandoProsperaParaUnLectorPuro()throws Exception{
-  var f=fixture();long upr=scope("UPR-REQ"),prof=user(PROF);
+ record Attempt(String table,Long id,Map<String,Object> data){}
+ /** Un intento por comando de Workflow.run sobre los expedientes del fixture, con revision vigente y datos validos. */
+ Map<String,Attempt> attempts(Fixture f,Site x){
+  long upr=scope(x.scope()),prof=user(x.prof());
   Map<String,Object> anyReason=Map.of("reason","Intento de lector");
-  record Attempt(String table,Long id,Map<String,Object> data){}
   var attempts=new LinkedHashMap<String,Attempt>();
   attempts.put("ATTENTION_CREATE",new Attempt(null,null,Map.of("scope_id",upr,"channel","PRESENCIAL","received_at",ago(60),"form",form("EN_ATENCION"))));
   attempts.put("ATTENTION_SAVE",new Attempt("requirement",f.attention(),Map.of("form",form("EN_ATENCION"),"reason","Intento")));
@@ -262,6 +292,7 @@ class InstitutionalReaderTest {
   attempts.put("REQ_CLASSIFY",new Attempt("requirement",f.req(),Map.of("complexity","BAJA","reason","Intento")));
   attempts.put("REQ_CASE_CREATE",new Attempt("requirement",f.req(),Map.of("scope_id",upr,"responsible_id",prof,"objective","Intento","matter","UPR")));
   attempts.put("REQ_CLOSE",new Attempt("requirement",f.req(),anyReason));
+  attempts.put("REQ_MATTER",new Attempt("requirement",f.req(),Map.of("matter","UPR","reason","Intento")));
   attempts.put("REQ_NOTE",new Attempt("requirement",f.attention(),note("Intento",false)));
   attempts.put("FLOW_REQUEST",new Attempt("requirement",f.req(),Map.of("kind","COLABORACION","target_scope",scope("UEP"),"reason","Intento","objective","Intento")));
   attempts.put("FLOW_DECIDE",new Attempt("flow_request",f.flow(),Map.of("decision","ACEPTADA","responsible_id",prof,"reason","Intento")));
@@ -293,16 +324,20 @@ class InstitutionalReaderTest {
   attempts.put("INTEGRATION_RESUME",new Attempt(null,1L,anyReason));
   attempts.put("MAIL_RESOLVE",new Attempt(null,1L,Map.of("decision","DESCARTAR","reason","Intento")));
 
+  return attempts;
+ }
+ /** Cada intento termina en 403 y deja la base identica (filas, revisiones y auditoria). */
+ void sweep(String who,Map<String,Attempt> attempts)throws Exception{
   // NOTICE_READ marca como leido un aviso propio (no es gestion); sobre un aviso ajeno no cambia nada.
   var expected=new TreeSet<>(workflowCommands());expected.remove("NOTICE_READ");
   assertEquals(expected,new TreeSet<>(attempts.keySet()),"el barrido cubre todos los comandos de Workflow.run");
 
   var outcomes=new TreeMap<String,Object>();
-  db.update("UPDATE staff SET must_change=FALSE WHERE username=?",READER);
+  db.update("UPDATE staff SET must_change=FALSE WHERE username=?",who);
   var changes=new TreeMap<String,Object>();
   for(var e:attempts.entrySet()){
    var a=e.getValue();var before=snapshot();
-   try{flow.run(READER,new Workflow.Command(UUID.randomUUID(),e.getKey(),a.id(),rev(a.table(),a.id()),a.data()));outcomes.put(e.getKey(),"EXITO");}
+   try{flow.run(who,new Workflow.Command(UUID.randomUUID(),e.getKey(),a.id(),rev(a.table(),a.id()),a.data()));outcomes.put(e.getKey(),"EXITO");}
    catch(Problem p){if(p.status!=403)outcomes.put(e.getKey(),p.status+" "+p.getMessage());}
    var after=snapshot();
    if(!after.equals(before)){
@@ -311,8 +346,13 @@ class InstitutionalReaderTest {
     changes.put(e.getKey(),diff);
    }
   }
-  assertEquals(Map.of(),outcomes,"todo comando de un lector puro termina en 403");
-  assertEquals(Map.of(),changes,"ningun intento del lector deja rastro en la base (filas, revisiones ni auditoria)");
+  assertEquals(Map.of(),outcomes,who+": todo comando termina en 403");
+  assertEquals(Map.of(),changes,who+": ningun intento deja rastro en la base (filas, revisiones ni auditoria)");
+ }
+
+ @Test void ningunComandoProsperaParaUnLectorPuro()throws Exception{
+  var f=fixture();long prof=user(PROF);
+  sweep(READER,attempts(f,CENTRAL));
 
   db.update("UPDATE staff SET must_change=FALSE WHERE username=?",READER);
   long notice=db.insert("INSERT INTO inbox_notice(user_id,at_ms,text_value,resource_type,resource_id) VALUES(?,?,?,?,?)",prof,System.currentTimeMillis(),"Aviso sintetico","CAS",f.caseId());
@@ -439,11 +479,11 @@ class InstitutionalReaderTest {
  Set<Long> where(String sql,java.util.function.Predicate<Map<String,Object>> visible){
   var out=new HashSet<Long>();for(var r:db.rows(sql))if(visible.test(r))out.add(n(r,"id"));return out;
  }
- /** Lo que Access (o Queries, para SOL y flujos) deja leer, por bandeja. Las SOL asumidas o descartadas solo estan en la bandeja del lector. */
+ /** Lo que Access (o Queries, para SOL y flujos) deja leer, por bandeja. Las SOL asumidas o descartadas solo estan en la bandeja del lector y en la de la Direccion de su materia (R02). */
  Map<String,Set<Long>> expected(Access.Actor a){
   var out=new LinkedHashMap<String,Set<Long>>();
   out.put("com",where("SELECT * FROM communication",c->access.comRead(a,c)));
-  out.put("sol",where("SELECT * FROM solicitation",x->queries.solVisible(a,x)&&(a.institutionalReader()||Set.of("PENDIENTE","DEVUELTA").contains(s(x,"state")))));
+  out.put("sol",where("SELECT * FROM solicitation",x->queries.solVisible(a,x)&&(a.institutionalReader()||access.matterSol(a,x)||Set.of("PENDIENTE","DEVUELTA").contains(s(x,"state")))));
   out.put("req",where("SELECT * FROM requirement",r->access.reqRead(a,r)));
   out.put("cas",where("SELECT * FROM case_record",c->access.caseRead(a,c)));
   out.put("flujos",where("SELECT * FROM flow_request",f->queries.flowVisible(a,f)));
@@ -454,8 +494,8 @@ class InstitutionalReaderTest {
  }
 
  @Test void bandejasEquivalentesAAccess(){
-  fixture();headReader();
-  for(String who:List.of(READER,MIXED,HEAD_READER,HEAD,PROF,ADMIN,DIST,"gabinete","direccion.upd","ti")){
+  fixture();headReader();var x=regional();
+  for(String who:List.of(READER,MIXED,HEAD_READER,HEAD,PROF,ADMIN,DIST,"gabinete",DIR_UPR,DIR_UPD,DIR_UEP,COORD,PROF_REG,"ti")){
    var a=access.actor(who);
    expected(a).forEach((kind,ids)->assertEquals(ids,board(a,kind,"all"),who+" / "+kind));
   }
@@ -465,6 +505,20 @@ class InstitutionalReaderTest {
    assertEquals(db.count("SELECT COUNT(*) FROM "+e.getValue()),board(reader,e.getKey(),"all").size(),e.getKey());
   assertTrue(board(reader,"sol","all").size()>board(reader,"sol","pending").size()+board(reader,"sol","returned").size(),"incluye SOL asumidas");
   assertEquals(Set.of(),board(reader,"tareas","all"));
+  // R02: la Direccion UPD ve en sus bandejas la cadena regional de su materia; UPR y UEP no (UEP solo el flujo que recibe).
+  var upd=access.actor(DIR_UPD);long com=n(db.one("SELECT communication_id FROM requirement WHERE id=?",x.req()),"communication_id");
+  assertTrue(board(upd,"com","all").contains(com),"COM de la cadena");
+  assertTrue(board(upd,"sol","all").containsAll(List.of(x.solPending(),x.solReturned(),x.solAssumed())),"SOL de su materia en todo estado");
+  assertTrue(board(upd,"req","all").containsAll(List.of(x.req(),x.closedReq(),x.attention())));
+  assertTrue(board(upd,"cas","all").contains(x.caseId()));
+  assertTrue(board(upd,"flujos","all").contains(x.flow()));
+  assertTrue(board(upd,"atenciones","all").contains(x.attention()));
+  assertFalse(board(upd,"sol","pending").contains(x.solPending()),"SOL por asumir: solo las de su recepcion");
+  for(String other:List.of(DIR_UPR,DIR_UEP)){
+   var a=access.actor(other);
+   for(var e:Map.of("com",com,"sol",x.solAssumed(),"req",x.req(),"cas",x.caseId()).entrySet())assertFalse(board(a,e.getKey(),"all").contains(e.getValue()),other+" / "+e.getKey());
+  }
+  assertTrue(board(access.actor(DIR_UEP),"flujos","all").contains(x.flow()),"la Direccion UEP recibe la colaboracion");
  }
 
  @SuppressWarnings("unchecked") Map<String,Map<String,Object>> sections(Access.Actor a){
@@ -494,7 +548,8 @@ class InstitutionalReaderTest {
   long own=board(head,"sol","pending").size(),all=db.count("SELECT COUNT(*) FROM solicitation WHERE state='PENDIENTE'");
   assertTrue(own>=1&&own<all,"SOL por asumir: solo las de su recepcion ("+own+" de "+all+")");
   assertEquals(board(head.withoutInstitutionalReader(),"sol","pending"),board(head,"sol","pending"));
-  assertEquals(board(access.actor(DIST),"sol","returned"),where("SELECT * FROM solicitation WHERE state='DEVUELTA'",x->true));
+  // Distribucion central redistribuye las devueltas de ingresos centrales; las de una sede son de su Coordinacion (R02).
+  assertEquals(board(access.actor(DIST),"sol","returned"),where("SELECT s.* FROM solicitation s JOIN communication c ON c.id=s.communication_id JOIN org_scope o ON o.id=c.origin_scope WHERE s.state='DEVUELTA' AND o.regional=FALSE",x->true));
   assertEquals(Set.of(),board(access.actor(READER),"sol","returned"),"devolver a Distribucion no es del lector");
  }
 
@@ -509,5 +564,158 @@ class InstitutionalReaderTest {
   assertEquals(true,detail(HEAD_READER,"CAS",f.caseId()).get("institutional_read"));
   assertEquals(false,detail(HEAD,"CAS",f.caseId()).get("institutional_read"));
   assertEquals(false,detail(PROF,"REQ",f.req()).get("institutional_read"));
+ }
+
+ // --- R02: materia sugerida, materia del REQ y lectura nacional por materia (D9) ------------------------------------
+ Map<String,Object> data(Object...kv){var m=new HashMap<String,Object>();for(int i=0;i<kv.length;i+=2)m.put((String)kv[i],kv[i+1]);return m;}
+ boolean reads(String who,String kind,long id){
+  try{detail(who,kind,id);return true;}catch(Problem p){assertEquals(403,p.status,who+" "+kind+" "+id);return false;}
+ }
+
+ @Test void materiaSugeridaYMateriaDelReq(){
+  fixture();long sede=scope("REG-DEMO"),upr=scope("UPR-REQ");
+  long com=com("COM central para una sede");
+  var central=refuse(DIST,"COM_ROUTE","communication",com,data("scope_id",upr,"suggested_matter","UPD","reason","Clasificacion"));
+  assertEquals(409,central.status);assertEquals("La materia sugerida se indica solo cuando el destino es una sede regional.",central.getMessage());
+  assertEquals(400,refuse(DIST,"COM_ROUTE","communication",com,data("scope_id",sede,"suggested_matter","OTRA","reason","Clasificacion")).status);
+  run(DIST,"COM_ROUTE","communication",com,data("scope_id",sede,"suggested_matter","UPD","reason","Competencia regional"));
+  long sol=n(db.one("SELECT id FROM solicitation WHERE communication_id=?",com),"id");
+  assertEquals("UPD",detail(COORD,"SOL",sol).get("suggested_matter"));
+  assertTrue(s(db.one("SELECT note FROM audit_event WHERE action='SOL_DISTRIBUIDA' AND resource_id=?",sol),"note").startsWith("Materia sugerida UPD."));
+  assertTrue(reads(DIR_UPD,"SOL",sol));assertFalse(reads(DIR_UPR,"SOL",sol));
+
+  // Redirigir dentro de la sede solo para cambiar la materia es un cambio; repetirla no.
+  run(COORD,"SOL_ROUTE","solicitation",sol,data("scope_id",sede,"suggested_matter","UPR","reason","Materia corregida"));
+  assertEquals(409,refuse(COORD,"SOL_ROUTE","solicitation",sol,data("scope_id",sede,"suggested_matter","UPR","reason","Sin cambio")).status);
+  assertTrue(reads(DIR_UPR,"SOL",sol));assertFalse(reads(DIR_UPD,"SOL",sol));
+  // Al nivel central no lleva materia: indicarla se rechaza y omitirla la limpia.
+  assertEquals(409,refuse(COORD,"SOL_ROUTE","solicitation",sol,data("scope_id",scope("UPD"),"suggested_matter","UPD","reason","A central")).status);
+  run(COORD,"SOL_ROUTE","solicitation",sol,data("scope_id",scope("UPD"),"reason","Competencia central"));
+  assertNull(db.one("SELECT suggested_matter FROM solicitation WHERE id=?",sol).get("suggested_matter"));
+  assertFalse(reads(DIR_UPR,"SOL",sol));
+  run(DIR_UPD,"SOL_ROUTE","solicitation",sol,data("scope_id",sede,"suggested_matter","UEP","reason","Vuelve a la sede"));
+
+  // El REQ hereda la materia sugerida al asumir; la Coordinacion la rectifica con fundamento.
+  long req=run(COORD,"SOL_ASSUME","solicitation",sol,data("responsible_id",user(PROF_REG),"reason","Asumida"));
+  assertEquals("UEP",db.one("SELECT matter FROM requirement WHERE id=?",req).get("matter"));
+  assertTrue(reads(DIR_UEP,"REQ",req));assertFalse(reads(DIR_UPD,"REQ",req));
+  assertEquals(403,refuse(DIR_UEP,"REQ_MATTER","requirement",req,data("matter","UPD","reason","Intento")).status);
+  assertEquals("La materia del REQ no cambio.",refuse(COORD,"REQ_MATTER","requirement",req,data("matter","UEP","reason","Sin cambio")).getMessage());
+  assertEquals(400,refuse(COORD,"REQ_MATTER","requirement",req,data("matter","OTRA","reason","Fuera de catalogo")).status);
+  long revision=rev("requirement",req);
+  run(COORD,"REQ_MATTER","requirement",req,data("matter","UPD","reason","Materia rectificada por la Coordinacion"));
+  assertEquals(revision+1,rev("requirement",req));
+  assertEquals("UEP -> UPD. Materia rectificada por la Coordinacion",s(db.one("SELECT note FROM audit_event WHERE action='REQ_MATTER' AND resource_id=?",req),"note"));
+  assertTrue(reads(DIR_UPD,"REQ",req));assertFalse(reads(DIR_UEP,"REQ",req));
+  // Solo en sedes.
+  long centralReq=run(HEAD,"COM_ASSUME","communication",com(HEAD,"COM central sin materia"),data("responsible_id",user(PROF),"reason","Ingreso propio"));
+  assertEquals("La materia del REQ se registra solo en las sedes regionales.",refuse(HEAD,"REQ_MATTER","requirement",centralReq,data("matter","UPR","reason","Intento")).getMessage());
+ }
+
+ @Test void direccionLeeSuMateriaEnLaSedeSinGestionNiReservados()throws Exception{
+  var x=regional();long com=n(db.one("SELECT communication_id FROM requirement WHERE id=?",x.req()),"communication_id");
+  for(var e:List.of(Map.entry("COM",com),Map.entry("SOL",x.solPending()),Map.entry("SOL",x.solReturned()),Map.entry("SOL",x.solAssumed()),Map.entry("REQ",x.req()),
+    Map.entry("REQ",x.closedReq()),Map.entry("REQ",x.attention()),Map.entry("CAS",x.caseId()),Map.entry("FLUJO",x.flow()))){
+   var v=detail(DIR_UPD,e.getKey(),e.getValue());noFaculties("UPD "+e,v);
+   assertEquals(true,v.get("matter_read"),"aviso de lectura por materia: "+e);assertEquals(false,v.get("institutional_read"));
+  }
+  // Registro del REQ por su materia, sin reservados.
+  var att=detail(DIR_UPD,"REQ",x.attention());
+  @SuppressWarnings("unchecked") var view=(Map<String,Object>)att.get("attention");
+  assertEquals(true,view.get("can_read"));assertNotNull(view.get("form"),"ficha NNA de su materia");
+  assertEquals(List.of(x.openReqNote()),ids(att,"notes"));assertEquals(List.of(x.reqOpenDoc()),ids(att,"documents"));
+  var closed=detail(DIR_UPD,"REQ",x.closedReq());
+  assertEquals("Motivo de cierre sintetico",closed.get("close_reason"));assertEquals(List.of(x.reopening()),ids(closed,"reopenings"));
+  var req=detail(DIR_UPD,"REQ",x.req());assertEquals(List.of(x.link()),ids(req,"links"));assertEquals(List.of(x.flow()),ids(req,"flows"));
+  var cas=detail(DIR_UPD,"CAS",x.caseId());
+  assertEquals(List.of(x.openNote()),ids(cas,"notes"));assertEquals(List.of(x.caseOpenDoc()),ids(cas,"documents"));
+  db.update("UPDATE staff SET must_change=FALSE WHERE username=?",DIR_UPD);var upd=access.actor(DIR_UPD);
+  assertEquals("informe-caso.txt",documents.download(upd,x.caseOpenDoc()).name());
+  for(long reserved:List.of(x.caseReservedDoc(),x.reqReservedDoc()))assertEquals(403,assertThrows(Problem.class,()->documents.download(upd,reserved)).status);
+
+  // La Coordinacion regional conserva la gestion y no ve el aviso.
+  var coord=detail(COORD,"REQ",x.req());assertEquals(true,coord.get("can_head"));assertEquals(false,coord.get("matter_read"));
+  assertEquals(true,detail(COORD,"CAS",x.caseId()).get("can_head"));
+  assertEquals(true,detail(COORD,"SOL",x.solPending()).get("can_decide"));
+  // Otra materia no lee nada de la cadena (UEP solo el flujo que recibe, por su funcion); el COM nuevo sin SOL tampoco.
+  for(String other:List.of(DIR_UPR,DIR_UEP))for(var e:List.of(Map.entry("COM",com),Map.entry("SOL",x.solAssumed()),Map.entry("REQ",x.req()),Map.entry("CAS",x.caseId())))
+   assertFalse(reads(other,e.getKey(),e.getValue()),other+" "+e);
+  assertEquals(false,detail(DIR_UEP,"FLUJO",x.flow()).get("matter_read"));
+  assertFalse(reads(DIR_UPD,"COM",x.comNew()));
+  // Regional sin materia, y central con materia: fuera de la lectura nacional.
+  long plain=run(COORD,"COM_ASSUME","communication",com(REGIONAL,COORD,"COM regional sin materia"),data("responsible_id",user(PROF_REG),"reason","Ingreso propio"));
+  assertFalse(reads(DIR_UPD,"REQ",plain));
+  long centralReq=run(HEAD,"COM_ASSUME","communication",com(HEAD,"COM central con materia"),data("responsible_id",user(PROF),"reason","Ingreso propio"));
+  long centralCase=run(HEAD,"REQ_CASE_CREATE","requirement",centralReq,data("scope_id",scope("UPR-REQ"),"responsible_id",user(PROF),"objective","Caso central","matter","UPD"));
+  db.update("UPDATE requirement SET matter='UPD' WHERE id=?",centralReq);
+  assertFalse(reads(DIR_UPD,"REQ",centralReq));assertFalse(reads(DIR_UPD,"CAS",centralCase));
+
+  // Una sede cerrada sigue legible por materia (D8).
+  db.update("UPDATE org_scope SET enabled=FALSE,state='CERRADA' WHERE code='REG-DEMO'");
+  try{assertTrue(reads(DIR_UPD,"CAS",x.caseId()));assertTrue(board(access.actor(DIR_UPD),"cas","all").contains(x.caseId()));}
+  finally{db.update("UPDATE org_scope SET enabled=TRUE,state='ACTIVA' WHERE code='REG-DEMO'");}
+ }
+
+ @Test void casoDeSuMateriaNoAbreLaFichaNiLosOriginales()throws Exception{
+  regional();long sede=scope("REG-DEMO");
+  // REQ con materia UPR (primera atencion con un original de ingreso) y Caso con materia UPD.
+  long req=run(PROF_REG,"ATTENTION_CREATE","requirement",null,data("scope_id",sede,"channel","PRESENCIAL","received_at",ago(600),"form",form("EN_ATENCION")));
+  long com=n(db.one("SELECT communication_id FROM requirement WHERE id=?",req),"communication_id");
+  long original=upload(PROF_REG,"COM",com,false,"original-ingreso.txt");
+  run(COORD,"REQ_MATTER","requirement",req,data("matter","UPR","reason","Materia de la sede"));
+  long cas=run(COORD,"REQ_CASE_CREATE","requirement",req,data("scope_id",sede,"responsible_id",user(PROF_REG),"objective","Linea UPD","matter","UPD"));
+  run(PROF_REG,"CASE_NOTE","case_record",cas,note("Constancia abierta del Caso",false));
+  run(PROF_REG,"CASE_NOTE","case_record",cas,note("Constancia reservada del Caso",true));
+  long open=n(db.one("SELECT id FROM management_note WHERE case_id=? AND reserved=FALSE",cas),"id");
+  long caseDoc=upload(PROF_REG,"CAS",cas,false,"informe-linea.txt");
+
+  // UPD: el Caso, sus constancias y documentos no reservados y el resumen del REQ; nada de la COM ni de la ficha.
+  db.update("UPDATE staff SET must_change=FALSE WHERE username IN (?,?)",DIR_UPD,DIR_UPR);var upd=access.actor(DIR_UPD);
+  var c=detail(DIR_UPD,"CAS",cas);noFaculties("CAS UPD",c);
+  assertEquals(true,c.get("matter_read"));
+  assertEquals(List.of(open),ids(c,"notes"));assertEquals(List.of(caseDoc),ids(c,"documents"));
+  assertEquals(List.of(),c.get("citizen_documents"),"sin originales de ingreso");
+  assertFalse(access.caseSourceDocuments(upd,db.one("SELECT * FROM case_record WHERE id=?",cas)));
+  var r=detail(DIR_UPD,"REQ",req);noFaculties("REQ UPD",r);
+  @SuppressWarnings("unchecked") var view=(Map<String,Object>)r.get("attention");
+  assertEquals(false,view.get("can_read"));assertNull(view.get("form"),"sin ficha de primera atencion");
+  assertEquals(false,r.get("can_read_com"));assertEquals(List.of(),r.get("citizen_documents"));
+  assertEquals(List.of(),r.get("notes"));assertEquals(List.of(),r.get("documents"));assertEquals(List.of(),r.get("history"));
+  assertFalse(reads(DIR_UPD,"COM",com));
+  assertEquals(403,assertThrows(Problem.class,()->documents.download(upd,original)).status);
+  long version=n(db.one("SELECT MAX(id) AS id FROM attention_revision WHERE requirement_id=?",req),"id");
+  assertEquals(403,assertThrows(Problem.class,()->attention.version(upd,req,version)).status);
+  assertFalse(board(upd,"com","all").contains(com),"la COM no entra en su bandeja");
+
+  // UPR, por la materia del REQ: la cadena completa, pero no el Caso de otra materia.
+  var upr=access.actor(DIR_UPR);
+  @SuppressWarnings("unchecked") var full=(Map<String,Object>)detail(DIR_UPR,"REQ",req).get("attention");
+  assertEquals(true,full.get("can_read"));assertNotNull(full.get("form"));
+  assertTrue(reads(DIR_UPR,"COM",com));
+  assertEquals("original-ingreso.txt",documents.download(upr,original).name());
+  assertFalse(reads(DIR_UPR,"CAS",cas));
+ }
+
+ @Test void subroganciaDeLaDireccionTrasladaLaLecturaPorMateria()throws Exception{
+  var x=regional();String substitute="profesional.upd";
+  assertEquals(Set.of("UPD"),access.actor(DIR_UPD).matters());
+  assertEquals(Set.of(),access.actor(substitute).matters());
+  long designation=run("ti","DESIGNATE",null,null,data("scope_id",scope("UPD"),"titular_id",user(DIR_UPD),"substitute_id",user(substitute),"reason","Resolucion sintetica"));
+  long substitution=run("ti","SUBSTITUTE_ACTIVATE",null,designation,data("from_at",ago(5),"until_at",Instant.now().plusSeconds(3600).toString(),"reason","Feriado legal sintetico"));
+  try{
+   assertEquals(Set.of("UPD"),access.actor(substitute).matters());
+   assertEquals(Set.of(),access.actor(DIR_UPD).matters(),"la lectura sigue a la funcion subrogada");
+   assertTrue(reads(substitute,"CAS",x.caseId()));assertFalse(reads(DIR_UPD,"CAS",x.caseId()));
+   for(String who:List.of(substitute,DIR_UPD)){var a=access.actor(who);expected(a).forEach((kind,ids)->assertEquals(ids,board(a,kind,"all"),who+" / "+kind));}
+  }finally{
+   run("ti","SUBSTITUTE_END","substitution",substitution,data("reason","Termino sintetico"));
+  }
+  assertEquals(Set.of("UPD"),access.actor(DIR_UPD).matters());
+ }
+
+ @Test void ningunComandoProsperaPorLecturaDeMateria()throws Exception{
+  var x=regional();
+  assertTrue(reads(DIR_UPD,"CAS",x.caseId())&&reads(DIR_UPD,"REQ",x.attention()),"el barrido opera sobre lo que lee");
+  sweep(DIR_UPD,attempts(x,REGIONAL));
  }
 }

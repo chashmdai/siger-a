@@ -24,7 +24,7 @@ public class RequirementCommands {
 
     Result run(Actor a,String type,long id,Long expected,Input in){
         return switch(type){
-            case "REQ_CLASSIFY","REQ_CASE_CREATE","REQ_CLOSE","REQ_NOTE" -> req(a,type,id,expected,in);
+            case "REQ_CLASSIFY","REQ_CASE_CREATE","REQ_CLOSE","REQ_NOTE","REQ_MATTER" -> req(a,type,id,expected,in);
             case "FLOW_REQUEST" -> requestFlow(a,id,expected,in);
             case "FLOW_DECIDE" -> decideFlow(a,id,expected,in);
             case "REOPEN_REQUEST","REOPEN_AUTHORIZE","REOPEN_DECIDE" -> reopen(a,type,id,expected,in);
@@ -51,6 +51,16 @@ public class RequirementCommands {
             String reason=in.reason();
             db.update("UPDATE requirement SET complexity=?,revision=revision+1 WHERE id=?",level,id);
             life.changed(a,"REQ_COMPLEJIDAD","REQ",id,scope,s(r,"complexity")+" -> "+level+". "+reason);
+            return done("REQ",id);
+        }
+        if(type.equals("REQ_MATTER")){
+            // Materia del REQ regional (D9): la Coordinacion de la sede la registra o rectifica; abre la lectura nacional.
+            require(access.regional(scope),"La materia del REQ se registra solo en las sedes regionales.");
+            String matter=in.choice("matter",Lifecycle.REGIONAL_MATTERS);
+            require(!matter.equals(r.get("matter")),"La materia del REQ no cambio.");
+            String reason=in.reason();
+            db.update("UPDATE requirement SET matter=?,revision=revision+1 WHERE id=?",matter,id);
+            life.changed(a,"REQ_MATTER","REQ",id,scope,(r.get("matter")==null?"Sin materia":s(r,"matter"))+" -> "+matter+". "+reason);
             return done("REQ",id);
         }
         if(type.equals("REQ_CASE_CREATE")){

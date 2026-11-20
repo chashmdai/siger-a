@@ -177,6 +177,6 @@ class FormularioReception {
             if(!b(u,"technical")||b(u,"enabled")||db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=?",id)>0)
                 throw new IllegalStateException("La identidad tecnica del Formulario no es valida; no se registra la entrega.");
         }
-        return new Actor(id,TECHNICAL,TECHNICAL_NAME,scope,false,0,List.of(),Set.of());
+        return new Actor(id,TECHNICAL,TECHNICAL_NAME,scope,false,0,List.of(),Set.of(),Set.of());
     }
 }

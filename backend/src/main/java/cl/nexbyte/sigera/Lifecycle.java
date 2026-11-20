@@ -15,6 +15,8 @@ import static cl.nexbyte.sigera.Problem.require;
 public class Lifecycle {
     static final String[] CHANNELS={"PRESENCIAL","TELEFONO","CORREO","OFICIO","OTRO"};
     static final String[] MATTERS={"UPR","UPD","UEP","OTRA"};
+    /** Materia sugerida de una SOL a una sede y materia del REQ regional (D9): las de las Direcciones nacionales. */
+    static final String[] REGIONAL_MATTERS={"UPR","UPD","UEP"};
     static final String[] IMMEDIATE_RESULTS={"ORIENTACION","RESPUESTA_DIRECTA","REMISION_CONCLUIDA"};
     static final String OPEN_TASK="('PENDIENTE','EN_CURSO')";
 

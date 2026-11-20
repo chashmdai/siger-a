@@ -59,7 +59,7 @@ public class Workflow {
         Result result=switch(type){
             case "ATTENTION_CREATE","ATTENTION_SAVE","ATTENTION_SEND","ATTENTION_DECIDE","ATTENTION_RESOLVE" -> attention.run(a,type,id,expected,in);
             case "COM_CREATE","COM_IMMEDIATE","COM_ROUTE","COM_ASSUME","SOL_ROUTE","SOL_RETURN","SOL_ASSUME","SOL_DISCARD","COM_LINK","LINK_DECIDE","LINK_RETURN" -> intake.run(a,type,id,expected,in);
-            case "REQ_CLASSIFY","REQ_CASE_CREATE","REQ_CLOSE","REQ_NOTE","FLOW_REQUEST","FLOW_DECIDE","REOPEN_REQUEST","REOPEN_AUTHORIZE","REOPEN_DECIDE" -> requirements.run(a,type,id,expected,in);
+            case "REQ_CLASSIFY","REQ_CASE_CREATE","REQ_CLOSE","REQ_NOTE","REQ_MATTER","FLOW_REQUEST","FLOW_DECIDE","REOPEN_REQUEST","REOPEN_AUTHORIZE","REOPEN_DECIDE" -> requirements.run(a,type,id,expected,in);
             case "CASE_NOTE","CASE_ASSIGN","CASE_ACK","CASE_MEMBER_ADD","CASE_MEMBER_REMOVE","CASE_REQUEST_CLOSE","CASE_WITHDRAW_CLOSE","CASE_CLOSE","CASE_RETURN","CASE_WAIT","CASE_RESUME","CASE_MATTER",
                  "NOTE_RECTIFY","TASK_CREATE","TASK_EDIT","TASK_COMPLETE","TASK_CANCEL","TASK_ATTEMPT" -> cases.run(a,type,id,expected,in);
             case "NOTICE_READ" -> readNotice(a,id);

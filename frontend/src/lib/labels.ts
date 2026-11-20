@@ -17,6 +17,11 @@ export const DOCUMENT_LABELS: Record<string, string> = {OFICIO: 'Oficio', INFORM
 export const PERSON_ROLE_LABELS: Record<string, string> = {NNA: 'NNA', ACOMPANANTE: 'Acompañante', REQUIRENTE: 'Requirente', OTRA_PERSONA: 'Otra persona'};
 export const COMPLEXITY_LABELS: Record<string, string> = {BAJA: 'Baja', MEDIANA: 'Mediana', ALTA: 'Alta'};
 export const FLOW_LABELS: Record<string, string> = {DERIVACION: 'Derivación', COLABORACION: 'Colaboración', TRANSFERENCIA: 'Transferencia'};
+/** Materias (D9): las de las Direcciones nacionales; OTRA solo existe en los Casos. */
+export const MATTER_LABELS: Record<string, string> = {
+  UPR: 'UPR · Protección de Derechos y Representación Judicial', UPD: 'UPD · Promoción y Difusión de Derechos',
+  UEP: 'UEP · Estudios, Publicaciones y Estadísticas', OTRA: 'Otra',
+};
 
 export const STATE_LABELS: Record<string, string> = {
   NUEVA: 'Nueva', ENVIADA: 'Enviada', ASUMIDA: 'Asumida', DEVUELTA: 'Devuelta', DESCARTADA: 'Descartada', VINCULADA: 'Vinculada', ATENDIDA: 'Atendida',
@@ -39,7 +44,7 @@ export const ACTION_LABELS: Record<string, string> = {
   REOPEN_REQUEST: 'Nueva gestión solicitada', REOPEN_AUTHORIZE: 'Reactivación autorizada', REOPEN_DECIDE: 'Nueva gestión decidida',
   CASE_NOTE: 'Actuación registrada', CASE_ACK: 'Asignación acusada', CASE_MEMBER_ADD: 'Integrante incorporado', CASE_MEMBER_REMOVE: 'Integrante retirado',
   CASE_REQUEST_CLOSE: 'Término solicitado', CASE_WITHDRAW_CLOSE: 'Solicitud de término retirada', CASE_CLOSE: 'Caso cerrado', CASE_ASSIGN: 'Responsable reasignado',
-  CASE_MATTER: 'Materia rectificada', CASE_WAIT: 'Caso en espera', CASE_RESUME: 'Gestión reanudada', CASE_RETURN: 'Término devuelto con observaciones',
+  CASE_MATTER: 'Materia rectificada', REQ_MATTER: 'Materia del REQ registrada', CASE_WAIT: 'Caso en espera', CASE_RESUME: 'Gestión reanudada', CASE_RETURN: 'Término devuelto con observaciones',
   NOTE_RECTIFY: 'Actuación rectificada', TASK_CREATE: 'Tarea creada', TASK_COMPLETE: 'Tarea completada', TASK_ATTEMPT: 'Intento registrado', TASK_CANCEL: 'Tarea cancelada', TASK_EDIT: 'Tarea reprogramada',
   ATTENTION_CREATE: 'Primera atención registrada', ATTENTION_SAVE: 'Ficha complementada', ATTENTION_SEND: 'Atención entregada', ATTENTION_DECIDE: 'Entrega decidida', ATTENTION_RESOLVE: 'Atención resuelta',
 };

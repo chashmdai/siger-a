@@ -25,7 +25,8 @@ public class Attention {
     private Map<String,Object> req(long id){return db.one("SELECT * FROM requirement WHERE id=?",id);}
     private boolean receiving(Actor a,Map<String,Object> h){return access.handoffRecipient(a,h);}
     public boolean mayRead(Actor a,Map<String,Object> r){
-        if(a.institutionalReader()||access.reqMain(a,r))return true;
+        // Por materia (D9) solo la del REQ abre la ficha; la de un Caso no.
+        if(access.reqWideRead(a,r)||access.reqMain(a,r))return true;
         if(access.pendingAttentionRecipient(a,r))return true;
         return db.rows("SELECT * FROM case_record WHERE requirement_id=?",n(r,"id")).stream().anyMatch(c->access.caseSourceDocuments(a,c));
     }

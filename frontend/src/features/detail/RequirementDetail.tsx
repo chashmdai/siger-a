@@ -1,9 +1,10 @@
+import type {ReactNode} from 'react';
 import type {Row} from '../../lib/rows';
 import {bool, list, number, obj, text, when} from '../../lib/rows';
 import {headAt} from '../../lib/access';
-import {caseScopeOptions, casePersonOptions, nameOf, scopeOf} from '../../lib/catalog';
-import {choose, decision, matter, objective, reason} from '../../lib/fields';
-import {COMPLEXITY_LABELS, FLOW_LABELS, humanize, labeled} from '../../lib/labels';
+import {caseScopeOptions, casePersonOptions, nameOf, scopeOf, scopeRow} from '../../lib/catalog';
+import {choose, decision, matter, objective, reason, reqMatter} from '../../lib/fields';
+import {COMPLEXITY_LABELS, FLOW_LABELS, humanize, labeled, MATTER_LABELS} from '../../lib/labels';
 import type {Context} from '../../app/context';
 import type {Field} from '../../components/ActionDialog';
 import {Kind, Status} from '../../components/Status';
@@ -25,14 +26,17 @@ export function RequirementDetail({r, ctx}: {r: Row; ctx: Context}) {
   const head = bool(r, 'can_head'), closed = text(r, 'state') === 'CERRADO';
   const hasAttention = Object.keys(obj(r, 'attention')).length > 0;
   const caseScopes = (r.case_scopes as number[]) ?? [];
+  // REQ de una sede: la Coordinacion registra su materia (D9); el Caso nuevo parte con ella.
+  const regional = scopeRow(ctx.catalog, r.principal_scope)?.regional === true;
   const choice = (title: string, type: string, fields: Field[], note?: string) => choose(ctx, title, type, r, fields, note);
   const classify = () => choice('Clasificar o reclasificar REQ', 'REQ_CLASSIFY', [{key: 'complexity', label: 'Complejidad del Requerimiento', type: 'select', required: true, value: text(r, 'complexity'), options: labeled(['BAJA', 'MEDIANA', 'ALTA'], COMPLEXITY_LABELS)}, reason]);
   const openCase = () => choice('Abrir Caso para seguimiento', 'REQ_CASE_CREATE', [
     objective,
     {key: 'scope_id', label: 'Área en la que se gestionará el Caso', type: 'select', required: true, options: caseScopeOptions(ctx.catalog, caseScopes)},
     {key: 'responsible_id', label: 'Profesional del área elegida', type: 'select', required: true, dependsOn: 'scope_id', options: casePersonOptions(ctx.catalog, caseScopes)},
-    matter,
+    {...matter, value: text(r, 'matter')},
   ], 'Solo la jefatura crea y asigna. Puede seleccionarse a sí misma si tiene facultad en este ámbito.');
+  const setMatter = () => choice('Registrar o rectificar la materia del REQ', 'REQ_MATTER', [{...reqMatter, value: text(r, 'matter')}, reason], 'La Dirección nacional de esa materia podrá leer este REQ y su cadena, sin gestionarlos. La gestión sigue en la Coordinación regional.');
   const close = () => choice('Cerrar Requerimiento expresamente', 'REQ_CLOSE', [reason], 'Requiere cero Casos abiertos y resolver las peticiones de continuidad. No se cierra al cerrar el último Caso.');
   const decideLink = (l: Row) => choose(ctx, 'Evaluar pertinencia y destino del antecedente', 'LINK_DECIDE', l, [
     decision([['ADMITIDA', 'Admitir'], ['RECHAZADA', 'No admitir']]),
@@ -50,6 +54,7 @@ export function RequirementDetail({r, ctx}: {r: Row; ctx: Context}) {
           {!closed && head && <>
             <button className="primary" onClick={openCase}><Icon name="briefcase" size={18}/>Abrir Caso</button>
             <button onClick={classify}><Icon name="layers" size={18}/>Complejidad</button>
+            {regional && <button onClick={setMatter}><Icon name="edit" size={18}/>Materia</button>}
             <button onClick={() => requestFlow(ctx, 'REQ', r, 'COLABORACION')}><Icon name="people" size={18}/>Pedir colaboración</button>
             <button onClick={() => requestFlow(ctx, 'REQ', r, 'TRANSFERENCIA')}><Icon name="swap" size={18}/>Transferir principal</button>
             <button disabled={!bool(r, 'can_close')} title={bool(r, 'can_close') ? undefined : 'Revisa las condiciones de cierre'} onClick={close}><Icon name="lock" size={18}/>Cerrar REQ</button>
@@ -95,6 +100,7 @@ export function RequirementDetail({r, ctx}: {r: Row; ctx: Context}) {
             ['Jefatura principal', scopeOf(ctx.catalog, r.principal_scope)],
             ['Área sugerida', r.requested_area_scope ? scopeOf(ctx.catalog, r.requested_area_scope) : 'Sin área específica'],
             ['Complejidad', r.complexity ? <Status value={r.complexity}/> : <span className="muted">Sin clasificar (no equivale a baja)</span>],
+            ...(regional ? [['Materia', r.matter ? humanize(r.matter, MATTER_LABELS) : <span className="muted">Sin materia registrada</span>] as [string, ReactNode]] : []),
             ['Casos abiertos', `${text(r, 'open_cases') || 0} de ${text(r, 'total_cases') || 0}`],
             ['Atención sin Caso', r.attention_user ? nameOf(ctx.catalog, r.attention_user) : ''],
           ]}/>

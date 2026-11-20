@@ -2,7 +2,7 @@ import type {Row} from '../../lib/rows';
 import {bool, list, number, text, when} from '../../lib/rows';
 import {nameOf, scopeOf} from '../../lib/catalog';
 import {choose, fixedSelect, matter, person, reason} from '../../lib/fields';
-import {humanize, initials} from '../../lib/labels';
+import {humanize, initials, MATTER_LABELS} from '../../lib/labels';
 import type {Context} from '../../app/context';
 import type {Field} from '../../components/ActionDialog';
 import {Kind, Status} from '../../components/Status';
@@ -35,7 +35,7 @@ export function CaseDetail({r, ctx}: {r: Row; ctx: Context}) {
 
   return <DetailGrid
     main={<>
-      {!write && !bool(r, 'institutional_read') && <Callout tone="neutral">Consulta autorizada. Poder leer no concede facultad de gestionar, reasignar ni cerrar.</Callout>}
+      {!write && !bool(r, 'institutional_read') && !bool(r, 'matter_read') && <Callout tone="neutral">Consulta autorizada. Poder leer no concede facultad de gestionar, reasignar ni cerrar.</Callout>}
       {state === 'EN_REVISION' && <Callout tone="warn" role="status" title="En revisión de cierre">El responsable solicitó terminar este Caso; aún no está cerrado y la jefatura debe decidir. Mientras siga pendiente, el responsable puede retirar su solicitud y volver a gestión.</Callout>}
       {bool(r, 'own_substitution') && !closed && <Callout tone="warn">Ejerces subrogancia sobre tu propio Caso: puedes solicitar el término, pero no autoconfirmarlo. La revisión excepcional por un tercero aún no está disponible.</Callout>}
       <ActionBar label="Gestión">
@@ -82,7 +82,7 @@ export function CaseDetail({r, ctx}: {r: Row; ctx: Context}) {
           ['Ámbito', scopeOf(ctx.catalog, r.scope_id)],
           ['Responsable', nameOf(ctx.catalog, r.responsible_id)],
           ['Complejidad del REQ', r.req_complexity ? <Status value={r.req_complexity}/> : ''],
-          ['Materia', text(r, 'matter')],
+          ['Materia', humanize(r.matter, MATTER_LABELS)],
         ]}/>
       </Panel>
       {!closed && (head || owner) && <ClosureStatus row={r} action={owner && !mayConfirmClose && state !== 'EN_REVISION' ? 'request' : 'close'}/>}

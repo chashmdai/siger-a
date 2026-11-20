@@ -1,6 +1,7 @@
 import type {Row} from '../../lib/rows';
 import {bool, number, obj, text} from '../../lib/rows';
-import {scopeOf, solicitationPeople} from '../../lib/catalog';
+import {humanize, MATTER_LABELS} from '../../lib/labels';
+import {scopeOf, scopeRow, solicitationPeople} from '../../lib/catalog';
 import {choose, decision, reason, routingFields} from '../../lib/fields';
 import type {Context} from '../../app/context';
 import type {Field} from '../../components/ActionDialog';
@@ -11,6 +12,7 @@ import {ActionBar, DetailGrid} from './parts';
 /** Solicitud a una jefatura: asumir (nace el REQ), redirigir, devolver o descartar. */
 export function SolDetail({r, ctx}: {r: Row; ctx: Context}) {
   const com = obj(r, 'communication');
+  const regional = scopeRow(ctx.catalog, r.destination_scope)?.regional === true;
   const choice = (title: string, type: string, fields: Field[], note?: string) => () => choose(ctx, title, type, r, fields, note);
   return <DetailGrid
     main={<>
@@ -31,7 +33,7 @@ export function SolDetail({r, ctx}: {r: Row; ctx: Context}) {
     side={<Panel title="Destino" icon="send">
       <Facts stacked items={[
         ['Recibe', text(r, 'receiving_authority')],
-        ['Área sugerida', r.requested_area_scope ? scopeOf(ctx.catalog, r.requested_area_scope) : 'Sin área específica'],
+        regional ? ['Materia sugerida', r.suggested_matter ? humanize(r.suggested_matter, MATTER_LABELS) : 'Sin materia sugerida'] : ['Área sugerida', r.requested_area_scope ? scopeOf(ctx.catalog, r.requested_area_scope) : 'Sin área específica'],
         ['Clasificación', text(r, 'classification') ? <span className="preserve">{text(r, 'classification')}</span> : ''],
       ]}/>
     </Panel>}/>;

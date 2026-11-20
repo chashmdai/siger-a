@@ -23,6 +23,8 @@ export default function Detail({kind, row: r, ctx}: {kind: string; row: Row; ctx
     <DetailHeader kind={kind} r={r} ctx={ctx}/>
     {/* El servidor indica cuando la ficha se lee solo por la consulta institucional (sin ella, la cuenta no la veria). */}
     {bool(r, 'institutional_read') && <Callout tone="neutral" title="Consulta institucional">Lectura sin facultades de gestión. No se muestran las constancias ni los documentos reservados.</Callout>}
+    {/* Lectura nacional por materia (D9): la Direccion lee lo de su materia en una sede, sin gestionarlo. */}
+    {bool(r, 'matter_read') && <Callout tone="neutral" title="Lectura nacional por materia">Tu Dirección lee este registro de una sede por su materia, sin facultades de gestión. La gestión corresponde a la Coordinación regional. No se muestran las constancias ni los documentos reservados.</Callout>}
     {Body && <Body r={r} ctx={ctx}/>}
     {list(r, 'closures').length > 0 && <Panel title="Cierres anteriores" icon="history" description="Se conservan aunque el registro se haya reabierto.">
       <Table rows={list(r, 'closures')} columns={[

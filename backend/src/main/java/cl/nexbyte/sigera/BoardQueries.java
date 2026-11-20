@@ -22,21 +22,36 @@ public class BoardQueries {
             heads=grants(a,"JEFATURA","DIRECCION");professionals=grants(a,"JEFATURA","DIRECCION","PROFESIONAL");readers=grants(a,"LECTURA");registrars=grants(a,"JEFATURA","DIRECCION","PROFESIONAL","ADMINISTRATIVO");
             receivers=scopes.stream().filter(s->b(s,"regional")?a.head(n(s,"id")):s(s,"code").equals("UPR-REQ")?a.at("JEFATURA",n(s,"id")):a.at("DIRECCION",n(s,"id"))).map(s->n(s,"id")).toList();
             regionalHeads=scopes.stream().filter(s->b(s,"regional")&&a.head(n(s,"id"))).map(s->n(s,"id")).toList();
-            matters=scopes.stream().filter(s->a.at("DIRECCION",n(s,"id"))&&Set.of("UPR","UPD").contains(s(s,"unit_code"))).map(s->s(s,"unit_code")).distinct().toList();
+            matters=List.copyOf(a.matters());
+        }
+        /**
+         * Lectura nacional por materia (D9), como Access.matterSol/matterReq/matterCase: el registro tiene una materia de
+         * la Direccion y su ambito es una sede (tambien cerrada). Los codigos salen del catalogo fijo, nunca del navegador.
+         */
+        String byMatter(String column,String scopeColumn){
+            var codes=matters.stream().filter(Access.NATIONAL_MATTERS::contains).map(m->"'"+m+"'").toList();
+            if(codes.isEmpty())return "1=0";
+            return "("+column+" IN ("+String.join(",",codes)+") AND EXISTS(SELECT 1 FROM org_scope mo WHERE mo.id="+scopeColumn+" AND mo.regional=TRUE))";
         }
         String caseRead(String c){
             if(institutional)return "1=1";
-            String transverse=matters.isEmpty()?"1=0":"("+c+".matter IN ("+matters.stream().map(m->"'"+m+"'").collect(Collectors.joining(","))+") AND EXISTS(SELECT 1 FROM org_scope vs WHERE vs.id="+c+".scope_id AND vs.regional=TRUE AND vs.enabled=TRUE))";
-            return "("+at(c+".scope_id",heads)+" OR "+at(c+".scope_id",readers)+" OR ("+at(c+".scope_id",professionals)+" AND ("+c+".responsible_id="+a.id()+" OR EXISTS(SELECT 1 FROM case_member vm WHERE vm.case_id="+c+".id AND vm.user_id="+a.id()+"))) OR "+transverse+")";
+            return "("+at(c+".scope_id",heads)+" OR "+at(c+".scope_id",readers)+" OR ("+at(c+".scope_id",professionals)+" AND ("+c+".responsible_id="+a.id()+" OR EXISTS(SELECT 1 FROM case_member vm WHERE vm.case_id="+c+".id AND vm.user_id="+a.id()+"))) OR "+byMatter(c+".matter",c+".scope_id")+")";
+        }
+        String matterReq(String r){return byMatter(r+".matter",r+".principal_scope");}
+        String matterSol(String s){return byMatter(s+".suggested_matter",s+".destination_scope");}
+        /** COM de una cadena legible por materia: por su SOL o su REQ, nunca solo por un Caso (Access.matterCom). */
+        String matterCom(String c){
+            if(matters.isEmpty())return "1=0";
+            return "(EXISTS(SELECT 1 FROM solicitation ms WHERE ms.communication_id="+c+".id AND "+matterSol("ms")+") OR EXISTS(SELECT 1 FROM requirement mr WHERE mr.communication_id="+c+".id AND "+matterReq("mr")+"))";
         }
         String reqMain(String r){return "("+at(r+".principal_scope",heads)+" OR ("+r+".attention_user="+a.id()+" AND "+at(r+".attention_scope",registrars)+"))";}
         String attentionReceiver(String r){return "EXISTS(SELECT 1 FROM attention_handoff ha WHERE ha.requirement_id="+r+".id AND ha.state='PENDIENTE' AND ((ha.recipient_kind='JEFATURA' AND "+at("ha.target_scope",receivers)+") OR (ha.recipient_kind='PROFESIONAL' AND ha.target_user="+a.id()+" AND "+at("ha.target_scope",professionals)+")))";}
-        String reqRead(String r){if(institutional)return "1=1";return "("+attentionReceiver(r)+" OR ("+r+".created_by="+a.id()+" AND EXISTS(SELECT 1 FROM attention_record ar WHERE ar.requirement_id="+r+".id)) OR "+reqMain(r)+" OR "+at(r+".principal_scope",readers)+" OR EXISTS(SELECT 1 FROM case_record vc WHERE vc.requirement_id="+r+".id AND "+caseRead("vc")+"))";}
+        String reqRead(String r){if(institutional)return "1=1";return "("+matterReq(r)+" OR "+attentionReceiver(r)+" OR ("+r+".created_by="+a.id()+" AND EXISTS(SELECT 1 FROM attention_record ar WHERE ar.requirement_id="+r+".id)) OR "+reqMain(r)+" OR "+at(r+".principal_scope",readers)+" OR EXISTS(SELECT 1 FROM case_record vc WHERE vc.requirement_id="+r+".id AND "+caseRead("vc")+"))";}
         String distribution(String c){return "("+at(c+".origin_scope",regionalHeads)+(a.role("DISTRIBUIDOR")?" OR EXISTS(SELECT 1 FROM org_scope vo WHERE vo.id="+c+".origin_scope AND vo.regional=FALSE)":"")+")";}
-        String comRead(String c){if(institutional)return "1=1";return "("+c+".created_by="+a.id()+" OR "+distribution(c)+" OR EXISTS(SELECT 1 FROM solicitation vs WHERE vs.communication_id="+c+".id AND vs.state='PENDIENTE' AND "+at("vs.destination_scope",receivers)+") OR EXISTS(SELECT 1 FROM requirement vr WHERE vr.communication_id="+c+".id AND ("+reqMain("vr")+" OR "+attentionReceiver("vr")+")) OR EXISTS(SELECT 1 FROM communication_link vl JOIN requirement lr ON lr.id=vl.requirement_id WHERE vl.communication_id="+c+".id AND vl.returned_ms IS NULL AND ("+at("lr.principal_scope",heads)+" OR (vl.state='ADMITIDA' AND ((vl.target_case_id IS NULL AND "+reqMain("lr")+") OR EXISTS(SELECT 1 FROM case_record lc WHERE lc.id=vl.target_case_id AND "+caseRead("lc")+"))))))";}
-        /** SOL: la receptora ve las pendientes y Distribucion las devueltas; la consulta institucional, todas. */
-        String solRead(String s,String c){return institutional?"1=1":"(("+s+".state='PENDIENTE' AND "+at(s+".destination_scope",receivers)+") OR ("+s+".state='DEVUELTA' AND "+distribution(c)+"))";}
-        String flowRead(String f){return institutional?"1=1":"("+at(f+".origin_scope",heads)+" OR "+at(f+".target_scope",heads)+")";}
+        String comRead(String c){if(institutional)return "1=1";return "("+c+".created_by="+a.id()+" OR "+distribution(c)+" OR "+matterCom(c)+" OR EXISTS(SELECT 1 FROM solicitation vs WHERE vs.communication_id="+c+".id AND vs.state='PENDIENTE' AND "+at("vs.destination_scope",receivers)+") OR EXISTS(SELECT 1 FROM requirement vr WHERE vr.communication_id="+c+".id AND ("+reqMain("vr")+" OR "+attentionReceiver("vr")+")) OR EXISTS(SELECT 1 FROM communication_link vl JOIN requirement lr ON lr.id=vl.requirement_id WHERE vl.communication_id="+c+".id AND vl.returned_ms IS NULL AND ("+at("lr.principal_scope",heads)+" OR (vl.state='ADMITIDA' AND ((vl.target_case_id IS NULL AND "+reqMain("lr")+") OR EXISTS(SELECT 1 FROM case_record lc WHERE lc.id=vl.target_case_id AND "+caseRead("lc")+"))))))";}
+        /** SOL: la receptora ve las pendientes y Distribucion las devueltas; la consulta institucional, todas; la Direccion, las de su materia en sedes (todo estado). */
+        String solRead(String s,String c){return institutional?"1=1":"(("+s+".state='PENDIENTE' AND "+at(s+".destination_scope",receivers)+") OR ("+s+".state='DEVUELTA' AND "+distribution(c)+") OR "+matterSol(s)+")";}
+        String flowRead(String f){return institutional?"1=1":"("+at(f+".origin_scope",heads)+" OR "+at(f+".target_scope",heads)+" OR EXISTS(SELECT 1 FROM requirement fr WHERE fr.id="+f+".requirement_id AND "+matterReq("fr")+"))";}
     }
     static List<Long> grants(Actor a,String...roles){var wanted=Set.of(roles);return a.grants().stream().filter(g->g.scope()!=null&&wanted.contains(g.role())).map(Access.Grant::scope).distinct().toList();}
     private record Spec(String select,String from,String permission,String scope,String search,String order){}
