@@ -168,6 +168,27 @@ class ProfileSetTest {
         assertEquals(3,active(acct));
     }
 
+    /** Fecha como la serializa el navegador (Date.toISOString: siempre con milisegundos, en UTC). */
+    static String browser(long ms){return java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(java.time.ZoneOffset.UTC).format(Instant.ofEpochMilli(ms));}
+
+    @Test void perfilReenviadoPorLaInterfazSinCambios(){
+        // G04: la interfaz reenvia cada funcion con su termino exacto en milisegundos y el inicio solo si es programada.
+        long acct=account("perfil.interfaz","PROFESIONAL","UPR-REQ","LECTURA","UPD");
+        long now=System.currentTimeMillis(),until=now+172_800_123L,from=now+3_600_456L;
+        db.update("UPDATE role_assignment SET valid_until=? WHERE user_id=? AND role_code='LECTURA'",until,acct);
+        db.insert("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,valid_until,granted_by,basis) VALUES(?,?,?,?,?,?,?)",acct,"LECTURA",scope("UEP"),from,null,user("ti"),"Concesion sintetica programada");
+        var state=snapshot(acct);long before=version(acct);
+        var same=List.of(f("PROFESIONAL","UPR-REQ"),f("LECTURA","UPD","until_at",browser(until)),f("LECTURA","UEP","from_at",browser(from)));
+        var refused=refuseSet(acct,same);
+        assertEquals(409,refused.status);assertEquals(NO_CHANGES,refused.getMessage());
+        assertEquals(state,snapshot(acct));assertEquals(before,version(acct));
+        // El mismo termino redondeado a minutos (como un campo datetime-local) ya no coincide: revoca y vuelve a otorgar.
+        long minute=until/60_000L*60_000L;
+        set(acct,List.of(f("PROFESIONAL","UPR-REQ"),f("LECTURA","UPD","until_at",browser(minute)),f("LECTURA","UEP","from_at",browser(from))));
+        assertEquals(minute,n(db.one("SELECT valid_until FROM role_assignment WHERE user_id=? AND scope_id=? AND revoked_at IS NULL",acct,scope("UPD")),"valid_until"));
+        assertEquals(3,active(acct));
+    }
+
     @Test void cuentaDeshabilitadaSoloAdmiteRevocaciones(){
         long acct=account("perfil.baja","PROFESIONAL","UPR-REQ","ADMINISTRATIVO","UPR-REQ");
         run("ti","STAFF_UPDATE",acct,null,Map.of("name","Cuenta dada de baja","enabled",false,"reason","Termino de funciones sintetico"));

@@ -332,3 +332,36 @@ blockquote { margin: 0 0 1rem; padding: .75rem 1rem; font-size: 1rem; line-heigh
 .external-person:first-child { border-top: 0; padding-top: 0; }
 .external-person h3 { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 0 0 .75rem; }
 .external-person .table-block, .external-person .callout { margin-top: .75rem; }
+
+/* Perfil de la cuenta (Administracion): matriz de ambitos x funciones. En pantallas angostas la matriz se
+   desplaza horizontalmente dentro de su marco y la columna de ambitos queda fija. */
+dialog.modal.profile-modal { width: min(980px, calc(100vw - 2rem)); }
+.profile-subtitle { display: flex; align-items: center; gap: .4rem; margin: 1.1rem 0 .6rem; font-size: .95rem; }
+.profile-matrix-scroll { max-width: 100%; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overscroll-behavior-x: contain; }
+.profile-matrix-scroll:focus-visible { outline: none; box-shadow: var(--ring); }
+.profile-matrix { width: max-content; min-width: 100%; }
+.profile-matrix th, .profile-matrix td { padding: .55rem .7rem; }
+.profile-matrix td { text-align: center; vertical-align: middle; }
+.profile-matrix thead th:not(:first-child) { text-align: center; }
+.profile-matrix th:first-child { position: sticky; left: 0; z-index: 2; min-width: 11rem; max-width: 16rem; background: var(--surface-2); border-right: 1px solid var(--line); text-align: left; }
+.profile-matrix thead th:first-child { z-index: 3; }
+.profile-matrix tbody th { font-size: .88rem; font-weight: 400; text-transform: none; letter-spacing: normal; white-space: normal; color: var(--ink-800); }
+.profile-matrix tbody th small { display: block; font-size: .78rem; }
+.profile-matrix tbody tr:hover th { background: var(--primary-tint); }
+.profile-matrix input:disabled { cursor: not-allowed; opacity: .55; }
+.profile-institutional { display: flex; flex-wrap: wrap; gap: .5rem 2rem; }
+.profile-institutional label.check { margin: 0 0 .5rem; }
+.profile-institutional small { display: block; font-weight: 400; }
+.profile-periods { list-style: none; margin: 0 0 1rem; padding: 0; display: grid; gap: .5rem; }
+.profile-periods li { display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(0, 13rem) minmax(0, 13rem); gap: .4rem 1rem; align-items: end; padding: .6rem .8rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.profile-periods li.invalid { border-color: var(--danger-ink); }
+.profile-periods label { margin: 0; font-weight: 500; font-size: .82rem; }
+.profile-periods .cell-strong { align-self: center; }
+.profile-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 0 0 1rem; }
+.profile-summary section { padding: .2rem 1rem .6rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.profile-summary ul { margin: 0; padding-left: 1.1rem; }
+.profile-summary li { margin: 0 0 .3rem; }
+@media (max-width: 640px) {
+  .profile-periods li, .profile-summary { grid-template-columns: minmax(0, 1fr); }
+  .profile-matrix th:first-child { min-width: 8.5rem; }
+}

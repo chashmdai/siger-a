@@ -32,8 +32,8 @@ export function menuFor(user: User, unread: number): MenuGroup[] {
       [{path: 'flujos', label: 'Colaboraciones y traslados', icon: 'flow'}, management],
     ]],
     ['Administración', [
-      [{path: 'subrogancias', label: 'Subrogancias', icon: 'swap'}, has(user, 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'AUTORIDAD')],
-      [{path: 'administracion', label: 'Usuarios y permisos', icon: 'shield'}, has(user, 'TI', 'AUTORIDAD')],
+      [{path: 'subrogancias', label: 'Subrogancias', icon: 'swap'}, has(user, 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'TI')],
+      [{path: 'administracion', label: 'Usuarios y permisos', icon: 'shield'}, has(user, 'TI')],
       [{path: 'auditoria', label: 'Auditoría y operación', icon: 'activity'}, has(user, 'TI', 'AUDITORIA')],
     ]],
   ];

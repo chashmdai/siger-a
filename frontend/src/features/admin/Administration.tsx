@@ -1,24 +1,26 @@
 import {useEffect, useState} from 'react';
 import {request} from '../../lib/api';
 import type {Row} from '../../lib/rows';
-import {bool, list, localTime, number, obj, text, when} from '../../lib/rows';
+import {bool, list, number, obj, text, when} from '../../lib/rows';
 import {has} from '../../lib/access';
 import {nameOf, scopeOf} from '../../lib/catalog';
-import {choose, person, reason, scopeField} from '../../lib/fields';
+import {choose, reason, scopeField} from '../../lib/fields';
 import type {Context} from '../../app/context';
 import {Table} from '../../components/Table';
 import {Icon} from '../../components/Icon';
-import {ErrorMessage, PageHeader, Panel} from '../../components/Primitives';
+import {Callout, ErrorMessage, PageHeader, Panel} from '../../components/Primitives';
 import {humanize, ROLE_LABELS} from '../../lib/labels';
+import {ProfileDialog} from './ProfileDialog';
+import {grantOf, grantState} from './profile';
 
 const INTEGRATIONS: [string, string][] = [['FORMULARIO_PULL', 'Consumidor del Formulario Público'], ['CORREO_GRAPH', 'Correo institucional (Microsoft Graph)']];
+const WARNING_TITLES: Record<string, string> = {SIN_TI_PERMANENTE: 'Sin cuenta TI permanente', TI_INCOMPATIBLE: 'Cuentas con TI incompatible'};
 const MODE_LABELS: Record<string, string> = {DESACTIVADO: 'Desactivado', MANUAL: 'Ciclo manual', AUTOMATICO: 'Automático', GRAPH: 'Graph'};
-
-const GRANTABLE_ROLES = ['ADMINISTRATIVO', 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'AUTORIDAD', 'LECTURA', 'AUDITORIA', 'DISTRIBUIDOR'];
+const GRANT_STATES: Record<string, string> = {VIGENTE: 'Vigente', PROGRAMADA: 'Programada', VENCIDA: 'Vencida', REVOCADA: 'Revocada'};
 
 /**
- * TI administra cuentas y ambitos; la autoridad concede funciones dentro de su alcance.
- * En modo auditoria muestra cuarentena (TI) y eventos autorizados.
+ * TI administra cuentas, ambitos y funciones (D1): el perfil de cada cuenta fija todas sus funciones en un acto
+ * (PROFILE_SET). En modo auditoria muestra cuarentena (TI) y eventos autorizados.
  */
 export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnly: boolean}) {
   const [data, setData] = useState<Row>({}), [error, setError] = useState('');
@@ -27,7 +29,10 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
     void request('/administration').then(r => {if (live) setData(r);}).catch(e => {if (live) setError(e.message);});
     return () => {live = false;};
   }, []);
-  const ti = has(ctx.user, 'TI'), authority = has(ctx.user, 'AUTORIDAD');
+  const ti = has(ctx.user, 'TI');
+  const [profile, setProfile] = useState<Row | null>(null);
+  const [now] = useState(() => Date.now());
+  const openProfile = (id: unknown) => {const account = list(data, 'users').find(u => number(u, 'id') === Number(id)); if (account) setProfile(account);};
 
   const createUser = () => ctx.act({title: 'Crear cuenta individual', type: 'STAFF_CREATE', id: null, revision: null, fields: [
     {key: 'username', label: 'Usuario (minúsculas, puntos o guiones)', required: true, max: 64},
@@ -46,20 +51,13 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
     {key: 'regional', label: 'Es sede regional', type: 'checkbox'},
     reason,
   ]});
-  const grantRole = () => ctx.act({title: 'Conceder función con respaldo', type: 'GRANT_CREATE', id: null, revision: null, fields: [
-    person(ctx.catalog, 'user_id', 'Funcionario'),
-    scopeField(ctx.catalog),
-    {key: 'role', label: 'Función', type: 'select', required: true, options: GRANTABLE_ROLES.map(v => ({value: v, label: ROLE_LABELS[v] ?? v}))},
-    {key: 'from_at', label: 'Inicio', type: 'datetime-local', required: true, value: localTime()},
-    {key: 'until_at', label: 'Término (opcional)', type: 'datetime-local'},
-    reason,
-  ]});
   const accountActions = (r: Row) => <div className="actions compact">
+    {number(r, 'id') !== ctx.user.id && <button className="sm" onClick={() => setProfile(r)}><Icon name="shield" size={16}/>Perfil</button>}
     <button className="sm" onClick={() => choose(ctx, 'Actualizar cuenta', 'STAFF_UPDATE', r, [{key: 'name', label: 'Nombre', required: true, value: text(r, 'name'), max: 160}, {key: 'email', label: 'Correo', value: text(r, 'email'), max: 200}, {key: 'enabled', label: 'Habilitada', type: 'checkbox', value: bool(r, 'enabled')}, reason])}>Editar o desactivar</button>
     <button className="sm" onClick={() => choose(ctx, 'Restablecer clave temporal', 'STAFF_RESET', r, [{key: 'password', label: 'Nueva clave individual temporal', type: 'password', required: true, max: 72}, reason], 'Invalida sesiones y exige cambio al ingresar.')}>Restablecer</button>
   </div>;
-  // Las funciones centrales (sin ambito) se revocan indicando el ambito de la autoridad.
-  const revoke = (g: Row) => choose(ctx, 'Revocar función', 'GRANT_REVOKE', g, [...(g.scope_id ? [] : [scopeField(ctx.catalog, 'scope_id', 'Ámbito central de tu autoridad')]), reason]);
+  // Revocacion individual (por ejemplo, uno de dos periodos de la misma funcion); el perfil cubre el resto.
+  const revoke = (g: Row) => choose(ctx, 'Revocar función', 'GRANT_REVOKE', g, [reason], 'Las sesiones abiertas de la cuenta se cierran. La historia de la función se conserva.');
   // Liberacion: un original real sale de cuarentena solo tras un analisis antivirus limpio y reciente del servidor.
   // La revision manual sin motor existe unicamente en instancias de pruebas (politica del servidor).
   const policy = obj(data, 'document_policy');
@@ -92,13 +90,23 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
 
   return <>
     <PageHeader eyebrow={<><Icon name={auditOnly ? 'activity' : 'shield'} size={14}/>Administración</>} title={auditOnly ? 'Auditoría y operación' : 'Personas y funciones'}
-      lead={auditOnly ? 'Trazabilidad y cuarentena dentro de tus facultades. Consultar no concede acceso a los expedientes.' : 'TI crea cuentas. La autoridad habilitada concede funciones dentro de su alcance; nadie puede otorgarse privilegios a sí mismo.'}
-      aside={!auditOnly && <>
-        {ti && <><button onClick={createUser}><Icon name='plus' size={18}/>Crear usuario</button><button onClick={createScope}><Icon name='layers' size={18}/>Nuevo ámbito</button></>}
-        {authority && <button className='primary' onClick={grantRole}><Icon name='shield' size={18}/>Conceder función</button>}
+      lead={auditOnly ? 'Trazabilidad y cuarentena dentro de tus facultades. Consultar no concede acceso a los expedientes.' : 'TI crea cuentas y fija sus funciones con el perfil de cada cuenta, con el acto institucional como fundamento. Nadie puede otorgarse funciones a sí mismo y TI no tiene acceso a los expedientes.'}
+      aside={!auditOnly && ti && <>
+        <button className='primary' onClick={createUser}><Icon name='plus' size={18}/>Crear usuario</button>
+        <button onClick={createScope}><Icon name='layers' size={18}/>Nuevo ámbito</button>
       </>}/>
     {error && <ErrorMessage>{error}</ErrorMessage>}
+    {list(data, 'warnings').map(w => <Callout key={text(w, 'code')} tone='warn' role='status' title={WARNING_TITLES[text(w, 'code')] ?? 'Aviso de administración'}>{text(w, 'message')}</Callout>)}
+    {profile && <ProfileDialog ctx={ctx} account={profile} grants={list(data, 'grants')} close={() => setProfile(null)}/>}
     {!auditOnly && <>
+      {list(data, 'incompatibilities').length > 0 && <Panel title='Incompatibilidades por resolver' icon='alert' count={list(data, 'incompatibilities').length} description='Cuentas que combinan TI con otras funciones (heredadas de versiones anteriores). TI no puede tener otras funciones: deja en el perfil solo TI o solo las demás.'>
+        <Table rows={list(data, 'incompatibilities')} columns={[
+          {name: 'Usuario', render: r => <code>{text(r, 'username')}</code>},
+          {name: 'Nombre', render: r => <span className='cell-strong'>{text(r, 'name')}</span>},
+          {name: 'Funciones', render: r => ((r.roles ?? []) as string[]).map(code => humanize(code, ROLE_LABELS)).join(', ')},
+          {name: 'Acción', render: r => number(r, 'id') === ctx.user.id ? <span className='muted'>Otra cuenta TI debe resolverla</span> : <button className='sm' onClick={() => openProfile(r.id)}>Abrir perfil</button>},
+        ]}/>
+      </Panel>}
       <Panel title='Cuentas' icon='people' count={list(data, 'users').length}>
         <Table rows={list(data, 'users')} columns={[
           {name: 'Usuario', render: r => <code>{text(r, 'username')}</code>},
@@ -108,13 +116,15 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
           {name: 'Acciones TI', render: r => ti ? accountActions(r) : <span className='muted'>Consulta</span>},
         ]}/>
       </Panel>
-      {authority && <Panel title='Funciones otorgadas' icon='shield' count={list(data, 'grants').length}>
+      {ti && <Panel title='Funciones otorgadas' icon='shield' count={list(data, 'grants').length} description='Vigentes, programadas e historia. Para cambiar las funciones de una cuenta usa su perfil; Revocar retira una sola concesión.'>
         <Table rows={list(data, 'grants')} columns={[
           {name: 'Persona', render: g => nameOf(ctx.catalog, g.user_id)},
           {name: 'Función', render: g => <span className='chip'>{humanize(g.role_code, ROLE_LABELS)}</span>},
-          {name: 'Ámbito', render: g => scopeOf(ctx.catalog, g.scope_id)},
-          {name: 'Hasta', render: g => when(g.valid_until)},
-          {name: 'Revocación', render: g => g.revoked_at ? when(g.revoked_at) : <button className='sm' onClick={() => revoke(g)}>Revocar</button>},
+          {name: 'Ámbito', render: g => g.scope_id == null ? <span className='muted'>Institucional</span> : scopeOf(ctx.catalog, g.scope_id)},
+          {name: 'Desde', render: g => <span className='nowrap'>{when(g.valid_from)}</span>},
+          {name: 'Hasta', render: g => <span className='nowrap'>{g.valid_until == null ? 'Sin término' : when(g.valid_until)}</span>},
+          {name: 'Estado', render: g => {const state = grantState(grantOf(g), now); return <span className={'chip' + (state === 'VIGENTE' ? ' chip-ok' : '')}>{GRANT_STATES[state]}{state === 'REVOCADA' ? ' ' + when(g.revoked_at) : ''}</span>;}},
+          {name: 'Acción', render: g => ['VIGENTE', 'PROGRAMADA'].includes(grantState(grantOf(g), now)) && number(g, 'user_id') !== ctx.user.id ? <button className='sm' onClick={() => revoke(g)}>Revocar</button> : <span className='muted'>—</span>},
         ]}/>
       </Panel>}
     </>}

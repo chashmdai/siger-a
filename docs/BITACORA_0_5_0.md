@@ -11,7 +11,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G01 | Catalogo de roles y TI administrador | CERRADO |
 | G02 | Comando PROFILE_SET | CERRADO |
 | G03 | Supresion de AUTORIDAD e inicializacion | CERRADO |
-| G04 | Perfil de cuenta en la interfaz | ABIERTO |
+| G04 | Perfil de cuenta en la interfaz | CERRADO |
 | G05 | Consulta institucional: lectura | ABIERTO |
 | G06 | Consulta institucional: bandejas e interfaz | ABIERTO |
 | G07 | Indice de personas (V11) | ABIERTO |
@@ -96,3 +96,17 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - `MySql84IntegrationTest` se ajusto (1 cuenta, 0 AUTORIDAD, marcador) sin ejecutarse aqui.
 - Pendientes: `Recover-Ti.ps1` y `TiRecovery.ready()` (modo proceso) sin ejecutar en Windows ni MySQL -> G14 (o G13); recorrido de recuperacion en `PRUEBAS_MANUALES_0_5_0.md` -> G14; interfaz de avisos e incompatibilidades -> G04
 - Verificacion manual sugerida al usuario: no aplica en interfaz. Opcional: arrancar una copia de un `var/` 0.4.0 con el perfil local y comprobar en `audit_event` los `FUNCION_REVOCADA` de `sistema:actualizacion`.
+
+### G04 - Perfil de cuenta en la interfaz   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate G04: perfil de cuenta en la interfaz`)
+- Hecho: modal "Perfil de la cuenta" (`ProfileDialog.tsx`, boton Perfil por cuenta salvo la propia). Matriz de ambitos habilitados (mas los deshabilitados con funciones) x funciones por ambito de `catalog.roles`, con desplazamiento horizontal y la columna de ambitos fija; casillas institucionales; vigencia opcional; paso 2 con "Se otorgan / Se revocan" y fundamento; clave idempotente con reintento ante resultado incierto. TI limpia y bloquea las demas casillas. Si la cuenta esta deshabilitada, solo admite desmarcar; dos periodos de la misma funcion y ambito bloquean con la indicacion de revocar uno desde "Funciones otorgadas"; un perfil sin cambios no se puede confirmar. Logica pura en `profile.ts` (misma comparacion que el servidor; reenvia `until_at` exacto en ms y `from_at` solo si es programada o se cambio).
+- Administracion: sin "Conceder funcion" individual (decision del responsable; `GRANT_CREATE` sigue en el servidor); "Funciones otorgadas" para TI con Desde/Hasta/Estado y Revocar sin campo de ambito; `warnings` como aviso (TI y AUDITORIA); panel "Incompatibilidades por resolver" con Abrir perfil. Subrogancias, menu, `access.ts` (sin `authorityAt`), `labels.ts` ("Autoridad (suprimido)") y dashboard (sin seccion `authority`; textos de `technical` y "Contacta a TI") pasan a TI.
+- Archivos clave: `frontend/src/features/admin/{ProfileDialog.tsx,profile.ts,Administration.tsx,Substitutions.tsx}`, `app/menu.ts`, `lib/{access,labels}.ts`, `features/dashboard/{Dashboard.tsx,texts.ts}`, `styles/screens.css`, `frontend/tests/profile.test.ts`, `ProfileSetTest.java`, `CLAUDE.md`
+- Verificacion: JUnit 90 ok + 1 omitida (antes 89 + 1; +1 `ProfileSetTest.perfilReenviadoPorLaInterfazSinCambios`: fechas serializadas como `toISOString` dan "El perfil no tiene cambios."; redondeadas a minutos revocan y otorgan); frontend 18 ok (antes 10; +8 `profile.test.ts`); typecheck ok; build ok; humo por API 12/12 con el JAR y `./target/humo-gate`: catalogo sin AUTORIDAD, alta + Distribucion + Administrativo y Profesional (UPR-REQ) en un `PROFILE_SET`, reintento con la misma clave, perfil reenviado sin cambios -> 409, sesion de la cuenta con las 3 funciones, TI predesigna/activa/termina una subrogancia; el bundle servido contiene la interfaz nueva. Sin navegador en este equipo: el recorrido visual queda como verificacion manual.
+- Desvios del plan: no hay boton de concesion individual (decision del responsable). El menu se verifico por la sesion y por `menuFor`, no con una prueba: `menu.ts` importa sin extension y `node --test` no lo carga.
+- Hallazgos para gates siguientes:
+  - G05/G06/G11: la matriz toma los roles de `catalog.roles`: `reach` AMBITO = columna con ambito obligatorio; cualquier otro = casilla institucional sin ambito. Los roles de ambito opcional de G11 (REPORTES, REPORTES_PERSONAS, EXPORTACION) necesitan un `reach` nuevo y soporte en `ProfileDialog`/`profile.ts`. G06 agrega `CONSULTA_INSTITUCIONAL` a `read` en `menu.ts`.
+  - Tras `PROFILE_SET` el epoch cierra las sesiones abiertas de la cuenta (lo avisa el dialogo).
+  - `Dashboard.tsx` sigue mostrando "Version 0.4.0" fija -> G14.
+- Pendientes: recorrido visual del perfil en `PRUEBAS_MANUALES_0_5_0.md` -> G14; `PROFILE_SET` en `MySql84IntegrationTest` -> G13
+- Verificacion manual sugerida al usuario: lista paso a paso entregada al cierre de la sesion (crear cuenta con Distribucion + Administrativo + Profesional en UPR-REQ; guardar sin cambios; marcar TI y ver que se limpian las demas; entrar con la cuenta nueva y revisar el menu; predesignar y activar una subrogancia como TI; pantalla angosta).

@@ -8,6 +8,5 @@ export const REGISTRAR_ROLES = ['ADMINISTRATIVO', 'PROFESIONAL', 'JEFATURA', 'DI
 
 export const has = (u: User, ...roles: string[]) => u.grants.some(g => roles.includes(g.role));
 export const headAt = (u: User, id: number) => u.grants.some(g => g.scope === id && ['JEFATURA', 'DIRECCION'].includes(g.role));
-export const authorityAt = (u: User, id: number) => u.grants.some(g => g.scope === id && g.role === 'AUTORIDAD');
 /** Ambito en el que la cuenta puede registrar ingresos o primeras atenciones. */
 export const registersAt = (u: User, id: number) => u.grants.some(g => g.scope === id && REGISTRAR_ROLES.includes(g.role));

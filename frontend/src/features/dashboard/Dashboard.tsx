@@ -13,7 +13,7 @@ import {Callout, EmptyState, ErrorMessage, PageHeader, Panel} from '../../compon
 import {ACTIONABLE, greeting, say, today} from './texts';
 
 /** Colas resumidas que se muestran en cada espacio de trabajo. */
-const QUEUES_BY_SECTION: Record<string, string[]> = {distribution: ['com'], management: ['sol', 'cas', 'atenciones'], personal: ['tareas', 'atenciones'], overview: [], intake: ['atenciones'], technical: [], authority: [], audit: []};
+const QUEUES_BY_SECTION: Record<string, string[]> = {distribution: ['com'], management: ['sol', 'cas', 'atenciones'], personal: ['tareas', 'atenciones'], overview: [], intake: ['atenciones'], technical: [], audit: []};
 
 const goto = (r: Row) => {location.hash = boardRoute(text(r, 'route'), text(r, 'filter'));};
 
@@ -76,7 +76,6 @@ export default function Dashboard({ctx, version}: {ctx: Context; version: number
         <p>Utiliza el diagnóstico y los respaldos de la instancia antes de una actualización.</p>
         <a className="button sm" href="#auditoria">Ver operación autorizada<Icon name="arrowRight" size={16}/></a>
       </Panel>}
-      {role === 'authority' && <Callout>La subrogancia sustituye la función vigente, incluidas sus áreas habilitadas. No copia Casos ni tareas y no permite el autocierre del Caso propio del subrogante.</Callout>}
       {queues.length > 0 && <div className="queues">{queues.map(q => <Queue key={text(q, 'title')} queue={q} ctx={ctx}/>)}</div>}
     </div>}
     <p className="dashboard-footnote"><Icon name="info" size={16}/>Los recordatorios vencidos son tu agenda personal, no un incumplimiento normativo. Un aviso no equivale a acuse ni a actuación.</p>

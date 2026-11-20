@@ -28,12 +28,13 @@ const TEXT: Record<string, string> = {
   'Una atencion, varios Casos posibles': 'Una atención, varios Casos posibles',
   'Lineas de gestion': 'Líneas de gestión',
   'Periodo vigente': 'Período vigente',
-  'Administracion tecnica': 'Administración técnica',
-  'Usuarios y operacion. Este perfil no concede lectura de expedientes.': 'Usuarios y operación. Este perfil no concede lectura de expedientes.',
   'Solo metadatos tecnicos': 'Solo metadatos técnicos',
   'Auditoria autorizada': 'Auditoría autorizada',
   'Consulta de trazabilidad limitada a los ambitos concedidos.': 'Consulta de trazabilidad limitada a los ámbitos concedidos.',
-  'No hay una funcion operativa asignada. Contacta a la autoridad habilitada.': 'No tienes una función operativa asignada. Contacta a la autoridad habilitada.',
+  'No hay una funcion operativa asignada. Contacta a TI.': 'No tienes una función operativa asignada. Contacta a TI.',
+  'Administracion': 'Administración',
+  'Cuentas, funciones, subrogancias y operacion. Este perfil no concede lectura de expedientes.': 'Cuentas, funciones, subrogancias y operación. Este perfil no concede lectura de expedientes.',
+  'Periodo vigente; la cartera no se transfiere': 'Período vigente; la cartera no se transfiere',
   'Informacion personal': 'Información personal',
 };
 
