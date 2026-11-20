@@ -21,6 +21,8 @@ import static cl.nexbyte.sigera.Db.*;
  * Consulta institucional (0.5.0, D4, gate G05): lectura de todas las fichas COM, SOL, REQ, CAS, FLUJO y de primera
  * atencion (NNA y versiones), proyeccion del Formulario y documentos no reservados. Lo reservado queda fuera y ningun
  * comando de Workflow.run prospera para un lector puro. Combinada con Profesional conserva exactamente sus facultades.
+ * G06: las bandejas (BoardQueries.Visibility) coinciden con Access en todas ellas, Inicio tiene su seccion institucional
+ * y la ficha avisa cuando se lee solo por la consulta.
  */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,properties={
  "spring.datasource.url=jdbc:h2:mem:sigerainstitutionalreader;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
@@ -29,7 +31,7 @@ import static cl.nexbyte.sigera.Db.*;
 class InstitutionalReaderTest {
  @DynamicPropertySource static void trustedKeys(DynamicPropertyRegistry registry){FormularioDocs.trustedKeys(registry);}
  static final String HEAD="coordinacion.requerimientos",PROF="profesional",ADMIN="administrativo",DIST="distribucion",READER="lector.institucional",MIXED="lector.profesional";
- @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired Queries queries;@Autowired Attention attention;@Autowired Documents documents;@Autowired FormularioReception reception;@Autowired FormularioKeys keys;
+ @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired Queries queries;@Autowired Attention attention;@Autowired Documents documents;@Autowired FormularioReception reception;@Autowired FormularioKeys keys;@Autowired BoardQueries boards;
 
  /** Expedientes sinteticos compartidos por las pruebas; ninguna prueba los modifica con exito salvo la combinada (objetos propios). */
  record Fixture(long comNew,long solPending,long solReturned,long solAssumed,long req,long caseId,long reservedNote,long openNote,long task,long flow,long link,
@@ -411,5 +413,98 @@ class InstitutionalReaderTest {
   }finally{
    db.update("UPDATE role_assignment SET revoked_at=NULL WHERE user_id=? AND role_code='CONSULTA_INSTITUCIONAL'",mixed);
   }
+ }
+ // --- G06: bandejas, Inicio y aviso en la ficha ---------------------------------------------------------------------
+ static final String HEAD_READER="lector.direccion";
+ /** Direccion UPD con la consulta institucional y una SOL pendiente propia (ademas de las de UPR-REQ del fixture). */
+ long headReader(){
+  if(db.count("SELECT COUNT(*) FROM staff WHERE username=?",HEAD_READER)==0){
+   staff(HEAD_READER,"CONSULTA_INSTITUCIONAL","DIRECCION@UPD");
+   run(DIST,"COM_ROUTE","communication",com("COM para Direccion UPD"),Map.of("scope_id",scope("UPD"),"reason","Competencia UPD"));
+  }
+  return user(HEAD_READER);
+ }
+ /** Todos los ids de una bandeja con el filtro dado, recorriendo todas sus paginas. */
+ Set<Long> board(Access.Actor a,String kind,String filter){
+  var out=new HashSet<Long>();
+  for(int p=0;;p++){
+   var page=boards.page(a,kind,p,100,"",filter,null);var items=list(page,"items");
+   items.forEach(r->assertTrue(out.add(n(r,"id")),kind+": fila repetida"));
+   if(items.isEmpty()||out.size()>=n(page,"total"))return out;
+  }
+ }
+ Set<Long> where(String sql,java.util.function.Predicate<Map<String,Object>> visible){
+  var out=new HashSet<Long>();for(var r:db.rows(sql))if(visible.test(r))out.add(n(r,"id"));return out;
+ }
+ /** Lo que Access (o Queries, para SOL y flujos) deja leer, por bandeja. Las SOL asumidas o descartadas solo estan en la bandeja del lector. */
+ Map<String,Set<Long>> expected(Access.Actor a){
+  var out=new LinkedHashMap<String,Set<Long>>();
+  out.put("com",where("SELECT * FROM communication",c->access.comRead(a,c)));
+  out.put("sol",where("SELECT * FROM solicitation",x->queries.solVisible(a,x)&&(a.institutionalReader()||Set.of("PENDIENTE","DEVUELTA").contains(s(x,"state")))));
+  out.put("req",where("SELECT * FROM requirement",r->access.reqRead(a,r)));
+  out.put("cas",where("SELECT * FROM case_record",c->access.caseRead(a,c)));
+  out.put("flujos",where("SELECT * FROM flow_request",f->queries.flowVisible(a,f)));
+  out.put("atenciones",where("SELECT r.* FROM requirement r WHERE EXISTS(SELECT 1 FROM attention_record t WHERE t.requirement_id=r.id)",r->access.reqRead(a,r)));
+  out.put("tareas",where("SELECT * FROM task_item WHERE executor_id="+a.id(),t->access.caseRead(a,db.one("SELECT * FROM case_record WHERE id=?",n(t,"case_id")))));
+  out.put("avisos",where("SELECT * FROM inbox_notice WHERE user_id="+a.id(),x->true));
+  return out;
+ }
+
+ @Test void bandejasEquivalentesAAccess(){
+  fixture();headReader();
+  for(String who:List.of(READER,MIXED,HEAD_READER,HEAD,PROF,ADMIN,DIST,"gabinete","direccion.upd","ti")){
+   var a=access.actor(who);
+   expected(a).forEach((kind,ids)->assertEquals(ids,board(a,kind,"all"),who+" / "+kind));
+  }
+  // El lector ve las bandejas de expedientes completas; tareas y avisos siguen siendo personales.
+  var reader=access.actor(READER);
+  for(var e:Map.of("com","communication","sol","solicitation","req","requirement","cas","case_record","flujos","flow_request").entrySet())
+   assertEquals(db.count("SELECT COUNT(*) FROM "+e.getValue()),board(reader,e.getKey(),"all").size(),e.getKey());
+  assertTrue(board(reader,"sol","all").size()>board(reader,"sol","pending").size()+board(reader,"sol","returned").size(),"incluye SOL asumidas");
+  assertEquals(Set.of(),board(reader,"tareas","all"));
+ }
+
+ @SuppressWarnings("unchecked") Map<String,Map<String,Object>> sections(Access.Actor a){
+  var out=new LinkedHashMap<String,Map<String,Object>>();for(var x:(List<Map<String,Object>>)boards.dashboard(a).get("sections"))out.put(s(x,"id"),x);return out;
+ }
+ Map<String,Long> counts(Map<String,Object> section){
+  var out=new LinkedHashMap<String,Long>();for(var m:list(section,"metrics"))out.put(s(m,"route")+":"+s(m,"filter"),n(m,"count"));return out;
+ }
+
+ @Test void inicioDelLectorYFiltrosDeDecisionPropia(){
+  fixture();headReader();
+  var reader=sections(access.actor(READER));
+  assertEquals(List.of("institutional"),List.copyOf(reader.keySet()),"sin secciones de gestion ni resumen de alcance");
+  assertEquals(Map.of("com:all",db.count("SELECT COUNT(*) FROM communication"),"req:open",db.count("SELECT COUNT(*) FROM requirement WHERE state='ABIERTO'"),
+   "cas:open",db.count("SELECT COUNT(*) FROM case_record WHERE state<>'CERRADO'"),"flujos:pending",db.count("SELECT COUNT(*) FROM flow_request WHERE state='PENDIENTE'")),counts(reader.get("institutional")));
+  assertEquals(List.of(),boards.dashboard(access.actor(READER)).get("queues"));
+
+  // Con funciones propias, cada seccion de gestion cuenta lo mismo que sin la consulta (los filtros llevan su facultad).
+  for(String who:List.of(HEAD_READER,MIXED)){
+   var a=access.actor(who);var own=a.withoutInstitutionalReader();var with=sections(a);var without=sections(own);
+   assertTrue(with.containsKey("institutional")&&!with.containsKey("overview"),who);
+   assertTrue(without.containsKey("overview"),who);
+   without.forEach((id,sec)->{if(!id.equals("overview"))assertEquals(counts(sec),counts(with.get(id)),who+" / "+id);});
+   assertEquals(boards.dashboard(own).get("queues").toString().replaceAll("generated_ms=\\d+",""),boards.dashboard(a).get("queues").toString().replaceAll("generated_ms=\\d+",""),who+": colas");
+  }
+  var head=access.actor(HEAD_READER);
+  long own=board(head,"sol","pending").size(),all=db.count("SELECT COUNT(*) FROM solicitation WHERE state='PENDIENTE'");
+  assertTrue(own>=1&&own<all,"SOL por asumir: solo las de su recepcion ("+own+" de "+all+")");
+  assertEquals(board(head.withoutInstitutionalReader(),"sol","pending"),board(head,"sol","pending"));
+  assertEquals(board(access.actor(DIST),"sol","returned"),where("SELECT * FROM solicitation WHERE state='DEVUELTA'",x->true));
+  assertEquals(Set.of(),board(access.actor(READER),"sol","returned"),"devolver a Distribucion no es del lector");
+ }
+
+ @Test void fichaAvisaLaLecturaSoloPorConsulta(){
+  var f=fixture();headReader();
+  long solUpd=n(db.one("SELECT s.id FROM solicitation s JOIN communication c ON c.id=s.communication_id WHERE c.subject='COM para Direccion UPD'"),"id");
+  for(var e:List.of(Map.entry("COM",f.comNew()),Map.entry("SOL",f.solAssumed()),Map.entry("REQ",f.req()),Map.entry("CAS",f.caseId()),Map.entry("FLUJO",f.flow()),Map.entry("REQ",f.attention())))
+   assertEquals(true,detail(READER,e.getKey(),e.getValue()).get("institutional_read"),"lector: "+e);
+  assertEquals(true,detail(MIXED,"CAS",f.caseId()).get("institutional_read"),"Caso ajeno de la cuenta mixta");
+  assertEquals(false,detail(HEAD_READER,"FLUJO",f.flow()).get("institutional_read"),"la Direccion destinataria lo lee por su funcion");
+  assertEquals(false,detail(HEAD_READER,"SOL",solUpd).get("institutional_read"));
+  assertEquals(true,detail(HEAD_READER,"CAS",f.caseId()).get("institutional_read"));
+  assertEquals(false,detail(HEAD,"CAS",f.caseId()).get("institutional_read"));
+  assertEquals(false,detail(PROF,"REQ",f.req()).get("institutional_read"));
  }
 }

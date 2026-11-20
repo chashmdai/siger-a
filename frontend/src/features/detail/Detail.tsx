@@ -1,11 +1,11 @@
 import type {ComponentType} from 'react';
 import type {Row} from '../../lib/rows';
-import {list, text, when} from '../../lib/rows';
+import {bool, list, text, when} from '../../lib/rows';
 import {nameOf} from '../../lib/catalog';
 import {ACTION_LABELS, humanize} from '../../lib/labels';
 import type {Context} from '../../app/context';
 import {Table} from '../../components/Table';
-import {EmptyState, Panel} from '../../components/Primitives';
+import {Callout, EmptyState, Panel} from '../../components/Primitives';
 import {ComDetail} from './ComDetail';
 import {SolDetail} from './SolDetail';
 import {RequirementDetail} from './RequirementDetail';
@@ -21,6 +21,8 @@ export default function Detail({kind, row: r, ctx}: {kind: string; row: Row; ctx
   const history = list(r, 'history');
   return <article className="detail fade-in">
     <DetailHeader kind={kind} r={r} ctx={ctx}/>
+    {/* El servidor indica cuando la ficha se lee solo por la consulta institucional (sin ella, la cuenta no la veria). */}
+    {bool(r, 'institutional_read') && <Callout tone="neutral" title="Consulta institucional">Lectura sin facultades de gestión. No se muestran las constancias ni los documentos reservados.</Callout>}
     {Body && <Body r={r} ctx={ctx}/>}
     {list(r, 'closures').length > 0 && <Panel title="Cierres anteriores" icon="history" description="Se conservan aunque el registro se haya reabierto.">
       <Table rows={list(r, 'closures')} columns={[

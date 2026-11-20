@@ -1,5 +1,5 @@
 import type {User} from '../lib/access';
-import {has} from '../lib/access';
+import {has} from '../lib/access.ts';
 import type {IconName} from '../components/Icon';
 
 export type MenuItem = {path: string; label: string; icon: IconName; badge?: number; hint?: string};
@@ -12,7 +12,9 @@ export type MenuGroup = {title: string; items: MenuItem[]};
 export function menuFor(user: User, unread: number): MenuGroup[] {
   const management = has(user, 'JEFATURA', 'DIRECCION');
   const operative = has(user, 'ADMINISTRATIVO', 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'DISTRIBUIDOR');
-  const read = operative || has(user, 'LECTURA');
+  // La consulta institucional (D4) lee todas las bandejas de expedientes, sin acciones de gestion.
+  const institutional = has(user, 'CONSULTA_INSTITUCIONAL');
+  const read = operative || institutional || has(user, 'LECTURA');
   const groups: [string, [MenuItem, boolean][]][] = [
     ['Mi trabajo', [
       [{path: 'inicio', label: 'Inicio', icon: 'home', hint: 'Pendientes y cifras de tus funciones'}, true],
@@ -26,10 +28,10 @@ export function menuFor(user: User, unread: number): MenuGroup[] {
     ]],
     ['Gestión', [
       [{path: 'com', label: 'Comunicaciones', icon: 'mail'}, read],
-      [{path: 'sol', label: 'Solicitudes', icon: 'send', hint: 'SOL pendientes y devueltas'}, management || has(user, 'DISTRIBUIDOR')],
+      [{path: 'sol', label: 'Solicitudes', icon: 'send', hint: 'Solicitudes enviadas a una jefatura'}, management || institutional || has(user, 'DISTRIBUIDOR')],
       [{path: 'req', label: 'Requerimientos', icon: 'folder'}, read],
-      [{path: 'cas', label: 'Casos', icon: 'briefcase'}, has(user, 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'LECTURA')],
-      [{path: 'flujos', label: 'Colaboraciones y traslados', icon: 'flow'}, management],
+      [{path: 'cas', label: 'Casos', icon: 'briefcase'}, institutional || has(user, 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'LECTURA')],
+      [{path: 'flujos', label: 'Colaboraciones y traslados', icon: 'flow'}, management || institutional],
     ]],
     ['Administración', [
       [{path: 'subrogancias', label: 'Subrogancias', icon: 'swap'}, has(user, 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'TI')],

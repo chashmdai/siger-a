@@ -15,22 +15,28 @@ public class BoardQueries {
     static String at(String column,Collection<Long> ids){return column+" IN ("+ids(ids)+")";}
     final class Visibility {
         final Actor a;final List<Long> heads,professionals,readers,registrars,receivers,regionalHeads;final List<String> matters;
+        /** Consulta institucional (D4): lectura de todo, como Access.institutionalReader; nunca abre predicados de gestion. */
+        final boolean institutional;
         Visibility(Actor a){
-            this.a=a;var scopes=db.rows("SELECT * FROM org_scope WHERE enabled=TRUE");
+            this.a=a;institutional=a.institutionalReader();var scopes=db.rows("SELECT * FROM org_scope WHERE enabled=TRUE");
             heads=grants(a,"JEFATURA","DIRECCION");professionals=grants(a,"JEFATURA","DIRECCION","PROFESIONAL");readers=grants(a,"LECTURA");registrars=grants(a,"JEFATURA","DIRECCION","PROFESIONAL","ADMINISTRATIVO");
             receivers=scopes.stream().filter(s->b(s,"regional")?a.head(n(s,"id")):s(s,"code").equals("UPR-REQ")?a.at("JEFATURA",n(s,"id")):a.at("DIRECCION",n(s,"id"))).map(s->n(s,"id")).toList();
             regionalHeads=scopes.stream().filter(s->b(s,"regional")&&a.head(n(s,"id"))).map(s->n(s,"id")).toList();
             matters=scopes.stream().filter(s->a.at("DIRECCION",n(s,"id"))&&Set.of("UPR","UPD").contains(s(s,"unit_code"))).map(s->s(s,"unit_code")).distinct().toList();
         }
         String caseRead(String c){
+            if(institutional)return "1=1";
             String transverse=matters.isEmpty()?"1=0":"("+c+".matter IN ("+matters.stream().map(m->"'"+m+"'").collect(Collectors.joining(","))+") AND EXISTS(SELECT 1 FROM org_scope vs WHERE vs.id="+c+".scope_id AND vs.regional=TRUE AND vs.enabled=TRUE))";
             return "("+at(c+".scope_id",heads)+" OR "+at(c+".scope_id",readers)+" OR ("+at(c+".scope_id",professionals)+" AND ("+c+".responsible_id="+a.id()+" OR EXISTS(SELECT 1 FROM case_member vm WHERE vm.case_id="+c+".id AND vm.user_id="+a.id()+"))) OR "+transverse+")";
         }
         String reqMain(String r){return "("+at(r+".principal_scope",heads)+" OR ("+r+".attention_user="+a.id()+" AND "+at(r+".attention_scope",registrars)+"))";}
         String attentionReceiver(String r){return "EXISTS(SELECT 1 FROM attention_handoff ha WHERE ha.requirement_id="+r+".id AND ha.state='PENDIENTE' AND ((ha.recipient_kind='JEFATURA' AND "+at("ha.target_scope",receivers)+") OR (ha.recipient_kind='PROFESIONAL' AND ha.target_user="+a.id()+" AND "+at("ha.target_scope",professionals)+")))";}
-        String reqRead(String r){return "("+attentionReceiver(r)+" OR ("+r+".created_by="+a.id()+" AND EXISTS(SELECT 1 FROM attention_record ar WHERE ar.requirement_id="+r+".id)) OR "+reqMain(r)+" OR "+at(r+".principal_scope",readers)+" OR EXISTS(SELECT 1 FROM case_record vc WHERE vc.requirement_id="+r+".id AND "+caseRead("vc")+"))";}
+        String reqRead(String r){if(institutional)return "1=1";return "("+attentionReceiver(r)+" OR ("+r+".created_by="+a.id()+" AND EXISTS(SELECT 1 FROM attention_record ar WHERE ar.requirement_id="+r+".id)) OR "+reqMain(r)+" OR "+at(r+".principal_scope",readers)+" OR EXISTS(SELECT 1 FROM case_record vc WHERE vc.requirement_id="+r+".id AND "+caseRead("vc")+"))";}
         String distribution(String c){return "("+at(c+".origin_scope",regionalHeads)+(a.role("DISTRIBUIDOR")?" OR EXISTS(SELECT 1 FROM org_scope vo WHERE vo.id="+c+".origin_scope AND vo.regional=FALSE)":"")+")";}
-        String comRead(String c){return "("+c+".created_by="+a.id()+" OR "+distribution(c)+" OR EXISTS(SELECT 1 FROM solicitation vs WHERE vs.communication_id="+c+".id AND vs.state='PENDIENTE' AND "+at("vs.destination_scope",receivers)+") OR EXISTS(SELECT 1 FROM requirement vr WHERE vr.communication_id="+c+".id AND ("+reqMain("vr")+" OR "+attentionReceiver("vr")+")) OR EXISTS(SELECT 1 FROM communication_link vl JOIN requirement lr ON lr.id=vl.requirement_id WHERE vl.communication_id="+c+".id AND vl.returned_ms IS NULL AND ("+at("lr.principal_scope",heads)+" OR (vl.state='ADMITIDA' AND ((vl.target_case_id IS NULL AND "+reqMain("lr")+") OR EXISTS(SELECT 1 FROM case_record lc WHERE lc.id=vl.target_case_id AND "+caseRead("lc")+"))))))";}
+        String comRead(String c){if(institutional)return "1=1";return "("+c+".created_by="+a.id()+" OR "+distribution(c)+" OR EXISTS(SELECT 1 FROM solicitation vs WHERE vs.communication_id="+c+".id AND vs.state='PENDIENTE' AND "+at("vs.destination_scope",receivers)+") OR EXISTS(SELECT 1 FROM requirement vr WHERE vr.communication_id="+c+".id AND ("+reqMain("vr")+" OR "+attentionReceiver("vr")+")) OR EXISTS(SELECT 1 FROM communication_link vl JOIN requirement lr ON lr.id=vl.requirement_id WHERE vl.communication_id="+c+".id AND vl.returned_ms IS NULL AND ("+at("lr.principal_scope",heads)+" OR (vl.state='ADMITIDA' AND ((vl.target_case_id IS NULL AND "+reqMain("lr")+") OR EXISTS(SELECT 1 FROM case_record lc WHERE lc.id=vl.target_case_id AND "+caseRead("lc")+"))))))";}
+        /** SOL: la receptora ve las pendientes y Distribucion las devueltas; la consulta institucional, todas. */
+        String solRead(String s,String c){return institutional?"1=1":"(("+s+".state='PENDIENTE' AND "+at(s+".destination_scope",receivers)+") OR ("+s+".state='DEVUELTA' AND "+distribution(c)+"))";}
+        String flowRead(String f){return institutional?"1=1":"("+at(f+".origin_scope",heads)+" OR "+at(f+".target_scope",heads)+")";}
     }
     static List<Long> grants(Actor a,String...roles){var wanted=Set.of(roles);return a.grants().stream().filter(g->g.scope()!=null&&wanted.contains(g.role())).map(Access.Grant::scope).distinct().toList();}
     private record Spec(String select,String from,String permission,String scope,String search,String order){}
@@ -39,10 +45,10 @@ public class BoardQueries {
         return switch(kind){
             case "atenciones"->new Spec("r.id,r.folio,r.principal_scope,r.attention_user,r.attention_scope,r.created_by,r.created_ms,r.revision,r.state AS req_state,c.subject,t.modality,t.updated_ms,"+Attention.stateSql("r","t")+" AS state", "requirement r JOIN attention_record t ON t.requirement_id=r.id JOIN communication c ON c.id=r.communication_id",v.reqRead("r"),"r.principal_scope","LOWER(CONCAT(COALESCE(r.folio,''),' ',c.subject))","t.updated_ms DESC,r.id DESC");
             case "com"->new Spec("c.id,c.folio,c.subject,c.channel,c.state,c.origin_scope,c.created_ms,c.received_ms,c.revision,c.created_by","communication c",v.comRead("c"),"c.origin_scope","LOWER(CONCAT(COALESCE(c.folio,''),' ',c.subject))","c.id DESC");
-            case "sol"->new Spec("s.id,s.communication_id,s.destination_scope,s.requested_area_scope,s.state,s.created_ms,s.revision,c.folio AS com_folio,c.subject","solicitation s JOIN communication c ON c.id=s.communication_id","((s.state='PENDIENTE' AND "+at("s.destination_scope",v.receivers)+") OR (s.state='DEVUELTA' AND "+v.distribution("c")+"))","s.destination_scope","LOWER(CONCAT(COALESCE(c.folio,''),' ',c.subject))","s.created_ms,s.id");
+            case "sol"->new Spec("s.id,s.communication_id,s.destination_scope,s.requested_area_scope,s.state,s.created_ms,s.revision,c.folio AS com_folio,c.subject","solicitation s JOIN communication c ON c.id=s.communication_id",v.solRead("s","c"),"s.destination_scope","LOWER(CONCAT(COALESCE(c.folio,''),' ',c.subject))","s.created_ms,s.id");
             case "req"->new Spec("r.id,r.folio,r.communication_id,r.principal_scope,r.attention_user,r.attention_scope,r.complexity,r.state,r.created_ms,r.revision,(SELECT COUNT(*) FROM case_record rc WHERE rc.requirement_id=r.id AND rc.state<>'CERRADO') AS open_cases,(SELECT COUNT(*) FROM case_record tc WHERE tc.requirement_id=r.id) AS total_cases","requirement r",v.reqRead("r"),"r.principal_scope","LOWER(COALESCE(r.folio,''))","r.id DESC");
             case "cas"->new Spec("c.id,c.folio,c.requirement_id,c.scope_id,c.responsible_id,c.objective,c.state,c.created_ms,c.revision,r.folio AS req_folio,r.complexity AS req_complexity,(SELECT COUNT(*) FROM task_item t WHERE t.case_id=c.id AND t.state IN ('PENDIENTE','EN_CURSO')) AS pending_tasks","case_record c JOIN requirement r ON r.id=c.requirement_id",v.caseRead("c"),"c.scope_id","LOWER(CONCAT(COALESCE(c.folio,''),' ',COALESCE(r.folio,''),' ',c.objective))","c.id DESC");
-            case "flujos"->new Spec("f.id,f.kind,f.requirement_id,f.origin_case_id,f.origin_scope,f.target_scope,f.state,f.created_ms,f.revision,r.folio AS req_folio","flow_request f JOIN requirement r ON r.id=f.requirement_id","("+at("f.origin_scope",v.heads)+" OR "+at("f.target_scope",v.heads)+")","f.target_scope","LOWER(CONCAT(COALESCE(r.folio,''),' ',f.kind))","f.created_ms,f.id");
+            case "flujos"->new Spec("f.id,f.kind,f.requirement_id,f.origin_case_id,f.origin_scope,f.target_scope,f.state,f.created_ms,f.revision,r.folio AS req_folio","flow_request f JOIN requirement r ON r.id=f.requirement_id",v.flowRead("f"),"f.target_scope","LOWER(CONCAT(COALESCE(r.folio,''),' ',f.kind))","f.created_ms,f.id");
             case "tareas"->new Spec("t.id,t.case_id,t.title,t.executor_id,t.state,t.due_ms,t.next_reminder_ms,t.reminder_interval_hours,t.revision,c.folio AS case_folio,c.scope_id","task_item t JOIN case_record c ON c.id=t.case_id","t.executor_id="+a.id()+" AND "+v.caseRead("c"),"c.scope_id","LOWER(CONCAT(t.title,' ',COALESCE(c.folio,'')))","CASE WHEN t.due_ms IS NULL THEN 1 ELSE 0 END,t.due_ms,t.id");
             case "avisos"->new Spec("i.id,i.at_ms,i.text_value,i.resource_type,i.resource_id,i.read_ms","inbox_notice i","i.user_id="+a.id(),null,"LOWER(i.text_value)","i.id DESC");
             default->throw new Problem(400,"Bandeja desconocida.");
@@ -60,8 +66,9 @@ public class BoardQueries {
             case "atenciones:closed"->"r.state='CERRADO'";
             case "com:pending"->"c.state='NUEVA' AND "+v.distribution("c");
             case "com:mine"->"c.created_by="+v.a.id();
-            case "sol:pending"->"s.state='PENDIENTE'";
-            case "sol:returned"->"s.state='DEVUELTA'";
+            // Filtros de decision propia: con la consulta institucional el permiso ya no los acota.
+            case "sol:pending"->"s.state='PENDIENTE' AND "+at("s.destination_scope",v.receivers);
+            case "sol:returned"->"s.state='DEVUELTA' AND "+v.distribution("c");
             case "req:open"->"r.state='ABIERTO'";
             case "req:closed"->"r.state='CERRADO'";
             case "req:without_case"->"r.state='ABIERTO' AND NOT EXISTS(SELECT 1 FROM case_record wc WHERE wc.requirement_id=r.id)";
@@ -123,7 +130,9 @@ public class BoardQueries {
             sections.add(section("intake","Atencion ciudadana","Un REQ desde el primer contacto; datos parciales y entregas sin una SOL artificial.",List.of(metric(v,"Atenciones a mi cargo","atenciones","mine","Continuar ficha y registrar resultado"),metric(v,"Entregas por recibir","atenciones","incoming","Recibir o devolver con fundamento"),metric(v,"Entregas enviadas","atenciones","outgoing","Aun bajo encargo de origen"),head?metric(v,"Seguimiento por asignar","atenciones","followup","Jefatura abre Caso en el mismo REQ"):metric(v,"Atenciones iniciadas por mi","atenciones","created","Seguimiento de tus entregas"))));
             queues.add(queue(v,"Primeras atenciones por recibir","atenciones","incoming"));queues.add(queue(v,"Atenciones a mi cargo","atenciones","mine"));
         }
-        if(operative||a.role("LECTURA"))sections.add(section("overview","Resumen de mi alcance","Estas cifras incluyen solo registros que puedes consultar. No son totales institucionales ni indicadores oficiales.",List.of(metric(v,"Comunicaciones visibles","com","all","Incluye antecedentes"),metric(v,"REQ abiertos","req","open","Una atencion, varios Casos posibles"),metric(v,"Casos abiertos","cas","open","Lineas de gestion"),metric(v,"Casos cerrados","cas","closed","Historia conservada"))));
+        if(v.institutional)sections.add(section("institutional","Consulta institucional","Lectura de todos los registros, sin facultades de gestion. No incluye constancias ni documentos reservados.",List.of(metric(v,"Comunicaciones","com","all","Todas las COM registradas"),metric(v,"REQ abiertos","req","open","En toda la institucion"),metric(v,"Casos abiertos","cas","open","En toda la institucion"),metric(v,"Peticiones entre unidades pendientes","flujos","pending","Colaboraciones, derivaciones y transferencias"))));
+        // Con la consulta institucional el resumen "de mi alcance" seria institucional: lo reemplaza la seccion anterior.
+        else if(operative||a.role("LECTURA"))sections.add(section("overview","Resumen de mi alcance","Estas cifras incluyen solo registros que puedes consultar. No son totales institucionales ni indicadores oficiales.",List.of(metric(v,"Comunicaciones visibles","com","all","Incluye antecedentes"),metric(v,"REQ abiertos","req","open","Una atencion, varios Casos posibles"),metric(v,"Casos abiertos","cas","open","Lineas de gestion"),metric(v,"Casos cerrados","cas","closed","Historia conservada"))));
         if(a.role(Roles.TI)){
             // TI administra cuentas, funciones y subrogancias de toda la instancia (D1); no concede lectura de expedientes.
             long now=System.currentTimeMillis();

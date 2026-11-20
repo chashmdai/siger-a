@@ -35,7 +35,7 @@ export function CaseDetail({r, ctx}: {r: Row; ctx: Context}) {
 
   return <DetailGrid
     main={<>
-      {!write && <Callout tone="neutral">Consulta autorizada. Poder leer no concede facultad de gestionar, reasignar ni cerrar.</Callout>}
+      {!write && !bool(r, 'institutional_read') && <Callout tone="neutral">Consulta autorizada. Poder leer no concede facultad de gestionar, reasignar ni cerrar.</Callout>}
       {state === 'EN_REVISION' && <Callout tone="warn" role="status" title="En revisión de cierre">El responsable solicitó terminar este Caso; aún no está cerrado y la jefatura debe decidir. Mientras siga pendiente, el responsable puede retirar su solicitud y volver a gestión.</Callout>}
       {bool(r, 'own_substitution') && !closed && <Callout tone="warn">Ejerces subrogancia sobre tu propio Caso: puedes solicitar el término, pero no autoconfirmarlo. La revisión excepcional por un tercero aún no está disponible.</Callout>}
       <ActionBar label="Gestión">

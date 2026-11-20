@@ -142,7 +142,21 @@ public class Queries {
             case "FLUJO" -> {var f=db.one("SELECT * FROM flow_request WHERE id=?",id);if(!flowVisible(a,f))Problem.denied();scope=n(f,"origin_scope");out=new LinkedHashMap<>(f);out.put("can_accept",a.head(n(f,"target_scope")));out.put("can_withdraw",a.head(scope));out.put("case_scopes",access.managementScopes(a,n(f,"target_scope")));}
             default -> throw new Problem(404,"Tipo de ficha desconocido.");
         }
-        out.put("history",kind.equals("REQ")&&!access.reqRecords(a,db.one("SELECT * FROM requirement WHERE id=?",id))?List.of():history(a,kind,id,scope));db.audit(a.id(),"CONSULTA",""+kind,id,scope,"");return out;
+        out.put("history",kind.equals("REQ")&&!access.reqRecords(a,db.one("SELECT * FROM requirement WHERE id=?",id))?List.of():history(a,kind,id,scope));
+        // Aviso de la ficha: se lee solo por la consulta institucional (sin ella, la misma cuenta no la veria).
+        out.put("institutional_read",a.institutionalReader()&&!readable(a.withoutInstitutionalReader(),kind,id));
+        db.audit(a.id(),"CONSULTA",""+kind,id,scope,"");return out;
+    }
+    /** Mismos predicados de lectura que detail, sin auditar ni armar la ficha. */
+    boolean readable(Actor a,String kind,long id){
+        return switch(kind){
+            case "COM" -> access.comRead(a,db.one("SELECT * FROM communication WHERE id=?",id));
+            case "SOL" -> {var s=db.one("SELECT * FROM solicitation WHERE id=?",id);yield solVisible(a,s)&&access.comRead(a,db.one("SELECT * FROM communication WHERE id=?",n(s,"communication_id")));}
+            case "REQ" -> access.reqRead(a,db.one("SELECT * FROM requirement WHERE id=?",id));
+            case "CAS" -> access.caseRead(a,db.one("SELECT * FROM case_record WHERE id=?",id));
+            case "FLUJO" -> flowVisible(a,db.one("SELECT * FROM flow_request WHERE id=?",id));
+            default -> false;
+        };
     }
     private List<Map<String,Object>> history(Actor a,String kind,long id,long scope){
         // Lectores por materia reciben historia del Caso autorizado, no auditoria transversal.

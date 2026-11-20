@@ -13,7 +13,7 @@ import {Callout, EmptyState, ErrorMessage, PageHeader, Panel} from '../../compon
 import {ACTIONABLE, greeting, say, today} from './texts';
 
 /** Colas resumidas que se muestran en cada espacio de trabajo. */
-const QUEUES_BY_SECTION: Record<string, string[]> = {distribution: ['com'], management: ['sol', 'cas', 'atenciones'], personal: ['tareas', 'atenciones'], overview: [], intake: ['atenciones'], technical: [], audit: []};
+const QUEUES_BY_SECTION: Record<string, string[]> = {distribution: ['com'], management: ['sol', 'cas', 'atenciones'], personal: ['tareas', 'atenciones'], overview: [], intake: ['atenciones'], technical: [], audit: [], institutional: []};
 
 const goto = (r: Row) => {location.hash = boardRoute(text(r, 'route'), text(r, 'filter'));};
 

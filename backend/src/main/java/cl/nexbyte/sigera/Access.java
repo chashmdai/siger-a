@@ -17,6 +17,10 @@ public class Access {
         public boolean registrar(long scope) { return professional(scope)||at("ADMINISTRATIVO",scope); }
         /** Consulta institucional (D4): lee todo salvo lo reservado; ninguna regla de escritura la considera. */
         public boolean institutionalReader() { return role(Roles.CONSULTA_INSTITUCIONAL); }
+        /** La misma cuenta sin la consulta institucional: distingue lo que lee solo gracias a ella. */
+        public Actor withoutInstitutionalReader() {
+            return new Actor(id,username,name,homeScope,mustChange,securityVersion,grants.stream().filter(g->!g.role().equals(Roles.CONSULTA_INSTITUCIONAL)).toList(),substitutions);
+        }
     }
     private final Db db;
     private final MailOutbox mail;

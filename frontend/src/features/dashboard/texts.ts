@@ -36,6 +36,9 @@ const TEXT: Record<string, string> = {
   'Cuentas, funciones, subrogancias y operacion. Este perfil no concede lectura de expedientes.': 'Cuentas, funciones, subrogancias y operación. Este perfil no concede lectura de expedientes.',
   'Periodo vigente; la cartera no se transfiere': 'Período vigente; la cartera no se transfiere',
   'Informacion personal': 'Información personal',
+  'Lectura de todos los registros, sin facultades de gestion. No incluye constancias ni documentos reservados.': 'Lectura de todos los registros, sin facultades de gestión. No incluye constancias ni documentos reservados.',
+  'En toda la institucion': 'En toda la institución',
+  'Peticiones entre unidades pendientes': 'Peticiones entre unidades pendientes',
 };
 
 export const say = (value: string) => TEXT[value] ?? value;

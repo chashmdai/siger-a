@@ -17,7 +17,7 @@ type Board = {title: string; lead: string; icon: IconName; empty: string};
 const BOARDS: Record<string, Board> = {
   atenciones: {title: 'Primeras atenciones', icon: 'people', lead: 'Atenciones registradas como REQ desde el primer contacto. Abre una para completar la ficha, entregarla o resolverla.', empty: 'No hay atenciones para este filtro.'},
   com: {title: 'Comunicaciones', icon: 'mail', lead: 'Todo lo recibido, tal como se registró. Las COM por distribuir esperan su clasificación.', empty: 'No hay comunicaciones para este filtro.'},
-  sol: {title: 'Solicitudes', icon: 'send', lead: 'Solicitudes enviadas a una jefatura. Al asumir una SOL nace su Requerimiento.', empty: 'No hay solicitudes pendientes para este filtro.'},
+  sol: {title: 'Solicitudes', icon: 'send', lead: 'Solicitudes enviadas a una jefatura. Al asumir una SOL nace su Requerimiento.', empty: 'No hay solicitudes para este filtro.'},
   req: {title: 'Requerimientos', icon: 'folder', lead: 'Un REQ puede contener varios Casos y se cierra de forma expresa por su jefatura principal.', empty: 'No hay requerimientos para este filtro.'},
   cas: {title: 'Casos', icon: 'briefcase', lead: 'Líneas de gestión profesional dentro de un REQ. Las tareas pendientes impiden el cierre.', empty: 'No hay Casos para este filtro.'},
   flujos: {title: 'Colaboraciones y traslados', icon: 'flow', lead: 'Colaboraciones, derivaciones y transferencias entre unidades y su decisión.', empty: 'No hay peticiones entre unidades para este filtro.'},
@@ -28,7 +28,7 @@ const BOARDS: Record<string, Board> = {
 const FILTERS: Record<string, [string, string][]> = {
   atenciones: [['all', 'Todas'], ['mine', 'A mi cargo'], ['incoming', 'Por recibir'], ['outgoing', 'Entregas enviadas'], ['created', 'Iniciadas por mí'], ['followup', 'Seguimiento por asignar'], ['closed', 'Resueltas']],
   com: [['all', 'Todas'], ['pending', 'Por distribuir'], ['mine', 'Mis ingresos']],
-  sol: [['all', 'Pendientes y devueltas'], ['pending', 'Por asumir'], ['returned', 'Devueltas a Distribución']],
+  sol: [['all', 'Todas'], ['pending', 'Por asumir'], ['returned', 'Devueltas a Distribución']],
   req: [['all', 'Todos'], ['open', 'Abiertos'], ['closed', 'Cerrados'], ['without_case', 'Abiertos sin Caso'], ['ready', 'Sin bloqueos para cierre']],
   cas: [['all', 'Todos'], ['mine', 'Mis Casos abiertos'], ['open', 'Abiertos'], ['closed', 'Cerrados'], ['review', 'Cierres por revisar'], ['unacknowledged', 'Asignaciones sin acuse'], ['returned', 'Mis cierres devueltos']],
   flujos: [['all', 'Todos'], ['pending', 'Pendientes'], ['incoming', 'Para mi decisión'], ['outgoing', 'Solicitados por mi ámbito']],

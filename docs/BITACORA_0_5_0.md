@@ -15,7 +15,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G04b | Perfil de cuenta: vista movil | CERRADO |
 | G05 | Consulta institucional: lectura | CERRADO |
 | G05b | Consulta institucional: base intacta y original del Formulario | CERRADO |
-| G06 | Consulta institucional: bandejas e interfaz | ABIERTO |
+| G06 | Consulta institucional: bandejas e interfaz | CERRADO |
 | G07 | Indice de personas (V11) | ABIERTO |
 | G08 | Buscador | ABIERTO |
 | G09 | Calendario habil (V12) | ABIERTO |
@@ -157,3 +157,21 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 - Hallazgos para gates siguientes: G06 puede reutilizar `snapshot()` en la prueba de equivalencia de bandejas y `adultWithFile` (copia del vector de `FormularioConsumerTest`) si necesita una COM del Formulario con original.
 - Pendientes: ninguno nuevo
 - Verificacion manual sugerida al usuario: no aplica
+
+### G06 - Consulta institucional: bandejas e interfaz   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate G06: consulta institucional, bandejas e interfaz`)
+- Hecho:
+  - `BoardQueries.Visibility.institutional`: `comRead`, `reqRead` y `caseRead` dan `1=1` para el lector, y los permisos de `sol` (todos los estados, `solRead`) y `flujos` (`flowRead`) tambien. `reqMain`, `distribution`, `attentionReceiver`, `receivers` y `heads` no cambian. Tareas y avisos siguen siendo personales.
+  - `sol:pending` exige ser receptora y `sol:returned` exige distribucion. Sin ese ajuste, una Direccion con la consulta contaba en "SOL por asumir" todas las SOL pendientes de la institucion. Sin la consulta el resultado no cambia.
+  - Inicio: seccion `institutional` (comunicaciones, REQ abiertos, Casos abiertos y peticiones entre unidades pendientes), que reemplaza a `overview` cuando la cuenta tiene la consulta. Ficha: `institutional_read` (`Queries.readable` sobre `Actor.withoutInstitutionalReader()`) muestra el aviso "Consulta institucional: lectura sin facultades de gestion..." en `Detail.tsx`, y `CaseDetail` no repite su aviso generico.
+  - Menu: `read` incluye la consulta, y el lector ve Solicitudes, Casos y Colaboraciones. `menu.ts` importa `../lib/access.ts` con extension para que `node --test` lo cargue. La bandeja SOL `all` pasa a llamarse "Todas".
+- Archivos clave: `BoardQueries.java`, `Access.java`, `Queries.java`, `InstitutionalReaderTest.java`, `frontend/src/app/menu.ts`, `features/detail/{Detail,CaseDetail}.tsx`, `features/dashboard/{Dashboard.tsx,texts.ts}`, `features/worklist/WorkspaceList.tsx`, `frontend/tests/menu.test.ts`, `CLAUDE.md`
+- Verificacion: JUnit 100 ok + 1 omitida (antes 97 + 1; +3 en `InstitutionalReaderTest`: equivalencia de las 8 bandejas con todas las paginas para 10 cuentas, Inicio y filtros de decision propia, aviso de la ficha; Maven informa 101 ejecutadas). Mutaciones comprobadas: sin `institutional` o con el `sol:pending` anterior, las pruebas fallan. Frontend 27 ok (antes 22; +5 `menu.test.ts`: lector puro, lector + Profesional, Direccion + consulta, TI y cuenta sin funciones); typecheck ok; build ok. Humo con el JAR en una instancia aislada (18606, borrada): 19/19 por API (TI otorga la consulta por perfil, solo la seccion institucional, bandejas visibles, "Por asumir" vacia, tareas en 0, fichas COM/SOL con `institutional_read` y sin `can_*`, `SOL_ASSUME` 403, TI con 0 en bandejas). Con Playwright: menu de 8 entradas, Inicio institucional y ficha COM con el aviso, sin botones de gestion.
+- Desvios del plan: el aviso depende de una bandera del servidor y no del rol en el navegador, para que una cuenta mixta no lo vea en lo que gestiona. Los filtros `sol:*` se ajustaron aunque no estaban en el alcance, porque la lectura nueva los exponia.
+- Hallazgos para gates siguientes:
+  - G12: `/api/export` usa las bandejas, asi que el lector institucional ya exporta el resumen de toda la institucion (folio, estado, ambito y fecha; sin datos ciudadanos; auditado; tope de 10.000 filas). G12 decide si el resumen actual pasa a exigir `EXPORTACION` (decision del responsable: no se toco en G06).
+  - G08: el buscador puede filtrar con `Visibility.comRead/reqRead/caseRead` (ya consideran al lector).
+  - Un filtro nuevo de bandeja que represente una decision propia debe llevar su condicion de rol: el permiso de la bandeja ya no lo acota para las cuentas con la consulta.
+  - `InstitutionalReaderTest` crea `lector.direccion` (DIRECCION@UPD + consulta) por SQL, como segunda Direccion de UPD; solo existe en esa clase.
+- Pendientes: recorrido del lector en `PRUEBAS_MANUALES_0_5_0.md` -> G14; `MySql84IntegrationTest` con las bandejas del lector -> G13
+- Verificacion manual sugerida al usuario: como `ti`, otorga "Consulta institucional" a una cuenta nueva desde su perfil. Entra con esa cuenta y comprueba: el menu (Comunicaciones, Solicitudes, Requerimientos, Casos y Colaboraciones, sin Mis tareas ni Nueva atencion), Inicio con "Consulta institucional", el aviso en una ficha COM, REQ o Caso, y que no hay botones de gestion. Opcional: agrega Profesional a la misma cuenta y comprueba que en su propio Caso no aparece el aviso y conserva sus acciones.
