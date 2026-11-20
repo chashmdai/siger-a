@@ -252,7 +252,7 @@ public class Documents {
                 if(!access.comRead(a,c)&&!(!write&&caseCanReadOriginal(a,target)))Problem.denied();
                 if(reserved)throw new Problem(400,"La reserva de gestion no modifica el original de ingreso.");
                 if(write){boolean initial=n(c,"created_by")==a.id()&&s(c,"state").equals("NUEVA");boolean duringAttention=db.rows("SELECT * FROM requirement WHERE communication_id=?",target).stream().anyMatch(r->access.attentionEditable(a,r));require(initial||duringAttention,"El ingreso ya fue encaminado; incorpora nuevos antecedentes como otra COM.");}return n(c,"origin_scope");}
-            case "REQ" -> {var r=access.reqForRead(a,target);if(!access.reqMain(a,r))Problem.denied();if(reserved&&!a.head(n(r,"principal_scope")))Problem.denied();if(write)require(s(r,"state").equals("ABIERTO")&&db.count("SELECT COUNT(*) FROM case_record WHERE requirement_id=?",target)==0,"Utiliza el Caso activo o una COM hija.");return n(r,"principal_scope");}
+            case "REQ" -> {var r=access.reqForRead(a,target);if(!(write?access.reqMain(a,r):access.reqRecords(a,r)))Problem.denied();if(reserved&&!a.head(n(r,"principal_scope")))Problem.denied();if(write)require(s(r,"state").equals("ABIERTO")&&db.count("SELECT COUNT(*) FROM case_record WHERE requirement_id=?",target)==0,"Utiliza el Caso activo o una COM hija.");return n(r,"principal_scope");}
             case "CAS" -> {var c=write?access.caseForWrite(a,target):access.caseForRead(a,target);if(reserved&&!access.reserved(a,c))Problem.denied();if(write)require(!s(c,"state").equals("CERRADO"),"No se carga gestion sobre Casos cerrados.");return n(c,"scope_id");}
             default -> throw new Problem(400,"Contexto documental invalido.");
         }

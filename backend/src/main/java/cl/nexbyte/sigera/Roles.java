@@ -14,6 +14,8 @@ public final class Roles {
         public Map<String,Object> json() { return Map.of("code",code,"reach",reach.name(),"group",group); }
     }
     public static final String TI="TI";
+    /** D4: lectura de todos los expedientes salvo lo reservado; nunca concede gestion. */
+    public static final String CONSULTA_INSTITUCIONAL="CONSULTA_INSTITUCIONAL";
     public static final List<Role> ALL=List.of(
         new Role("ADMINISTRATIVO",Reach.AMBITO,"OPERATIVA"),
         new Role("PROFESIONAL",Reach.AMBITO,"OPERATIVA"),
@@ -21,6 +23,7 @@ public final class Roles {
         new Role("DIRECCION",Reach.AMBITO,"OPERATIVA"),
         new Role("DISTRIBUIDOR",Reach.INSTITUCIONAL,"OPERATIVA"),
         new Role("LECTURA",Reach.AMBITO,"CONSULTA"),
+        new Role(CONSULTA_INSTITUCIONAL,Reach.INSTITUCIONAL,"CONSULTA"),
         new Role("AUDITORIA",Reach.AMBITO,"CONTROL"),
         new Role(TI,Reach.INSTITUCIONAL,"ADMINISTRACION"));
     private static final Map<String,Role> BY_CODE=new LinkedHashMap<>();

@@ -8,7 +8,7 @@ export const KIND_SHORT: Record<string, string> = {COM: 'COM', SOL: 'SOL', REQ: 
 /** AUTORIDAD fue suprimido en 0.5.0 (D1): su etiqueta solo se usa para mostrar el historial. */
 export const ROLE_LABELS: Record<string, string> = {
   ADMINISTRATIVO: 'Administrativo', PROFESIONAL: 'Profesional', JEFATURA: 'Jefatura', DIRECCION: 'Dirección', DISTRIBUIDOR: 'Distribución',
-  AUTORIDAD: 'Autoridad (suprimido)', LECTURA: 'Lectura', AUDITORIA: 'Auditoría', TI: 'TI',
+  AUTORIDAD: 'Autoridad (suprimido)', LECTURA: 'Lectura', CONSULTA_INSTITUCIONAL: 'Consulta institucional', AUDITORIA: 'Auditoría', TI: 'TI',
 };
 
 export const CHANNEL_LABELS: Record<string, string> = {PRESENCIAL: 'Presencial', TELEFONO: 'Teléfono', CORREO: 'Correo', OFICIO: 'Oficio', OTRO: 'Otro'};

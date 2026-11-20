@@ -42,14 +42,15 @@ public class Queries {
         }).toList());return result;
     }
     boolean solVisible(Actor a,Map<String,Object> s){
+        if(a.institutionalReader())return true;
         if(s(s,"state").equals("DEVUELTA"))return access.canDistribute(a,db.one("SELECT * FROM communication WHERE id=?",n(s,"communication_id")));
         if(s(s,"state").equals("PENDIENTE"))return access.solReceiver(a,n(s,"destination_scope"));
         return db.rows("SELECT * FROM requirement WHERE solicitation_id=?",n(s,"id")).stream().anyMatch(r->access.reqRead(a,r));
     }
-    boolean flowVisible(Actor a,Map<String,Object> f){return a.head(n(f,"origin_scope"))||a.head(n(f,"target_scope"));}
+    boolean flowVisible(Actor a,Map<String,Object> f){return a.institutionalReader()||a.head(n(f,"origin_scope"))||a.head(n(f,"target_scope"));}
     Map<String,Object> reqSummary(Actor a,Map<String,Object> r){
         var out=new LinkedHashMap<>(r);long id=n(r,"id");
-        if(!access.reqMain(a,r))out.remove("close_reason");
+        if(!access.reqRecords(a,r))out.remove("close_reason");
         out.put("can_head",a.head(n(r,"principal_scope")));out.put("can_attention",access.reqMain(a,r));
         out.put("open_cases",db.count("SELECT COUNT(*) FROM case_record WHERE requirement_id=? AND state<>'CERRADO'",id));
         out.put("total_cases",db.count("SELECT COUNT(*) FROM case_record WHERE requirement_id=?",id));
@@ -91,7 +92,8 @@ public class Queries {
         switch(kind){
             case "COM" -> {
                 var c=access.comForRead(a,id);scope=n(c,"origin_scope");out=new LinkedHashMap<>(c);
-                out.put("can_link",s(c,"state").equals("NUEVA")&&db.count("SELECT COUNT(*) FROM communication_link WHERE communication_id=?",id)==0);
+                // Misma facultad que COM_LINK (distribucion o jefatura de origen); la consulta institucional no la tiene.
+                out.put("can_link",(access.canDistribute(a,c)||a.head(scope))&&s(c,"state").equals("NUEVA")&&db.count("SELECT COUNT(*) FROM communication_link WHERE communication_id=?",id)==0);
                 out.put("persons",db.rows("SELECT * FROM communication_person WHERE communication_id=? ORDER BY id",id));
                 out.put("can_route",access.canDistribute(a,c)&&s(c,"state").equals("NUEVA")&&db.count("SELECT COUNT(*) FROM solicitation WHERE communication_id=?",id)==0);
                 out.put("can_assume",a.head(scope)&&s(c,"state").equals("NUEVA"));out.put("attention_scopes",access.managementScopes(a,scope));
@@ -104,9 +106,10 @@ public class Queries {
             }
             case "SOL" -> {
                 var s=db.one("SELECT * FROM solicitation WHERE id=?",id);if(!solVisible(a,s))Problem.denied();scope=n(s,"destination_scope");out=new LinkedHashMap<>(s);
-                out.put("communication",access.comForRead(a,n(s,"communication_id")));out.put("can_decide",access.solReceiver(a,scope)&&s(s,"state").equals("PENDIENTE"));
+                var com=access.comForRead(a,n(s,"communication_id"));out.put("communication",com);out.put("can_decide",access.solReceiver(a,scope)&&s(s,"state").equals("PENDIENTE"));
                 out.put("receiving_authority",access.solReceiverLabel(scope));
-                out.put("can_redistribute",s(s,"state").equals("DEVUELTA"));
+                // La consulta institucional tambien ve SOL devueltas: redistribuir sigue siendo de Distribucion.
+                out.put("can_redistribute",s(s,"state").equals("DEVUELTA")&&access.canDistribute(a,com));
             }
             case "REQ" -> {
                 var r=access.reqForRead(a,id);scope=n(r,"principal_scope");out=reqSummary(a,r);
@@ -119,11 +122,12 @@ public class Queries {
                     if(access.caseRead(a,c)){var v=caseSummary(a,c);v.put("readable",true);return v;}
                     if(a.head(scope)){var v=pick(c,"id","folio","state","scope_id");v.put("readable",false);return v;}return null;
                 }).filter(Objects::nonNull).toList());
-                out.put("notes",access.reqMain(a,r)?db.rows("SELECT n.*,u.name AS author FROM management_note n JOIN staff u ON u.id=n.author_id WHERE n.requirement_id=? AND n.case_id IS NULL ORDER BY n.id",id):List.of());
-                out.put("documents",documents(a,"REQ",id));out.put("citizen_documents",access.comRead(a,com)?db.rows("SELECT d.id,d.name,d.size_bytes,d.quarantined,d.document_type,d.created_ms,cm.folio AS source_folio FROM document_item d JOIN communication cm ON cm.id=d.communication_id WHERE cm.id=? ORDER BY d.id",n(r,"communication_id")):List.of());out.put("closures",access.reqMain(a,r)?db.rows("SELECT * FROM closure_record WHERE requirement_id=? AND case_id IS NULL ORDER BY id",id):List.of());
-                out.put("links",db.rows("SELECT l.*,c.folio AS com_folio FROM communication_link l JOIN communication c ON c.id=l.communication_id WHERE l.requirement_id=? ORDER BY l.id",id).stream().filter(l->a.head(scope)||s(l,"state").equals("ADMITIDA")&&(l.get("target_case_id")==null?access.reqMain(a,r):access.caseRead(a,db.one("SELECT * FROM case_record WHERE id=?",n(l,"target_case_id"))))).toList());
+                // Constancias del REQ: completas para quien lo gestiona; la consulta institucional no ve las reservadas (D4).
+                out.put("notes",access.reqRecords(a,r)?db.rows("SELECT n.*,u.name AS author FROM management_note n JOIN staff u ON u.id=n.author_id WHERE n.requirement_id=? AND n.case_id IS NULL ORDER BY n.id",id).stream().filter(n->!b(n,"reserved")||access.reqMain(a,r)).toList():List.of());
+                out.put("documents",documents(a,"REQ",id));out.put("citizen_documents",access.comRead(a,com)?db.rows("SELECT d.id,d.name,d.size_bytes,d.quarantined,d.document_type,d.created_ms,cm.folio AS source_folio FROM document_item d JOIN communication cm ON cm.id=d.communication_id WHERE cm.id=? ORDER BY d.id",n(r,"communication_id")):List.of());out.put("closures",access.reqRecords(a,r)?db.rows("SELECT * FROM closure_record WHERE requirement_id=? AND case_id IS NULL ORDER BY id",id):List.of());
+                out.put("links",db.rows("SELECT l.*,c.folio AS com_folio FROM communication_link l JOIN communication c ON c.id=l.communication_id WHERE l.requirement_id=? ORDER BY l.id",id).stream().filter(l->a.institutionalReader()||a.head(scope)||s(l,"state").equals("ADMITIDA")&&(l.get("target_case_id")==null?access.reqMain(a,r):access.caseRead(a,db.one("SELECT * FROM case_record WHERE id=?",n(l,"target_case_id"))))).toList());
                 out.put("flows",db.rows("SELECT * FROM flow_request WHERE requirement_id=? ORDER BY id",id).stream().filter(f->flowVisible(a,f)).toList());
-                out.put("reopenings",db.rows("SELECT * FROM reopening WHERE requirement_id=? ORDER BY id",id).stream().filter(p->a.head(scope)||a.id()==n(p,"requested_by")||p.get("case_id")!=null&&a.head(n(db.one("SELECT scope_id FROM case_record WHERE id=?",n(p,"case_id")),"scope_id"))).toList());
+                out.put("reopenings",db.rows("SELECT * FROM reopening WHERE requirement_id=? ORDER BY id",id).stream().filter(p->a.institutionalReader()||a.head(scope)||a.id()==n(p,"requested_by")||p.get("case_id")!=null&&a.head(n(db.one("SELECT scope_id FROM case_record WHERE id=?",n(p,"case_id")),"scope_id"))).toList());
             }
             case "CAS" -> {
                 var c=access.caseForRead(a,id);scope=n(c,"scope_id");out=caseSummary(a,c);
@@ -138,7 +142,7 @@ public class Queries {
             case "FLUJO" -> {var f=db.one("SELECT * FROM flow_request WHERE id=?",id);if(!flowVisible(a,f))Problem.denied();scope=n(f,"origin_scope");out=new LinkedHashMap<>(f);out.put("can_accept",a.head(n(f,"target_scope")));out.put("can_withdraw",a.head(scope));out.put("case_scopes",access.managementScopes(a,n(f,"target_scope")));}
             default -> throw new Problem(404,"Tipo de ficha desconocido.");
         }
-        out.put("history",kind.equals("REQ")&&!access.reqMain(a,db.one("SELECT * FROM requirement WHERE id=?",id))?List.of():history(a,kind,id,scope));db.audit(a.id(),"CONSULTA",""+kind,id,scope,"");return out;
+        out.put("history",kind.equals("REQ")&&!access.reqRecords(a,db.one("SELECT * FROM requirement WHERE id=?",id))?List.of():history(a,kind,id,scope));db.audit(a.id(),"CONSULTA",""+kind,id,scope,"");return out;
     }
     private List<Map<String,Object>> history(Actor a,String kind,long id,long scope){
         // Lectores por materia reciben historia del Caso autorizado, no auditoria transversal.
@@ -169,7 +173,7 @@ public class Queries {
     }
     public List<Map<String,Object>> documents(Actor a,String kind,long id){
         String column=switch(kind){case "COM"->"communication_id";case "REQ"->"requirement_id";case "CAS"->"case_id";default->throw new Problem(400,"Contexto documental invalido.");};
-        if(kind.equals("REQ")&&!access.reqMain(a,db.one("SELECT * FROM requirement WHERE id=?",id)))return List.of();
+        if(kind.equals("REQ")&&!access.reqRecords(a,db.one("SELECT * FROM requirement WHERE id=?",id)))return List.of();
         return db.rows("SELECT id,name,size_bytes,sha256,created_ms,uploaded_by,reserved,quarantined,note_id,document_type,description,previous_document_id FROM document_item WHERE "+column+"=? ORDER BY id",id).stream().filter(d->!b(d,"reserved")||kind.equals("CAS")&&access.reserved(a,db.one("SELECT * FROM case_record WHERE id=?",id))||kind.equals("REQ")&&a.head(n(db.one("SELECT principal_scope FROM requirement WHERE id=?",id),"principal_scope"))).toList();
     }
     public Map<String,Object> administration(Actor a){

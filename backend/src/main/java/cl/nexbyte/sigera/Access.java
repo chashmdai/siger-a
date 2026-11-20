@@ -15,6 +15,8 @@ public class Access {
         public boolean head(long scope) { return at("JEFATURA",scope)||at("DIRECCION",scope); }
         public boolean professional(long scope) { return head(scope)||at("PROFESIONAL",scope); }
         public boolean registrar(long scope) { return professional(scope)||at("ADMINISTRATIVO",scope); }
+        /** Consulta institucional (D4): lee todo salvo lo reservado; ninguna regla de escritura la considera. */
+        public boolean institutionalReader() { return role(Roles.CONSULTA_INSTITUCIONAL); }
     }
     private final Db db;
     private final MailOutbox mail;
@@ -148,11 +150,11 @@ public class Access {
     }
     // Los originales de una COM pueden contener materias ajenas: lectura transversal de Caso no abre todos sus archivos.
     public boolean caseSourceDocuments(Actor a,Map<String,Object> c) {
-        return a.head(n(c,"scope_id"))||member(a,c);
+        return a.institutionalReader()||a.head(n(c,"scope_id"))||member(a,c);
     }
     public boolean caseRead(Actor a,Map<String,Object> c) {
         long scope=n(c,"scope_id");
-        if(a.head(scope)||member(a,c)||a.at("LECTURA",scope))return true;
+        if(a.institutionalReader()||a.head(scope)||member(a,c)||a.at("LECTURA",scope))return true;
         if(!regional(scope))return false;
         for(var g:a.grants())if(g.role().equals("DIRECCION")&&g.scope()!=null){
             String unit=s(scope(g.scope()),"unit_code");
@@ -186,14 +188,19 @@ public class Access {
     public boolean attentionEditable(Actor a,Map<String,Object> r){
         return attentionWritable(a,r)&&db.count("SELECT COUNT(*) FROM attention_record WHERE requirement_id=?",n(r,"id"))==1;
     }
+    /**
+     * Registro completo del REQ (constancias, cierres y su motivo, documentos e historial): quien lo gestiona o la
+     * consulta institucional. Solo lectura; las escrituras siguen exigiendo reqMain.
+     */
+    public boolean reqRecords(Actor a,Map<String,Object> r) { return a.institutionalReader()||reqMain(a,r); }
     public boolean reqRead(Actor a,Map<String,Object> r) {
-        if(pendingAttentionRecipient(a,r))return true;
+        if(a.institutionalReader()||pendingAttentionRecipient(a,r))return true;
         if(n(r,"created_by")==a.id()&&db.count("SELECT COUNT(*) FROM attention_record WHERE requirement_id=?",n(r,"id"))==1)return true; // Resumen de continuidad, no ficha completa.
         if(reqMain(a,r)||a.at("LECTURA",n(r,"principal_scope")))return true;
         return db.rows("SELECT * FROM case_record WHERE requirement_id=?",n(r,"id")).stream().anyMatch(c->caseRead(a,c));
     }
     public boolean comRead(Actor a,Map<String,Object> c) {
-        if(n(c,"created_by")==a.id())return true;
+        if(a.institutionalReader()||n(c,"created_by")==a.id())return true;
         if(canDistribute(a,c))return true;
         if(db.rows("SELECT destination_scope FROM solicitation WHERE communication_id=? AND state='PENDIENTE'",n(c,"id")).stream().anyMatch(r->solReceiver(a,n(r,"destination_scope"))))return true;
         if(db.rows("SELECT * FROM requirement WHERE communication_id=?",n(c,"id")).stream().anyMatch(r->reqMain(a,r)||pendingAttentionRecipient(a,r)))return true;

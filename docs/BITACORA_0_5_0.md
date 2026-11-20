@@ -13,7 +13,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G03 | Supresion de AUTORIDAD e inicializacion | CERRADO |
 | G04 | Perfil de cuenta en la interfaz | CERRADO |
 | G04b | Perfil de cuenta: vista movil | CERRADO |
-| G05 | Consulta institucional: lectura | ABIERTO |
+| G05 | Consulta institucional: lectura | CERRADO |
 | G06 | Consulta institucional: bandejas e interfaz | ABIERTO |
 | G07 | Indice de personas (V11) | ABIERTO |
 | G08 | Buscador | ABIERTO |
@@ -128,3 +128,18 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - Verificado con `chrome-headless-shell` por CDP en una instancia propia (18601, borrada): a 414 px el perfil, `ActionDialog` y la vista previa quedan con 0 px a cada lado y la paleta con 24/24; ningun boton sale de su tarjeta ni se parte en 51 tarjetas de Administracion y 5 de Subrogancias (tambien a 700 px); sin desplazamiento horizontal de pagina. En escritorio los dialogos quedan centrados en el area visible. JUnit 90 ok + 1 omitida.
 - Verificacion final (2026-11-20): el responsable reviso a 390 px y lo aprobo. Tambien se verifico con el MCP de Playwright (Chromium del sistema, `--headless`) a 390 px en una instancia propia (18601, borrada), con sesion de `ti`. En la lista de cuentas hay 51 tarjetas, sin botones fuera de la tarjeta ni partidos y sin desplazamiento horizontal. El perfil de `humo.perfil` ocupa todo el ancho (0 px a cada lado), con la vista de tarjetas (1 de 14 ambitos con el filtro), sin matriz y sin desplazamiento horizontal. Se revisaron las capturas. G04b queda cerrado.
 - Verificacion manual sugerida al usuario: en http://localhost:18600 abre como `ti` el perfil de `prueba.perfil` en ancho de celular. Comprueba que se ve la tarjeta UPR-REQ con "2 funciones" y que al desactivar el filtro aparecen todos los ambitos. Busca "nna", expande la tarjeta y recorre con Tab y Espacio las casillas de funciones; marca TI y comprueba que las tarjetas quedan bloqueadas.
+
+### G05 - Consulta institucional: lectura   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate G05: consulta institucional, lectura`)
+- Hecho: rol `CONSULTA_INSTITUCIONAL` en `Roles` (institucional, grupo CONSULTA; aparece solo en el perfil e incompatible con TI por `tiCompatible`). `Actor.institutionalReader()` abre `comRead`, `reqRead`, `caseRead`, `caseSourceDocuments`, `Attention.mayRead` (ficha general y NNA, versiones, entregas), `solVisible` (todo estado) y `flowVisible`. Nuevo `Access.reqRecords` (= `reqMain` o lector) para el registro completo del REQ: `close_reason`, constancias, cierres, historial, documentos y su descarga (`Documents.authorize` REQ: leer con `reqRecords`, escribir con `reqMain`). Vinculos y reaperturas del REQ visibles. Reservados: los filtros existentes (jefatura o responsable) no cambian; las constancias reservadas del REQ, ahora visibles para quien no es `reqMain`, se excluyen.
+- Banderas corregidas: `can_link` (COM) exige distribucion o jefatura de origen, como `COM_LINK`, y `can_redistribute` (SOL) exige `canDistribute`. Antes no dependian de quien consultaba: la primera estaba oculta en la interfaz bajo `can_route` y la segunda la protegia `solVisible`.
+- Archivos clave: `Roles.java`, `Access.java`, `Attention.java`, `Queries.java`, `Documents.java`, `frontend/src/lib/labels.ts` (etiqueta), `InstitutionalReaderTest.java`, `CLAUDE.md`
+- Verificacion: JUnit 96 ok + 1 omitida (antes 90 + 1; +6 `InstitutionalReaderTest`; Maven informa 97 ejecutadas); frontend 22 ok; typecheck ok; build ok; humo por API 13/13 con el JAR en una instancia aislada (18605, borrada): catalogo con el rol, TI otorga por perfil (TI + consulta -> 409), el lector lee COM/SOL/REQ/CAS sin ninguna `can_*`, la constancia reservada no aparece, `CASE_NOTE` y `REQ_CLASSIFY` -> 403, TI sigue con 403 en el Caso.
+- Barrido: los tipos se leen del `switch` de `Workflow.run`; con revision vigente y datos validos, los 57 terminan en 403 (ninguno en 409). `NOTICE_READ` queda fuera (marcar un aviso propio no es gestion); sobre un aviso ajeno responde exito sin modificarlo (se comprueba).
+- Desvios del plan: el rol se publica en G05 (aprobado). Hasta G06 un lector puro no tiene bandejas, contadores ni menu (`/worklist` da 0) y solo llega a una ficha por enlace. Las dos banderas corregidas no estaban en el alcance, pero las expone la lectura nueva.
+- Hallazgos para gates siguientes:
+  - G06: `BoardQueries.Visibility` necesita el equivalente SQL de `institutionalReader` en `comRead`, `reqRead`, `caseRead` y en las SOL de todo estado. `/api/export` usa las bandejas y heredara el cambio. En `menu.ts`, `read` debe incluir `CONSULTA_INSTITUCIONAL`. `InstitutionalReaderTest.fixture()` sirve de base para la equivalencia `Access` vs `BoardQueries`.
+  - G06 (interfaz): las demas banderas de las fichas ya llegan en falso para el lector. Revisar los botones que no dependen de `can_*` (por ejemplo, acciones de `SolDetail` o `ReqDetail` ligadas a `can_head`).
+  - `TaskReminders` usa `caseRead`: un ejecutor que deja de ser miembro pero tiene la consulta sigue recibiendo recordatorios (inocuo).
+- Pendientes: bandejas, dashboard, menu y aviso en las fichas -> G06; recorrido del lector en `PRUEBAS_MANUALES_0_5_0.md` -> G14; `MySql84IntegrationTest` con el lector -> G13
+- Verificacion manual sugerida al usuario: no aplica en la interfaz hasta G06. Opcional: como `ti`, abre el perfil de una cuenta y comprueba que aparece la casilla "Consulta institucional" y que al marcar TI se limpia.
