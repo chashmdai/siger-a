@@ -8,6 +8,12 @@ estructura-inicial.json
   - funciones de funcionarios: ADMINISTRATIVO, PROFESIONAL, JEFATURA, DIRECCION, LECTURA, AUDITORIA (con "ambito")
     o DISTRIBUIDOR y TI (institucionales, sin ambito). Una persona puede combinar funciones; se admiten varios
     distribuidores; una jefatura o direccion por ambito. TI va sola: no se combina con ninguna otra funcion.
+  - Sedes regionales (desde 0.5.0): un ambito por sede con "regional": true y "region" (codigo de region del
+    Formulario: 15 Arica y Parinacota, 01 Tarapaca, 02 Antofagasta, 03 Atacama, 04 Coquimbo, 05 Valparaiso,
+    13 Metropolitana, 06 O'Higgins, 07 Maule, 16 Nuble, 08 Biobio, 09 La Araucania, 14 Los Rios, 10 Los Lagos,
+    11 Aysen, 12 Magallanes). "estado": ACTIVA (por defecto) o PROYECTADA (no recibe nada hasta que TI la active;
+    sus cuentas y funciones quedan preparadas). "apertura" opcional, aaaa-mm-dd. La Coordinacion regional se registra
+    como DIRECCION de la sede: las sedes no tienen JEFATURA. La sede del ejemplo es ficticia: reemplazarla o retirarla.
   - Desde 0.5.0 TI administra el sistema (cuentas, funciones y subrogancias) sin acceso a expedientes. No existe la
     autoridad habilitante: un archivo con la entrada "autoridad" se rechaza.
 

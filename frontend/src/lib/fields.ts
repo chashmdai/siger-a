@@ -17,6 +17,10 @@ export const objective: Field = {key: 'objective', label: 'Objetivo de esta lín
 
 export const person = (catalog: Row, key = 'responsible_id', label = 'Profesional responsable', scopeId?: number): Field => ({key, label, type: 'select', options: people(catalog, scopeId), required: true});
 export const scopeField = (catalog: Row, key = 'scope_id', label = 'Ámbito de destino'): Field => ({key, label, type: 'select', options: scopes(catalog), required: true});
+/** Adscripción de una cuenta: ámbitos activos y sedes proyectadas (dotación preparada); nunca una sede cerrada. */
+export const staffScopeField = (catalog: Row, label = 'Adscripción principal', value?: number): Field => ({key: 'scope_id', label, type: 'select', required: true, value,
+  options: list(catalog, 'scopes').filter(s => s.enabled !== false || text(s, 'state') === 'PROYECTADA')
+    .map(s => ({value: number(s, 'id'), label: text(s, 'code') + ' · ' + text(s, 'name') + (text(s, 'state') === 'PROYECTADA' ? ' (sede proyectada)' : '')}))});
 
 /** Select de una sola opcion ya decidida en la pantalla (la persona, el Caso o la decision elegidos). */
 export const fixedSelect = (key: string, label: string, value: string | number, optionLabel: string = String(value)): Field =>

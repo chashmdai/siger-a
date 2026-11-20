@@ -149,3 +149,32 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-In
 ```
 
 Reiniciar SIGER. Solo los avisos nuevos generan correo, desde `siger@defensorianinez.cl` y para destinatarios `@defensorianinez.cl`.
+
+## Actualizacion a 0.5.0: inventario de Coordinaciones regionales (antes de actualizar)
+
+Desde 0.5.0 la Coordinacion regional se registra como `DIRECCION` de su sede (D7). Al primer arranque con 0.5.0, una rutina auditada (`sistema:actualizacion`, marcador `COORDINACION_REGIONAL_050`) convierte cada `JEFATURA` vigente o programada en una sede. Si la sede ya tiene una `DIRECCION` superpuesta, esa `JEFATURA` no se convierte y Administracion muestra el aviso `JEFATURA_EN_SEDE`. Para saber de antemano que hara la rutina, ejecuta en la instancia 0.4.0 (esquema V10) esta consulta de solo lectura con el cliente `mysql` de la VM, sobre el esquema `siger_a_*` de la instancia. No modifica nada.
+
+```sql
+-- 1) JEFATURA vigentes o programadas en sedes regionales: se convertiran en DIRECCION con el mismo periodo.
+--    superpuesta=1: hay una DIRECCION que se superpone en la misma sede; no se convertira (aviso JEFATURA_EN_SEDE).
+SELECT s.code AS sede, u.username, g.id AS concesion, FROM_UNIXTIME(g.valid_from/1000) AS desde,
+       IF(g.valid_until IS NULL,NULL,FROM_UNIXTIME(g.valid_until/1000)) AS hasta,
+       EXISTS(SELECT 1 FROM role_assignment d WHERE d.scope_id=g.scope_id AND d.role_code='DIRECCION' AND d.revoked_at IS NULL
+              AND d.valid_from<COALESCE(g.valid_until,9223372036854775807) AND (d.valid_until IS NULL OR d.valid_until>g.valid_from)) AS superpuesta
+FROM role_assignment g JOIN org_scope s ON s.id=g.scope_id JOIN staff u ON u.id=g.user_id
+WHERE g.role_code='JEFATURA' AND s.regional=TRUE AND g.revoked_at IS NULL
+  AND (g.valid_until IS NULL OR g.valid_until>UNIX_TIMESTAMP()*1000)
+ORDER BY s.code, g.id;
+-- 2) Subrogancias vivas (no terminadas ni vencidas) sobre esas concesiones: pasaran a la nueva DIRECCION.
+SELECT s.code AS sede, x.id AS subrogancia, t.username AS titular, b.username AS subrogante,
+       FROM_UNIXTIME(x.from_ms/1000) AS desde, FROM_UNIXTIME(x.until_ms/1000) AS hasta
+FROM substitution_scope ss JOIN substitution x ON x.id=ss.substitution_id JOIN substitution_designation d ON d.id=x.designation_id
+JOIN role_assignment g ON g.id=ss.grant_id JOIN org_scope s ON s.id=g.scope_id
+JOIN staff t ON t.id=d.titular_id JOIN staff b ON b.id=d.substitute_id
+WHERE g.role_code='JEFATURA' AND s.regional=TRUE AND g.revoked_at IS NULL AND x.ended_ms IS NULL AND x.until_ms>UNIX_TIMESTAMP()*1000
+ORDER BY s.code, x.id;
+-- 3) Sedes existentes: quedaran ACTIVA (o CERRADA si estan deshabilitadas) y sin region; TI la registra despues.
+SELECT code, name, site_code, enabled FROM org_scope WHERE regional=TRUE ORDER BY code;
+```
+
+Despues de actualizar, TI registra la region de cada sede (comando `SCOPE_UPDATE`; panel Estructura desde R03) y resuelve en el perfil de cada cuenta las `JEFATURA` que hayan quedado sin convertir.

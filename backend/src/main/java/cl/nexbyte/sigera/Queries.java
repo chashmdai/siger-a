@@ -22,8 +22,17 @@ public class Queries {
         Map<String,Object> result=new LinkedHashMap<>();result.put("notices",notices);result.put("designations",designations);result.put("substitutions",subs);
         return result;
     }
+    /** Operaciones con destino de unidad o sede: SOL (COM_ROUTE, SOL_ROUTE), flujos (FLOW_REQUEST) y entrega a jefatura (ATTENTION_SEND). */
+    static final List<String> DESTINATION_OPERATIONS=List.of("SOL","COLABORACION","TRANSFERENCIA","DERIVACION","ENTREGA");
     public Map<String,Object> catalog(Actor a){
-        var catalogScopes=db.rows("SELECT * FROM org_scope ORDER BY id");Map<String,Object> result=new LinkedHashMap<>();result.put("scopes",catalogScopes);result.put("units",db.rows("SELECT * FROM org_unit ORDER BY code"));result.put("roles",Roles.json());
+        // Todos los ambitos, tambien las sedes PROYECTADA y CERRADA (con su estado, para etiquetas), con su nivel y las
+        // operaciones que reciben segun la misma regla que valida cada comando (Access.destination); solo un ambito
+        // activo recibe. La entrega a un profesional se publica aparte, por persona (handoff_scopes).
+        var catalogScopes=db.rows("SELECT * FROM org_scope ORDER BY id").stream().map(x->{
+            var row=new LinkedHashMap<String,Object>(x);row.put("level",b(x,"regional")?"REGIONAL":"CENTRAL");
+            row.put("receives",access.destination(x)?DESTINATION_OPERATIONS:List.of());return (Map<String,Object>)row;}).toList();
+        Map<String,Object> result=new LinkedHashMap<>();result.put("scopes",catalogScopes);
+        result.put("regions",AdultIdentity.REGIONS.entrySet().stream().map(e->Map.of("code",e.getKey(),"name",e.getValue())).toList());result.put("units",db.rows("SELECT * FROM org_unit ORDER BY code"));result.put("roles",Roles.json());
         var enabledScopes=catalogScopes.stream().filter(x->b(x,"enabled")).map(x->n(x,"id")).toList();
         boolean registrar=a.grants().stream().anyMatch(g->g.scope()!=null&&a.registrar(g.scope()));
         Map<Long,Actor> actors=new HashMap<>();for(var candidate:access.enabledActors())actors.put(candidate.id(),candidate);

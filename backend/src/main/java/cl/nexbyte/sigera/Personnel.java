@@ -21,14 +21,16 @@ public class Personnel {
             case "STAFF_CREATE" -> {
                 ti(a);String username=in.text("username",64,true).toLowerCase(Locale.ROOT);
                 require(username.matches("[a-z0-9][a-z0-9._-]{2,63}"),"Usuario: 3 a 64 caracteres sin espacios.");
-                long scope=in.id("scope_id");access.scope(scope);String password=password(in.text("password",72,true));
+                long scope=in.id("scope_id");access.staffableScope(scope);String password=password(in.text("password",72,true));
                 long user=db.insert("INSERT INTO staff(username,name,email,password_hash,home_scope) VALUES(?,?,?,?,?)",username,in.text("name",160,true),in.text("email",200,false),passwords.encode(password),scope);
                 audit(a,"CUENTA_CREADA","USUARIO",user,null,in.reason());return Workflow.done("USUARIO",user);
             }
             case "STAFF_UPDATE" -> {
                 ti(a);require(id!=a.id()||in.flag("enabled"),"No puedes desactivar tu propia sesion.");
-                db.one("SELECT id FROM staff WHERE id=? AND technical=FALSE",id);
-                db.update("UPDATE staff SET name=?,email=?,enabled=?,security_version=security_version+1 WHERE id=?",in.text("name",160,true),in.text("email",200,false),in.flag("enabled"),id);
+                var account=db.one("SELECT id,home_scope FROM staff WHERE id=? AND technical=FALSE",id);
+                // Adscripcion principal opcional (0.5.0): permite trasladar cuentas antes de cerrar una sede.
+                Long home=in.optionalId("scope_id");if(home!=null&&home!=n(account,"home_scope"))access.staffableScope(home);
+                db.update("UPDATE staff SET name=?,email=?,enabled=?,home_scope=?,security_version=security_version+1 WHERE id=?",in.text("name",160,true),in.text("email",200,false),in.flag("enabled"),home==null?n(account,"home_scope"):home,id);
                 keepTi();audit(a,"CUENTA_ACTUALIZADA","USUARIO",id,null,in.reason());return Workflow.done("USUARIO",id);
             }
             case "STAFF_RESET" -> {
@@ -39,7 +41,7 @@ public class Personnel {
             case "GRANT_CREATE" -> {
                 ti(a);long user=in.id("user_id");require(user!=a.id(),"No puedes otorgarte funciones.");access.user(user);
                 var role=Roles.require(in.text("role",32,true));
-                Long scope=null;if(role.scoped()){scope=in.id("scope_id");access.scope(scope);}
+                Long scope=null;if(role.scoped()){scope=in.id("scope_id");grantable(role.code(),scope);}
                 long from=in.instant("from_at",true),until=in.instant("until_at",false),end=until==0?Long.MAX_VALUE:until;
                 require(until==0||until>Math.max(from,System.currentTimeMillis()),"Periodo invalido para "+role.code()+": el termino debe ser posterior al inicio y a la fecha actual.");
                 List<Object> same=new ArrayList<>(List.of(user,role.code()));if(scope!=null)same.add(scope);same.add(end);same.add(from);
@@ -59,8 +61,41 @@ public class Personnel {
             case "SCOPE_CREATE" -> {
                 ti(a);String unit=in.choice("unit_code","UPR","UPD","UEP","UGI","REG","DAI","GAB","DEF","AUD");String code=in.text("code",48,true).toUpperCase(Locale.ROOT);
                 require(code.matches("[A-Z0-9_-]{2,48}"),"Codigo de ambito invalido.");
-                long scope=db.insert("INSERT INTO org_scope(code,name,unit_code,area_code,site_code,regional) VALUES(?,?,?,?,?,?)",code,in.text("name",160,true),unit,in.text("area_code",48,false),in.text("site_code",48,true),in.flag("regional"));
-                audit(a,"AMBITO_CREADO","AMBITO",scope,scope,in.reason());return Workflow.done("AMBITO",scope);
+                require(db.count("SELECT COUNT(*) FROM org_scope WHERE code=?",code)==0,"Ya existe un ambito con ese codigo.");
+                boolean regional=in.flag("regional");String region=region(in,regional);
+                String state=in.text("state",12,false);if(state.isEmpty())state=Access.ACTIVE;
+                require(state.equals(Access.ACTIVE)||state.equals(Access.PROJECTED),"Estado inicial invalido: ACTIVA o PROYECTADA.");
+                require(regional||state.equals(Access.ACTIVE),"Solo una sede regional puede crearse proyectada.");
+                long opens=in.instant("opens_at",false);Long opensMs=null;
+                if(opens>0)opensMs=opens;else if(regional&&state.equals(Access.ACTIVE))opensMs=System.currentTimeMillis();
+                long scope=db.insert("INSERT INTO org_scope(code,name,unit_code,area_code,site_code,regional,region_code,state,enabled,opens_ms) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    code,in.text("name",160,true),unit,in.text("area_code",48,false),in.text("site_code",48,true),regional,region,state,state.equals(Access.ACTIVE),opensMs);
+                audit(a,"AMBITO_CREADO","AMBITO",scope,scope,(regional?"Sede "+state+", region "+region+". ":"")+in.reason());return Workflow.done("AMBITO",scope);
+            }
+            case "SCOPE_UPDATE" -> {
+                ti(a);var s=db.one("SELECT * FROM org_scope WHERE id=?",id);Db.revision(s,revision);
+                require(!s(s,"state").equals(Access.CLOSED),"El ambito esta cerrado: no se edita.");
+                String name=in.text("name",160,true),region=region(in,b(s,"regional"));long opens=in.instant("opens_at",false);Long opensMs=opens>0?opens:null;
+                require(!name.equals(s(s,"name"))||!Objects.equals(region,s.get("region_code"))||!Objects.equals(opensMs,nullableId(s,"opens_ms")),"El ambito no tiene cambios.");
+                db.update("UPDATE org_scope SET name=?,region_code=?,opens_ms=?,revision=revision+1 WHERE id=?",name,region,opensMs,id);
+                audit(a,"AMBITO_ACTUALIZADO","AMBITO",id,id,in.reason());return Workflow.done("AMBITO",id);
+            }
+            case "SCOPE_ACTIVATE" -> {
+                ti(a);var s=site(id,revision);
+                require(s(s,"state").equals(Access.PROJECTED),"Solo una sede proyectada se activa.");
+                require(AdultIdentity.validRegion(s(s,"region_code")),"Indica la region de la sede antes de activarla.");
+                db.update("UPDATE org_scope SET state=?,enabled=TRUE,opens_ms=COALESCE(opens_ms,?),revision=revision+1 WHERE id=?",Access.ACTIVE,System.currentTimeMillis(),id);
+                // La dotacion preparada empieza a regir: las sesiones de esas cuentas se renuevan.
+                staffedIn(id).forEach(this::epoch);
+                audit(a,"AMBITO_ACTIVADO","AMBITO",id,id,in.reason());return Workflow.done("AMBITO",id);
+            }
+            case "SCOPE_CLOSE" -> {
+                ti(a);var s=site(id,revision);
+                require(s(s,"state").equals(Access.ACTIVE),"Solo una sede activa se cierra.");
+                var blockers=closeBlockers(id);
+                require(blockers.isEmpty(),"No se puede cerrar la sede: "+String.join("; ",blockers)+".");
+                db.update("UPDATE org_scope SET state=?,enabled=FALSE,revision=revision+1 WHERE id=?",Access.CLOSED,id);
+                audit(a,"AMBITO_CERRADO","AMBITO",id,id,in.reason());return Workflow.done("AMBITO",id);
             }
             case "DESIGNATE" -> {
                 ti(a);long scope=in.id("scope_id"),titular=in.id("titular_id"),substitute=in.id("substitute_id");access.scope(scope);
@@ -105,6 +140,49 @@ public class Personnel {
         }
     }
     static final Set<String> HEADS=Set.of("JEFATURA","DIRECCION");
+    static final String REGIONAL_HEAD_REJECTED="Las sedes regionales no tienen Jefatura: la Coordinacion regional se registra como Direccion de la sede (D7).";
+    /** Concesion nueva en un ambito: ACTIVA o PROYECTADA (dotacion preparada), nunca CERRADA; sin JEFATURA en sedes (D7). */
+    void grantable(String role,long scope){
+        var s=access.staffableScope(scope);
+        require(!(role.equals("JEFATURA")&&b(s,"regional")),REGIONAL_HEAD_REJECTED);
+    }
+    /** Region del Formulario: obligatoria en sedes regionales, ausente en el nivel central. */
+    private static String region(Input in,boolean regional){
+        String region=in.text("region_code",4,false);
+        if(regional)require(AdultIdentity.validRegion(region),"Indica la region de la sede (codigo del Formulario).");
+        else require(region.isEmpty(),"Solo las sedes regionales tienen region.");
+        return regional?region:null;
+    }
+    /** Sede regional con revision vigente: activar y cerrar solo aplican a sedes (D8). */
+    private Map<String,Object> site(long id,Long revision){
+        var s=db.one("SELECT * FROM org_scope WHERE id=?",id);Db.revision(s,revision);
+        require(b(s,"regional"),"Solo las sedes regionales se activan o cierran.");
+        return s;
+    }
+    /** Cuentas con funciones vigentes o programadas en el ambito. */
+    private List<Long> staffedIn(long scope){
+        return db.rows("SELECT DISTINCT user_id FROM role_assignment WHERE scope_id=? AND revoked_at IS NULL AND (valid_until IS NULL OR valid_until>?)",scope,System.currentTimeMillis()).stream().map(r->n(r,"user_id")).toList();
+    }
+    /**
+     * Lo que impide cerrar una sede (D8): nada abierto ni pendiente que quede sin quien lo resuelva, y ninguna funcion
+     * ni cuenta adscrita. Solo cantidades, sin datos de personas.
+     */
+    List<String> closeBlockers(long scope){
+        long now=System.currentTimeMillis();var out=new ArrayList<String>();
+        blocker(out,"REQ abiertos",db.count("SELECT COUNT(*) FROM requirement WHERE principal_scope=? AND state<>'CERRADO'",scope));
+        blocker(out,"Casos abiertos",db.count("SELECT COUNT(*) FROM case_record WHERE scope_id=? AND state<>'CERRADO'",scope));
+        blocker(out,"SOL pendientes",db.count("SELECT COUNT(*) FROM solicitation WHERE destination_scope=? AND state='PENDIENTE'",scope));
+        blocker(out,"COM sin encaminar",db.count("SELECT COUNT(*) FROM communication WHERE origin_scope=? AND state='NUEVA'",scope));
+        blocker(out,"SOL devueltas de COM de la sede",db.count("SELECT COUNT(*) FROM solicitation s JOIN communication c ON c.id=s.communication_id WHERE c.origin_scope=? AND s.state='DEVUELTA'",scope));
+        blocker(out,"peticiones entre unidades pendientes",db.count("SELECT COUNT(*) FROM flow_request WHERE state='PENDIENTE' AND (origin_scope=? OR target_scope=?)",scope,scope));
+        blocker(out,"entregas de primera atencion pendientes",db.count("SELECT COUNT(*) FROM attention_handoff WHERE state='PENDIENTE' AND (from_scope=? OR target_scope=?)",scope,scope));
+        blocker(out,"reaperturas pendientes",db.count("SELECT COUNT(*) FROM reopening p JOIN requirement q ON q.id=p.requirement_id LEFT JOIN case_record c ON c.id=p.case_id WHERE p.state='PENDIENTE' AND (q.principal_scope=? OR c.scope_id=?)",scope,scope));
+        blocker(out,"vinculaciones propuestas",db.count("SELECT COUNT(*) FROM communication_link l JOIN requirement q ON q.id=l.requirement_id JOIN communication c ON c.id=l.communication_id WHERE l.state='PROPUESTA' AND (q.principal_scope=? OR c.origin_scope=?)",scope,scope));
+        blocker(out,"funciones vigentes o programadas",db.count("SELECT COUNT(*) FROM role_assignment WHERE scope_id=? AND revoked_at IS NULL AND (valid_until IS NULL OR valid_until>?)",scope,now));
+        blocker(out,"cuentas con adscripcion principal en la sede",db.count("SELECT COUNT(*) FROM staff WHERE home_scope=? AND technical=FALSE",scope));
+        return out;
+    }
+    private static void blocker(List<String> out,String what,long count){if(count>0)out.add(count+" "+what);}
     private record Wanted(Roles.Role role,Long scope,long from,Long until){ }
 
     /**
@@ -139,7 +217,7 @@ public class Personnel {
         var finalRoles=new ArrayList<String>();kept.forEach(g->finalRoles.add(s(g,"role_code")));create.forEach(w->finalRoles.add(w.role().code()));
         require(!finalRoles.contains(Roles.TI)||finalRoles.size()==1,"TI es incompatible con cualquier otra funcion: el perfil no puede combinarla con otras.");
         for(var w:create){
-            if(w.scope()!=null)access.scope(w.scope());
+            if(w.scope()!=null)grantable(w.role().code(),w.scope()); // Solo concesiones nuevas: lo que se conserva no se revalida.
             if(HEADS.contains(w.role().code()))headFree(w.scope(),user,w.from()==0?now:w.from(),w.until()==null?Long.MAX_VALUE:w.until());
         }
         for(var g:revoke){
@@ -182,10 +260,17 @@ public class Personnel {
         var out=new ArrayList<Map<String,Object>>();
         if(permanentTi(db)==0)out.add(Map.of("code","SIN_TI_PERMANENTE","count",0L,
             "message","La instancia no tiene una cuenta TI habilitada, vigente y sin fecha de término. Recupérala con el procedimiento de recuperación de TI (scripts\\Recover-Ti.ps1)."));
+        long heads=regionalHeads(db);
+        if(heads>0)out.add(Map.of("code","JEFATURA_EN_SEDE","count",heads,
+            "message","Hay "+heads+(heads==1?" función Jefatura vigente o programada":" funciones Jefatura vigentes o programadas")+" en sedes regionales. La Coordinación regional se registra como Dirección: revísalo en el perfil de cada cuenta."));
         long conflicts=tiConflicts(db).size();
         if(conflicts>0)out.add(Map.of("code","TI_INCOMPATIBLE","count",conflicts,
             "message","Hay "+conflicts+(conflicts==1?" cuenta que combina":" cuentas que combinan")+" TI con otras funciones. TI no puede tener otras funciones: resuélvelo en el perfil de cada cuenta."));
         return out;
+    }
+    /** JEFATURA vigentes o programadas en sedes regionales (D7): las que la conversion de arranque no pudo convertir. */
+    static long regionalHeads(Db db){
+        return db.count("SELECT COUNT(*) FROM role_assignment g JOIN org_scope s ON s.id=g.scope_id WHERE g.role_code='JEFATURA' AND s.regional=TRUE AND g.revoked_at IS NULL AND (g.valid_until IS NULL OR g.valid_until>?)",System.currentTimeMillis());
     }
     /**
      * Cuentas que combinan TI con otra funcion vigente o programada (D2): heredadas de versiones anteriores, nunca se

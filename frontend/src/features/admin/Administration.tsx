@@ -4,7 +4,7 @@ import type {Row} from '../../lib/rows';
 import {bool, list, number, obj, text, when} from '../../lib/rows';
 import {has} from '../../lib/access';
 import {nameOf, scopeOf} from '../../lib/catalog';
-import {choose, reason, scopeField} from '../../lib/fields';
+import {choose, reason, staffScopeField} from '../../lib/fields';
 import type {Context} from '../../app/context';
 import {Table} from '../../components/Table';
 import {Icon} from '../../components/Icon';
@@ -38,7 +38,7 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
     {key: 'username', label: 'Usuario (minúsculas, puntos o guiones)', required: true, max: 64},
     {key: 'name', label: 'Nombre', required: true, max: 160},
     {key: 'email', label: 'Correo (opcional, no se envía)', max: 200},
-    scopeField(ctx.catalog, 'scope_id', 'Adscripción principal'),
+    staffScopeField(ctx.catalog),
     {key: 'password', label: 'Clave temporal individual (14 a 72 bytes)', type: 'password', required: true, max: 72},
     reason,
   ], note: 'No recibe funciones operativas automaticamente. Entrega la clave por un canal seguro.'});
@@ -49,11 +49,13 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
     {key: 'area_code', label: 'Área (opcional)', max: 48},
     {key: 'site_code', label: 'Sede / CENTRAL', required: true, max: 48},
     {key: 'regional', label: 'Es sede regional', type: 'checkbox'},
+    {key: 'region_code', label: 'Región (obligatoria en sedes regionales)', type: 'select', options: list(ctx.catalog, 'regions').map(r => ({value: text(r, 'code'), label: text(r, 'name')}))},
+    {key: 'state', label: 'Estado inicial', type: 'select', required: true, value: 'ACTIVA', options: [{value: 'ACTIVA', label: 'Activa'}, {value: 'PROYECTADA', label: 'Proyectada (solo sedes regionales)'}]},
     reason,
-  ]});
+  ], note: 'Una sede proyectada no recibe comunicaciones ni solicitudes; puedes preparar sus cuentas y funciones, que rigen al activarla.'});
   const accountActions = (r: Row) => <div className="actions compact">
     {number(r, 'id') !== ctx.user.id && <button className="sm" onClick={() => setProfile(r)}><Icon name="shield" size={16}/>Perfil</button>}
-    <button className="sm" onClick={() => choose(ctx, 'Actualizar cuenta', 'STAFF_UPDATE', r, [{key: 'name', label: 'Nombre', required: true, value: text(r, 'name'), max: 160}, {key: 'email', label: 'Correo', value: text(r, 'email'), max: 200}, {key: 'enabled', label: 'Habilitada', type: 'checkbox', value: bool(r, 'enabled')}, reason])}>Editar o desactivar</button>
+    <button className="sm" onClick={() => choose(ctx, 'Actualizar cuenta', 'STAFF_UPDATE', r, [{key: 'name', label: 'Nombre', required: true, value: text(r, 'name'), max: 160}, {key: 'email', label: 'Correo', value: text(r, 'email'), max: 200}, {key: 'enabled', label: 'Habilitada', type: 'checkbox', value: bool(r, 'enabled')}, staffScopeField(ctx.catalog, 'Adscripción principal', number(r, 'home_scope')), reason])}>Editar o desactivar</button>
     <button className="sm" onClick={() => choose(ctx, 'Restablecer clave temporal', 'STAFF_RESET', r, [{key: 'password', label: 'Nueva clave individual temporal', type: 'password', required: true, max: 72}, reason], 'Invalida sesiones y exige cambio al ingresar.')}>Restablecer</button>
   </div>;
   // Revocacion individual (por ejemplo, uno de dos periodos de la misma funcion); el perfil cubre el resto.

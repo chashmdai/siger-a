@@ -22,8 +22,13 @@ import static cl.nexbyte.sigera.Db.*;
 @ActiveProfiles("test")
 class InstitutionalStaffTest {
     static final Path DIR=Path.of("target","institucional-staff-"+UUID.randomUUID());
-    static final String STAFF=InstitutionalBootstrapTest.VALID.replace("\"ambito\":\"UGI\"}}","\"ambito\":\"UGI\"},"
-        +"\"funcionarios\":[{\"usuario\":\"jefa.req\",\"nombre\":\"Jefa REQ\",\"correo\":\"jefa@defensorianinez.cl\",\"ambito\":\"UPR-REQ\",\"funciones\":[{\"funcion\":\"JEFATURA\",\"ambito\":\"UPR-REQ\"},{\"funcion\":\"PROFESIONAL\",\"ambito\":\"UPR-REQ\"}]},"
+    // Sedes de prueba (D7-D8): una activa con su Coordinacion como DIRECCION y otra proyectada con dotacion preparada.
+    static final String SITES="{\"codigo\":\"REG-SUR\",\"nombre\":\"Sede de prueba Sur\",\"unidad\":\"REG\",\"sede\":\"SEDE-SUR\",\"regional\":true,\"region\":\"10\"},"
+        +"{\"codigo\":\"REG-NORTE\",\"nombre\":\"Sede de prueba Norte\",\"unidad\":\"REG\",\"sede\":\"SEDE-NORTE\",\"regional\":true,\"region\":\"15\",\"estado\":\"PROYECTADA\",\"apertura\":\"2027-03-01\"}";
+    static final String SITE_STAFF="{\"usuario\":\"coord.sur\",\"nombre\":\"Coordinacion Sur\",\"ambito\":\"REG-SUR\",\"funciones\":[{\"funcion\":\"DIRECCION\",\"ambito\":\"REG-SUR\"},{\"funcion\":\"PROFESIONAL\",\"ambito\":\"REG-SUR\"}]},"
+        +"{\"usuario\":\"prep.norte\",\"nombre\":\"Dotacion Norte\",\"ambito\":\"REG-NORTE\",\"funciones\":[{\"funcion\":\"DIRECCION\",\"ambito\":\"REG-NORTE\"}]},";
+    static final String STAFF=InstitutionalBootstrapTest.VALID.replace("\"sede\":\"CENTRAL\"}],","\"sede\":\"CENTRAL\"},"+SITES+"],").replace("\"ambito\":\"UGI\"}}","\"ambito\":\"UGI\"},"
+        +"\"funcionarios\":["+SITE_STAFF+"{\"usuario\":\"jefa.req\",\"nombre\":\"Jefa REQ\",\"correo\":\"jefa@defensorianinez.cl\",\"ambito\":\"UPR-REQ\",\"funciones\":[{\"funcion\":\"JEFATURA\",\"ambito\":\"UPR-REQ\"},{\"funcion\":\"PROFESIONAL\",\"ambito\":\"UPR-REQ\"}]},"
         +"{\"usuario\":\"distribuidora\",\"nombre\":\"Distribuidora\",\"ambito\":\"UPR-REQ\",\"funciones\":[{\"funcion\":\"DISTRIBUIDOR\"},{\"funcion\":\"ADMINISTRATIVO\",\"ambito\":\"UPR-REQ\"}]},"
         +"{\"usuario\":\"profesional.req\",\"nombre\":\"Profesional REQ\",\"ambito\":\"UPR-REQ\",\"funciones\":[{\"funcion\":\"PROFESIONAL\",\"ambito\":\"UPR-REQ\"}]}]}");
     @DynamicPropertySource static void file(DynamicPropertyRegistry r)throws Exception{
@@ -31,16 +36,25 @@ class InstitutionalStaffTest {
         r.add("siger.bootstrap-file",()->DIR.resolve("estructura.json").toString());
         r.add("siger.data",()->DIR.resolve("data").toString());
     }
-    @Autowired Db db;@Autowired Bootstrap bootstrap;@Autowired Workflow flow;
+    @Autowired Db db;@Autowired Bootstrap bootstrap;@Autowired Workflow flow;@Autowired Access access;
 
     @Test void funcionariosConFuncionesRealesSinDatosDePrueba()throws Exception{
-        assertEquals(4,db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE"));
-        assertEquals(4,db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE AND must_change=TRUE"));
+        assertEquals(6,db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE"));
+        assertEquals(6,db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE AND must_change=TRUE"));
         long jefa=n(db.one("SELECT id FROM staff WHERE username='jefa.req'"),"id"),scope=n(db.one("SELECT id FROM org_scope WHERE code='UPR-REQ'"),"id");
         assertEquals(1,db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code='JEFATURA' AND scope_id=?",jefa,scope));
         assertEquals(1,db.count("SELECT COUNT(*) FROM role_assignment WHERE role_code='DISTRIBUIDOR' AND scope_id IS NULL"));
         assertEquals(0,db.count("SELECT COUNT(*) FROM role_assignment WHERE basis NOT LIKE 'INICIALIZACION INSTITUCIONAL.%'"));
-        assertEquals(5,Files.readAllLines(DIR.resolve("data").resolve("bootstrap-usuarios.csv")).size());
+        assertEquals(7,Files.readAllLines(DIR.resolve("data").resolve("bootstrap-usuarios.csv")).size());
+        // Sedes: la activa rige con su apertura; la proyectada queda deshabilitada y su dotacion preparada no rige aun.
+        var sur=db.one("SELECT * FROM org_scope WHERE code='REG-SUR'");var norte=db.one("SELECT * FROM org_scope WHERE code='REG-NORTE'");
+        assertEquals("10",s(sur,"region_code"));assertEquals("ACTIVA",s(sur,"state"));assertTrue(b(sur,"enabled"));assertNotNull(sur.get("opens_ms"));
+        assertEquals("PROYECTADA",s(norte,"state"));assertFalse(b(norte,"enabled"));
+        assertEquals(java.time.LocalDate.of(2027,3,1).atStartOfDay(java.time.ZoneId.of("America/Santiago")).toInstant().toEpochMilli(),n(norte,"opens_ms"));
+        assertEquals("ACTIVA",s(db.one("SELECT state FROM org_scope WHERE code='UGI'"),"state"));assertNull(db.one("SELECT region_code FROM org_scope WHERE code='UGI'").get("region_code"));
+        assertTrue(access.actor("coord.sur").head(n(sur,"id")));
+        assertEquals(1,db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=(SELECT id FROM staff WHERE username='prep.norte') AND role_code='DIRECCION'"));
+        assertFalse(access.actor("prep.norte").head(n(norte,"id")));
         assertEquals(0,db.count("SELECT COUNT(*) FROM communication"));
         // Flujo real con datos ficticios: la distribuidora registra una COM y la jefatura la recibe (reglas existentes).
         db.update("UPDATE staff SET must_change=FALSE WHERE technical=FALSE");
@@ -59,8 +73,15 @@ class InstitutionalStaffTest {
         String repeated=STAFF.replace("\"usuario\":\"profesional.req\"","\"usuario\":\"jefa.req\"");
         String unknownScope=STAFF.replace("\"funcion\":\"PROFESIONAL\",\"ambito\":\"UPR-REQ\"}]}]}","\"funcion\":\"PROFESIONAL\",\"ambito\":\"NO-EXISTE\"}]}]}");
         String centralWithScope=STAFF.replace("{\"funcion\":\"DISTRIBUIDOR\"}","{\"funcion\":\"DISTRIBUIDOR\",\"ambito\":\"UPR-REQ\"}");
+        String headInSite=STAFF.replace("{\"funcion\":\"DIRECCION\",\"ambito\":\"REG-SUR\"}","{\"funcion\":\"JEFATURA\",\"ambito\":\"REG-SUR\"}");
+        String siteWithoutRegion=STAFF.replace(",\"region\":\"10\"","");
+        String unknownRegion=STAFF.replace("\"region\":\"10\"","\"region\":\"99\"");
+        String closedSite=STAFF.replace("\"estado\":\"PROYECTADA\"","\"estado\":\"CERRADA\"");
+        String badOpening=STAFF.replace("2027-03-01","2027-13-01");
+        String centralWithRegion=STAFF.replace("\"unidad\":\"UGI\",\"sede\":\"CENTRAL\"","\"unidad\":\"UGI\",\"sede\":\"CENTRAL\",\"region\":\"13\"");
         int i=0;
-        for(String bad:List.of(twoHeads,tiCombined,tiWithScope,sameTwice,authority,repeated,unknownScope,centralWithScope)){
+        for(String bad:List.of(twoHeads,tiCombined,tiWithScope,sameTwice,authority,repeated,unknownScope,centralWithScope,
+                               headInSite,siteWithoutRegion,unknownRegion,closedSite,badOpening,centralWithRegion)){
             assertNotEquals(STAFF,bad,"caso "+i);
             Path f=DIR.resolve("invalido-"+(i++)+".json");Files.writeString(f,bad);
             var e=assertThrows(IllegalStateException.class,()->bootstrap.institutional(f));

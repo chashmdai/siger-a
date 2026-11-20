@@ -66,6 +66,10 @@ class TiAdministrationTest {
         admin.put("GRANT_CREATE",new Object[]{null,null,grant(target,"LECTURA",reqScope)});
         admin.put("GRANT_REVOKE",new Object[]{targetGrant,null,Map.of("reason","x")});
         admin.put("SCOPE_CREATE",new Object[]{null,null,Map.of("unit_code","UPR","code","UPR-X","name","Ambito x","site_code","CENTRAL","reason","x")});
+        long regDemo=scope("REG-DEMO");
+        admin.put("SCOPE_UPDATE",new Object[]{regDemo,0L,Map.of("name","Cambio","region_code","05","reason","x")});
+        admin.put("SCOPE_ACTIVATE",new Object[]{regDemo,0L,Map.of("reason","x")});
+        admin.put("SCOPE_CLOSE",new Object[]{regDemo,0L,Map.of("reason","x")});
         admin.put("DESIGNATE",new Object[]{null,null,Map.of("scope_id",upd,"titular_id",user("direccion.upd"),"substitute_id",user("profesional.upd"),"reason","x")});
         admin.put("SUBSTITUTE_ACTIVATE",new Object[]{demoDesignation,null,Map.of("from_at",ago(1),"until_at",in(3600),"reason","x")});
         admin.put("DOC_RELEASE",new Object[]{1L,null,Map.of("reason","x")});

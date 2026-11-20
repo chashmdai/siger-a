@@ -74,9 +74,36 @@ public class Access {
     public Map<String,Object> scope(long id) {
         var r=db.one("SELECT * FROM org_scope WHERE id=?",id);Problem.require(b(r,"enabled"),"Ambito no habilitado.");return r;
     }
+    /**
+     * Ambito donde TI puede adscribir cuentas u otorgar funciones (0.5.0, D7-D8): ACTIVA o PROYECTADA (dotacion
+     * preparada, rige al activar la sede). Una sede CERRADA no recibe cuentas ni funciones.
+     */
+    public Map<String,Object> staffableScope(long id) {
+        var r=db.one("SELECT * FROM org_scope WHERE id=?",id);
+        Problem.require(b(r,"enabled")||s(r,"state").equals(PROJECTED),s(r,"state").equals(CLOSED)?"La sede o ambito esta cerrado: no recibe cuentas ni funciones.":"Ambito no habilitado.");
+        return r;
+    }
+    public static final String PROJECTED="PROYECTADA",ACTIVE="ACTIVA",CLOSED="CERRADA";
+    /** Unidades centrales cuya Direccion recibe SOL, flujos y entregas a jefatura. */
+    static final Set<String> RECEIVING_UNITS=Set.of("UPR","UPD","UEP","UGI");
+    /**
+     * Ambito que recibe lo enviado a s (SOL, colaboracion, transferencia, derivacion y entrega a jefatura), o null si
+     * no recibe. Misma regla para validar cada comando (solDestination) y para publicar destinos en el catalogo:
+     * una sede activa se recibe a si misma; una unidad central, en su Direccion (UPR-REQ, en su Coordinadora).
+     */
+    Long receiverOf(Map<String,Object> s){
+        if(!b(s,"enabled"))return null;
+        if(b(s,"regional"))return n(s,"id");
+        if(!RECEIVING_UNITS.contains(s(s,"unit_code")))return null;
+        if("UPR-REQ".equals(s(s,"code")))return n(s,"id");
+        var roots=db.rows("SELECT id FROM org_scope WHERE unit_code=? AND site_code='CENTRAL' AND COALESCE(area_code,'')='' AND enabled=TRUE",s(s,"unit_code"));
+        return roots.size()==1?n(roots.getFirst(),"id"):null;
+    }
+    /** Destino publicable: el ambito se recibe a si mismo. */
+    public boolean destination(Map<String,Object> s){return Objects.equals(receiverOf(s),n(s,"id"));}
     public boolean regional(long scope){return b(db.one("SELECT regional FROM org_scope WHERE id=?",scope),"regional");}
     /** La unidad recibe SOL en Direccion; solo UPR-REQ tiene coordinacion de area como destinataria. */
-    public boolean solReceiver(Actor a,long scope){return receiver(a,scope(scope));}
+    public boolean solReceiver(Actor a,long scope){var s=db.one("SELECT * FROM org_scope WHERE id=?",scope);return b(s,"enabled")&&receiver(a,s);}
     private static boolean receiver(Actor a,Map<String,Object> s){
         long scope=n(s,"id");
         if(b(s,"regional"))return a.head(scope);
@@ -84,7 +111,8 @@ public class Access {
         return a.at("DIRECCION",scope);
     }
     public String solReceiverLabel(long scope){
-        var s=scope(scope);
+        // Tambien para fichas de una sede cerrada, que siguen legibles.
+        var s=db.one("SELECT * FROM org_scope WHERE id=?",scope);
         if(b(s,"regional"))return "Coordinacion regional: "+s(s,"name");
         return "UPR-REQ".equals(s(s,"code"))?"Coordinadora de Requerimientos":"Direccion "+s(s,"unit_code");
     }
@@ -102,11 +130,11 @@ public class Access {
         }
         if(b(selected,"regional"))return new SolDestination(n(selected,"id"),null);
         String unit=s(selected,"unit_code");
-        Problem.require(Set.of("UPR","UPD","UEP","UGI").contains(unit),"La dependencia no tiene recepcion de SOL habilitada.");
+        Problem.require(RECEIVING_UNITS.contains(unit),"La dependencia no tiene recepcion de SOL habilitada.");
         if(proposed!=null&&"UPR-REQ".equals(s(scope(proposed),"code")))return new SolDestination(proposed,proposed);
-        var roots=db.rows("SELECT * FROM org_scope WHERE unit_code=? AND site_code='CENTRAL' AND COALESCE(area_code,'')='' AND enabled=TRUE",unit);
-        Problem.require(roots.size()==1,"Falta habilitar la Direccion destinataria de "+unit+".");
-        return new SolDestination(n(roots.getFirst(),"id"),proposed);
+        Long target=receiverOf(selected);
+        Problem.require(target!=null,"Falta habilitar la Direccion destinataria de "+unit+".");
+        return new SolDestination(target,proposed);
     }
     /** Profesional elegible de cualquier area de la unidad, sin otorgarle permisos sobre toda ella. */
     public long solAttentionScope(Actor receiver,long staffId,long scope,Long area){
@@ -121,7 +149,8 @@ public class Access {
     }
     /** Ambitos precisos que una autoridad puede ejercer; ninguna herencia de organigrama. */
     public List<Long> managementScopes(Actor a,long reception){
-        var root=scope(reception);
+        var root=db.one("SELECT * FROM org_scope WHERE id=?",reception);
+        if(!b(root,"enabled"))return List.of(); // Sede cerrada: su ficha se lee, pero no se gestiona.
         if(b(root,"regional")||!s(root,"area_code").isBlank())return a.head(reception)?List.of(reception):List.of();
         return db.rows("SELECT id FROM org_scope WHERE unit_code=? AND site_code=? AND enabled=TRUE ORDER BY id",s(root,"unit_code"),s(root,"site_code"))
             .stream().map(r->n(r,"id")).filter(a::head).toList();

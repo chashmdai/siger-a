@@ -4,7 +4,9 @@
     {"codigo": "DEF", "nombre": "Defensoria", "unidad": "DEF", "sede": "CENTRAL"},
     {"codigo": "UGI", "nombre": "Gestion Institucional", "unidad": "UGI", "sede": "CENTRAL"},
     {"codigo": "UPR-REQ", "nombre": "Requerimientos / Atencion de Personas", "unidad": "UPR", "area": "REQ", "sede": "CENTRAL"},
-    {"codigo": "UPR-PD", "nombre": "Proteccion de Derechos", "unidad": "UPR", "area": "PD", "sede": "CENTRAL"}
+    {"codigo": "UPR-PD", "nombre": "Proteccion de Derechos", "unidad": "UPR", "area": "PD", "sede": "CENTRAL"},
+    {"codigo": "REG-EJEMPLO", "nombre": "EJEMPLO: Sede regional (reemplazar o retirar)", "unidad": "REG", "sede": "SEDE-EJEMPLO",
+     "regional": true, "region": "05", "estado": "PROYECTADA", "apertura": "2027-03-01"}
   ],
   "ti": {"usuario": "nombre.apellido.ti", "nombre": "Nombre Apellido (TI)", "correo": "persona.ti@defensorianinez.cl", "ambito": "UGI"},
   "funcionarios": [
@@ -12,6 +14,8 @@
      "funciones": [{"funcion": "DISTRIBUIDOR"}, {"funcion": "ADMINISTRATIVO", "ambito": "UPR-REQ"}]},
     {"usuario": "nombre.jefatura.req", "nombre": "Nombre Apellido", "correo": "jefatura.req@defensorianinez.cl", "ambito": "UPR-REQ",
      "funciones": [{"funcion": "JEFATURA", "ambito": "UPR-REQ"}, {"funcion": "PROFESIONAL", "ambito": "UPR-REQ"}]},
+    {"usuario": "nombre.coordinacion.regional", "nombre": "Nombre Apellido", "correo": "coordinacion.regional@defensorianinez.cl", "ambito": "REG-EJEMPLO",
+     "funciones": [{"funcion": "DIRECCION", "ambito": "REG-EJEMPLO"}, {"funcion": "PROFESIONAL", "ambito": "REG-EJEMPLO"}]},
     {"usuario": "nombre.profesional.req", "nombre": "Nombre Apellido", "correo": "profesional.req@defensorianinez.cl", "ambito": "UPR-REQ",
      "funciones": [{"funcion": "PROFESIONAL", "ambito": "UPR-REQ"}]}
   ]

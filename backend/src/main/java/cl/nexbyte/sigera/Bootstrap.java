@@ -36,8 +36,11 @@ public class Bootstrap implements ApplicationRunner {
         if(seed){
             if(db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE")==0)seed();
             reconcileDemoOrganization(); // Actualiza solo cuentas sinteticas; nunca nombres de funcionarios reales.
+            // Region sintetica de la sede de pruebas (0.5.0, D8); solo si sigue siendo la sede sintetica sin region.
+            db.update("UPDATE org_scope SET region_code=?,revision=revision+1 WHERE code='REG-DEMO' AND regional=TRUE AND region_code IS NULL AND LOWER(name) LIKE '%sintetica%'",DEMO_REGION);
         }
         suppressAuthority();
+        convertRegionalHeads();
         warnAdministration();
         if(migrate)ctx.close();
     }
@@ -63,7 +66,7 @@ public class Bootstrap implements ApplicationRunner {
             for(var u:units)db.update("INSERT INTO org_unit(code,name) VALUES(?,?)",u[0],u[1]);
             String[][] scopes={{"UPR","Direccion UPR","UPR",""},{"UPD","Direccion UPD","UPD",""},{"UEP","Direccion UEP","UEP",""},{"UPR-REQ","Requerimientos / Atencion de Personas","UPR","REQ"},{"UPR-NCE","NNA bajo cuidado del Estado","UPR","NCE"},{"UPR-RJ","Representacion Judicial","UPR","RJ"},{"UPR-PD","Proteccion de Derechos","UPR","PD"},{"UPD-EDU","Educacion","UPD","EDU"},{"UPD-DIF","Difusion","UPD","DIF"},{"UPD-PAR","Participacion","UPD","PAR"},{"UEP-EST","Estudios","UEP","EST"},{"UEP-OBS","Observatorio de Derechos","UEP","OBS"},{"UGI","Gestion Institucional","UGI",""},{"REG-DEMO","Sede sintetica - no oficial","REG",""}};
             Map<String,Long> ids=new LinkedHashMap<>();
-            for(var s:scopes){boolean regional=s[0].equals("REG-DEMO");long id=db.insert("INSERT INTO org_scope(code,name,unit_code,area_code,site_code,regional) VALUES(?,?,?,?,?,?)",s[0],s[1],s[2],s[3].isBlank()?null:s[3],regional?"SEDE-DEMO":"CENTRAL",regional);ids.put(s[0],id);}
+            for(var s:scopes){boolean regional=s[0].equals("REG-DEMO");long id=db.insert("INSERT INTO org_scope(code,name,unit_code,area_code,site_code,regional,region_code) VALUES(?,?,?,?,?,?,?)",s[0],s[1],s[2],s[3].isBlank()?null:s[3],regional?"SEDE-DEMO":"CENTRAL",regional,regional?DEMO_REGION:null);ids.put(s[0],id);}
             String[][] users={
                 {"distribucion","Distribuidor sintetico","UPR-REQ","DISTRIBUIDOR"},
                 {"administrativo","Primera atencion sintetica","UPR-REQ","ADMINISTRATIVO"},
@@ -78,7 +81,7 @@ public class Bootstrap implements ApplicationRunner {
                 {"profesional.uep","Profesional Estudios sintetico","UEP-EST","PROFESIONAL"},
                 {"direccion.ugi","Direccion UGI sintetica","UGI","DIRECCION"},
                 {"profesional.ugi","Profesional UGI sintetico","UGI","PROFESIONAL"},
-                {"coordinacion.regional","Coordinacion regional sintetica","REG-DEMO","JEFATURA"},
+                {"coordinacion.regional","Coordinacion regional sintetica","REG-DEMO","DIRECCION"}, // D7: rango de Direccion en su sede
                 {"profesional.regional","Profesional regional sintetico","REG-DEMO","PROFESIONAL"},
                 {"ti","Administracion tecnica sintetica","UGI","TI"},
                 {"auditoria","Auditoria de prueba","UPR-REQ","AUDITORIA"},
@@ -94,7 +97,7 @@ public class Bootstrap implements ApplicationRunner {
                     for(var e:ids.entrySet())if((e.getKey().equals(unit)||e.getKey().startsWith(unit+"-"))&&!e.getKey().equals("UPR-REQ"))grant(id,"DIRECCION",e.getValue());
                     if(unit.equals("UPR"))grant(id,"LECTURA",ids.get("UPR-REQ"));
                 }else grant(id,u[3],Set.of("TI","DISTRIBUIDOR").contains(u[3])?null:scope);
-                if(u[3].equals("JEFATURA"))grant(id,"PROFESIONAL",scope);
+                if(u[3].equals("JEFATURA")||u[2].equals("REG-DEMO")&&u[3].equals("DIRECCION"))grant(id,"PROFESIONAL",scope);
                 if(u[3].equals("DISTRIBUIDOR"))grant(id,"ADMINISTRATIVO",scope);
             }
             db.update("INSERT INTO substitution_designation(scope_id,titular_id,substitute_id,basis) VALUES(?,?,?,?)",ids.get("REG-DEMO"),people.get("coordinacion.regional"),people.get("profesional.regional"),"Designacion exclusivamente sintetica para probar subrogancia.");
@@ -198,12 +201,14 @@ public class Bootstrap implements ApplicationRunner {
         if(!root.path("autoridad").isMissingNode())throw invalid("desde 0.5.0 TI administra funciones; retira la entrada autoridad");
         String basis=text(root,"fundamento",1000,true);
         var scopes=root.path("ambitos");if(!scopes.isArray()||scopes.isEmpty()||scopes.size()>500)throw invalid("ambitos (1 a 500)");
-        var codes=new LinkedHashSet<String>();
+        var codes=new LinkedHashSet<String>();var regionalCodes=new HashSet<String>();
         for(var sc:scopes){
             String code=text(sc,"codigo",48,true);
             if(!code.matches("[A-Z0-9_-]{2,48}")||!codes.add(code))throw invalid("codigo de ambito "+code);
             if(!UNITS.containsKey(text(sc,"unidad",24,true)))throw invalid("unidad del ambito "+code);
             text(sc,"nombre",160,true);text(sc,"sede",48,true);text(sc,"area",48,false);
+            site(sc,code);
+            if(sc.path("regional").asBoolean(false))regionalCodes.add(code);
         }
         var ti=root.path("ti");String tiUser=user(ti);
         if(!codes.contains(text(ti,"ambito",48,true)))throw invalid("ambito de adscripcion de "+tiUser);
@@ -218,7 +223,8 @@ public class Bootstrap implements ApplicationRunner {
             var own=new HashSet<String>();
             for(var g:roles){
                 var role=role(text(g,"funcion",32,true),u);String scope="";
-                if(role.scoped()){scope=text(g,"ambito",48,true);if(!codes.contains(scope))throw invalid("ambito de la funcion de "+u);}
+                if(role.scoped()){scope=text(g,"ambito",48,true);if(!codes.contains(scope))throw invalid("ambito de la funcion de "+u);
+                    if(role.code().equals("JEFATURA")&&regionalCodes.contains(scope))throw invalid("la sede "+scope+" no tiene Jefatura: la Coordinacion regional se registra como DIRECCION ("+u+")");}
                 else if(!g.path("ambito").isMissingNode())throw invalid("la funcion "+role.code()+" es institucional y no lleva ambito ("+u+")");
                 if(!own.add(role.code()+"@"+scope))throw invalid("funcion "+role.code()+" repetida para "+u);
                 if(Personnel.HEADS.contains(role.code())&&!heads.add(scope))throw invalid("mas de una jefatura o direccion en "+scope);
@@ -234,9 +240,10 @@ public class Bootstrap implements ApplicationRunner {
             for(var u:UNITS.entrySet())if(db.count("SELECT COUNT(*) FROM org_unit WHERE code=?",u.getKey())==0)db.update("INSERT INTO org_unit(code,name) VALUES(?,?)",u.getKey(),u.getValue());
             Map<String,Long> ids=new HashMap<>();
             for(var sc:scopes){
-                String area=text(sc,"area",48,false);
-                ids.put(text(sc,"codigo",48,true),db.insert("INSERT INTO org_scope(code,name,unit_code,area_code,site_code,regional) VALUES(?,?,?,?,?,?)",
-                    text(sc,"codigo",48,true),text(sc,"nombre",160,true),text(sc,"unidad",24,true),area.isEmpty()?null:area,text(sc,"sede",48,true),sc.path("regional").asBoolean(false)));
+                String area=text(sc,"area",48,false),code=text(sc,"codigo",48,true);var site=site(sc,code);
+                ids.put(code,db.insert("INSERT INTO org_scope(code,name,unit_code,area_code,site_code,regional,region_code,state,enabled,opens_ms) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    code,text(sc,"nombre",160,true),text(sc,"unidad",24,true),area.isEmpty()?null:area,text(sc,"sede",48,true),site.regional(),
+                    site.region(),site.state(),site.state().equals(Access.ACTIVE),site.opens()));
             }
             long tiId=account(ti,ids,csv);
             db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,'TI',NULL,?,?)",tiId,System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);
@@ -253,6 +260,28 @@ public class Bootstrap implements ApplicationRunner {
                 if(Files.getFileStore(credentials).supportsFileAttributeView("posix"))Files.setPosixFilePermissions(credentials,PosixFilePermissions.fromString("rw-------"));
             }catch(Exception e){throw new IllegalStateException("No fue posible crear el archivo privado de accesos iniciales.");}
         });
+    }
+    private record Site(boolean regional,String region,String state,Long opens){ }
+    /**
+     * Datos de sede de un ambito del archivo (0.5.0, D7-D8): una sede regional lleva region (codigo del Formulario),
+     * estado ACTIVA (por defecto) o PROYECTADA y fecha de apertura opcional aaaa-mm-dd; el nivel central no los lleva.
+     */
+    private static Site site(tools.jackson.databind.JsonNode sc,String code){
+        boolean regional=sc.path("regional").asBoolean(false);
+        String region=text(sc,"region",4,false),state=text(sc,"estado",12,false),opening=text(sc,"apertura",10,false);
+        if(state.isEmpty())state=Access.ACTIVE;
+        if(!regional){
+            if(!region.isEmpty()||!opening.isEmpty()||!state.equals(Access.ACTIVE))throw invalid("region, estado y apertura solo aplican a sedes regionales ("+code+")");
+            return new Site(false,null,state,null);
+        }
+        if(!AdultIdentity.validRegion(region))throw invalid("region de la sede "+code+" (codigo del Formulario, por ejemplo 05)");
+        if(!state.equals(Access.ACTIVE)&&!state.equals(Access.PROJECTED))throw invalid("estado de la sede "+code+" (ACTIVA o PROYECTADA)");
+        Long opens=null;
+        if(!opening.isEmpty()){
+            try{opens=java.time.LocalDate.parse(opening).atStartOfDay(ExternalProjection.ZONE).toInstant().toEpochMilli();}
+            catch(java.time.DateTimeException e){throw invalid("apertura de la sede "+code+" (aaaa-mm-dd)");}
+        }else if(state.equals(Access.ACTIVE))opens=System.currentTimeMillis();
+        return new Site(true,region,state,opens);
     }
     /** Funcion del catalogo unico; AUTORIDAD (suprimida) o un codigo desconocido invalidan el archivo. */
     private static Roles.Role role(String code,String user){
@@ -286,6 +315,44 @@ public class Bootstrap implements ApplicationRunner {
                 LOG.info("Supresion de AUTORIDAD: {} concesiones revocadas en {} cuentas.",live.size(),users.size());
             }
             db.update("INSERT INTO application_marker(code,applied_ms) VALUES(?,?)",AUTHORITY_MARKER,now);
+        });
+    }
+    // --- Coordinacion regional como Direccion de la sede (0.5.0, D7) ---------------------------------
+    static final String REGIONAL_HEAD_MARKER="COORDINACION_REGIONAL_050",DEMO_REGION="05";
+    /**
+     * Rutina idempotente de arranque: cada JEFATURA vigente o programada en una sede regional se revoca (nunca se
+     * borra) y se otorga DIRECCION en la misma sede con el mismo periodo, a nombre de sistema:actualizacion, con un
+     * epoch por cuenta. Las subrogancias vivas sobre esa concesion pasan a la nueva (las terminadas o vencidas
+     * conservan su historia). Si una DIRECCION se superpone en la misma sede, la JEFATURA no se convierte: queda
+     * como aviso JEFATURA_EN_SEDE para que TI la resuelva en el perfil.
+     */
+    void convertRegionalHeads(){
+        tx.executeWithoutResult(status->{
+            db.lock();
+            if(db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",REGIONAL_HEAD_MARKER)>0)return;
+            long now=System.currentTimeMillis();
+            var live=db.rows("SELECT g.* FROM role_assignment g JOIN org_scope s ON s.id=g.scope_id WHERE g.role_code='JEFATURA' AND s.regional=TRUE AND g.revoked_at IS NULL AND (g.valid_until IS NULL OR g.valid_until>?) ORDER BY g.id",now);
+            Long actor=null;var users=new LinkedHashSet<Long>();int converted=0,kept=0;
+            String basis="Coordinacion regional registrada como Direccion de la sede (0.5.0, D7)";
+            for(var g:live){
+                long id=n(g,"id"),user=n(g,"user_id"),scope=n(g,"scope_id"),from=n(g,"valid_from");Long until=nullableId(g,"valid_until");
+                if(db.count("SELECT COUNT(*) FROM role_assignment WHERE scope_id=? AND role_code='DIRECCION' AND revoked_at IS NULL AND valid_from<? AND (valid_until IS NULL OR valid_until>?)",
+                    scope,until==null?Long.MAX_VALUE:until,from)>0){kept++;continue;}
+                if(actor==null)actor=maintenance(db);
+                db.update("UPDATE role_assignment SET revoked_at=? WHERE id=? AND revoked_at IS NULL",now,id);
+                db.audit(actor,"FUNCION_REVOCADA","USUARIO",user,scope,"JEFATURA. "+basis);
+                long grant=db.insert("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,valid_until,granted_by,basis) VALUES(?,'DIRECCION',?,?,?,?,?)",user,scope,from,until,actor,basis);
+                db.audit(actor,"FUNCION_OTORGADA","USUARIO",user,scope,"DIRECCION. "+basis);
+                for(var x:db.rows("SELECT ss.substitution_id,d.substitute_id FROM substitution_scope ss JOIN substitution x ON x.id=ss.substitution_id JOIN substitution_designation d ON d.id=x.designation_id WHERE ss.grant_id=? AND x.ended_ms IS NULL AND x.until_ms>?",id,now)){
+                    db.update("UPDATE substitution_scope SET grant_id=?,role_code='DIRECCION' WHERE substitution_id=? AND grant_id=?",grant,n(x,"substitution_id"),id);
+                    db.audit(actor,"SUBROGANCIA_ACTUALIZADA","SUBROGANCIA",n(x,"substitution_id"),scope,"La subrogancia sigue sobre la Direccion de la sede. "+basis);
+                    users.add(n(x,"substitute_id"));
+                }
+                users.add(user);converted++;
+            }
+            for(long u:users)db.update("UPDATE staff SET security_version=security_version+1 WHERE id=?",u);
+            if(converted+kept>0)LOG.info("Coordinacion regional: {} jefaturas convertidas en Direccion y {} sin convertir por superposicion.",converted,kept);
+            db.update("INSERT INTO application_marker(code,applied_ms) VALUES(?,?)",REGIONAL_HEAD_MARKER,now);
         });
     }
     /** Aviso en el log del servicio (solo codigos y cantidades, sin datos de personas); Administracion muestra lo mismo. */
