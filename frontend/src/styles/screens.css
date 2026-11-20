@@ -11,6 +11,8 @@
 .subheading { margin: 1.1rem 0 .5rem; font-size: .95rem; }
 button.block, .button.block { width: 100%; margin-top: .75rem; }
 .actions.compact { margin: 0; gap: .35rem; flex-wrap: nowrap; }
+/* El texto de cada boton de accion no se parte; en la vista de tarjetas los botones bajan de linea (components.css). */
+.actions.compact > button, .actions.compact > .button { white-space: nowrap; flex-shrink: 0; }
 .chip-ok { color: var(--ok-ink); background: var(--ok-bg); }
 .chip-warn { color: var(--warn-ink); background: var(--warn-bg); }
 .avatar.sm { width: 28px; height: 28px; font-size: .72rem; }
@@ -270,7 +272,7 @@ blockquote { margin: 0 0 1rem; padding: .75rem 1rem; font-size: 1rem; line-heigh
 .draft-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .55rem .75rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; animation: rise var(--base) var(--ease) both; }
 .draft-row label { margin: 0; }
 .draft-row small { display: block; }
-.attention-preview { width: min(920px, calc(100vw - 2rem)); }
+dialog.modal.attention-preview { --modal-width: 920px; }
 .preview-brand { display: flex; align-items: center; gap: .9rem; }
 .preview-meta { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; margin: 0 0 .8rem; font-size: .88rem; }
 .preview-meta dt { font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-500); }
@@ -335,7 +337,7 @@ blockquote { margin: 0 0 1rem; padding: .75rem 1rem; font-size: 1rem; line-heigh
 
 /* Perfil de la cuenta (Administracion): matriz de ambitos x funciones. En pantallas angostas la matriz se
    desplaza horizontalmente dentro de su marco y la columna de ambitos queda fija. */
-dialog.modal.profile-modal { width: min(980px, calc(100vw - 2rem)); }
+dialog.modal.profile-modal { --modal-width: 980px; }
 .profile-subtitle { display: flex; align-items: center; gap: .4rem; margin: 1.1rem 0 .6rem; font-size: .95rem; }
 .profile-matrix-scroll { max-width: 100%; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overscroll-behavior-x: contain; }
 .profile-matrix-scroll:focus-visible { outline: none; box-shadow: var(--ring); }

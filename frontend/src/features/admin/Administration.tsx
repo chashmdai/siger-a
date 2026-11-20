@@ -121,7 +121,7 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
           {name: 'Persona', render: g => nameOf(ctx.catalog, g.user_id)},
           {name: 'Función', render: g => <span className='chip'>{humanize(g.role_code, ROLE_LABELS)}</span>},
           {name: 'Ámbito', render: g => g.scope_id == null ? <span className='muted'>Institucional</span> : scopeOf(ctx.catalog, g.scope_id)},
-          {name: 'Desde', render: g => <span className='nowrap'>{when(g.valid_from)}</span>},
+          {name: 'Desde', render: g => number(g, 'valid_from') > 0 ? <span className='nowrap'>{when(g.valid_from)}</span> : <span className='muted'>Sin fecha registrada</span>},
           {name: 'Hasta', render: g => <span className='nowrap'>{g.valid_until == null ? 'Sin término' : when(g.valid_until)}</span>},
           {name: 'Estado', render: g => {const state = grantState(grantOf(g), now); return <span className={'chip' + (state === 'VIGENTE' ? ' chip-ok' : '')}>{GRANT_STATES[state]}{state === 'REVOCADA' ? ' ' + when(g.revoked_at) : ''}</span>;}},
           {name: 'Acción', render: g => ['VIGENTE', 'PROGRAMADA'].includes(grantState(grantOf(g), now)) && number(g, 'user_id') !== ctx.user.id ? <button className='sm' onClick={() => revoke(g)}>Revocar</button> : <span className='muted'>—</span>},

@@ -213,8 +213,10 @@ td small { display: block; max-width: 38ch; overflow-wrap: anywhere; }
     background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1);
   }
   .responsive tbody tr:hover { background: var(--surface); }
-  .responsive td { display: grid; grid-template-columns: minmax(96px, 36%) 1fr; gap: .75rem; padding: .45rem .95rem; border: 0; }
-  .responsive td > * { justify-self: start; }
+  /* minmax(0, 1fr): el valor se ajusta al ancho de la tarjeta en vez de desbordarla. */
+  .responsive td { display: grid; grid-template-columns: minmax(96px, 36%) minmax(0, 1fr); gap: .75rem; padding: .45rem .95rem; border: 0; }
+  .responsive td > * { justify-self: start; min-width: 0; max-width: 100%; }
+  .responsive td > .actions { flex-wrap: wrap; }
   .responsive td::before { content: attr(data-label); font-size: .74rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-500); padding-top: .12rem; }
   .responsive td:first-child { padding-top: .7rem; }
   .responsive td:last-child { padding-bottom: .7rem; }
@@ -320,9 +322,12 @@ td small { display: block; max-width: 38ch; overflow-wrap: anywhere; }
 .work-item-end > svg { color: var(--ink-500); transition: transform var(--base) var(--ease), color var(--base) var(--ease); }
 .work-item:hover .work-item-end > svg { transform: translateX(3px); color: var(--primary); }
 
-/* Dialogo modal de comandos */
+/* Dialogo modal de comandos. Regla comun de todos los dialogos .modal: cada variante solo cambia
+   --modal-width (nunca width ni margin), asi queda centrada con el mismo margen a ambos lados y en movil
+   todas pasan a la hoja inferior. 100% (no 100vw) es el ancho visible, sin la barra de desplazamiento. */
 dialog.modal {
-  width: min(640px, calc(100vw - 2rem)); max-height: min(88vh, 900px);
+  --modal-width: 640px;
+  width: min(var(--modal-width), calc(100% - 2rem)); max-width: none; max-height: min(88vh, 900px); margin: auto;
   padding: 0; overflow: hidden;
   background: var(--surface); border: 0; border-radius: var(--radius-xl); box-shadow: var(--shadow-3);
 }
@@ -343,7 +348,7 @@ dialog.modal.closing::backdrop { opacity: 0; transition: opacity var(--fast) var
 .field-counter { align-self: flex-end; margin-top: -.15rem; font-size: .74rem; font-weight: 500; color: var(--ink-500); font-variant-numeric: tabular-nums; }
 .field-counter.near { color: var(--warn-ink); font-weight: 650; }
 @media (max-width: 640px) {
-  dialog.modal { width: 100vw; max-width: 100vw; max-height: 94vh; margin: auto 0 0; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+  dialog.modal { width: 100%; max-width: 100%; max-height: 94vh; margin: auto 0 0; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
   dialog.modal[open] { animation: sheet-in var(--slow) var(--ease); }
   dialog.modal.closing { animation: sheet-out var(--base) var(--ease) forwards; }
   .modal-foot .actions { width: 100%; }
@@ -354,7 +359,7 @@ dialog.modal.closing::backdrop { opacity: 0; transition: opacity var(--fast) var
 
 /* Paleta de comandos */
 dialog.palette {
-  width: min(620px, calc(100vw - 2rem)); margin: 12vh auto auto; padding: 0; overflow: hidden;
+  width: min(620px, calc(100% - 2rem)); margin: 12vh auto auto; padding: 0; overflow: hidden;
   border: 0; border-radius: var(--radius-xl); box-shadow: var(--shadow-3);
 }
 dialog.palette[open] { animation: modal-in var(--base) var(--ease); }

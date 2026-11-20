@@ -12,8 +12,8 @@ import {useExit} from '../../components/useExit';
 import type {Entry, Grant, Profile, RoleDef, Wanted} from './profile';
 import {countIn, diff, duplicates, grantOf, hasTi, initial, keyOf, liveGrants, payload, periodProblems, TI, toggle, visibleScopes} from './profile';
 
-/** Valor para <input type="datetime-local"> en la zona del navegador. */
-const localInput = (ms: number | null) => ms == null ? '' : new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+/** Valor para <input type="datetime-local"> en la zona del navegador. Un inicio 0 (sin fecha registrada) queda vacio. */
+const localInput = (ms: number | null) => ms == null || ms <= 0 ? '' : new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 const fromInput = (value: string) => value ? new Date(value).getTime() : null;
 
 /** Bajo este ancho la matriz no cabe: cada ambito se muestra como una tarjeta expandible. Igual que el corte movil de los modales. */
@@ -65,6 +65,8 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
   const invalid = periodProblems(profile, now), ti = hasTi(profile), locked = busy || uncertain;
   const label = (role: string, scope: number | null | undefined) => (ROLE_LABELS[role] ?? humanize(role)) + (scope != null ? ' en ' + scopeOf(ctx.catalog, scope) : '');
   const period = (from: number | null, until: number | null) => (from != null && from > now ? 'desde ' + when(from) : 'desde ahora') + (until != null ? ', hasta ' + when(until) : ', sin término');
+  /** Periodo de una funcion existente (resumen de revocaciones): no es "desde ahora", ya rige o esta programada. */
+  const current = (g: Grant) => (g.valid_from > now ? 'programada desde ' + when(g.valid_from) : g.valid_from > 0 ? 'vigente desde ' + when(g.valid_from) : 'vigente') + (g.valid_until != null ? ', hasta ' + when(g.valid_until) : ', sin término');
   const wantedPeriod = (w: Wanted) => period(w.from_at ? Date.parse(w.from_at) : null, w.until_at ? Date.parse(w.until_at) : null);
 
   const set = (role: string, scope: number | null, on: boolean) => setProfile(p => toggle(p, role, scope, on, live));
@@ -202,7 +204,7 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
             </section>
             <section>
               <h3 className="profile-subtitle"><Icon name="close" size={16}/>Se revocan</h3>
-              {changes.revoke.length ? <ul>{changes.revoke.map((g: Grant) => <li key={g.id}>{label(g.role_code, g.scope_id)} <small>({period(g.valid_from, g.valid_until)})</small></li>)}</ul> : <p className="muted">Ninguna.</p>}
+              {changes.revoke.length ? <ul>{changes.revoke.map((g: Grant) => <li key={g.id}>{label(g.role_code, g.scope_id)} <small>({current(g)})</small></li>)}</ul> : <p className="muted">Ninguna.</p>}
             </section>
           </div>
           <p className="field-help">Cambiar la vigencia de una función la revoca y la vuelve a otorgar con el período nuevo. Al confirmar se cierran las sesiones abiertas de la cuenta; al volver a ingresar verá sus funciones nuevas.</p>

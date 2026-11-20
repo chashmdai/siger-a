@@ -126,3 +126,10 @@ test('el buscador compara codigo y nombre sin tildes ni mayusculas, palabra por 
   assert.deepEqual(all('inexistente'), []);
   assert.deepEqual(codes(visibleScopes(SCOPES, initial(live), live, true, 'nna')), []);
 });
+
+test('una funcion sin fecha de inicio registrada (semillas, inicio 0) se conserva sin enviar inicio', () => {
+  const seed = [grantOf({id: 20, user_id: 9, role_code: 'PROFESIONAL', scope_id: 3, valid_from: 0, valid_until: null, revoked_at: null})];
+  assert.equal(grantState(seed[0], NOW), 'VIGENTE');
+  assert.deepEqual(payload(initial(seed), NOW), [{role: 'PROFESIONAL', scope_id: 3}]);
+  assert.deepEqual(diff(seed, payload(initial(seed), NOW)), {grant: [], revoke: []});
+});
