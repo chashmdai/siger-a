@@ -170,10 +170,9 @@ class FormularioConsumerTest {
         assertThrows(UsernameNotFoundException.class,()->users.loadUserByUsername(FormularioReception.TECHNICAL));
         assertEquals(404,assertThrows(Problem.class,()->access.actor(FormularioReception.TECHNICAL)).status);
         assertTrue(access.enabledActors().stream().noneMatch(a->a.id()==n(t,"id")));
-        // TI no la habilita ni le repone clave; una autoridad no le otorga funciones.
+        // TI no la habilita, no le repone clave ni le otorga funciones.
         long ti=db.insert("INSERT INTO staff(username,name,password_hash,home_scope,must_change) VALUES('ti.formulario','TI prueba','test-non-login',?,FALSE)",scope);
         db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,'TI',NULL,0,'PRUEBA')",ti);
-        db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,'AUTORIDAD',?,0,'PRUEBA')",ti,scope);
         var admin=access.actor("ti.formulario");long tech=n(t,"id");
         assertEquals(404,assertThrows(Problem.class,()->personnel.run(admin,"STAFF_UPDATE",tech,null,new Input(Map.of("name","x","enabled",true,"reason","Prueba de resguardo")))).status);
         assertEquals(404,assertThrows(Problem.class,()->personnel.run(admin,"STAFF_RESET",tech,null,new Input(Map.of("password","Clave-Temporal-2026!","reason","Prueba de resguardo")))).status);

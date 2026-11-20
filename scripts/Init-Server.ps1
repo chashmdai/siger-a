@@ -22,7 +22,7 @@ $me=[Security.Principal.WindowsIdentity]::GetCurrent()
 if($Mode -eq 'Institucional'){
     $groups=(& "$env:SystemRoot\System32\whoami.exe" /groups /fo csv /nh) -join "`n"
     if($groups -match 'S-1-5-32-544'){throw 'La instancia institucional se inicializa COMO la cuenta de servicio de SIGER, sin privilegios administrativos (runas /user:<cuenta>). Esa cuenta sera la duena de la custodia DPAPI.'}
-    if(-not $EstructuraInicial -or -not(Test-Path -LiteralPath $EstructuraInicial -PathType Leaf)){throw 'El modo Institucional exige -EstructuraInicial con el archivo de ambitos reales, TI y autoridad habilitante (ver docs\INSTALACION_VM.md).'}
+    if(-not $EstructuraInicial -or -not(Test-Path -LiteralPath $EstructuraInicial -PathType Leaf)){throw 'El modo Institucional exige -EstructuraInicial con el archivo de ambitos reales, TI y funcionarios (ver docs\INSTALACION_VM.md).'}
     if(-not $Proposito){throw 'El modo Institucional exige -Proposito Validacion o Produccion.'}
 }elseif($EstructuraInicial -or $Proposito){throw '-EstructuraInicial y -Proposito solo corresponden al modo Institucional.'}
 if(-not $FolioPrefix){$FolioPrefix=if($Proposito -eq 'Validacion'){'SIGERV'}elseif($Proposito -eq 'Produccion'){'SIGER'}else{'COMP'}}
@@ -85,5 +85,5 @@ if($Mode -eq 'Institucional'){Copy-Item -LiteralPath $EstructuraInicial -Destina
 & (Join-Path $Root 'scripts\Migrate.ps1') -Root $Root -Initial
 if($LASTEXITCODE -and $LASTEXITCODE -ne 0){throw 'La migracion necesita revision.'}
 Write-Host "Instancia $($Mode.ToLowerInvariant()) preparada en $Root. MySQL propio permanece activo. No se inicio SIGER ni se abrio firewall."
-if($Mode -eq 'Institucional'){Write-Host 'Claves temporales de la cuenta TI y de la autoridad habilitante en data\bootstrap-usuarios.csv: entregarlas por canal seguro y retirar el archivo. No hay cuentas ni datos de prueba.'}
+if($Mode -eq 'Institucional'){Write-Host 'Claves temporales de la cuenta TI y de los funcionarios del archivo en data\bootstrap-usuarios.csv: entregarlas por canal seguro y retirar el archivo. No hay cuentas ni datos de prueba.'}
 else{Write-Host 'Las claves sinteticas estan en data\bootstrap-usuarios.csv. Nunca pegarlas en el chat.'}

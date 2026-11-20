@@ -108,15 +108,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA
 `estructura-inicial.json` lo prepara la institucion (dato real; no se versiona):
 
 ```json
-{"fundamento":"Resolucion o acto que designa a TI y a la autoridad habilitante inicial",
+{"fundamento":"Resolucion o acto que designa a TI y a los funcionarios iniciales",
  "ambitos":[{"codigo":"UGI","nombre":"Gestion Institucional","unidad":"UGI","sede":"CENTRAL"},
             {"codigo":"UPR-REQ","nombre":"Requerimientos / Atencion de Personas","unidad":"UPR","area":"REQ","sede":"CENTRAL","regional":false}],
  "ti":{"usuario":"nombre.apellido","nombre":"Nombre de la persona TI","correo":"persona@defensorianinez.cl","ambito":"UGI"},
- "autoridad":{"usuario":"nombre.autoridad","nombre":"Nombre de la autoridad","correo":"autoridad@defensorianinez.cl","ambito":"UGI","ambitos":["*"]}}
+ "funcionarios":[{"usuario":"nombre.distribucion","nombre":"Nombre Apellido","ambito":"UPR-REQ",
+                  "funciones":[{"funcion":"DISTRIBUIDOR"},{"funcion":"ADMINISTRATIVO","ambito":"UPR-REQ"},{"funcion":"PROFESIONAL","ambito":"UPR-REQ"}]}]}
 ```
 
-- `unidad` es uno de los codigos del producto: UPR, UPD, UEP, UGI, REG, DAI, GAB, DEF, AUD. `ambitos` de la autoridad acepta `"*"` (todos los listados) o codigos.
-- TI y autoridad son personas distintas. TI administra cuentas sin acceso a expedientes; la autoridad concede las demas funciones por la interfaz. Ambas reciben clave temporal individual en `data\bootstrap-usuarios.csv` con cambio obligatorio: entregarlas por canal seguro y retirar el archivo.
+- `unidad` es uno de los codigos del producto: UPR, UPD, UEP, UGI, REG, DAI, GAB, DEF, AUD.
+- `funcionarios` es opcional. Funciones por ambito (con `ambito`): ADMINISTRATIVO, PROFESIONAL, JEFATURA, DIRECCION, LECTURA, AUDITORIA; institucionales (sin `ambito`): DISTRIBUIDOR y TI. Una persona combina funciones; se admiten varios distribuidores; una jefatura o direccion por ambito; TI va sola (no se combina con ninguna otra funcion).
+- Desde 0.5.0 TI administra el sistema (cuentas, funciones y subrogancias) sin acceso a expedientes. **No existe la autoridad habilitante**: un archivo con la entrada `autoridad` (preparado para 0.4.0) detiene la inicializacion con el mensaje "desde 0.5.0 TI administra funciones; retira la entrada autoridad".
+- Cada cuenta recibe clave temporal individual en `data\bootstrap-usuarios.csv` con cambio obligatorio: entregarlas por canal seguro y retirar el archivo.
 - Un archivo invalido detiene la inicializacion sin escribir datos. Se admite UTF-8 con o sin BOM.
 - Esquema `siger_a_inst`; sin etiqueta de entorno en pantalla; la liberacion de originales exige analisis antivirus.
 
@@ -213,6 +216,29 @@ El actualizador exige respaldo completo 0.3.1 de la instancia/version activa y u
 MIGRATION_FAILED/PROMOTION_FAILED bloquean inicio ambiguo. START_FAILED permite reintentar la misma candidata tras diagnostico. No borrar el diario, hacer repair o cambiar al JAR anterior para forzar verde: una migracion parcialmente aplicada puede no ser reversible. Conservar respaldo, descriptor previo, error y logs; recuperar sobre otra copia o corregir hacia delante con evidencia. La copia previa no equivale a un rollback automatico.
 
 Los scripts siguen sin ejecutarse aqui sobre Windows/MySQL. Su primera validacion es parte de la prueba guiada, no una evidencia ya obtenida.
+
+### Supresion de AUTORIDAD al actualizar a 0.5.0
+
+Al primer arranque de 0.5.0 (tambien con `Update.ps1`, que migra con el JAR candidato) una rutina revoca las funciones AUTORIDAD vigentes o programadas. No borra filas: conserva la historia y registra un evento `FUNCION_REVOCADA` por cada una, con el fundamento "Rol suprimido en 0.5.0 (D1)", a nombre de la identidad tecnica `sistema:actualizacion` (sin sesion, sin funciones y fuera de las listas). Se aplica una sola vez (marcador `ROL_AUTORIDAD_SUPRIMIDO_050`). La cuenta que tenia la autoridad sigue existiendo, sin esa funcion.
+
+La rutina no quita funciones a las cuentas que combinen TI con otras: quedan en Administracion como "Incompatibilidades por resolver". En cada arranque, si no hay una TI permanente o hay cuentas incompatibles, el log del servicio registra un aviso `Administracion: SIN_TI_PERMANENTE` o `Administracion: TI_INCOMPATIBLE` (solo codigo y cantidad, sin nombres), y Administracion muestra el mismo aviso.
+
+### Recuperacion cuando no queda ninguna TI vigente
+
+SIGER impide por la interfaz quedar sin una cuenta TI habilitada, vigente y sin fecha de termino. Si aun asi ocurre (por ejemplo, la unica TI se jubila o su funcion vencio), se recupera con `Recover-Ti.ps1`, respaldado por un acto institucional:
+
+1. Obtener la resolucion o memo que designa a la persona TI. Hacer un respaldo (`Backup.ps1`).
+2. Detener SIGER (`Stop.ps1`, sin `-AlsoMySql`): el MySQL propio debe seguir activo.
+3. Ejecutar **como la cuenta de servicio**. Para una cuenta existente (se habilita, recibe clave temporal y conserva o recibe TI permanente; no debe tener otras funciones vigentes):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Recover-Ti.ps1' -Root 'D:\SIGER-A' -Usuario 'nombre.apellido' -Fundamento 'Resolucion exenta N ... que designa TI'
+```
+
+   Para una cuenta nueva, agregar `-Nombre 'Nombre Apellido' -Ambito 'UGI'` (codigo de un ambito habilitado).
+4. La clave temporal queda solo en `data\recuperacion-ti-<marca>.csv`: entregarla por canal seguro y retirar el archivo. Iniciar SIGER (`Start.ps1` o el servicio); la persona cambia la clave al ingresar.
+
+La recuperacion se rechaza sin cambios si queda una TI permanente (la administracion se hace por la interfaz), si la cuenta tiene otras funciones (TI va sola), si falta el fundamento o si SIGER esta en ejecucion. Queda auditada a nombre de `sistema:actualizacion` (`TI_RECUPERADA`, y segun el caso `CUENTA_CREADA` o `CUENTA_ACTUALIZADA`, `CLAVE_TEMPORAL_REPUESTA`, `FUNCION_REVOCADA` y `FUNCION_OTORGADA`), con el fundamento. El detalle queda en `logs\recuperacion-ti-*.log`, sin la clave.
 
 ## Operacion permanente 24/7 (V9-V10)
 

@@ -10,7 +10,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G00 | Linea base | CERRADO |
 | G01 | Catalogo de roles y TI administrador | CERRADO |
 | G02 | Comando PROFILE_SET | CERRADO |
-| G03 | Supresion de AUTORIDAD e inicializacion | ABIERTO |
+| G03 | Supresion de AUTORIDAD e inicializacion | CERRADO |
 | G04 | Perfil de cuenta en la interfaz | ABIERTO |
 | G05 | Consulta institucional: lectura | ABIERTO |
 | G06 | Consulta institucional: bandejas e interfaz | ABIERTO |
@@ -77,3 +77,22 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - `access.user(id)` (que usa `GRANT_CREATE`) responde 401 "Cuenta inactiva" para una cuenta deshabilitada; `PROFILE_SET` lee `staff` directamente para admitir revocaciones.
 - Pendientes: interfaz del perfil -> G04; `PROFILE_SET` en `MySql84IntegrationTest` -> G13
 - Verificacion manual sugerida al usuario: no aplica (sin interfaz hasta G04)
+
+### G03 - Supresion de AUTORIDAD e inicializacion   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate G03: supresion de AUTORIDAD e inicializacion`)
+- Hecho:
+  - `Bootstrap.suppressAuthority`: en cada arranque, una sola vez (marcador `ROL_AUTORIDAD_SUPRIMIDO_050`), revoca las AUTORIDAD vigentes o programadas sin borrar filas, con un `FUNCION_REVOCADA` "AUTORIDAD. Rol suprimido en 0.5.0 (D1)" por concesion y un epoch por cuenta. Actor: identidad tecnica `sistema:actualizacion` (`Bootstrap.maintenance`; disabled, `technical`, sin funciones; se crea solo si hay algo que revocar).
+  - Avisos: `warnAdministration` registra en el log `SIN_TI_PERMANENTE`/`TI_INCOMPATIBLE` (solo codigo y cantidad). `Queries.administration` entrega `warnings` (TI y AUDITORIA) e `incompatibilities` (TI: cuenta y roles); helpers `Personnel.permanentTi`, `tiConflicts` y `warnings`.
+  - Semillas demo sin la cuenta `autoridad`. Archivo institucional: rechaza la entrada `autoridad` ("desde 0.5.0 TI administra funciones; retira la entrada autoridad") y la funcion AUTORIDAD; valida con `Roles` (varios distribuidores, TI como funcion unica, sin repetir rol+ambito); se retira `STAFF_ROLES`.
+  - `GRANT_CREATE` rechaza un termino igual o anterior al inicio o a la fecha actual (mismo mensaje que `PROFILE_SET`).
+  - Recuperacion de TI: `TiRecovery` (`siger.recover-ti.*`, proceso sin web ni tareas, solo sin TI permanente; auditada por `sistema:actualizacion` con `TI_RECUPERADA`; clave temporal en `data/recuperacion-ti-*.csv`) y `scripts/Recover-Ti.ps1` (PS 5.1, SIGER detenido, datos por variables del proceso).
+- Archivos clave: `Bootstrap.java`, `TiRecovery.java`, `Personnel.java`, `Queries.java`, `application.properties`, `AuthoritySuppressionTest.java`, `scripts/Recover-Ti.ps1`, `scripts/Init-Server.ps1`, `deploy/config-ejemplo/*`, `docs/INSTALACION_VM.md`, `docs/DESPLIEGUE_VM.md`, `docs/DECISIONES_FUNCIONALES.md` (D1), `README.md`, `CLAUDE.md`
+- Verificacion: JUnit 89 ok + 1 omitida (antes 87 + 1; +2 de `AuthoritySuppressionTest`; Maven informa 90 ejecutadas); frontend 10 ok; typecheck ok; build ok (frontend sin cambios); `Check-Scripts.ps1` ok con `pwsh` en Linux (30 scripts; no equivale a PS 5.1); humo no aplica (sin cambios de interfaz)
+- Desvios del plan (decididos por el responsable): actor `sistema:actualizacion` en vez de "la cuenta TI de la instancia"; agregados el termino pasado en `GRANT_CREATE`, el procedimiento de recuperacion de TI y los avisos en el log y en Administracion. Una recuperacion sobre una cuenta con TI con termino o programada la revoca y otorga una permanente (sin superponer); si ya es permanente (cuenta solo deshabilitada), solo habilita y repone la clave.
+- Hallazgos para gates siguientes:
+  - G04: mostrar `administration.warnings` e `incompatibilities` ("Incompatibilidades por resolver"); `texts.ts` aun dice "Contacta a la autoridad habilitada". Las semillas nuevas no tienen `autoridad`; un `var/` local existente conserva esa cuenta, sin funciones tras el arranque. Agregar una prueba de que guardar un perfil sin cambios responde "El perfil no tiene cambios.".
+  - G07/G10: las cargas iniciales pueden seguir el patron de `suppressAuthority` (transaccion + `db.lock()` + marcador) y usar `Bootstrap.maintenance(db)` si auditan.
+  - G13 y G14: 0.4.0 esta en la VM como validacion. Hay que probar la actualizacion desde un MySQL V10 con datos: rutina de supresion, cargas iniciales de G07 y G10, y `Update.ps1`.
+  - `MySql84IntegrationTest` se ajusto (1 cuenta, 0 AUTORIDAD, marcador) sin ejecutarse aqui.
+- Pendientes: `Recover-Ti.ps1` y `TiRecovery.ready()` (modo proceso) sin ejecutar en Windows ni MySQL -> G14 (o G13); recorrido de recuperacion en `PRUEBAS_MANUALES_0_5_0.md` -> G14; interfaz de avisos e incompatibilidades -> G04
+- Verificacion manual sugerida al usuario: no aplica en interfaz. Opcional: arrancar una copia de un `var/` 0.4.0 con el perfil local y comprobar en `audit_event` los `FUNCION_REVOCADA` de `sistema:actualizacion`.

@@ -1,5 +1,5 @@
 {
-  "fundamento": "EJEMPLO: reemplazar por la resolucion o acto que designa a TI, a la autoridad habilitante y a los funcionarios",
+  "fundamento": "EJEMPLO: reemplazar por la resolucion o acto que designa a TI y a los funcionarios",
   "ambitos": [
     {"codigo": "DEF", "nombre": "Defensoria", "unidad": "DEF", "sede": "CENTRAL"},
     {"codigo": "UGI", "nombre": "Gestion Institucional", "unidad": "UGI", "sede": "CENTRAL"},
@@ -7,7 +7,6 @@
     {"codigo": "UPR-PD", "nombre": "Proteccion de Derechos", "unidad": "UPR", "area": "PD", "sede": "CENTRAL"}
   ],
   "ti": {"usuario": "nombre.apellido.ti", "nombre": "Nombre Apellido (TI)", "correo": "persona.ti@defensorianinez.cl", "ambito": "UGI"},
-  "autoridad": {"usuario": "nombre.apellido.autoridad", "nombre": "Nombre Apellido (autoridad habilitante)", "correo": "autoridad@defensorianinez.cl", "ambito": "DEF", "ambitos": ["*"]},
   "funcionarios": [
     {"usuario": "nombre.distribucion", "nombre": "Nombre Apellido", "correo": "distribucion@defensorianinez.cl", "ambito": "UPR-REQ",
      "funciones": [{"funcion": "DISTRIBUIDOR"}, {"funcion": "ADMINISTRATIVO", "ambito": "UPR-REQ"}]},

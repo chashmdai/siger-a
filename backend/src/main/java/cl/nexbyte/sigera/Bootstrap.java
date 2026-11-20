@@ -4,6 +4,8 @@ import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -16,6 +18,7 @@ import static cl.nexbyte.sigera.Db.*;
 
 @Component
 public class Bootstrap implements ApplicationRunner {
+    private static final Logger LOG=LoggerFactory.getLogger(Bootstrap.class);
     final Db db;final PasswordEncoder passwords;final TransactionTemplate tx;final ConfigurableApplicationContext ctx;
     final Path data;final boolean seed,migrate;final String institutional;
     public Bootstrap(Db db,PasswordEncoder passwords,PlatformTransactionManager manager,ConfigurableApplicationContext ctx,
@@ -34,6 +37,8 @@ public class Bootstrap implements ApplicationRunner {
             if(db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE")==0)seed();
             reconcileDemoOrganization(); // Actualiza solo cuentas sinteticas; nunca nombres de funcionarios reales.
         }
+        suppressAuthority();
+        warnAdministration();
         if(migrate)ctx.close();
     }
     private void requireDatabase(){
@@ -75,7 +80,6 @@ public class Bootstrap implements ApplicationRunner {
                 {"profesional.ugi","Profesional UGI sintetico","UGI","PROFESIONAL"},
                 {"coordinacion.regional","Coordinacion regional sintetica","REG-DEMO","JEFATURA"},
                 {"profesional.regional","Profesional regional sintetico","REG-DEMO","PROFESIONAL"},
-                {"autoridad","Autoridad habilitante sintetica","UGI","AUTORIDAD"},
                 {"ti","Administracion tecnica sintetica","UGI","TI"},
                 {"auditoria","Auditoria de prueba","UPR-REQ","AUDITORIA"},
                 {"gabinete","Consulta autorizada de prueba","UPR-REQ","LECTURA"}
@@ -85,8 +89,7 @@ public class Bootstrap implements ApplicationRunner {
                 String pass=randomPassword();long scope=ids.get(u[2]);
                 long id=db.insert("INSERT INTO staff(username,name,password_hash,home_scope) VALUES(?,?,?,?)",u[0],u[1],passwords.encode(pass),scope);
                 people.put(u[0],id);csv.append(u[0]).append(',').append(u[1]).append(',').append(pass).append('\n');
-                if(u[3].equals("AUTORIDAD")){for(long sc:ids.values())grant(id,"AUTORIDAD",sc);}
-                else if(u[3].equals("DIRECCION")){
+                if(u[3].equals("DIRECCION")){
                     String unit=u[2];
                     for(var e:ids.entrySet())if((e.getKey().equals(unit)||e.getKey().startsWith(unit+"-"))&&!e.getKey().equals("UPR-REQ"))grant(id,"DIRECCION",e.getValue());
                     if(unit.equals("UPR"))grant(id,"LECTURA",ids.get("UPR-REQ"));
@@ -159,8 +162,6 @@ public class Bootstrap implements ApplicationRunner {
                     else ensureDemoGrant(uid,"DIRECCION",n(sc,"id"));
                 }
             }
-            var authorities=db.rows("SELECT id FROM staff WHERE username='autoridad'");
-            if(!authorities.isEmpty())for(var r:roots)ensureDemoGrant(n(authorities.getFirst(),"id"),"AUTORIDAD",n(db.one("SELECT id FROM org_scope WHERE code=?",r[0]),"id"));
             if(willCreate){
                 try{
                     Files.writeString(supplemental,csv.toString(),StandardOpenOption.CREATE_NEW);
@@ -180,10 +181,10 @@ public class Bootstrap implements ApplicationRunner {
     }
     /**
      * Instancia institucional vacia: sin cuentas, sedes ni datos de prueba. Desde el archivo del operador
-     * (siger.bootstrap-file) se crean solo los ambitos reales informados, una cuenta TI (administra cuentas, sin
-     * acceso a expedientes) y una autoridad habilitante (concede funciones en los ambitos indicados), ambas con clave
-     * temporal individual y cambio obligatorio. Todo lo demas se registra despues por la interfaz, con autoria y
-     * fundamento. Solo actua con la tabla de personal vacia; un archivo invalido detiene el arranque sin escribir.
+     * (siger.bootstrap-file) se crean solo los ambitos reales informados, una cuenta TI (administra el sistema, sin
+     * acceso a expedientes; desde 0.5.0 tambien concede las funciones, D1) y, opcionalmente, los funcionarios con sus
+     * funciones del catalogo Roles, todos con clave temporal individual y cambio obligatorio. Solo actua con la tabla
+     * de personal vacia; un archivo invalido detiene el arranque sin escribir.
      */
     void institutional(Path file)throws Exception{
         if(!Files.isRegularFile(file)||Files.size(file)>262_144)throw new IllegalStateException("Archivo de inicializacion institucional ausente o demasiado grande.");
@@ -193,6 +194,8 @@ public class Bootstrap implements ApplicationRunner {
         String content=Files.readString(file,java.nio.charset.StandardCharsets.UTF_8);
         if(!content.isEmpty()&&content.charAt(0)==0xFEFF)content=content.substring(1);
         try{root=reader.readTree(content);}catch(RuntimeException e){throw new IllegalStateException("Archivo de inicializacion institucional con JSON invalido.");}
+        // AUTORIDAD fue suprimida (D1): un archivo preparado para 0.4.0 se rechaza entero, nunca se ignora en silencio.
+        if(!root.path("autoridad").isMissingNode())throw invalid("desde 0.5.0 TI administra funciones; retira la entrada autoridad");
         String basis=text(root,"fundamento",1000,true);
         var scopes=root.path("ambitos");if(!scopes.isArray()||scopes.isEmpty()||scopes.size()>500)throw invalid("ambitos (1 a 500)");
         var codes=new LinkedHashSet<String>();
@@ -202,29 +205,26 @@ public class Bootstrap implements ApplicationRunner {
             if(!UNITS.containsKey(text(sc,"unidad",24,true)))throw invalid("unidad del ambito "+code);
             text(sc,"nombre",160,true);text(sc,"sede",48,true);text(sc,"area",48,false);
         }
-        var ti=root.path("ti");var authority=root.path("autoridad");
-        String tiUser=user(ti),authorityUser=user(authority);
-        if(tiUser.equals(authorityUser))throw invalid("TI y autoridad deben ser personas distintas");
-        for(var a:List.of(ti,authority))if(!codes.contains(text(a,"ambito",48,true)))throw invalid("ambito de adscripcion de "+text(a,"usuario",64,true));
-        var granted=new LinkedHashSet<String>();
-        var list=authority.path("ambitos");if(!list.isArray()||list.isEmpty())throw invalid("ambitos de la autoridad");
-        for(var g:list){String c=g.asString("");if(c.equals("*"))granted.addAll(codes);else if(codes.contains(c))granted.add(c);else throw invalid("ambito de la autoridad "+c);}
-        // Funcionarios opcionales con sus funciones (mismas reglas que GRANT_CREATE): evita crearlos uno a uno en la interfaz.
+        var ti=root.path("ti");String tiUser=user(ti);
+        if(!codes.contains(text(ti,"ambito",48,true)))throw invalid("ambito de adscripcion de "+tiUser);
+        // Funcionarios opcionales con sus funciones del catalogo (mismas reglas que GRANT_CREATE y PROFILE_SET): una
+        // jefatura o direccion por ambito, varios distribuidores (D3) y TI solo como funcion unica (D2).
         var staff=root.path("funcionarios");if(!staff.isMissingNode()&&(!staff.isArray()||staff.size()>500))throw invalid("funcionarios (hasta 500)");
-        var usernames=new HashSet<>(List.of(tiUser,authorityUser));var heads=new HashSet<String>();int distributors=0;
+        var usernames=new HashSet<>(List.of(tiUser));var heads=new HashSet<String>();
         for(var f:staff.isArray()?staff:List.<tools.jackson.databind.JsonNode>of()){
             String u=user(f);if(!usernames.add(u))throw invalid("usuario repetido "+u);
             if(!codes.contains(text(f,"ambito",48,true)))throw invalid("ambito de adscripcion de "+u);
             var roles=f.path("funciones");if(!roles.isArray()||roles.isEmpty())throw invalid("funciones de "+u);
+            var own=new HashSet<String>();
             for(var g:roles){
-                String role=text(g,"funcion",32,true);
-                if(role.equals("DISTRIBUIDOR")){if(!g.path("ambito").isMissingNode())throw invalid("la distribucion es central y no lleva ambito ("+u+")");distributors++;continue;}
-                if(!STAFF_ROLES.contains(role))throw invalid("funcion "+role+" de "+u);
-                String scope=text(g,"ambito",48,true);if(!codes.contains(scope))throw invalid("ambito de la funcion de "+u);
-                if((role.equals("JEFATURA")||role.equals("DIRECCION"))&&!heads.add(scope))throw invalid("mas de una jefatura o direccion en "+scope);
+                var role=role(text(g,"funcion",32,true),u);String scope="";
+                if(role.scoped()){scope=text(g,"ambito",48,true);if(!codes.contains(scope))throw invalid("ambito de la funcion de "+u);}
+                else if(!g.path("ambito").isMissingNode())throw invalid("la funcion "+role.code()+" es institucional y no lleva ambito ("+u+")");
+                if(!own.add(role.code()+"@"+scope))throw invalid("funcion "+role.code()+" repetida para "+u);
+                if(Personnel.HEADS.contains(role.code())&&!heads.add(scope))throw invalid("mas de una jefatura o direccion en "+scope);
             }
+            if(own.stream().anyMatch(k->k.startsWith(Roles.TI+"@"))&&own.size()>1)throw invalid("TI es incompatible con cualquier otra funcion ("+u+")");
         }
-        if(distributors>1)throw invalid("solo una persona puede tener la distribucion central");
 
         Path credentials=data.resolve("bootstrap-usuarios.csv");
         if(Files.exists(credentials))throw new IllegalStateException("Existe un archivo de acceso anterior; no se sobreescribe.");
@@ -238,16 +238,15 @@ public class Bootstrap implements ApplicationRunner {
                 ids.put(text(sc,"codigo",48,true),db.insert("INSERT INTO org_scope(code,name,unit_code,area_code,site_code,regional) VALUES(?,?,?,?,?,?)",
                     text(sc,"codigo",48,true),text(sc,"nombre",160,true),text(sc,"unidad",24,true),area.isEmpty()?null:area,text(sc,"sede",48,true),sc.path("regional").asBoolean(false)));
             }
-            long tiId=account(ti,ids,csv),authorityId=account(authority,ids,csv);
+            long tiId=account(ti,ids,csv);
             db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,'TI',NULL,?,?)",tiId,System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);
-            for(var c:granted)db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,'AUTORIDAD',?,?,?)",authorityId,ids.get(c),System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);
             int people=0;
             for(var f:staff.isArray()?staff:List.<tools.jackson.databind.JsonNode>of()){
                 long id=account(f,ids,csv);people++;
-                for(var g:f.path("funciones")){String role=text(g,"funcion",32,true);
-                    db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,?,?,?,?)",id,role,role.equals("DISTRIBUIDOR")?null:ids.get(text(g,"ambito",48,true)),System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);}
+                for(var g:f.path("funciones")){var role=Roles.require(text(g,"funcion",32,true));
+                    db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,?,?,?,?)",id,role.code(),role.scoped()?ids.get(text(g,"ambito",48,true)):null,System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);}
             }
-            db.audit(tiId,"CONFIGURACION_INSTITUCIONAL_INICIAL","SISTEMA",0,null,ids.size()+" ambitos, una cuenta TI, una autoridad habilitante y "+people+" funcionarios. "+basis);
+            db.audit(tiId,"CONFIGURACION_INSTITUCIONAL_INICIAL","SISTEMA",0,null,ids.size()+" ambitos, una cuenta TI y "+people+" funcionarios. "+basis);
             db.update("INSERT INTO application_marker(code,applied_ms) VALUES('INSTITUTIONAL_BOOTSTRAP',?)",System.currentTimeMillis());
             try{
                 Files.writeString(credentials,csv.toString(),StandardOpenOption.CREATE_NEW);
@@ -255,8 +254,61 @@ public class Bootstrap implements ApplicationRunner {
             }catch(Exception e){throw new IllegalStateException("No fue posible crear el archivo privado de accesos iniciales.");}
         });
     }
-    /** Funciones de ambito que puede traer el archivo inicial (TI y autoridad tienen sus propias entradas). */
-    static final Set<String> STAFF_ROLES=Set.of("ADMINISTRATIVO","PROFESIONAL","JEFATURA","DIRECCION","LECTURA","AUDITORIA");
+    /** Funcion del catalogo unico; AUTORIDAD (suprimida) o un codigo desconocido invalidan el archivo. */
+    private static Roles.Role role(String code,String user){
+        if(code.equals("AUTORIDAD"))throw invalid("la funcion AUTORIDAD fue suprimida en 0.5.0; TI concede las funciones ("+user+")");
+        try{return Roles.require(code);}catch(Problem p){throw invalid("funcion "+code+" de "+user);}
+    }
+
+    // --- Supresion de AUTORIDAD (0.5.0, D1) ----------------------------------------------------------
+    static final String AUTHORITY_MARKER="ROL_AUTORIDAD_SUPRIMIDO_050";
+    /** Identidad tecnica de las rutinas de actualizacion y recuperacion: sin sesion, sin funciones y fuera de las listas. */
+    static final String MAINTENANCE="sistema:actualizacion",MAINTENANCE_NAME="Actualización técnica de SIGER";
+    /**
+     * Rutina idempotente de arranque: revoca (nunca borra) las concesiones AUTORIDAD vigentes o programadas, con un
+     * evento FUNCION_REVOCADA por cada una a nombre de la identidad tecnica sistema:actualizacion, y deja el marcador.
+     * Las vencidas o ya revocadas quedan intactas. No toca cuentas que combinen TI con otras funciones (solo se avisan).
+     */
+    void suppressAuthority(){
+        tx.executeWithoutResult(status->{
+            db.lock();
+            if(db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",AUTHORITY_MARKER)>0)return;
+            long now=System.currentTimeMillis();
+            var live=db.rows("SELECT id,user_id,scope_id FROM role_assignment WHERE role_code='AUTORIDAD' AND revoked_at IS NULL AND (valid_until IS NULL OR valid_until>?) ORDER BY id",now);
+            if(!live.isEmpty()){
+                long actor=maintenance(db);var users=new LinkedHashSet<Long>();
+                for(var g:live){
+                    db.update("UPDATE role_assignment SET revoked_at=? WHERE id=? AND revoked_at IS NULL",now,n(g,"id"));
+                    db.audit(actor,"FUNCION_REVOCADA","USUARIO",n(g,"user_id"),nullableId(g,"scope_id"),"AUTORIDAD. Rol suprimido en 0.5.0 (D1)");
+                    users.add(n(g,"user_id"));
+                }
+                for(long u:users)db.update("UPDATE staff SET security_version=security_version+1 WHERE id=?",u);
+                LOG.info("Supresion de AUTORIDAD: {} concesiones revocadas en {} cuentas.",live.size(),users.size());
+            }
+            db.update("INSERT INTO application_marker(code,applied_ms) VALUES(?,?)",AUTHORITY_MARKER,now);
+        });
+    }
+    /** Aviso en el log del servicio (solo codigos y cantidades, sin datos de personas); Administracion muestra lo mismo. */
+    void warnAdministration(){
+        if(db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE")==0)return;
+        for(var w:Personnel.warnings(db))LOG.warn("Administracion: {} (cantidad {}). Revisar en Administracion.",s(w,"code"),w.get("count"));
+    }
+    /**
+     * Identidad tecnica sistema:actualizacion: cuenta deshabilitada, sin clave utilizable, sin funciones y marcada
+     * technical (como la del Formulario). Se crea una vez; nunca adopta una cuenta de funcionario del mismo nombre.
+     */
+    static long maintenance(Db db){
+        var rows=db.rows("SELECT * FROM staff WHERE username=?",MAINTENANCE);
+        if(rows.isEmpty()){
+            var home=db.rows("SELECT MIN(id) AS id FROM org_scope");
+            if(home.isEmpty()||home.getFirst().get("id")==null)throw new IllegalStateException("No hay ambitos: la identidad tecnica de actualizacion no tiene adscripcion.");
+            return db.insert("INSERT INTO staff(username,name,password_hash,enabled,must_change,home_scope,technical) VALUES(?,?,'!',FALSE,FALSE,?,TRUE)",MAINTENANCE,MAINTENANCE_NAME,n(home.getFirst(),"id"));
+        }
+        var u=rows.getFirst();long id=n(u,"id");
+        if(!b(u,"technical")||b(u,"enabled")||db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=?",id)>0)
+            throw new IllegalStateException("La identidad tecnica de actualizacion no es valida; no se aplica la rutina.");
+        return id;
+    }
     private long account(tools.jackson.databind.JsonNode a,Map<String,Long> ids,StringBuilder csv){
         String pass=randomPassword(),username=user(a),name=text(a,"nombre",160,true),email=text(a,"correo",200,false);
         long id=db.insert("INSERT INTO staff(username,name,email,password_hash,home_scope,must_change) VALUES(?,?,?,?,?,TRUE)",username,name,email.isEmpty()?null:email,passwords.encode(pass),ids.get(text(a,"ambito",48,true)));
@@ -264,7 +316,7 @@ public class Bootstrap implements ApplicationRunner {
         return id;
     }
     private static String user(tools.jackson.databind.JsonNode a){
-        if(!a.isObject())throw invalid("cuenta TI o autoridad");
+        if(!a.isObject())throw invalid("cuenta TI o funcionario");
         String u=text(a,"usuario",64,true).toLowerCase(Locale.ROOT);
         if(!u.matches("[a-z0-9][a-z0-9._-]{2,63}")||u.contains(":"))throw invalid("usuario "+u);
         return u;

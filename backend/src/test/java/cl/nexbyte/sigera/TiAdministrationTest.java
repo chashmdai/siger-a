@@ -56,7 +56,7 @@ class TiAdministrationTest {
         run("direccion.upr","FLOW_REQUEST",req,rev("requirement",req),Map.of("kind","DERIVACION","case_id",cas,"target_scope",scope("UPD-EDU"),"objective","Destino sintetico","reason","Competencia de otra unidad"));
         long flowId=n(db.one("SELECT id FROM flow_request WHERE requirement_id=?",req),"id");
 
-        // Sin TI, ninguna operacion de administracion procede (tampoco la autoridad heredada, sin efecto desde 0.5.0).
+        // Sin TI, ninguna operacion de administracion procede.
         long demoDesignation=n(db.one("SELECT id FROM substitution_designation ORDER BY id LIMIT 1"),"id");
         long target=user("profesional"),targetGrant=grantId(target,"PROFESIONAL");
         Map<String,Object[]> admin=new LinkedHashMap<>();
@@ -72,7 +72,7 @@ class TiAdministrationTest {
         admin.put("INTEGRATION_PAUSE",new Object[]{2L,0L,Map.of("reason","x")});
         admin.put("INTEGRATION_RESUME",new Object[]{2L,0L,Map.of("reason","x")});
         admin.put("MAIL_RESOLVE",new Object[]{1L,null,Map.of("decision","DESCARTAR","reason","x")});
-        for(String who:List.of("autoridad","direccion.upd","auditoria","distribucion"))
+        for(String who:List.of("gabinete","direccion.upd","auditoria","distribucion"))
             for(var e:admin.entrySet()){var v=e.getValue();@SuppressWarnings("unchecked") var data=(Map<String,Object>)v[2];
                 assertEquals(403,status(who,e.getKey(),(Long)v[0],(Long)v[1],data),who+" "+e.getKey());}
         assertEquals(0,db.count("SELECT COUNT(*) FROM staff WHERE username='sin.permiso'"));
@@ -95,6 +95,15 @@ class TiAdministrationTest {
         assertEquals(409,status("ti","GRANT_CREATE",null,null,grant(multi,"DISTRIBUIDOR",null)));
         assertEquals(409,status("ti","GRANT_CREATE",null,null,grant(multi,"JEFATURA",reqScope)));
         assertEquals(409,status("ti","GRANT_CREATE",null,null,grant(multi,"AUTORIDAD",reqScope)));
+        // El termino debe ser posterior al inicio y a la fecha actual (como PROFILE_SET); uno pasado no crea nada.
+        long lectura=db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code='LECTURA'",multi);
+        for(String end:List.of(ago(30),ago(0))){
+            var past=grant(multi,"LECTURA",reqScope);past.put("from_at",ago(3600));past.put("until_at",end);
+            assertEquals("Periodo invalido para LECTURA: el termino debe ser posterior al inicio y a la fecha actual.",refusal("ti","GRANT_CREATE",null,null,past));
+        }
+        var early=grant(multi,"LECTURA",reqScope);early.put("from_at",in(7200));early.put("until_at",in(3600));
+        assertEquals(409,status("ti","GRANT_CREATE",null,null,early));
+        assertEquals(lectura,db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code='LECTURA'",multi));
 
         // D2: TI es incompatible con cualquier otra funcion, en ambos sentidos.
         assertEquals(409,status("ti","GRANT_CREATE",null,null,grant(multi,"TI",null)));
@@ -138,14 +147,16 @@ class TiAdministrationTest {
         assertTrue(list(workspace,"substitutions").stream().anyMatch(x->n(x,"id")==scheduled&&s(x,"state").equals("PROGRAMADA")));
         var forTi=queries.administration(access.actor("ti"));
         assertTrue(list(forTi,"grants").stream().anyMatch(g->n(g,"id")==administrative&&g.get("revoked_at")!=null));
-        assertTrue(list(forTi,"grants").stream().anyMatch(g->s(g,"role_code").equals("AUTORIDAD")));
+        // Instancia sana: sin avisos ni incompatibilidades (la rutina de supresion no encontro AUTORIDAD en las semillas).
+        assertTrue(list(forTi,"warnings").isEmpty());assertTrue(list(forTi,"incompatibilities").isEmpty());
+        assertEquals(0,db.count("SELECT COUNT(*) FROM role_assignment WHERE role_code='AUTORIDAD'"));
         assertFalse(list(forTi,"users").isEmpty());assertFalse(list(forTi,"designations").isEmpty());assertFalse(list(forTi,"substitutions").isEmpty());
         var forAudit=queries.administration(access.actor("auditoria"));
         assertTrue(list(forAudit,"users").isEmpty());assertTrue(list(forAudit,"grants").isEmpty());
         assertTrue(list(forAudit,"audit").stream().anyMatch(e->s(e,"action").equals("SUBROGANCIA_ACTIVADA")));
         assertTrue(list(forAudit,"audit").stream().anyMatch(e->s(e,"action").equals("FUNCION_REVOCADA")));
         assertEquals(403,read(()->queries.administration(access.actor("direccion.upd"))));
-        assertEquals(403,read(()->queries.administration(access.actor("autoridad"))));
+        assertEquals(403,read(()->queries.administration(access.actor("gabinete"))));
         var dashboard=list(boards.dashboard(access.actor("ti")),"sections");
         assertEquals(List.of("technical"),dashboard.stream().map(x->s(x,"id")).toList());
         var metrics=list(dashboard.getFirst(),"metrics");

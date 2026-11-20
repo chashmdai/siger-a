@@ -122,7 +122,7 @@ class ExternalOriginalTest {
         long registrar=staff("registro.ext",scope);
         grant(registrar,"ADMINISTRATIVO",scope);
         long broad=staff("amplio.ext",scope);
-        for(String role:List.of("ADMINISTRATIVO","PROFESIONAL","JEFATURA","DIRECCION","AUTORIDAD"))grant(broad,role,scope);
+        for(String role:List.of("ADMINISTRATIVO","PROFESIONAL","JEFATURA","DIRECCION"))grant(broad,role,scope);
         for(String role:List.of("DISTRIBUIDOR","TI","AUDITORIA"))grant(broad,role,null);
 
         // Quien puede registrar COM manualmente (COM_CREATE) no puede ingresar un original externo.

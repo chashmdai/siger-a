@@ -179,6 +179,9 @@ public class Queries {
         result.put("users",ti?db.rows("SELECT id,username,name,email,enabled,home_scope,must_change,security_version FROM staff WHERE technical=FALSE ORDER BY id"):List.of());
         result.put("grants",ti?db.rows("SELECT g.id,g.user_id,g.role_code,g.scope_id,g.valid_from,g.valid_until,g.revoked_at,g.granted_by,g.basis FROM role_assignment g JOIN staff u ON u.id=g.user_id WHERE u.technical=FALSE ORDER BY g.id"):List.of());
         result.put("designations",ti?db.rows("SELECT * FROM substitution_designation ORDER BY id DESC"):List.of());
+        // Avisos de la instancia (sin datos de personas) e incompatibilidades por resolver (D2; heredadas de 0.4.0).
+        result.put("warnings",Personnel.warnings(db));
+        result.put("incompatibilities",ti?Personnel.tiConflicts(db):List.of());
         result.put("substitutions",ti?db.rows("SELECT x.*,d.scope_id,d.titular_id,d.substitute_id FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id ORDER BY x.id DESC"):List.of());
         // Operacion de integraciones para TI: estado, pausa y contadores agregados; sin documentos ni contenidos.
         result.put("integrations",ti?integrations.overview():Map.of());

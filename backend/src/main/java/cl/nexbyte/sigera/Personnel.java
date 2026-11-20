@@ -40,7 +40,8 @@ public class Personnel {
                 ti(a);long user=in.id("user_id");require(user!=a.id(),"No puedes otorgarte funciones.");access.user(user);
                 var role=Roles.require(in.text("role",32,true));
                 Long scope=null;if(role.scoped()){scope=in.id("scope_id");access.scope(scope);}
-                long from=in.instant("from_at",true),until=in.instant("until_at",false),end=until==0?Long.MAX_VALUE:until;require(until==0||until>from,"Periodo invalido.");
+                long from=in.instant("from_at",true),until=in.instant("until_at",false),end=until==0?Long.MAX_VALUE:until;
+                require(until==0||until>Math.max(from,System.currentTimeMillis()),"Periodo invalido para "+role.code()+": el termino debe ser posterior al inicio y a la fecha actual.");
                 List<Object> same=new ArrayList<>(List.of(user,role.code()));if(scope!=null)same.add(scope);same.add(end);same.add(from);
                 require(db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code=? AND "+(scope==null?"scope_id IS NULL":"scope_id=?")+" AND revoked_at IS NULL AND valid_from<? AND (valid_until IS NULL OR valid_until>?)",same.toArray())==0,"La persona ya tiene esa funcion en un periodo superpuesto.");
                 tiCompatible(user,role.code());
@@ -167,8 +168,38 @@ public class Personnel {
     }
     /** La instancia nunca queda sin administracion: al menos una cuenta TI habilitada, vigente y sin termino. */
     void keepTi(){
-        require(db.count("SELECT COUNT(*) FROM role_assignment g JOIN staff u ON u.id=g.user_id WHERE g.role_code='TI' AND g.scope_id IS NULL AND g.revoked_at IS NULL AND g.valid_from<=? AND g.valid_until IS NULL AND u.enabled=TRUE AND u.technical=FALSE",System.currentTimeMillis())>0,
-            "La instancia debe conservar al menos una cuenta TI habilitada, vigente y sin fecha de termino.");
+        require(permanentTi(db)>0,"La instancia debe conservar al menos una cuenta TI habilitada, vigente y sin fecha de termino.");
+    }
+    /** Cuentas TI habilitadas, vigentes y sin termino (la condicion que keepTi preserva y que la recuperacion repone). */
+    static long permanentTi(Db db){
+        return db.count("SELECT COUNT(DISTINCT u.id) FROM role_assignment g JOIN staff u ON u.id=g.user_id WHERE g.role_code='TI' AND g.scope_id IS NULL AND g.revoked_at IS NULL AND g.valid_from<=? AND g.valid_until IS NULL AND u.enabled=TRUE AND u.technical=FALSE",System.currentTimeMillis());
+    }
+    /**
+     * Avisos de administracion sin datos de personas (codigo, cantidad y texto visible): instancia sin TI permanente o
+     * con cuentas que combinan TI con otras funciones. Los mismos codigos se registran en el log al arrancar.
+     */
+    static List<Map<String,Object>> warnings(Db db){
+        var out=new ArrayList<Map<String,Object>>();
+        if(permanentTi(db)==0)out.add(Map.of("code","SIN_TI_PERMANENTE","count",0L,
+            "message","La instancia no tiene una cuenta TI habilitada, vigente y sin fecha de término. Recupérala con el procedimiento de recuperación de TI (scripts\\Recover-Ti.ps1)."));
+        long conflicts=tiConflicts(db).size();
+        if(conflicts>0)out.add(Map.of("code","TI_INCOMPATIBLE","count",conflicts,
+            "message","Hay "+conflicts+(conflicts==1?" cuenta que combina":" cuentas que combinan")+" TI con otras funciones. TI no puede tener otras funciones: resuélvelo en el perfil de cada cuenta."));
+        return out;
+    }
+    /**
+     * Cuentas que combinan TI con otra funcion vigente o programada (D2): heredadas de versiones anteriores, nunca se
+     * corrigen solas. TI las resuelve en Administracion; aqui solo se listan (cuenta y codigos de funcion).
+     */
+    static List<Map<String,Object>> tiConflicts(Db db){
+        long now=System.currentTimeMillis();String live="g.revoked_at IS NULL AND (g.valid_until IS NULL OR g.valid_until>?)";
+        var out=new ArrayList<Map<String,Object>>();
+        for(var u:db.rows("SELECT u.id,u.username,u.name FROM staff u WHERE u.technical=FALSE AND EXISTS(SELECT 1 FROM role_assignment g WHERE g.user_id=u.id AND g.role_code='TI' AND "+live+")"
+            +" AND EXISTS(SELECT 1 FROM role_assignment g WHERE g.user_id=u.id AND g.role_code<>'TI' AND "+live+") ORDER BY u.id",now,now)){
+            var roles=db.rows("SELECT DISTINCT g.role_code FROM role_assignment g WHERE g.user_id=? AND "+live+" ORDER BY g.role_code",n(u,"id"),now).stream().map(r->s(r,"role_code")).toList();
+            var row=new LinkedHashMap<String,Object>(u);row.put("roles",roles);out.add(row);
+        }
+        return out;
     }
     void audit(Actor a,String action,String kind,long id,Long scope,String reason){db.audit(a.id(),action,kind,id,scope,reason);}
     static String password(String p){require(p.length()>=14&&p.getBytes(java.nio.charset.StandardCharsets.UTF_8).length<=72,"La clave necesita al menos 14 caracteres y un maximo de 72 bytes.");return p;}

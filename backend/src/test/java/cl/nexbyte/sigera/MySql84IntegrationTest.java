@@ -111,10 +111,11 @@ class MySql84IntegrationTest {
         try(var ctx=app("siger_a_mysql_inst",List.of("siger.bootstrap-file="+dir.resolve("estructura.json")))){
             var db=ctx.getBean(Db.class);
             assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version='10' AND success=TRUE"));
-            assertEquals(2,db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE"));
+            assertEquals(1,db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE"));
             assertEquals(3,db.count("SELECT COUNT(*) FROM org_scope"));
             assertEquals(0,db.count("SELECT COUNT(*) FROM staff WHERE LOWER(name) LIKE '%sintetic%'"));
-            assertEquals(3,db.count("SELECT COUNT(*) FROM role_assignment WHERE role_code='AUTORIDAD'"));
+            assertEquals(0,db.count("SELECT COUNT(*) FROM role_assignment WHERE role_code='AUTORIDAD'"));
+            assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",Bootstrap.AUTHORITY_MARKER));
         }
     }
 }

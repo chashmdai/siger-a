@@ -125,7 +125,7 @@ class ProfileSetTest {
         assertEquals(400,refusal("ti","PROFILE_SET",acct,version(acct),Map.of("grants",List.of(keep))).status);
 
         // Solo TI, y nunca sobre su propia cuenta.
-        for(String who:List.of("direccion.upr","auditoria","distribucion","autoridad"))
+        for(String who:List.of("direccion.upr","auditoria","distribucion","gabinete"))
             assertEquals(403,refusal(who,"PROFILE_SET",acct,version(acct),profile(List.of(keep))).status,who);
         long ti=user("ti");var own=snapshot(ti);
         assertEquals(409,refusal("ti","PROFILE_SET",ti,version(ti),profile(List.of(f("TI",null)))).status);

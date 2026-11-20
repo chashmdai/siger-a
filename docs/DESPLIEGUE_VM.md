@@ -9,7 +9,7 @@ una linea de PowerShell. `FECHA` es el sufijo del ZIP (`SIGER-FECHA.zip`). El de
 1. **Cuenta de servicio de Windows** para SIGER (por ejemplo `DOMINIO\svc-siger`), **sin privilegios administrativos**, con su contrasena, inicio de sesion local durante la instalacion (para `runas`) y el derecho "Iniciar sesion como servicio" (o autorizacion para que `Install-Service.ps1 -ConcederInicioComoServicio` lo agregue en la directiva local).
 2. **Carpetas vacias** `D:\SIGER-VALIDACION` y, despues, `D:\SIGER`, con control total para esa cuenta.
 3. **MySQL 8.4 Community ZIP (noinstall) para Windows x64**, extraido en `D:\Herramientas\mysql-8.4` (y el runtime Visual C++ si `mysqld --version` falla).
-4. **`estructura-inicial.json`** con los ambitos reales, la persona TI, la autoridad habilitante y los funcionarios con sus funciones (plantilla en `config-ejemplo\`).
+4. **`estructura-inicial.json`** con los ambitos reales, la persona TI y los funcionarios con sus funciones (sin autoridad habilitante desde 0.5.0) (plantilla en `config-ejemplo\`).
 5. **Codigo del ambito** que recibe las Comunicaciones del Formulario (por ejemplo `UPR-REQ`; debe estar en la estructura).
 6. **Graph (SIGER-Notificaciones)**: Tenant ID, Client ID, valor vigente del secreto de cliente y permiso `Mail.Send` limitado al buzon `siger@defensorianinez.cl`.
 7. **Red de salida** desde la VM: `formulario.defensorianinez.gob.cl:443`, `login.microsoftonline.com:443` y `graph.microsoft.com:443`.
