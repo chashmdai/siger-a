@@ -4,6 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SIGER (antes SIGER A; Nexbyte, Defensoria de la Ninez de Chile) es un monolito Spring Boot 4.1.1 / Java 25 con el frontend React 19 + TypeScript 6 + Vite 8 empaquetado dentro del mismo JAR. Usa MySQL independiente en la VM y H2 para pruebas locales. Los nombres internos (paquete `cl.nexbyte.sigera`, esquema `siger_a_*`, raiz `D:\SIGER-A`, namespace `SIGER-A-2026`, cookie `SIGERA_SESSION`) se conservan por compatibilidad; lo visible dice SIGER. El consumidor PULL/ACK del Formulario (manual o automatico), el correo Graph y el servicio Windows existen pero estan inactivos salvo configuracion explicita (ver abajo). La documentacion y los mensajes al usuario estan en espanol.
 
+## Trabajo en curso 0.5.0
+
+- El plan es `docs/PLAN_0_5_0.md` (decisiones D1-D6, diseno por iteraciones, protocolo en la seccion 5 y gates en la seccion 6). El estado vivo y los hallazgos de cada gate cerrado estan en `docs/BITACORA_0_5_0.md`.
+- Cada sesion toma solo el primer gate ABIERTO de la bitacora: presenta el inventario y el plan antes de editar, verifica con la suite completa, cierra el gate en la bitacora (formato de la seccion 7) y hace un commit `gate GNN: <titulo>`.
+- Mientras dure 0.5.0, si este archivo contradice el plan (por ejemplo, el rol AUTORIDAD o la version y el esquema manuales), prevalece lo que ya cerraron los gates de la bitacora.
+- En Linux: `sh ./mvnw -B -ntp -f backend/pom.xml test` (`mvnw` no tiene bit de ejecucion en git) y `cd frontend && npm ci && npm run typecheck && npm test && npm run build`. `Build.ps1` y `Run-Local.ps1` son solo para Windows.
+
 ## Comandos
 
 Las herramientas son portables y viven en `.tools/` (`java25`, `apache-maven-3.9.11`, `node-v24.22.0-win-x64`). No se instalan globalmente ni se modifican PATH ni JAVA_HOME de forma persistente. Si faltan, ejecutar `scripts\Get-Tools.ps1`.
