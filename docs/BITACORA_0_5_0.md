@@ -8,7 +8,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | Gate | Titulo | Estado |
 |---|---|---|
 | G00 | Linea base | CERRADO |
-| G01 | Catalogo de roles y TI administrador | ABIERTO |
+| G01 | Catalogo de roles y TI administrador | CERRADO |
 | G02 | Comando PROFILE_SET | ABIERTO |
 | G03 | Supresion de AUTORIDAD e inicializacion | ABIERTO |
 | G04 | Perfil de cuenta en la interfaz | ABIERTO |
@@ -45,3 +45,19 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - `backend/target` conserva carpetas de ejecuciones anteriores (`institucional-*`, `formulario-pull-*`); son inocuas.
 - Pendientes: corregir en `CLAUDE.md` el texto sobre version y esquema manuales -> G14 (o antes si un gate lo necesita); README declara 77 JUnit en 20 clases -> G14
 - Verificacion manual sugerida al usuario: no aplica
+
+### G01 - Catalogo de roles y TI administrador   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate G01: catalogo de roles y TI administrador`)
+- Hecho: catalogo unico `Roles` (codigo, alcance AMBITO/INSTITUCIONAL, grupo; sin AUTORIDAD), publicado en `/api/catalog` como `roles`. `GRANT_CREATE`/`GRANT_REVOKE`/`DESIGNATE`/`SUBSTITUTE_ACTIVATE`/`SUBSTITUTE_END` exigen TI (el titular termina la suya); `Actor.authority()` eliminado. Varios distribuidores (rechazo de periodo superpuesto por persona+rol+ambito, para todo rol); TI concedible e incompatible con otra funcion en ambos sentidos; `GRANT_REVOKE` rechaza la ya revocada y audita el rol.
+- Agregado por el responsable: `GRANT_CREATE`, `GRANT_REVOKE` y `STAFF_UPDATE` nunca dejan la instancia sin una TI habilitada, vigente y sin termino (`Personnel.keepTi`, postcondicion dentro de la transaccion de `Workflow`; sin ella vigente, solo procede la concesion que la repone).
+- `Queries`: `workspace` (TI ve todas las designaciones/subrogancias), `administration` (solo TI o AUDITORIA; TI recibe users con `security_version`, grants vigentes e historicos, `designations` y `substitutions`; AUDITORIA ve su alcance + `USUARIO/AMBITO/SUBROGANCIA`). Dashboard: seccion `authority` fusionada en `technical`. Seccion "Precision 0.5.0" en `DECISIONES_FUNCIONALES.md` (puntos 13 y 14 anotados).
+- Archivos clave: `Roles.java`, `Personnel.java`, `Queries.java`, `BoardQueries.java`, `Access.java`, `TiAdministrationTest.java`, `docs/DECISIONES_FUNCIONALES.md`, `CLAUDE.md`
+- Verificacion: JUnit 81 ok + 1 omitida (antes 79 + 1; +2 de `TiAdministrationTest`; Maven informa 82 ejecutadas); frontend 10 ok; typecheck ok; build ok (frontend sin cambios); humo no aplica (sin cambios de interfaz)
+- Desvios del plan: se elimino la regla "distribucion central no se concede desde un ambito regional" (aprobado). En las funciones institucionales se ignora `scope_id` y la auditoria queda sin ambito. Se actualizaron ya en G01 `AccessResolutionTest`, `Version031Test` e `InstitutionalBootstrapTest` (fallaban con `autoridad`).
+- Hallazgos para gates siguientes:
+  - G04: entre G01 y G04 la interfaz no permite conceder funciones ni activar subrogancias: `Administration.tsx` y `Substitutions.tsx` muestran esas acciones solo a AUTORIDAD (`authorityAt`), que ya no tiene efecto; TI solo puede hacerlo por API. `Dashboard.tsx` conserva `authority: []` en `QUEUES_BY_SECTION`; `GRANTABLE_ROLES` debe salir de `catalog.roles`.
+  - G02: reutilizar `Personnel.tiCompatible`, `keepTi` y la consulta de superposicion de `GRANT_CREATE`; `administration.users` ya trae `security_version` (revision de `PROFILE_SET`).
+  - G03: `Bootstrap` institucional aun rechaza mas de un distribuidor (`distributors>1`) y crea la autoridad; `InstitutionalStaffTest` (caso `twoDistributors`), `FormularioConsumerTest:176`, `ExternalOriginalTest:125` y `MySql84IntegrationTest:117` siguen con AUTORIDAD (no fallan). La cuenta demo `autoridad` existe sin facultades. Las cuentas que hoy combinen TI con otra funcion no se tocan: G03 las lista.
+  - `TiAdministrationTest` usa `@Order`: el metodo 2 deja `ti` con TI permanente al terminar (restaura en `finally`).
+- Pendientes: interfaz de concesion y subrogancias para TI -> G04; supresion de AUTORIDAD en datos y bootstrap -> G03
+- Verificacion manual sugerida al usuario: no aplica (sin cambios de interfaz hasta G04)

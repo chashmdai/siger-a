@@ -124,15 +124,19 @@ public class BoardQueries {
             queues.add(queue(v,"Primeras atenciones por recibir","atenciones","incoming"));queues.add(queue(v,"Atenciones a mi cargo","atenciones","mine"));
         }
         if(operative||a.role("LECTURA"))sections.add(section("overview","Resumen de mi alcance","Estas cifras incluyen solo registros que puedes consultar. No son totales institucionales ni indicadores oficiales.",List.of(metric(v,"Comunicaciones visibles","com","all","Incluye antecedentes"),metric(v,"REQ abiertos","req","open","Una atencion, varios Casos posibles"),metric(v,"Casos abiertos","cas","open","Lineas de gestion"),metric(v,"Casos cerrados","cas","closed","Historia conservada"))));
-        if(a.role("AUTORIDAD")){
-            String scopes=ids(grants(a,"AUTORIDAD"));long now=System.currentTimeMillis();
-            long active=db.count("SELECT COUNT(*) FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id WHERE d.scope_id IN ("+scopes+") AND d.enabled=TRUE AND x.ended_ms IS NULL AND x.from_ms<=? AND x.until_ms>?",now,now);
-            long future=db.count("SELECT COUNT(*) FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id WHERE d.scope_id IN ("+scopes+") AND d.enabled=TRUE AND x.ended_ms IS NULL AND x.from_ms>?",now);
-            sections.add(section("authority","Autoridad habilitante","Activa funciones predesignadas; no se transfiere la cartera.",List.of(Map.of("label","Subrogancias activas","count",active,"route","subrogancias","filter","","hint","Periodo vigente"),Map.of("label","Subrogancias programadas","count",future,"route","subrogancias","filter","","hint","Inicio futuro"))));
+        if(a.role(Roles.TI)){
+            // TI administra cuentas, funciones y subrogancias de toda la instancia (D1); no concede lectura de expedientes.
+            long now=System.currentTimeMillis();
+            long active=db.count("SELECT COUNT(*) FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id WHERE d.enabled=TRUE AND x.ended_ms IS NULL AND x.from_ms<=? AND x.until_ms>?",now,now);
+            long future=db.count("SELECT COUNT(*) FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id WHERE d.enabled=TRUE AND x.ended_ms IS NULL AND x.from_ms>?",now);
+            sections.add(section("technical","Administracion","Cuentas, funciones, subrogancias y operacion. Este perfil no concede lectura de expedientes.",List.of(
+                Map.of("label","Subrogancias activas","count",active,"route","subrogancias","filter","","hint","Periodo vigente; la cartera no se transfiere"),
+                Map.of("label","Subrogancias programadas","count",future,"route","subrogancias","filter","","hint","Inicio futuro"),
+                Map.of("label","Cuentas habilitadas","count",db.count("SELECT COUNT(*) FROM staff WHERE enabled=TRUE AND technical=FALSE"),"route","administracion","filter","","hint","Sin credenciales ni contenido"),
+                Map.of("label","Archivos en cuarentena","count",db.count("SELECT COUNT(*) FROM document_item WHERE quarantined=TRUE"),"route","auditoria","filter","","hint","Solo metadatos tecnicos"))));
         }
-        if(a.role("TI"))sections.add(section("technical","Administracion tecnica","Usuarios y operacion. Este perfil no concede lectura de expedientes.",List.of(Map.of("label","Cuentas habilitadas","count",db.count("SELECT COUNT(*) FROM staff WHERE enabled=TRUE"),"route","administracion","filter","","hint","Sin credenciales ni contenido"),Map.of("label","Archivos en cuarentena","count",db.count("SELECT COUNT(*) FROM document_item WHERE quarantined=TRUE"),"route","auditoria","filter","","hint","Solo metadatos tecnicos"))));
         if(a.role("AUDITORIA"))sections.add(section("audit","Auditoria autorizada","Consulta de trazabilidad limitada a los ambitos concedidos.",List.of(Map.of("label","Eventos en mi alcance","count",db.count("SELECT COUNT(*) FROM audit_event WHERE scope_id IN ("+ids(grants(a,"AUDITORIA"))+")"),"route","auditoria","filter","","hint","No concede acceso al expediente"))));
-        if(sections.isEmpty())sections.add(section("personal","Mi espacio","No hay una funcion operativa asignada. Contacta a la autoridad habilitada.",List.of(metric(v,"Avisos sin leer","avisos","unread","Informacion personal"))));
+        if(sections.isEmpty())sections.add(section("personal","Mi espacio","No hay una funcion operativa asignada. Contacta a TI.",List.of(metric(v,"Avisos sin leer","avisos","unread","Informacion personal"))));
         return Map.of("sections",sections,"queues",queues,"generated_ms",System.currentTimeMillis(),"substituting",!a.substitutions().isEmpty());
     }
 }

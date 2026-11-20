@@ -55,14 +55,14 @@ class InstitutionalBootstrapTest {
         // Reinicio con el mismo archivo: no se repite ni se duplica nada.
         bootstrap.run(null);
         assertEquals(2,db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE"));
-        // Funciona con las reglas existentes: la autoridad concede funciones (tras cambiar su clave temporal).
+        // Desde 0.5.0 (D1) TI concede funciones (tras cambiar su clave temporal); la autoridad heredada ya no.
         db.update("UPDATE staff SET must_change=FALSE WHERE technical=FALSE");
         long scope=n(db.one("SELECT id FROM org_scope WHERE code='UPR-REQ'"),"id");
         long person=db.insert("INSERT INTO staff(username,name,password_hash,home_scope,must_change) VALUES('funcionaria.req','Funcionaria','x',?,FALSE)",scope);
-        flow.run("autoridad.institucional",new Workflow.Command(UUID.randomUUID(),"GRANT_CREATE",null,null,
+        flow.run("ti.institucional",new Workflow.Command(UUID.randomUUID(),"GRANT_CREATE",null,null,
             Map.of("scope_id",scope,"user_id",person,"role","PROFESIONAL","from_at",java.time.Instant.now().minusSeconds(60).toString(),"reason","Designacion de prueba")));
         assertEquals(1,db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code='PROFESIONAL'",person));
-        assertEquals(403,assertThrows(Problem.class,()->flow.run("ti.institucional",new Workflow.Command(UUID.randomUUID(),"GRANT_CREATE",null,null,
+        assertEquals(403,assertThrows(Problem.class,()->flow.run("autoridad.institucional",new Workflow.Command(UUID.randomUUID(),"GRANT_CREATE",null,null,
             Map.of("scope_id",scope,"user_id",person,"role","JEFATURA","from_at",java.time.Instant.now().toString(),"reason","x")))).status);
     }
 

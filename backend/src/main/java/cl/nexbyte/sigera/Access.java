@@ -15,7 +15,6 @@ public class Access {
         public boolean head(long scope) { return at("JEFATURA",scope)||at("DIRECCION",scope); }
         public boolean professional(long scope) { return head(scope)||at("PROFESIONAL",scope); }
         public boolean registrar(long scope) { return professional(scope)||at("ADMINISTRATIVO",scope); }
-        public boolean authority(long scope) { return at("AUTORIDAD",scope); }
     }
     private final Db db;
     private final MailOutbox mail;

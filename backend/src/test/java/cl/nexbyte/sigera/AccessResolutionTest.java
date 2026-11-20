@@ -28,8 +28,8 @@ class AccessResolutionTest {
         long com=run("direccion.upd","COM_CREATE",null,null,Map.of("scope_id",root,"channel","TELEFONO","received_at",Instant.now().minusSeconds(60).toString(),"subject","Propio","body","Sintetico")).id();
         long req=run("direccion.upd","COM_ASSUME",com,revision("communication",com),Map.of("responsible_id",titular,"reason","Propio")).id();
         run("direccion.upd","REQ_CASE_CREATE",req,revision("requirement",req),Map.of("scope_id",root,"responsible_id",titular,"objective","Cartera","matter","UPD"));
-        long designation=run("autoridad","DESIGNATE",null,null,Map.of("scope_id",root,"titular_id",titular,"substitute_id",sub,"reason","Predesignacion")).id();
-        run("autoridad","SUBSTITUTE_ACTIVATE",designation,null,Map.of("from_at",Instant.now().minusSeconds(1).toString(),"until_at",Instant.now().plusSeconds(3600).toString(),"reason","Ausencia"));
+        long designation=run("ti","DESIGNATE",null,null,Map.of("scope_id",root,"titular_id",titular,"substitute_id",sub,"reason","Predesignacion")).id();
+        run("ti","SUBSTITUTE_ACTIVATE",designation,null,Map.of("from_at",Instant.now().minusSeconds(1).toString(),"until_at",Instant.now().plusSeconds(3600).toString(),"reason","Ausencia"));
         db.update("UPDATE staff SET enabled=FALSE WHERE username='gabinete'");
 
         var batch=access.enabledActors();

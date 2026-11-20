@@ -13,15 +13,17 @@ public class Queries {
     private final Documents documents;
     public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents){this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;}
     public Map<String,Object> workspace(Actor a){
-        // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales.
+        // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales:
+        // TI administra todas las subrogancias (D1); titular y subrogante ven las propias.
+        boolean ti=a.role(Roles.TI);
         var notices=db.rows("SELECT * FROM inbox_notice WHERE user_id=? ORDER BY id DESC LIMIT 20",a.id());
-        var designations=db.rows("SELECT * FROM substitution_designation ORDER BY id DESC").stream().filter(d->a.authority(n(d,"scope_id"))||a.id()==n(d,"titular_id")||a.id()==n(d,"substitute_id")).toList();
-        var subs=db.rows("SELECT x.*,d.scope_id,d.titular_id,d.substitute_id FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id ORDER BY x.id DESC").stream().filter(d->a.authority(n(d,"scope_id"))||a.id()==n(d,"titular_id")||a.id()==n(d,"substitute_id")).map(d->{var m=new LinkedHashMap<>(d);long now=System.currentTimeMillis();m.put("state",d.get("ended_ms")!=null?"TERMINADA":n(d,"until_ms")<=now?"EXPIRADA":n(d,"from_ms")>now?"PROGRAMADA":"ACTIVA");return m;}).toList();
+        var designations=db.rows("SELECT * FROM substitution_designation ORDER BY id DESC").stream().filter(d->ti||a.id()==n(d,"titular_id")||a.id()==n(d,"substitute_id")).toList();
+        var subs=db.rows("SELECT x.*,d.scope_id,d.titular_id,d.substitute_id FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id ORDER BY x.id DESC").stream().filter(d->ti||a.id()==n(d,"titular_id")||a.id()==n(d,"substitute_id")).map(d->{var m=new LinkedHashMap<>(d);long now=System.currentTimeMillis();m.put("state",d.get("ended_ms")!=null?"TERMINADA":n(d,"until_ms")<=now?"EXPIRADA":n(d,"from_ms")>now?"PROGRAMADA":"ACTIVA");return m;}).toList();
         Map<String,Object> result=new LinkedHashMap<>();result.put("notices",notices);result.put("designations",designations);result.put("substitutions",subs);
         return result;
     }
     public Map<String,Object> catalog(Actor a){
-        var catalogScopes=db.rows("SELECT * FROM org_scope ORDER BY id");Map<String,Object> result=new LinkedHashMap<>();result.put("scopes",catalogScopes);result.put("units",db.rows("SELECT * FROM org_unit ORDER BY code"));
+        var catalogScopes=db.rows("SELECT * FROM org_scope ORDER BY id");Map<String,Object> result=new LinkedHashMap<>();result.put("scopes",catalogScopes);result.put("units",db.rows("SELECT * FROM org_unit ORDER BY code"));result.put("roles",Roles.json());
         var enabledScopes=catalogScopes.stream().filter(x->b(x,"enabled")).map(x->n(x,"id")).toList();
         boolean registrar=a.grants().stream().anyMatch(g->g.scope()!=null&&a.registrar(g.scope()));
         Map<Long,Actor> actors=new HashMap<>();for(var candidate:access.enabledActors())actors.put(candidate.id(),candidate);
@@ -171,10 +173,13 @@ public class Queries {
         return db.rows("SELECT id,name,size_bytes,sha256,created_ms,uploaded_by,reserved,quarantined,note_id,document_type,description,previous_document_id FROM document_item WHERE "+column+"=? ORDER BY id",id).stream().filter(d->!b(d,"reserved")||kind.equals("CAS")&&access.reserved(a,db.one("SELECT * FROM case_record WHERE id=?",id))||kind.equals("REQ")&&a.head(n(db.one("SELECT principal_scope FROM requirement WHERE id=?",id),"principal_scope"))).toList();
     }
     public Map<String,Object> administration(Actor a){
-        boolean ti=a.role("TI"),authority=a.role("AUTORIDAD");if(!ti&&!authority&&!a.role("AUDITORIA"))Problem.denied();
+        boolean ti=a.role(Roles.TI),auditor=a.role("AUDITORIA");if(!ti&&!auditor)Problem.denied();
         Map<String,Object> result=new LinkedHashMap<>();
-        result.put("users",ti||authority?db.rows("SELECT id,username,name,email,enabled,home_scope,must_change FROM staff WHERE technical=FALSE ORDER BY id"):List.of());
-        result.put("grants",authority?db.rows("SELECT id,user_id,role_code,scope_id,valid_from,valid_until,revoked_at,basis FROM role_assignment ORDER BY id").stream().filter(g->g.get("scope_id")==null?s(g,"role_code").equals("DISTRIBUIDOR"):a.authority(n(g,"scope_id"))).toList():List.of());
+        // TI administra cuentas, funciones (vigentes e historicas), designaciones y subrogancias de toda la instancia (D1).
+        result.put("users",ti?db.rows("SELECT id,username,name,email,enabled,home_scope,must_change,security_version FROM staff WHERE technical=FALSE ORDER BY id"):List.of());
+        result.put("grants",ti?db.rows("SELECT g.id,g.user_id,g.role_code,g.scope_id,g.valid_from,g.valid_until,g.revoked_at,g.granted_by,g.basis FROM role_assignment g JOIN staff u ON u.id=g.user_id WHERE u.technical=FALSE ORDER BY g.id"):List.of());
+        result.put("designations",ti?db.rows("SELECT * FROM substitution_designation ORDER BY id DESC"):List.of());
+        result.put("substitutions",ti?db.rows("SELECT x.*,d.scope_id,d.titular_id,d.substitute_id FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id ORDER BY x.id DESC"):List.of());
         // Operacion de integraciones para TI: estado, pausa y contadores agregados; sin documentos ni contenidos.
         result.put("integrations",ti?integrations.overview():Map.of());
         // Cuarentena: identificador, tamano, huella y ultimo analisis; nunca nombre ni contenido del original.
@@ -182,7 +187,9 @@ public class Queries {
             +"(SELECT COUNT(*) FROM document_scan x WHERE x.document_id=d.id AND x.verdict='INFECTADO') AS detections FROM document_item d "
             +"LEFT JOIN document_scan s ON s.id=(SELECT MAX(y.id) FROM document_scan y WHERE y.document_id=d.id) WHERE d.quarantined=TRUE ORDER BY d.id"):List.of());
         result.put("document_policy",ti?documents.releasePolicy():Map.of());
-        result.put("audit",db.rows("SELECT e.*,u.name AS actor FROM audit_event e JOIN staff u ON u.id=e.actor_id WHERE e.scope_id IN ("+BoardQueries.ids(BoardQueries.grants(a,"AUDITORIA"))+")"+(ti?" OR e.resource_type IN ('USUARIO','SISTEMA','AMBITO')":"")+" ORDER BY e.id DESC LIMIT 300"));
+        // Auditoria: eventos de su alcance mas toda la administracion de cuentas, ambitos y subrogancias. TI: administracion y sistema.
+        String administrative=(auditor?"'USUARIO','AMBITO','SUBROGANCIA'":"")+(auditor&&ti?",":"")+(ti?"'USUARIO','SISTEMA','AMBITO','SUBROGANCIA'":"");
+        result.put("audit",db.rows("SELECT e.*,u.name AS actor FROM audit_event e JOIN staff u ON u.id=e.actor_id WHERE e.scope_id IN ("+BoardQueries.ids(BoardQueries.grants(a,"AUDITORIA"))+") OR e.resource_type IN ("+administrative+") ORDER BY e.id DESC LIMIT 300"));
         return result;
     }
     static Map<String,Object> pick(Map<String,Object> row,String...keys){Map<String,Object> out=new LinkedHashMap<>();for(var key:keys)out.put(key,row.get(key));return out;}

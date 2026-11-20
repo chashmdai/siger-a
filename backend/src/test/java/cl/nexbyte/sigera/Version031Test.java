@@ -28,13 +28,13 @@ class Version031Test {
         long root=scope("UPD"),area=scope("UPD-DIF"),titular=user("direccion.upd"),sub=user("profesional.upd");
         long req=ownReq("direccion.upd",root,titular,"Cartera personal de titular");
         long cas=run("direccion.upd","REQ_CASE_CREATE",req,revision("requirement",req),Map.of("scope_id",area,"responsible_id",titular,"objective","Gestion personal","matter","UPD")).id();
-        long designation=run("autoridad","DESIGNATE",null,null,Map.of("scope_id",root,"titular_id",titular,"substitute_id",sub,"reason","Predesignacion sintetica")).id();
-        long period=run("autoridad","SUBSTITUTE_ACTIVATE",designation,null,Map.of("from_at",Instant.now().minusSeconds(1).toString(),"until_at",Instant.now().plusSeconds(3600).toString(),"reason","Ausencia temporal")).id();
+        long designation=run("ti","DESIGNATE",null,null,Map.of("scope_id",root,"titular_id",titular,"substitute_id",sub,"reason","Predesignacion sintetica")).id();
+        long period=run("ti","SUBSTITUTE_ACTIVATE",designation,null,Map.of("from_at",Instant.now().minusSeconds(1).toString(),"until_at",Instant.now().plusSeconds(3600).toString(),"reason","Ausencia temporal")).id();
         var acting=access.actor("profesional.upd");var old=access.actor("direccion.upd");
         assertTrue(acting.at("DIRECCION",root));assertTrue(acting.head(area));assertTrue(access.solReceiver(acting,root));
         assertFalse(old.head(root));assertFalse(old.head(area));assertTrue(access.caseWrite(old,db.one("SELECT * FROM case_record WHERE id=?",cas)));
         assertFalse(acting.head(scope("UPR-REQ")));
-        run("autoridad","SUBSTITUTE_END",period,revision("substitution",period),Map.of("reason","Retorno"));
+        run("ti","SUBSTITUTE_END",period,revision("substitution",period),Map.of("reason","Retorno"));
         assertTrue(access.actor("direccion.upd").head(area));assertFalse(access.actor("profesional.upd").head(root));
     }
     @Test void reinicioDemoNoReponePermisoRevocado()throws Exception{
