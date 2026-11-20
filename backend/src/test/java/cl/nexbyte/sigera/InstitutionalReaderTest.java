@@ -2,6 +2,8 @@ package cl.nexbyte.sigera;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.io.ByteArrayInputStream;
+import java.security.KeyPairGenerator;
 import java.time.Instant;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -22,12 +24,12 @@ import static cl.nexbyte.sigera.Db.*;
  */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,properties={
  "spring.datasource.url=jdbc:h2:mem:sigerainstitutionalreader;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
- "siger.seed-demo=true","siger.data=./target/test-datareader-${random.uuid}"})
+ "siger.seed-demo=true","siger.data=./target/test-datareader-${random.uuid}","siger.folio-prefix=COMA"})
 @ActiveProfiles("test")
 class InstitutionalReaderTest {
  @DynamicPropertySource static void trustedKeys(DynamicPropertyRegistry registry){FormularioDocs.trustedKeys(registry);}
  static final String HEAD="coordinacion.requerimientos",PROF="profesional",ADMIN="administrativo",DIST="distribucion",READER="lector.institucional",MIXED="lector.profesional";
- @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired Queries queries;@Autowired Attention attention;@Autowired Documents documents;
+ @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired Queries queries;@Autowired Attention attention;@Autowired Documents documents;@Autowired FormularioReception reception;@Autowired FormularioKeys keys;
 
  /** Expedientes sinteticos compartidos por las pruebas; ninguna prueba los modifica con exito salvo la combinada (objetos propios). */
  record Fixture(long comNew,long solPending,long solReturned,long solAssumed,long req,long caseId,long reservedNote,long openNote,long task,long flow,long link,
@@ -291,17 +293,89 @@ class InstitutionalReaderTest {
   assertEquals(expected,new TreeSet<>(attempts.keySet()),"el barrido cubre todos los comandos de Workflow.run");
 
   var outcomes=new TreeMap<String,Object>();
+  db.update("UPDATE staff SET must_change=FALSE WHERE username=?",READER);
+  var changes=new TreeMap<String,Object>();
   for(var e:attempts.entrySet()){
-   var a=e.getValue();
-   try{run(READER,e.getKey(),a.table(),a.id(),a.data());outcomes.put(e.getKey(),"EXITO");}
+   var a=e.getValue();var before=snapshot();
+   try{flow.run(READER,new Workflow.Command(UUID.randomUUID(),e.getKey(),a.id(),rev(a.table(),a.id()),a.data()));outcomes.put(e.getKey(),"EXITO");}
    catch(Problem p){if(p.status!=403)outcomes.put(e.getKey(),p.status+" "+p.getMessage());}
+   var after=snapshot();
+   if(!after.equals(before)){
+    var diff=new TreeMap<String,String>();
+    for(var k:before.keySet())if(!Objects.equals(before.get(k),after.get(k)))diff.put(k,before.get(k)+" -> "+after.get(k));
+    changes.put(e.getKey(),diff);
+   }
   }
   assertEquals(Map.of(),outcomes,"todo comando de un lector puro termina en 403");
+  assertEquals(Map.of(),changes,"ningun intento del lector deja rastro en la base (filas, revisiones ni auditoria)");
 
   db.update("UPDATE staff SET must_change=FALSE WHERE username=?",READER);
   long notice=db.insert("INSERT INTO inbox_notice(user_id,at_ms,text_value,resource_type,resource_id) VALUES(?,?,?,?,?)",prof,System.currentTimeMillis(),"Aviso sintetico","CAS",f.caseId());
   run(READER,"NOTICE_READ",null,notice,Map.of());
   assertNull(db.one("SELECT read_ms FROM inbox_notice WHERE id=?",notice).get("read_ms"),"el aviso ajeno sigue sin leer");
+  // Control: la instantanea si detecta un cambio real (el lector marca como leido un aviso propio).
+  long own=db.insert("INSERT INTO inbox_notice(user_id,at_ms,text_value,resource_type,resource_id) VALUES(?,?,?,?,?)",user(READER),System.currentTimeMillis(),"Aviso propio sintetico","CAS",f.caseId());
+  var beforeOwn=snapshot();
+  run(READER,"NOTICE_READ",null,own,Map.of());
+  var afterOwn=snapshot();
+  assertEquals(beforeOwn.get("inbox_notice.leidos")+1,afterOwn.get("inbox_notice.leidos"));
+  assertEquals(beforeOwn.get("command_log.filas")+1,afterOwn.get("command_log.filas"),"el exito queda en command_log; los rechazos no");
+ }
+
+ /**
+  * Estado comparable de toda la base: filas de cada tabla, suma de revision donde existe, version de seguridad de las
+  * cuentas, funciones revocadas y avisos leidos. Un intento rechazado debe dejarlo identico (incluido audit_event).
+  */
+ Map<String,Long> snapshot(){
+  var out=new TreeMap<String,Long>();
+  var tables=db.rows("SELECT LOWER(table_name) AS t FROM information_schema.tables WHERE LOWER(table_schema)='public' AND table_type='BASE TABLE' ORDER BY 1");
+  assertTrue(tables.size()>40,"tablas del esquema: "+tables.size());
+  for(var row:tables){
+   String table=s(row,"t");out.put(table+".filas",db.count("SELECT COUNT(*) FROM "+table));
+   if(db.count("SELECT COUNT(*) FROM information_schema.columns WHERE LOWER(table_schema)='public' AND LOWER(table_name)=? AND LOWER(column_name)='revision'",table)>0)
+    out.put(table+".revision",db.count("SELECT COALESCE(SUM(revision),0) FROM "+table));
+  }
+  out.put("staff.security_version",db.count("SELECT COALESCE(SUM(security_version),0) FROM staff"));
+  out.put("role_assignment.revocadas",db.count("SELECT COUNT(*) FROM role_assignment WHERE revoked_at IS NOT NULL"));
+  out.put("inbox_notice.leidos",db.count("SELECT COUNT(*) FROM inbox_notice WHERE read_ms IS NOT NULL"));
+  out.put("document_item.cuarentena",db.count("SELECT COUNT(*) FROM document_item WHERE quarantined=TRUE"));
+  return out;
+ }
+
+ /** Copia del vector de FormularioConsumerTest: adulto ClaveUnica (canal publico, 1.1) con un original adjunto. */
+ static String adultWithFile(byte[] content){
+  var c=FormularioDocs.cuVulneration();c.put("version","1.1");
+  String id=UUID.randomUUID().toString();
+  c.withObjectProperty("datos").withArrayProperty("adjuntos").add(id);
+  var d=c.withArrayProperty("adjuntos").addObject();
+  d.put("id",id);d.put("nombre","informe ciudadano.pdf");d.put("tamanio",content.length);d.put("sha256",ExternalOriginal.sha256(content));d.put("tipo","application/pdf");d.put("estado","VALIDADO");
+  return FormularioDocs.sign(c);
+ }
+
+ @Test void lectorDescargaElOriginalDeUnaComDelFormulario()throws Exception{
+  fixture();long upr=scope("UPR-REQ");var reader=access.actor(READER);
+  // Mismo camino que el consumidor: custodia del original, registro de la entrega y comprobante firmado.
+  byte[] content="Original sintetico del Formulario para la consulta institucional.\n".getBytes(StandardCharsets.US_ASCII);
+  var original=ExternalOriginal.parse(adultWithFile(content),keys.keys());
+  var file=original.attachments().getFirst();
+  documents.custodyExternal(Documents.externalKey(original.externalId(),file.id()),file.size(),file.sha256(),new ByteArrayInputStream(content));
+  var pair=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+  long com=reception.register(original,upr,UUID.randomUUID(),System.currentTimeMillis()+60000,1,new FormularioAck("SIGER_A_PRUEBA",pair.getPrivate(),pair.getPublic())).communication();
+  long doc=n(db.one("SELECT x.document_id FROM external_document x WHERE x.communication_id=?",com),"document_id");
+
+  var view=detail(READER,"COM",com);noFaculties("COM del Formulario",view);
+  assertEquals(List.of(doc),ids(view,"documents"),"el original figura en la ficha");
+  assertNotNull(view.get("external"));
+  assertEquals(409,assertThrows(Problem.class,()->documents.download(reader,doc)).status,"en cuarentena no se descarga");
+
+  db.update("UPDATE document_item SET quarantined=FALSE WHERE id=?",doc); // Liberacion de TI fuera de esta prueba (DocumentReleaseTest).
+  long before=db.count("SELECT COUNT(*) FROM audit_event WHERE action='DESCARGA' AND actor_id=? AND resource_type='COM' AND resource_id=? AND note=?",reader.id(),com,"Documento "+doc);
+  var download=documents.download(reader,doc);
+  assertEquals("informe ciudadano.pdf",download.name());
+  assertEquals(content.length,download.size());
+  assertArrayEquals(content,Files.readAllBytes(download.path()));
+  assertEquals(before+1,db.count("SELECT COUNT(*) FROM audit_event WHERE action='DESCARGA' AND actor_id=? AND resource_type='COM' AND resource_id=? AND note=?",reader.id(),com,"Documento "+doc),
+   "la descarga queda auditada con la COM y el documento");
  }
 
  @Test void lectorConProfesionalConservaExactamenteSusFacultades(){

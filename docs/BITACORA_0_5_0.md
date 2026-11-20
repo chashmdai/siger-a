@@ -14,6 +14,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G04 | Perfil de cuenta en la interfaz | CERRADO |
 | G04b | Perfil de cuenta: vista movil | CERRADO |
 | G05 | Consulta institucional: lectura | CERRADO |
+| G05b | Consulta institucional: base intacta y original del Formulario | CERRADO |
 | G06 | Consulta institucional: bandejas e interfaz | ABIERTO |
 | G07 | Indice de personas (V11) | ABIERTO |
 | G08 | Buscador | ABIERTO |
@@ -143,3 +144,16 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - `TaskReminders` usa `caseRead`: un ejecutor que deja de ser miembro pero tiene la consulta sigue recibiendo recordatorios (inocuo).
 - Pendientes: bandejas, dashboard, menu y aviso en las fichas -> G06; recorrido del lector en `PRUEBAS_MANUALES_0_5_0.md` -> G14; `MySql84IntegrationTest` con el lector -> G13
 - Verificacion manual sugerida al usuario: no aplica en la interfaz hasta G06. Opcional: como `ti`, abre el perfil de una cuenta y comprueba que aparece la casilla "Consulta institucional" y que al marcar TI se limpia.
+
+### G05b - Consulta institucional: base intacta y original del Formulario   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate G05b: base intacta y original del Formulario`)
+- Origen: pedido del responsable al cerrar G05. Solo pruebas; sin cambios de codigo de produccion.
+- Hecho:
+  - El barrido toma una instantanea antes y despues de cada intento del lector: filas de todas las tablas del esquema (incluidas `audit_event` y `command_log`), suma de `revision` en las tablas que la tienen, `security_version`, funciones revocadas, avisos leidos y documentos en cuarentena. Las 57 instantaneas quedan identicas. Un control negativo comprueba que la instantanea detecta un cambio real (`NOTICE_READ` propio: +1 aviso leido, +1 `command_log`).
+  - Nueva `lectorDescargaElOriginalDeUnaComDelFormulario`: entrega 1.1 con adjunto registrada por el camino del consumidor (`custodyExternal` + `FormularioReception.register` + comprobante firmado). El lector ve el original en la ficha; en cuarentena la descarga da 409. Tras la liberacion (simulada por SQL), descarga los mismos bytes y nombre, y queda un `DESCARGA` con la COM y "Documento N".
+- Archivos clave: `InstitutionalReaderTest.java` (agrega `siger.folio-prefix=COMA`, que exige el comprobante)
+- Verificacion: JUnit 97 ok + 1 omitida (antes 96 + 1; +1 prueba nueva; Maven informa 98 ejecutadas); frontend sin cambios (22 ok en G05); humo no aplica (sin cambios de comportamiento)
+- Desvios del plan: ninguno (division de G05 prevista en la seccion 5).
+- Hallazgos para gates siguientes: G06 puede reutilizar `snapshot()` en la prueba de equivalencia de bandejas y `adultWithFile` (copia del vector de `FormularioConsumerTest`) si necesita una COM del Formulario con original.
+- Pendientes: ninguno nuevo
+- Verificacion manual sugerida al usuario: no aplica
