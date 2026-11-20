@@ -20,3 +20,4 @@ bootstrap-usuarios.csv
 *.mv.db
 *.sqlite
 *.sqlite3
+.playwright-mcp/
