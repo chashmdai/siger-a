@@ -10,18 +10,33 @@ import {Icon} from '../../components/Icon';
 import {Busy, Callout, ErrorMessage} from '../../components/Primitives';
 import {useExit} from '../../components/useExit';
 import type {Entry, Grant, Profile, RoleDef, Wanted} from './profile';
-import {diff, duplicates, grantOf, hasTi, initial, keyOf, liveGrants, payload, periodProblems, TI, toggle} from './profile';
+import {countIn, diff, duplicates, grantOf, hasTi, initial, keyOf, liveGrants, payload, periodProblems, TI, toggle, visibleScopes} from './profile';
 
 /** Valor para <input type="datetime-local"> en la zona del navegador. */
 const localInput = (ms: number | null) => ms == null ? '' : new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 const fromInput = (value: string) => value ? new Date(value).getTime() : null;
+
+/** Bajo este ancho la matriz no cabe: cada ambito se muestra como una tarjeta expandible. Igual que el corte movil de los modales. */
+const NARROW = '(max-width: 640px)';
+function useNarrow() {
+  const [narrow, setNarrow] = useState(() => typeof matchMedia === 'function' && matchMedia(NARROW).matches);
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return;
+    const media = matchMedia(NARROW), update = () => setNarrow(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  return narrow;
+}
 
 /** Envio pendiente: se conserva con su clave para reintentar igual si el resultado es incierto. */
 type Pending = {key: string; data: Row};
 
 /**
  * Perfil de la cuenta: TI fija en un acto todas sus funciones (PROFILE_SET). Matriz de ambitos x funciones por
- * ambito, casillas institucionales, vigencia opcional, resumen de lo que se otorga y revoca, y fundamento.
+ * ambito en escritorio y, en pantallas angostas, una tarjeta expandible por ambito (mismo estado de profile.ts);
+ * casillas institucionales, vigencia opcional, resumen de lo que se otorga y revoca, y fundamento.
  * El servidor valida todo de nuevo (D2, una jefatura por ambito, cuenta deshabilitada, revision).
  */
 export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; account: Row; grants: Row[]; close: () => void}) {
@@ -33,6 +48,10 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
   const scoped = roles.filter(r => r.reach === 'AMBITO'), institutional = roles.filter(r => r.reach !== 'AMBITO');
   const used = new Set(live.map(g => g.scope_id));
   const scopes = list(ctx.catalog, 'scopes').filter(s => s.enabled !== false || used.has(number(s, 'id')));
+  const scopeItems = scopes.map(s => ({id: number(s, 'id'), code: text(s, 'code'), name: text(s, 'name'), enabled: s.enabled !== false}));
+  const narrow = useNarrow();
+  const [onlyWith, setOnlyWith] = useState(true), [query, setQuery] = useState(''), [open, setOpen] = useState<ReadonlySet<number>>(() => new Set());
+  const search = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState<Profile>(() => initial(live));
   const [step, setStep] = useState<'edit' | 'confirm'>('edit');
@@ -85,6 +104,11 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
   /** Al salir tras un resultado incierto se recarga: si el perfil quedo registrado, su revision ya cambio. */
   const leave = () => {if (uncertain) ctx.reload(); exit();};
 
+  const flip = (scope: number) => setOpen(o => {const next = new Set(o); if (!next.delete(scope)) next.add(scope); return next;});
+  const showAll = () => {setOnlyWith(false); search.current?.focus();};
+  const roleName = (role: string) => ROLE_LABELS[role] ?? humanize(role);
+
+  const cards = visibleScopes(scopeItems, profile, live, onlyWith, query, open);
   const cell = (role: string, scope: number | null, name: string, scopeEnabled = true) => <input type="checkbox" aria-label={name}
     checked={profile.has(keyOf(role, scope))} disabled={blocked(role, scope, scopeEnabled)} onChange={e => set(role, scope, e.target.checked)}/>;
 
@@ -108,18 +132,46 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
             ? <Callout tone="neutral" title="TI es una función exclusiva">Una cuenta con TI no puede tener ninguna otra función, operativa ni de consulta. Al marcar TI se quitaron las demás; desmárcala para asignar otras funciones.</Callout>
             : <p className="field-help">Marca las funciones por ámbito. Lo que ya tiene la cuenta aparece marcado; desmarcarlo la revoca.</p>}
           <h3 className="profile-subtitle">Funciones por ámbito</h3>
-          <div className="profile-matrix-scroll" role="region" aria-label="Funciones por ámbito" tabIndex={0}>
-            <table className="profile-matrix">
-              <thead><tr><th scope="col">Ámbito</th>{scoped.map(r => <th scope="col" key={r.code}>{ROLE_LABELS[r.code] ?? humanize(r.code)}</th>)}</tr></thead>
-              <tbody>{scopes.map(s => {
-                const sid = number(s, 'id'), on = s.enabled !== false;
-                return <tr key={sid}>
-                  <th scope="row"><span className="cell-strong">{text(s, 'code')}</span><small>{text(s, 'name')}{on ? '' : ' (deshabilitado)'}</small></th>
-                  {scoped.map(r => <td key={r.code}>{cell(r.code, sid, (ROLE_LABELS[r.code] ?? r.code) + ' en ' + text(s, 'code'), on)}</td>)}
-                </tr>;
-              })}</tbody>
-            </table>
-          </div>
+          {narrow
+          ? <>
+            <div className="profile-scope-tools">
+              <label className="check"><input type="checkbox" checked={onlyWith} onChange={e => setOnlyWith(e.target.checked)}/><span>Solo ámbitos con funciones</span></label>
+              <label className="input-icon"><Icon name="search" size={18}/><input ref={search} type="search" aria-label="Buscar ámbito por código o nombre" placeholder="Buscar ámbito por código o nombre" value={query} onChange={e => setQuery(e.target.value)}/></label>
+            </div>
+            <p className="field-help" aria-live="polite">Mostrando {cards.length} de {scopeItems.length} ámbitos.</p>
+            {cards.length === 0 ? <div className="profile-scope-empty">
+              <p>{query.trim() ? 'Ningún ámbito coincide con la búsqueda' + (onlyWith ? ' entre los que tienen funciones.' : '.') : 'La cuenta no tiene funciones por ámbito.'}</p>
+              {onlyWith && <button type="button" className="sm" onClick={showAll}>{query.trim() ? 'Buscar en todos los ámbitos' : 'Mostrar todos los ámbitos'}</button>}
+            </div> : <ul className="profile-scope-cards">
+              {cards.map(s => {
+                const count = countIn(profile, s.id), expanded = open.has(s.id);
+                return <li key={s.id} className={'profile-scope-card' + (expanded ? ' open' : '')}>
+                  <h4>
+                    <button type="button" className="profile-scope-toggle" aria-expanded={expanded} aria-controls={'profile-scope-' + s.id} onClick={() => flip(s.id)}>
+                      <span className="profile-scope-text"><span className="cell-strong">{s.code}</span><small>{s.name}{s.enabled ? '' : ' (deshabilitado)'}</small></span>
+                      <span className={'chip' + (count > 0 ? ' chip-ok' : '')}>{count === 0 ? 'Sin funciones' : count === 1 ? '1 función' : count + ' funciones'}</span>
+                      <Icon name="down" size={18}/>
+                    </button>
+                  </h4>
+                  {expanded && <ul id={'profile-scope-' + s.id} className="profile-scope-roles">
+                    {scoped.map(r => <li key={r.code}><label className="check">{cell(r.code, s.id, roleName(r.code) + ' en ' + s.code, s.enabled)}<span>{roleName(r.code)}</span></label></li>)}
+                  </ul>}
+                </li>;
+              })}
+            </ul>}
+          </>
+          : <div className="profile-matrix-scroll" role="region" aria-label="Funciones por ámbito" tabIndex={0}>
+              <table className="profile-matrix">
+                <thead><tr><th scope="col">Ámbito</th>{scoped.map(r => <th scope="col" key={r.code}>{ROLE_LABELS[r.code] ?? humanize(r.code)}</th>)}</tr></thead>
+                <tbody>{scopes.map(s => {
+                  const sid = number(s, 'id'), on = s.enabled !== false;
+                  return <tr key={sid}>
+                    <th scope="row"><span className="cell-strong">{text(s, 'code')}</span><small>{text(s, 'name')}{on ? '' : ' (deshabilitado)'}</small></th>
+                    {scoped.map(r => <td key={r.code}>{cell(r.code, sid, (ROLE_LABELS[r.code] ?? r.code) + ' en ' + text(s, 'code'), on)}</td>)}
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>}
           <h3 className="profile-subtitle">Funciones institucionales</h3>
           <div className="profile-institutional">
             {institutional.map(r => <label key={r.code} className="check">

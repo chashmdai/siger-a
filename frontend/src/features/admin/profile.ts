@@ -92,3 +92,21 @@ export function diff(live: Grant[], wanted: Wanted[]) {
 export function periodProblems(profile: Profile, now: number) {
   return [...profile.values()].filter(e => e.until != null && e.until <= Math.max(e.from ?? 0, now)).map(e => keyOf(e.role, e.scope));
 }
+
+/** Funciones marcadas en un ambito (vista movil: contador de cada tarjeta). */
+export const countIn = (profile: Profile, scope: number) => [...profile.values()].filter(e => e.scope === scope).length;
+
+/** Texto comparable: minusculas, sin tildes ni signos, espacios simples. */
+export const fold = (value: string) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * Ambitos de la vista movil. Con "solo ambitos con funciones" se listan los que tienen funciones marcadas o que la
+ * cuenta ya tenia (desmarcar no hace desaparecer la tarjeta) y los que el usuario dejo abiertos. El buscador
+ * compara codigo y nombre, cada palabra por separado.
+ */
+export function visibleScopes<S extends {id: number; code: string; name: string}>(scopes: S[], profile: Profile, live: Grant[], onlyWith: boolean, query: string, open: ReadonlySet<number> = new Set()) {
+  const words = fold(query).split(' ').filter(Boolean);
+  const held = new Set(live.map(g => g.scope_id));
+  return scopes.filter(s => (!onlyWith || countIn(profile, s.id) > 0 || held.has(s.id) || open.has(s.id))
+    && words.every(w => fold(s.code + ' ' + s.name).includes(w)));
+}

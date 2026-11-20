@@ -12,6 +12,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G02 | Comando PROFILE_SET | CERRADO |
 | G03 | Supresion de AUTORIDAD e inicializacion | CERRADO |
 | G04 | Perfil de cuenta en la interfaz | CERRADO |
+| G04b | Perfil de cuenta: vista movil | CERRADO |
 | G05 | Consulta institucional: lectura | ABIERTO |
 | G06 | Consulta institucional: bandejas e interfaz | ABIERTO |
 | G07 | Indice de personas (V11) | ABIERTO |
@@ -110,3 +111,14 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - `Dashboard.tsx` sigue mostrando "Version 0.4.0" fija -> G14.
 - Pendientes: recorrido visual del perfil en `PRUEBAS_MANUALES_0_5_0.md` -> G14; `PROFILE_SET` en `MySql84IntegrationTest` -> G13
 - Verificacion manual sugerida al usuario: lista paso a paso entregada al cierre de la sesion (crear cuenta con Distribucion + Administrativo + Profesional en UPR-REQ; guardar sin cambios; marcar TI y ver que se limpian las demas; entrar con la cuenta nueva y revisar el menu; predesignar y activar una subrogancia como TI; pantalla angosta).
+
+### G04b - Perfil de cuenta: vista movil   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate G04b: perfil de cuenta, vista movil`)
+- Origen: la verificacion manual de G04 paso salvo el paso 6. En ancho de celular la columna fija de ambitos ocupaba mas de la mitad, solo se veia una funcion con el encabezado cortado y no se notaba que habia mas columnas.
+- Hecho: bajo 640 px (`useNarrow`, `matchMedia`, mismo corte que los modales) `ProfileDialog` reemplaza la matriz por una tarjeta por ambito: codigo, descripcion y contador de funciones marcadas en texto ("Sin funciones", "2 funciones"). La tarjeta es un `button` con `aria-expanded`/`aria-controls` dentro de un `h4` y al expandirse muestra las funciones como casillas en lista, con su nombre completo. Arriba van el filtro "Solo ambitos con funciones" (activo por defecto) y un buscador por codigo o nombre (sin tildes, palabra por palabra), con "Mostrando N de M ambitos" (`aria-live`) y un estado vacio con "Mostrar todos los ambitos" o "Buscar en todos los ambitos" (el foco pasa al buscador). Con el filtro se mantienen visibles los ambitos que la cuenta ya tenia y las tarjetas abiertas, para que desmarcar no haga desaparecer la tarjeta. En escritorio la matriz no cambia. Ambas vistas usan el mismo `Profile` de `profile.ts` (`countIn`, `fold`, `visibleScopes`). Animacion de apertura y giro del icono desactivados con `prefers-reduced-motion`; controles nativos y objetivos de 44 px o mas.
+- Archivos clave: `frontend/src/features/admin/{ProfileDialog.tsx,profile.ts}`, `frontend/src/styles/screens.css`, `frontend/tests/profile.test.ts`
+- Verificacion: JUnit 90 ok + 1 omitida (sin cambios; Maven informa 91 ejecutadas); frontend 21 ok (antes 18; +3: contador, filtro y buscador); typecheck ok; build ok; instancia aislada reiniciada en el puerto 18600 con `./target/humo-manual` (health UP, el bundle contiene la vista nueva). La revision visual en celular queda a cargo del responsable.
+- Desvios del plan: ninguno (division de G04 prevista en la seccion 5).
+- Hallazgos para gates siguientes: los roles nuevos de `catalog.roles` con `reach` AMBITO aparecen solos como columnas de la matriz y como casillas de cada tarjeta. Los de ambito opcional (G11) siguen pendientes, como se anoto en G04.
+- Pendientes: recorrido movil del perfil en `PRUEBAS_MANUALES_0_5_0.md` -> G14
+- Verificacion manual sugerida al usuario: en http://localhost:18600 abre como `ti` el perfil de `prueba.perfil` en ancho de celular. Comprueba que se ve la tarjeta UPR-REQ con "2 funciones" y que al desactivar el filtro aparecen todos los ambitos. Busca "nna", expande la tarjeta y recorre con Tab y Espacio las casillas de funciones; marca TI y comprueba que las tarjetas quedan bloqueadas.

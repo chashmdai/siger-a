@@ -2,7 +2,7 @@
 // replica la comparacion del servidor (Personnel.profile). node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {diff, duplicates, grantOf, grantState, hasTi, initial, keyOf, liveGrants, payload, periodProblems, toggle} from '../src/features/admin/profile.ts';
+import {countIn, diff, duplicates, fold, grantOf, grantState, hasTi, initial, keyOf, liveGrants, payload, periodProblems, toggle, visibleScopes} from '../src/features/admin/profile.ts';
 
 const NOW = Date.parse('2026-11-20T15:00:00.000Z');
 const HOUR = 3_600_000;
@@ -84,4 +84,45 @@ test('un termino pasado o anterior al inicio se marca antes de confirmar', () =>
   const reversed = new Map(profile).set(keyOf('DISTRIBUIDOR', null), {role: 'DISTRIBUIDOR', scope: null, from: NOW + 10 * HOUR, until: NOW + 5 * HOUR});
   assert.deepEqual(periodProblems(reversed, NOW), [keyOf('DISTRIBUIDOR', null)]);
   assert.deepEqual(periodProblems(initial(live), NOW), []);
+});
+
+// Vista angosta (G04b): tarjetas por ambito sobre el mismo estado del perfil.
+const SCOPES = [
+  {id: 3, code: 'UPR-REQ', name: 'Requerimientos / Atención de Personas'},
+  {id: 4, code: 'UPD', name: 'Dirección UPD'},
+  {id: 5, code: 'UEP', name: 'Dirección UEP'},
+  {id: 6, code: 'UPR-NCE', name: 'NNA bajo cuidado del Estado'},
+];
+const codes = (list: {code: string}[]) => list.map(s => s.code);
+
+test('el contador de cada tarjeta sale del mismo perfil que la matriz', () => {
+  let profile = initial(live);
+  assert.equal(countIn(profile, 3), 1);
+  profile = toggle(profile, 'ADMINISTRATIVO', 3, true, live);
+  assert.equal(countIn(profile, 3), 2);
+  assert.equal(countIn(profile, 6), 0);
+  assert.equal(countIn(toggle(profile, 'TI', null, true, live), 3), 0);
+});
+
+test('solo ambitos con funciones: incluye los que la cuenta tenia y los abiertos', () => {
+  const profile = initial(live);
+  assert.deepEqual(codes(visibleScopes(SCOPES, profile, live, true, '')), ['UPR-REQ', 'UPD', 'UEP']);
+  assert.deepEqual(codes(visibleScopes(SCOPES, profile, live, false, '')), ['UPR-REQ', 'UPD', 'UEP', 'UPR-NCE']);
+  // Desmarcar no hace desaparecer la tarjeta; una tarjeta abierta se mantiene aunque quede sin funciones.
+  const none = toggle(profile, 'PROFESIONAL', 3, false, live);
+  assert.ok(codes(visibleScopes(SCOPES, none, live, true, '')).includes('UPR-REQ'));
+  assert.deepEqual(codes(visibleScopes(SCOPES, initial([]), [], true, '', new Set([6]))), ['UPR-NCE']);
+  // Una funcion nueva en otro ambito lo hace visible con el filtro.
+  assert.ok(codes(visibleScopes(SCOPES, toggle(profile, 'LECTURA', 6, true, live), live, true, '')).includes('UPR-NCE'));
+});
+
+test('el buscador compara codigo y nombre sin tildes ni mayusculas, palabra por palabra', () => {
+  assert.equal(fold('  Atención  de PERSONAS '), 'atencion de personas');
+  const all = (q: string) => codes(visibleScopes(SCOPES, initial(live), live, false, q));
+  assert.deepEqual(all('upr'), ['UPR-REQ', 'UPR-NCE']);
+  assert.deepEqual(all('atencion personas'), ['UPR-REQ']);
+  assert.deepEqual(all('DIRECCIÓN'), ['UPD', 'UEP']);
+  assert.deepEqual(all('estado nna'), ['UPR-NCE']);
+  assert.deepEqual(all('inexistente'), []);
+  assert.deepEqual(codes(visibleScopes(SCOPES, initial(live), live, true, 'nna')), []);
 });
