@@ -9,7 +9,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 |---|---|---|
 | G00 | Linea base | CERRADO |
 | G01 | Catalogo de roles y TI administrador | CERRADO |
-| G02 | Comando PROFILE_SET | ABIERTO |
+| G02 | Comando PROFILE_SET | CERRADO |
 | G03 | Supresion de AUTORIDAD e inicializacion | ABIERTO |
 | G04 | Perfil de cuenta en la interfaz | ABIERTO |
 | G05 | Consulta institucional: lectura | ABIERTO |
@@ -61,3 +61,19 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - `TiAdministrationTest` usa `@Order`: el metodo 2 deja `ti` con TI permanente al terminar (restaura en `finally`).
 - Pendientes: interfaz de concesion y subrogancias para TI -> G04; supresion de AUTORIDAD en datos y bootstrap -> G03
 - Verificacion manual sugerida al usuario: no aplica (sin cambios de interfaz hasta G04)
+
+### G02 - Comando PROFILE_SET   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate G02: comando PROFILE_SET`)
+- Hecho: comando `PROFILE_SET` (TI; id = cuenta; `revision` = `staff.security_version`; `data={grants:[{role,scope_id?,from_at?,until_at?}],reason}`) en `Personnel.profile`. Compara por (rol, ambito) con las funciones vigentes o programadas: coincide si tiene el mismo termino (sin `until_at` = sin termino) y, si trae `from_at`, el mismo inicio; conserva lo que coincide (misma fila), revoca lo demas y otorga lo nuevo (desde `from_at` o ahora). Cambiar la vigencia = revocar + otorgar. Un evento `FUNCION_OTORGADA`/`FUNCION_REVOCADA` por cambio, un solo `epoch`, `keepTi` como postcondicion. Todo se valida antes de escribir.
+- Decisiones del responsable: D2 se evalua sobre el estado final (un acto puede pasar de {Profesional} a {TI}); perfil vacio admitido (revoca todo, salvo `keepTi`); cuenta deshabilitada solo admite revocaciones (si agregaria una funcion: 409 "La cuenta esta deshabilitada: su perfil solo admite revocaciones..."). Perfil identico: 409 "El perfil no tiene cambios.".
+- Otros: `Input.list(key,max)` (lista de objetos, 400 si no lo es; maximo 100 entradas en el perfil). `GRANT_CREATE` reutiliza los helpers nuevos `headFree` e `insertGrant` (mismo comportamiento). `Personnel.HEADS` agrupa JEFATURA/DIRECCION.
+- Archivos clave: `Personnel.java`, `Input.java`, `Workflow.java`, `ProfileSetTest.java`, `docs/DECISIONES_FUNCIONALES.md` (D3), `CLAUDE.md`
+- Verificacion: JUnit 87 ok + 1 omitida (antes 81 + 1; +6 de `ProfileSetTest`; Maven informa 88 ejecutadas); frontend 10 ok; typecheck ok; build ok (frontend sin cambios); humo no aplica (sin cambios de interfaz)
+- Desvios del plan: ninguno. El termino de una entrada nueva debe ser posterior al inicio y a la fecha actual (`GRANT_CREATE` admite un termino pasado; no se cambio).
+- Hallazgos para gates siguientes:
+  - G04: el componente de perfil debe reenviar para cada funcion existente su `valid_until` (y, si es programada, su `valid_from`) tal como vienen en `administration.grants`, en ISO-8601; omitir `until_at` en una funcion con termino la revoca y la reotorga sin termino. La revision es `users[].security_version`; tras un exito cambia, por lo que hay que recargar la administracion antes de otro perfil. Un resultado incierto se reintenta con la misma clave.
+  - G04: los mensajes de rechazo (jefatura ocupada, TI incompatible, entrada repetida, cuenta deshabilitada, sin cambios) llegan como 409 con texto para el funcionario.
+  - G03: `Bootstrap` institucional valida funciones por su cuenta (`STAFF_ROLES`, `distributors>1`); puede reutilizar `Roles`, pero no `PROFILE_SET` (no hay actor TI en la inicializacion).
+  - `access.user(id)` (que usa `GRANT_CREATE`) responde 401 "Cuenta inactiva" para una cuenta deshabilitada; `PROFILE_SET` lee `staff` directamente para admitir revocaciones.
+- Pendientes: interfaz del perfil -> G04; `PROFILE_SET` en `MySql84IntegrationTest` -> G13
+- Verificacion manual sugerida al usuario: no aplica (sin interfaz hasta G04)

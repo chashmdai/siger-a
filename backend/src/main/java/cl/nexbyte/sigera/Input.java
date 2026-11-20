@@ -1,7 +1,7 @@
 package cl.nexbyte.sigera;
 
 import java.time.Instant;
-import java.util.Map;
+import java.util.*;
 
 /** Validacion comun; ningun comando acepta estado, autor ni rol efectivos del navegador. */
 public record Input(Map<String,Object> values) {
@@ -30,6 +30,16 @@ public record Input(Map<String,Object> values) {
         String value=text(key,40,true);
         for(String c:choices)if(c.equals(value))return value;
         throw new Problem(400,"Opcion invalida: "+key);
+    }
+    /** Lista obligatoria de objetos (por ejemplo, las funciones de PROFILE_SET), cada uno validado con Input. */
+    public List<Input> list(String key, int max) {
+        if (!(values.get(key) instanceof List<?> items) || items.size()>max) throw new Problem(400,"Revisa el campo "+key+" (maximo "+max+" elementos).");
+        var out=new ArrayList<Input>();
+        for (Object item:items) {
+            if (!(item instanceof Map<?,?> m)) throw new Problem(400,"Campo invalido: "+key);
+            var copy=new LinkedHashMap<String,Object>();m.forEach((k,v)->copy.put(String.valueOf(k),v));out.add(new Input(copy));
+        }
+        return out;
     }
     public String reason() { return text("reason",12000,true); }
 }

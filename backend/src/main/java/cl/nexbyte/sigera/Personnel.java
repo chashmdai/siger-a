@@ -44,10 +44,11 @@ public class Personnel {
                 List<Object> same=new ArrayList<>(List.of(user,role.code()));if(scope!=null)same.add(scope);same.add(end);same.add(from);
                 require(db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code=? AND "+(scope==null?"scope_id IS NULL":"scope_id=?")+" AND revoked_at IS NULL AND valid_from<? AND (valid_until IS NULL OR valid_until>?)",same.toArray())==0,"La persona ya tiene esa funcion en un periodo superpuesto.");
                 tiCompatible(user,role.code());
-                if(Set.of("JEFATURA","DIRECCION").contains(role.code()))require(db.count("SELECT COUNT(*) FROM role_assignment WHERE scope_id=? AND user_id<>? AND role_code IN ('JEFATURA','DIRECCION') AND revoked_at IS NULL AND valid_from<? AND (valid_until IS NULL OR valid_until>?)",scope,user,end,from)==0,"Ya existe una jefatura efectiva. Usa delegacion autorizada o subrogancia, no jefaturas superpuestas.");
-                long grant=db.insert("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,valid_until,granted_by,basis) VALUES(?,?,?,?,?,?,?)",user,role.code(),scope,from,until==0?null:until,a.id(),in.text("reason",1000,true));
-                epoch(user);keepTi();audit(a,"FUNCION_OTORGADA","USUARIO",user,scope,role.code()+". "+in.reason());return Workflow.done("PERMISO",grant);
+                if(HEADS.contains(role.code()))headFree(scope,user,from,end);
+                long grant=insertGrant(a,user,role.code(),scope,from,until==0?null:until,in.text("reason",1000,true));
+                epoch(user);keepTi();return Workflow.done("PERMISO",grant);
             }
+            case "PROFILE_SET" -> {return profile(a,id,revision,in);}
             case "GRANT_REVOKE" -> {
                 ti(a);var grant=db.one("SELECT * FROM role_assignment WHERE id=?",id);
                 require(n(grant,"user_id")!=a.id(),"No modifiques tus propias funciones.");require(grant.get("revoked_at")==null,"La funcion ya fue revocada.");
@@ -101,6 +102,60 @@ public class Personnel {
             case "MAIL_RESOLVE" -> {return mail.resolve(a,id,in.choice("decision","REENVIAR","DESCARTAR"),in.reason());}
             default -> throw new Problem(400,"Operacion de administracion desconocida.");
         }
+    }
+    static final Set<String> HEADS=Set.of("JEFATURA","DIRECCION");
+    private record Wanted(Roles.Role role,Long scope,long from,Long until){ }
+
+    /**
+     * PROFILE_SET (0.5.0, D3): fija en un acto todas las funciones de una cuenta. Compara por (rol, ambito) con las
+     * funciones vigentes o programadas: una entrada coincide si tiene el mismo termino (sin until_at = sin termino) y,
+     * si trae from_at, el mismo inicio; lo que coincide se conserva, lo demas se revoca (nunca se borra) y lo nuevo
+     * se otorga. D2 y la jefatura unica se evaluan sobre el estado final. Todo se valida antes de escribir; un solo epoch.
+     * Una cuenta deshabilitada admite solo revocaciones.
+     */
+    private Workflow.Result profile(Actor a,long user,Long revision,Input in){
+        ti(a);require(user!=a.id(),"No modifiques tus propias funciones.");
+        var account=db.one("SELECT enabled,security_version FROM staff WHERE id=? AND technical=FALSE",user);
+        require(revision!=null&&n(account,"security_version")==revision,"El registro cambio. Actualiza la ficha antes de confirmar.");
+        String reason=in.text("reason",1000,true);long now=System.currentTimeMillis();
+        var wanted=new ArrayList<Wanted>();var keys=new HashSet<String>();
+        for(var e:in.list("grants",100)){
+            var role=Roles.require(e.text("role",32,true));Long scope=role.scoped()?e.id("scope_id"):null;
+            require(keys.add(role.code()+"@"+scope),"La funcion "+role.code()+" figura dos veces en el perfil para el mismo ambito.");
+            long from=e.instant("from_at",false),until=e.instant("until_at",false);
+            require(until==0||until>Math.max(from,now),"Periodo invalido para "+role.code()+": el termino debe ser posterior al inicio y a la fecha actual.");
+            wanted.add(new Wanted(role,scope,from,until==0?null:until));
+        }
+        var revoke=new ArrayList<>(db.rows("SELECT id,role_code,scope_id,valid_from,valid_until FROM role_assignment WHERE user_id=? AND revoked_at IS NULL AND (valid_until IS NULL OR valid_until>?) ORDER BY id",user,now));
+        var kept=new ArrayList<Map<String,Object>>();var create=new ArrayList<Wanted>();
+        for(var w:wanted){
+            var match=revoke.stream().filter(g->s(g,"role_code").equals(w.role().code())&&Objects.equals(nullableId(g,"scope_id"),w.scope())
+                &&Objects.equals(nullableId(g,"valid_until"),w.until())&&(w.from()==0||n(g,"valid_from")==w.from())).findFirst();
+            if(match.isPresent()){revoke.remove(match.get());kept.add(match.get());}else create.add(w);
+        }
+        require(!revoke.isEmpty()||!create.isEmpty(),"El perfil no tiene cambios.");
+        require(create.isEmpty()||b(account,"enabled"),"La cuenta esta deshabilitada: su perfil solo admite revocaciones. Habilitala antes de otorgar funciones.");
+        var finalRoles=new ArrayList<String>();kept.forEach(g->finalRoles.add(s(g,"role_code")));create.forEach(w->finalRoles.add(w.role().code()));
+        require(!finalRoles.contains(Roles.TI)||finalRoles.size()==1,"TI es incompatible con cualquier otra funcion: el perfil no puede combinarla con otras.");
+        for(var w:create){
+            if(w.scope()!=null)access.scope(w.scope());
+            if(HEADS.contains(w.role().code()))headFree(w.scope(),user,w.from()==0?now:w.from(),w.until()==null?Long.MAX_VALUE:w.until());
+        }
+        for(var g:revoke){
+            db.update("UPDATE role_assignment SET revoked_at=? WHERE id=? AND revoked_at IS NULL",now,n(g,"id"));
+            audit(a,"FUNCION_REVOCADA","USUARIO",user,nullableId(g,"scope_id"),s(g,"role_code")+". "+reason);
+        }
+        for(var w:create)insertGrant(a,user,w.role().code(),w.scope(),w.from()==0?now:w.from(),w.until(),reason);
+        epoch(user);keepTi();return Workflow.done("USUARIO",user);
+    }
+    /** Una jefatura o direccion efectiva por ambito: delegacion o subrogancia, nunca jefaturas superpuestas. */
+    void headFree(long scope,long user,long from,long end){
+        require(db.count("SELECT COUNT(*) FROM role_assignment WHERE scope_id=? AND user_id<>? AND role_code IN ('JEFATURA','DIRECCION') AND revoked_at IS NULL AND valid_from<? AND (valid_until IS NULL OR valid_until>?)",scope,user,end,from)==0,
+            "Ya existe una jefatura efectiva. Usa delegacion autorizada o subrogancia, no jefaturas superpuestas.");
+    }
+    long insertGrant(Actor a,long user,String role,Long scope,long from,Long until,String basis){
+        long grant=db.insert("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,valid_until,granted_by,basis) VALUES(?,?,?,?,?,?,?)",user,role,scope,from,until,a.id(),basis);
+        audit(a,"FUNCION_OTORGADA","USUARIO",user,scope,role+". "+basis);return grant;
     }
     void epoch(long id){db.update("UPDATE staff SET security_version=security_version+1 WHERE id=?",id);}
     void ti(Actor a){if(!a.role(Roles.TI))Problem.denied();}
