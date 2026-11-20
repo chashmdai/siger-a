@@ -16,10 +16,13 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G05 | Consulta institucional: lectura | CERRADO |
 | G05b | Consulta institucional: base intacta y original del Formulario | CERRADO |
 | G06 | Consulta institucional: bandejas e interfaz | CERRADO |
-| G07 | Indice de personas (V11) | ABIERTO |
+| R01 | Modelo de sede y Coordinacion regional (V11) | ABIERTO |
+| R02 | Materia y lectura nacional | ABIERTO |
+| R03 | Selector de destino y panel de estructura | ABIERTO |
+| G07 | Indice de personas (V12) | ABIERTO |
 | G08 | Buscador | ABIERTO |
-| G09 | Calendario habil (V12) | ABIERTO |
-| G10 | Hitos (V13) | ABIERTO |
+| G09 | Calendario habil (V13) | ABIERTO |
+| G10 | Hitos (V14) | ABIERTO |
 | G11 | Reportes: calculo | ABIERTO |
 | G12 | Reportes: interfaz y exportacion | ABIERTO |
 | G13 | Integracion MySQL | ABIERTO |
@@ -30,6 +33,19 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 - Base `cd21f6e` (0.4.0, esquema V10). El README declara 77 pruebas JUnit en 20 clases; en el codigo hay 83 metodos `@Test` en 22 archivos de prueba (`FormularioDocs` no tiene pruebas). G00 registra el conteo real ejecutado.
 - `CLAUDE.md` todavia indica que la version y el esquema se cambian a mano en varios lugares; desde `cd21f6e`, `Build.ps1` toma la version de `backend/pom.xml` (el frontend debe coincidir) y deriva el esquema de las migraciones. Se corrige en G14 (o antes, si un gate lo necesita).
 - Los scripts de `scripts/` son Windows PowerShell 5.1 con herramientas portables en `.tools/`; en Linux se usan `./mvnw` y `npm` directamente (seccion 2 del plan).
+
+## Antecedentes del bloque Sedes regionales (R01-R03)
+
+- Origen: decision del responsable del 2026-11-20, en una sesion de planificacion sin cambios de codigo. Las decisiones D7-D9 y la iteracion 2b estan en el plan, y los gates R01-R03 en su seccion 6. Se ejecutan despues de G06 y antes de G07. Los gates G07-G14 conservan su numero.
+- Renumeracion de migraciones: V11 = sedes regionales (R01); G07 = V12 (marcador `PERSON_INDEX_V12`); G09 = V13; G10 = V14 (marcador `MILESTONES_V14`); G13 cubre V11-V14. Los registros de cierre de G00-G06 no citan esos numeros.
+- Datos del codigo para R01 (revisados al planificar, sin ejecutar):
+  - `Access.GRANTS` ya descarta las funciones en ambitos con `enabled=FALSE`. Una dotacion preparada en una sede PROYECTADA (`enabled=FALSE`) no rige hasta activarla. `access.scope(id)` exige `enabled`: `PROFILE_SET`/`GRANT_CREATE` necesitan una excepcion para las sedes PROYECTADA.
+  - `org_scope` no tiene `revision`: hay que definir la concurrencia optimista de `SCOPE_*`.
+  - `substitution_scope.grant_id` apunta a la concesion del titular. Si la conversion `JEFATURA` -> `DIRECCION` revoca la concesion, una subrogancia activa en la sede deja de regir.
+  - `Actor.head()` acepta `JEFATURA` o `DIRECCION`, y las reglas regionales de `Access` usan `head()`. Hay que buscar los usos literales de `"JEFATURA"` en Java, en el SQL de `BoardQueries` y en el frontend.
+  - Demo: `REG-DEMO` con `coordinacion.regional` como `JEFATURA` y una designacion de subrogancia. `DECISIONES_FUNCIONALES.md` ("Organigrama representado") dice "Sede REG-DEMO para pruebas, sin inventar sedes reales".
+- Hallazgos para G08: los resultados del buscador muestran la sede y la region (del ambito principal del REQ y del ambito de cada Caso).
+- Hallazgos para G11: los reportes agrupan y filtran por sede, region y materia (materia sugerida de la SOL, materia del REQ y del Caso). Una Direccion nacional con `REPORTES` ve su materia a nivel nacional, incluidas las sedes.
 
 ## Registros de cierre
 

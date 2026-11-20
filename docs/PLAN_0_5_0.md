@@ -2,9 +2,10 @@
 
 Fecha: 2026-11-20. Base: commit `cd21f6e` (0.4.0, esquema V10). Decisiones tomadas por el responsable del proyecto el 2026-11-20.
 Texto comun y estable para todas las sesiones de Claude Code. El trabajo se ejecuta por **gates** (seccion 6): una sesion toma un gate, lo implementa, lo verifica, lo cierra en `docs/BITACORA_0_5_0.md`, hace commit y se detiene. El usuario hace `/clear` y la siguiente sesion toma el gate siguiente. La seccion 3 es el diseno de referencia; los gates indican que parte de ella corresponde a cada sesion.
+Bloque "Sedes regionales" (D7-D9, iteracion 2b, gates R01-R03, migracion V11) agregado el 2026-11-20 por decision del responsable; se ejecuta despues de G06 y antes de G07. Las migraciones de las iteraciones 3 y 4 pasan a V12-V14.
 Este documento solo cambia con aprobacion del responsable. Si una sesion encuentra que el plan es incorrecto o incompleto, lo registra en la bitacora como desvio o hallazgo y, si bloquea el gate, se detiene y lo informa.
 
-## 0. Decisiones (agregar a `docs/DECISIONES_FUNCIONALES.md` como "Precision 0.5.0")
+## 0. Decisiones (agregar a `docs/DECISIONES_FUNCIONALES.md` como "Precision 0.5.0"; D7-D9 las copia R01)
 
 D1. **TI administra el sistema completo**: cuentas, claves, ambitos, concesion y revocacion de funciones, predesignacion, activacion y termino de subrogancias, calendario habil, liberacion de documentos e integraciones. **Se suprime el rol AUTORIDAD.** El acto institucional que respalda cada decision (resolucion, memo) se registra como fundamento obligatorio. Reemplaza en el punto 13 a la "autoridad habilitada" por TI; el resto del punto 13 (ambito, periodo, retorno, revocacion) se mantiene.
 
@@ -17,6 +18,12 @@ D4. **Consulta institucional** (`CONSULTA_INSTITUCIONAL`): lectura completa de t
 D5. **Buscador de personas y folios.** Por RUN, nombre o folio, sobre los datos declarados de requirentes, adultos y NNA. Es un indice de coincidencias, no un registro maestro: no fusiona identidades ni autentica personas.
 
 D6. **Reportes.** `REPORTES` (cifras agregadas por unidad o ambito, sin datos de personas), `REPORTES_PERSONAS` (desglose por funcionario; su concesion es una decision institucional) y `EXPORTACION` (filas sin datos ciudadanos). Los tiempos se informan en **horas corridas y en dias habiles** (lunes a viernes, excluidos los feriados del calendario que mantiene TI).
+
+D7. **Sede regional = un ambito por sede** (no un ambito por sede y unidad). Su unica cabeza es la Coordinacion regional, con rango de Direccion: se registra como `DIRECCION` en el ambito de la sede. Las sedes no tienen `JEFATURA`. Sigue rigiendo una direccion por ambito.
+
+D8. **Ciclo de vida de la sede.** Cada sede tiene region (codigo de region como en el Formulario), estado `PROYECTADA`, `ACTIVA` o `CERRADA` y fecha de apertura. Una sede proyectada no aparece como destino, pero TI puede preparar su dotacion (cuentas y funciones que rigen al activarse). Cerrar exige que no queden REQ ni Casos abiertos ni SOL pendientes en la sede. TI administra las sedes.
+
+D9. **Lectura nacional por materia.** Las Direcciones nacionales de UPR, UPD y UEP leen, a nivel nacional y sin gestionar, todo lo de su materia en las sedes: las SOL con esa materia sugerida, los REQ con esa materia y los Casos con esa materia. Es la misma lectura de la consulta institucional (D4, G05), acotada a la materia y con lo reservado excluido. La gestion regional sigue en la Coordinacion regional (punto 14).
 
 ## 1. Que queda reservado hoy (verificado en el codigo de 0.4.0)
 
@@ -124,7 +131,79 @@ Consecuencia de D4: la consulta institucional ve las fichas NNA completas. Reser
 - Barrido de comandos.
 - El lector combinado con Profesional conserva exactamente sus facultades de gestion.
 
-### Iteracion 3 - Buscador de personas y folios (V11)
+### Iteracion 2b - Sedes regionales (V11)
+
+Gates R01-R03, despues de G06 y antes de G07. Decisiones D7-D9.
+
+**Punto de partida (verificado en el codigo al planificar)**
+- `org_scope` tiene `regional`, `site_code`, `unit_code`, `area_code` y `enabled`; no tiene region, estado, fecha de apertura ni `revision`. Existe `SCOPE_CREATE` (TI); no hay comandos para editar, activar ni cerrar.
+- `Access.GRANTS` y las subrogancias efectivas ya ignoran las funciones en ambitos con `enabled=FALSE`: una dotacion preparada en una sede deshabilitada no rige hasta habilitarla.
+- `Actor.head(scope)` es `JEFATURA` o `DIRECCION`, y `Personnel.HEADS`/`headFree` imponen una cabeza por ambito. Las reglas regionales de `Access` (distribucion en la sede, receptor de SOL, flujos, subrogancia) usan `head()`, asi que pasar la cabeza regional a `DIRECCION` no deberia cambiar facultades. R01 lo confirma buscando los usos literales de `"JEFATURA"` (Java, SQL de `BoardQueries` y frontend).
+- `case_record.matter` existe (`Lifecycle.MATTERS` = UPR, UPD, UEP, OTRA; `CASE_MATTER` la cambia la jefatura del Caso). SOL y REQ no tienen materia.
+- Demo: `REG-DEMO` (`site_code` SEDE-DEMO), con `coordinacion.regional` como `JEFATURA` y una designacion de subrogancia. El archivo institucional ya acepta `regional` y `sede` por ambito.
+- `catalog/territorio.json` lista las regiones de norte a sur, con el codigo del Formulario.
+
+**V11 (una sola migracion aditiva para el bloque)**
+- `org_scope.region_code` (nulo en el nivel central), `org_scope.state` (`PROYECTADA`, `ACTIVA`, `CERRADA`; los ambitos existentes quedan `ACTIVA`) y `org_scope.opens_ms` (nulo).
+- `solicitation.suggested_matter` (nulo; UPR, UPD o UEP) y `requirement.matter` (nulo).
+- `enabled` se mantiene coherente con el estado: `ACTIVA` -> TRUE; `PROYECTADA` y `CERRADA` -> FALSE.
+- `org_scope` no tiene `revision`. R01 propone en su inventario como validar la concurrencia optimista de `SCOPE_*` (por ejemplo, `org_scope.revision` en la misma V11).
+- Valores validados en `Input`, sin CHECK que H2 y MySQL traten distinto.
+
+**Backend**
+- Comandos de TI en `Personnel`, con fundamento obligatorio y `db.audit`:
+  - `SCOPE_UPDATE`: nombre, region y fecha de apertura (el nivel y la unidad no cambian);
+  - `SCOPE_ACTIVATE`: PROYECTADA -> ACTIVA (`enabled=TRUE`); la dotacion preparada empieza a regir;
+  - `SCOPE_CLOSE`: ACTIVA -> CERRADA (`enabled=FALSE`); 409 si quedan REQ o Casos abiertos o SOL pendientes en la sede;
+  - `SCOPE_CREATE` acepta region y estado para las sedes.
+- El selector elige la sede por region, lo que supone una sola sede ACTIVA por region. R01 lo confirma con el responsable y, si se acepta, `SCOPE_ACTIVATE` lo valida.
+- `GRANT_CREATE`, `PROFILE_SET` y `Bootstrap` admiten funciones en sedes PROYECTADA (dotacion preparada), rechazan `JEFATURA` en cualquier sede y no otorgan en una sede CERRADA.
+- Conversion de las Coordinaciones existentes. Rutina Java idempotente al arrancar, con marcador (por ejemplo, `COORDINACION_REGIONAL_050`), siguiendo el patron de `suppressAuthority`. Actor `sistema:actualizacion` (`Bootstrap.maintenance`).
+  - Por cada `JEFATURA` vigente o programada en una sede: la revoca y otorga `DIRECCION` con el mismo periodo, con un epoch por cuenta.
+  - Antes de proponerla, R01 resuelve dos casos. Primero, las subrogancias activas: `substitution_scope.grant_id` apunta a la concesion revocada, que dejaria de regir. Segundo, una `DIRECCION` que se superponga en la misma sede: no se convierte y se lista como incompatibilidad.
+  - Para la instancia de validacion de la VM, R01 entrega una consulta SQL de solo lectura que el responsable ejecuta alli.
+- `/api/catalog` publica por ambito:
+  - `level` (CENTRAL o REGIONAL), `region_code` y `state`;
+  - las operaciones que puede recibir (SOL, colaboracion, traslado, derivacion, entrega), calculadas con las mismas reglas de `Access` que validan cada comando. Las sedes PROYECTADA y CERRADA no reciben nada.
+  - Tambien las regiones en el orden del Formulario.
+- Materia (R02):
+  - `COM_ROUTE` y `SOL_ROUTE` aceptan `suggested_matter` opcional (UPR, UPD o UEP), solo cuando el destino es una sede;
+  - el REQ la hereda al asumir la SOL;
+  - `REQ_MATTER` (Coordinacion regional del REQ, con fundamento) la rectifica;
+  - al abrir un Caso, la interfaz precarga la materia del REQ (el servidor sigue exigiendo `matter`).
+  - R02 agrega los campos a los dialogos actuales; R03 los integra en el selector.
+- Lectura por materia (R02):
+  - Las materias de cada Direccion nacional salen de sus `DIRECCION` vigentes (propias o subrogadas) en el ambito raiz central de UPR, UPD o UEP.
+  - `Access` y `BoardQueries.Visibility` abren, solo en sedes: SOL con esa `suggested_matter` (todo estado), REQ con esa `matter` (con su registro, como `reqRecords`) y Casos con esa `matter`.
+  - Reservados excluidos como en G05. Ninguna regla de escritura considera esta lectura.
+  - El inventario de R02 define si la COM, la primera atencion y los flujos de esa cadena tambien se leen. Propuesta: si, como parte de la cadena legible, pero sin agregarlos a la bandeja COM.
+
+**Frontend (R03)**
+- Selector de destino en dos pasos, un solo componente para `COM_ROUTE`, `SOL_ROUTE`, `FLOW_REQUEST` y las entregas de primera atencion:
+  - Nivel central -> Unidad y Area opcional;
+  - Sede regional -> Region (de norte a sur, con busqueda) y Materia sugerida.
+  - Solo muestra los destinos que el catalogo publica para esa operacion.
+  - Si la COM o la ficha tiene region, propone la sede de esa region. La region la entrega el servidor (Formulario: region del NNA o del adulto; ficha 1.1: region de la persona adulta). R03 define que region prevalece.
+- Panel "Estructura" para TI, con el nivel central y las sedes:
+  - por sede: region, estado, Coordinacion vigente, subrogancia, dotacion y volumen abierto (REQ, Casos y SOL pendientes);
+  - acciones: Ver funcionarios (abre su Perfil), Editar, Activar y Cerrar.
+- Perfil de cuenta (G04): los ambitos se agrupan en Nivel central / Sedes regionales, con buscador y "solo con funciones" (hoy solo en la vista movil). En las sedes, la columna `JEFATURA` no se ofrece y `DIRECCION` se muestra como "Coordinacion regional". Las sedes PROYECTADA muestran su estado.
+
+**Pruebas**
+- R01:
+  - transiciones de estado y rechazos: cerrar con pendientes, `JEFATURA` en una sede, funciones en una sede cerrada;
+  - la dotacion preparada no rige antes de activar la sede y rige despues;
+  - la conversion es idempotente y conserva la historia;
+  - catalogo: cada destino publicado lo acepta su comando, y uno no publicado se rechaza.
+- R02:
+  - la equivalencia `Access`/`BoardQueries` de G06 se extiende a las tres Direcciones;
+  - los reservados quedan excluidos;
+  - barrido de comandos sin efecto para la lectura por materia (patron de `InstitutionalReaderTest`, con instantanea);
+  - la Coordinacion regional conserva la gestion;
+  - una Direccion no lee lo de otra materia ni lo regional sin materia.
+- R03: `frontend/tests` del selector (destinos por operacion, orden de regiones, busqueda, propuesta por region) y del agrupamiento del perfil; verificacion manual paso a paso.
+
+### Iteracion 3 - Buscador de personas y folios (V12)
 
 **Fuentes verificadas**
 | Fuente | Datos |
@@ -137,13 +216,13 @@ Consecuencia de D4: la consulta institucional ve las fichas NNA completas. Reser
 
 La ficha es JSON y no se puede buscar de forma portable en SQL; por eso se usa un indice.
 
-**V11 `person_reference`** (dato derivado, reconstruible)
+**V12 `person_reference`** (dato derivado, reconstruible)
 - Columnas: `id`, `communication_id` (no nulo), `requirement_id` (nulo), `source` (COM, COM_PERSONA, FICHA, FORMULARIO), `person_role`, `display_name`, `name_key` (minusculas, sin tildes ni puntuacion, espacios simples), `run_number`, `run_dv`, `document_key`, `authenticated`, `updated_ms`.
 - Indices por `run_number`, `document_key` y `communication_id`.
 
 **Mantenimiento**
 - `PersonIndex.refresh(com)` en la misma transaccion de `COM_CREATE`, `COM_IMMEDIATE`, `ATTENTION_CREATE`, `ATTENTION_SAVE` y ambas rutas de `conserveExternal`: borra las referencias de esa COM y las vuelve a calcular con los datos vigentes. Las versiones antiguas de la ficha no se indexan.
-- Carga inicial en Java al arrancar, por lotes, con el marcador `PERSON_INDEX_V11`.
+- Carga inicial en Java al arrancar, por lotes, con el marcador `PERSON_INDEX_V12`.
 - Un RUN escrito en texto libre (`12.345.678-9`, `12345678-9`) se reconoce y se normaliza.
 
 **Busqueda** (`GET /api/search?q=`, 3 a 160 caracteres)
@@ -178,14 +257,14 @@ La ficha es JSON y no se puede buscar de forma portable en SQL; por eso se usa u
 - Carga inicial idempotente.
 - Mismas consultas en `MySql84IntegrationTest`.
 
-### Iteracion 4 - Calendario habil (V12) e hitos (V13)
+### Iteracion 4 - Calendario habil (V13) e hitos (V14)
 
-**V12 `business_holiday`**
+**V13 `business_holiday`**
 - Columnas: `day` CHAR(10) PK `aaaa-mm-dd`, `name`, `created_by`, `created_ms`.
 - Comandos de TI `HOLIDAY_ADD` y `HOLIDAY_REMOVE`, con fundamento.
 - No se siembran feriados inventados: TI los carga por anio. Los reportes advierten "sin feriados cargados para AAAA".
 
-**V13 `milestone`**
+**V14 `milestone`**
 - Columnas: `id`, `resource_type`, `resource_id`, `requirement_id`, `case_id`, `event`, `actor_id`, `subject_user` (por ejemplo el profesional asignado), `scope_id`, `at_ms`, `reconstructed`.
 - Indices por (`event`, `at_ms`) y `requirement_id`.
 
@@ -196,7 +275,7 @@ La ficha es JSON y no se puede buscar de forma portable en SQL; por eso se usa u
 - Tareas: `TAREA_CREADA`, `TAREA_COMPLETADA`, `TAREA_CANCELADA`.
 - Entregas y flujos: `ENTREGA_ENVIADA`, `ENTREGA_DECIDIDA`, `FLUJO_SOLICITADO`, `FLUJO_DECIDIDO`.
 
-**Carga historica** (Java, marcador `MILESTONES_V13`)
+**Carga historica** (Java, marcador `MILESTONES_V14`)
 - Desde las columnas de fecha existentes: `received_ms`/`created_ms`, `solicitation.created_ms`, `case_assignment.assigned_ms`/`acknowledged_ms`, `attention_handoff`, `flow_request`, `closure_record`.
 - Desde `audit_event` para lo que solo esta ahi: `SOL_REDIRIGIDA`, `CASE_WAIT`, `CASE_RESUME`, `CASE_REQUEST_CLOSE`, `CASE_WITHDRAW_CLOSE`, `CASE_RETURN`, `TASK_COMPLETE`, `TASK_CANCEL`.
 - Esas filas llevan `reconstructed=TRUE`.
@@ -259,7 +338,7 @@ La ficha es JSON y no se puede buscar de forma portable en SQL; por eso se usa u
 
 ## 4. Documentacion que se actualiza
 
-`DECISIONES_FUNCIONALES.md` (seccion 0), `ALCANCE_Y_PENDIENTES.md`, `ARQUITECTURA.md`, `CLAUDE.md` (roles, TI, version y esquema automaticos, nuevos modulos), `INSTALACION_VM.md` y `DESPLIEGUE_VM.md` (sin autoridad habilitante), `deploy/config-ejemplo/*`, y una nueva `docs/PRUEBAS_MANUALES_0_5_0.md` con los recorridos de cada iteracion.
+`DECISIONES_FUNCIONALES.md` (seccion 0; D7-D9 en R01, y "Organigrama representado" con las sedes), `ALCANCE_Y_PENDIENTES.md`, `ARQUITECTURA.md`, `CLAUDE.md` (roles, TI, version y esquema automaticos, nuevos modulos), `INSTALACION_VM.md` y `DESPLIEGUE_VM.md` (sin autoridad habilitante), `deploy/config-ejemplo/*`, y una nueva `docs/PRUEBAS_MANUALES_0_5_0.md` con los recorridos de cada iteracion.
 
 ## 5. Protocolo de cada sesion (gate)
 
@@ -277,6 +356,8 @@ La ficha es JSON y no se puede buscar de forma portable en SQL; por eso se usa u
 
 Si un gate resulta mas grande de lo previsto, la sesion puede dividirlo: cierra `GNNa` con lo implementado y verificado, y agrega `GNNb` como ABIERTO en la tabla, con su alcance restante.
 
+Los gates del bloque Sedes regionales se llaman `RNN` y siguen el mismo protocolo, con commit `gate RNN: <titulo>`. R01 parte de `gate G06`, y G07 parte del ultimo gate R cerrado. Los gates G07-G14 conservan su numero.
+
 ## 6. Gates
 
 | Gate | Titulo | Alcance (seccion 3) | Verificacion especifica |
@@ -288,13 +369,16 @@ Si un gate resulta mas grande de lo previsto, la sesion puede dividirlo: cierra 
 | G04 | Perfil de cuenta en la interfaz | It. 1 frontend: componente de perfil, `Substitutions.tsx`, `menu.ts`, `lib/access.ts`, `labels.ts`. | typecheck, `npm test`, build y humo: TI crea una cuenta con Distribucion + Administrativo + Profesional en un paso y esa cuenta ve su menu. |
 | G05 | Consulta institucional: lectura | It. 2 backend: rol, `Access`, `Queries`, `Attention.mayRead`, `Documents` (lectura y descarga), exclusion de reservados. | Fichas COM/SOL/REQ/CAS/FLUJO y NNA legibles; reservados invisibles; barrido de todos los comandos de `Workflow.run` sin exito para un lector puro. |
 | G06 | Consulta institucional: bandejas e interfaz | It. 2: `BoardQueries.Visibility`, dashboard, menu y aviso en fichas. | Equivalencia `Access` vs `BoardQueries` en todas las bandejas para el lector y una cuenta comun; humo con un lector. |
-| G07 | Indice de personas (V11) | It. 3: migracion V11, normalizacion, `PersonIndex.refresh` en los comandos, carga inicial con marcador. | Normalizacion (tildes, puntos, DV K); cada fuente indexada; refresco al guardar ficha; carga inicial idempotente. |
+| R01 | Modelo de sede y Coordinacion regional (V11) | It. 2b backend: V11 completa; `SCOPE_UPDATE`, `SCOPE_ACTIVATE` y `SCOPE_CLOSE`; dotacion preparada en sedes proyectadas; rechazo de `JEFATURA` en sedes; `Bootstrap` y `estructura-inicial.json` con region y estado; catalogo con nivel, region, estado y destinos validos; D7-D9 en `DECISIONES_FUNCIONALES.md`. Inventario de las `JEFATURA` en ambitos regionales (demo y, por consulta SQL, la instancia de validacion) y propuesta de su conversion a `DIRECCION`: rutina idempotente con marcador, auditada por `sistema:actualizacion`. | Transiciones y rechazos; la dotacion preparada rige solo al activar; conversion idempotente con historia; destinos publicados = aceptados por su comando. |
+| R02 | Materia y lectura nacional | It. 2b: `suggested_matter` en `COM_ROUTE` y `SOL_ROUTE`, herencia al REQ, `REQ_MATTER`, precarga en el Caso; lectura por materia en `Access` y `BoardQueries.Visibility` para UPR, UPD y UEP. | Equivalencia `Access`/`BoardQueries` de G06 extendida a las Direcciones; reservados excluidos; barrido de comandos sin efecto para la lectura por materia; la Coordinacion regional conserva la gestion. |
+| R03 | Selector de destino y panel de estructura | It. 2b frontend: selector de dos pasos con sus pruebas en `frontend/tests`, sugerencia por region, panel Estructura y perfil agrupado. Si es muy grande, se divide en R03a/R03b. | typecheck, `npm test`, build, humo y verificacion manual paso a paso. |
+| G07 | Indice de personas (V12) | It. 3: migracion V12, normalizacion, `PersonIndex.refresh` en los comandos, carga inicial con marcador. | Normalizacion (tildes, puntos, DV K); cada fuente indexada; refresco al guardar ficha; carga inicial idempotente. |
 | G08 | Buscador | It. 3: `GET /api/search`, filtro por permisos, auditoria HMAC, pantalla y paleta Ctrl+K. | Folio, RUN y nombre; permisos; TI 403; auditoria sin el termino en claro; humo. |
-| G09 | Calendario habil (V12) | It. 4: `business_holiday`, `HOLIDAY_ADD`/`HOLIDAY_REMOVE`, `BusinessCalendar`, pantalla de feriados para TI. | Fines de semana, feriados, mismo dia, cambio de horario de Chile. |
-| G10 | Hitos (V13) | It. 4: tabla `milestone`, escritura en cada comando, carga historica. | Un hito por cada transicion; carga historica idempotente con `reconstructed`. |
+| G09 | Calendario habil (V13) | It. 4: `business_holiday`, `HOLIDAY_ADD`/`HOLIDAY_REMOVE`, `BusinessCalendar`, pantalla de feriados para TI. | Fines de semana, feriados, mismo dia, cambio de horario de Chile. |
+| G10 | Hitos (V14) | It. 4: tabla `milestone`, escritura en cada comando, carga historica. | Un hito por cada transicion; carga historica idempotente con `reconstructed`. |
 | G11 | Reportes: calculo | It. 5 backend: roles `REPORTES`, `REPORTES_PERSONAS`, `EXPORTACION`; catalogo de reportes; estadisticas; endpoints. | Conjunto sintetico con mediana y p90 esperados; alcance; desglose por persona oculto sin su rol; TI 403. |
 | G12 | Reportes: interfaz y exportacion | It. 5: pantalla de reportes, CSV sin datos ciudadanos, auditoria. | Columnas exportadas; rechazo al exceder el limite; humo. |
-| G13 | Integracion MySQL | `MySql84IntegrationTest` extendido a V11-V13, buscador, reportes y perfil. | Requiere un MySQL 8.4 desechable (`-Dsiger.mysql.base=...`); si no hay, queda para el PC Windows. |
+| G13 | Integracion MySQL | `MySql84IntegrationTest` extendido a V11-V14, sedes, lectura por materia, buscador, reportes y perfil. | Requiere un MySQL 8.4 desechable (`-Dsiger.mysql.base=...`); si no hay, queda para el PC Windows. |
 | G14 | Cierre de version | Documentacion de la seccion 4, `PRUEBAS_MANUALES_0_5_0.md`, revision final de `CLAUDE.md`, `Build.ps1 -IncludeJava` y `Check-Scripts.ps1` en Windows, `SOURCE_SHA256.txt`. | Build completo y paquete `release\SIGER-<fecha>.zip`. |
 
 ## 7. Formato del registro de cierre (en la bitacora)
