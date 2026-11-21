@@ -61,6 +61,12 @@ estar detenido (`docs/DESPLIEGUE_VM.md`).
 
 ## Pendientes que NO se presentan como terminados
 
+- **Requisito previo a instalar en la VM: build de entrega en Windows** (G15, POSTERGADO en `docs/BITACORA_0_5_0.md`):
+  `Build.ps1 -IncludeJava` con Node 24 portable, `Check-Scripts.ps1` en Windows PowerShell 5.1, `SOURCE_SHA256.txt` y
+  el paquete `release\SIGER-<fecha>.zip`. La VM se instala con ese paquete: `Init-Server.ps1` y `Update.ps1` exigen
+  su `manifest.json` (y `Update.ps1`, que se haya compilado con pruebas). El orden completo de lo pendiente esta en
+  "Cierre del plan 0.5.0" de la bitacora.
+
 - Ejecucion en la VM de la instalacion de 0.5.0, de la actualizacion de la validacion (`docs/ACTUALIZACION_0_5_0.md`),
   de `Recover-Ti.ps1`, de un envio real por Graph y del analisis con el motor antivirus institucional.
 - **Produccion (decision para 0.6.0, fecha objetivo antes del 15/12/2026)**: instancia nueva inicializada en modo
@@ -68,8 +74,6 @@ estar detenido (`docs/DESPLIEGUE_VM.md`).
   por completo (base, documentos y respaldos), dejando constancia documentada de la eliminacion. Para hacerlo hay que
   resolver en 0.6.0 que `Close-Validation.ps1` hoy rechaza cerrar una validacion con recepciones del Formulario (la
   de la VM tiene 9) y que no existe un procedimiento de eliminacion (los scripts no incluyen comandos destructivos).
-- Build de entrega en Windows (gate G15 de `docs/BITACORA_0_5_0.md`): `Build.ps1 -IncludeJava` con Node 24,
-  `Check-Scripts.ps1` en Windows PowerShell 5.1 y `SOURCE_SHA256.txt`.
 - Reserva excepcional por campo de la ficha (por ejemplo, nota de seguridad o de identidad) y autorizaciones
   excepcionales completas.
 - Plazos normativos (por ejemplo, 48 horas) sobre el calendario habil; informes oficiales definitivos.

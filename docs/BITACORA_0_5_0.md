@@ -1,7 +1,7 @@
 # SIGER 0.5.0 - bitacora de gates
 
 Estado vivo del trabajo de `docs/PLAN_0_5_0.md`. Cada sesion de Claude Code toma el primer gate ABIERTO, lo cierra aqui con el formato de la seccion 7 del plan y se detiene.
-Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (detenido; ver su registro).
+Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (detenido; ver su registro), POSTERGADO (fuera del cierre de 0.5.0; requisito antes de instalar en la VM).
 
 ## Estado
 
@@ -32,7 +32,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G13 | Integracion MySQL | CERRADO |
 | G14 | Cierre de version | CERRADO |
 | G14b | Documentacion: PULL/ACK verificado en la VM | CERRADO |
-| G15 | Build de entrega en Windows | ABIERTO |
+| G15 | Build de entrega en Windows | POSTERGADO |
 
 ## Antecedentes para G00 (revision previa del codigo, sin ejecutar)
 
@@ -481,3 +481,35 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 - `Recover-Ti.ps1` sin la VM: solo con una instancia de pruebas propia (`Init-Server.ps1 -Mode Pruebas` con un MySQL 8.4 ZIP noinstall). Dejarla sin TI permanente (deshabilitar `ti` por SQL en esa instancia), `Stop.ps1` sin `-AlsoMySql` y recuperar una cuenta nueva (`-Usuario recuperada.ti -Nombre ... -Ambito UGI -Fundamento ...`). Esperado como en G14: clave solo en `data\recuperacion-ti-*.csv`, `logs\recuperacion-ti-*.log` sin ella, rechazo con una TI permanente. Si no hay MySQL para una instancia de pruebas, registrarlo como pendiente de la VM.
 - `SOURCE_SHA256.txt`, al final, despues de cerrar G15 en la bitacora y con todo en el indice (`git add`): una linea `sha256  ruta` por archivo de `git ls-files` (mismo orden) salvo el propio, con LF y sin BOM, calculada sobre el contenido del indice, no sobre la copia local (los `.ps1` tienen CRLF en la copia). En Git Bash: `git ls-files | grep -vx SOURCE_SHA256.txt | while IFS= read -r f; do printf '%s  %s\n' "$(git cat-file blob ":$f" | sha256sum | cut -d' ' -f1)" "$f"; done > SOURCE_SHA256.txt`. Luego `git add SOURCE_SHA256.txt`, commit `gate G15: build de entrega en Windows` y push.
 
+## Cierre del plan 0.5.0
+
+- Fecha: 2026-11-21 (commit `plan 0.5.0: cierre`). Decision del responsable: el plan se cierra en codigo y documentacion; G15 queda POSTERGADO como pendiente (no como gate abierto). La etiqueta `v0.5.0` se crea despues de G15, con el paquete generado; no se creo ninguna etiqueta.
+- Gates cerrados (25): G00, G01, G02, G03, G04, G04b, G05, G05b, G06, R01, R02, R03a, R03b, G07, G07b, G08a, G08b, G08c, G09, G10, G11, G12, G13, G14 y G14b. G15 POSTERGADO.
+- Cifras finales (Linux, JDK 25):
+  - JUnit H2: 152 ok + 1 omitida (153 ejecutadas; la omitida es `DocumentReleaseTest.defenderNoOperativoFallaCerrado`, sin Windows Defender). En el codigo hay 156 metodos `@Test` en 33 clases: las 3 de MySQL se activan solo con `-Dsiger.mysql.base`. Base 0.4.0 en G00: 79 ok + 1 omitida.
+  - Suite completa sobre MySQL 8.4.13 en contenedor (G14): 155 ok + 1 omitida (156 ejecutadas), con `MySql84IntegrationTest` y `MySql84UpgradeTest` (actualizacion desde un volcado sintetico de 0.4.0).
+  - Frontend: 73 ok (base 10); typecheck y build sin avisos. `Check-Scripts.ps1` con `pwsh` en Linux: 31 scripts ok (no equivale a Windows PowerShell 5.1).
+- Migraciones (aditivas; V1-V10 intactas): V11 sedes regionales (region, estado, apertura y `revision` de `org_scope`; materia sugerida de la SOL y materia del REQ), V12 `person_reference` (indice de personas), V13 `business_holiday` (calendario habil), V14 `milestone` y `application_marker.amount` (hitos). Rutinas de arranque con marcador: `ROL_AUTORIDAD_SUPRIMIDO_050`, `COORDINACION_REGIONAL_050`, `PERSON_INDEX_V12B`, `MILESTONES_V14`.
+- Decisiones (`docs/DECISIONES_FUNCIONALES.md`, "Precision 0.5.0"): D1 TI administra el sistema y se suprime AUTORIDAD; D2 TI sin otras funciones ni lectura de expedientes; D3 funciones combinables con el perfil (`PROFILE_SET`) y varios distribuidores; D4 consulta institucional sin reservados ni gestion; D5 buscador de personas y folios como indice de coincidencias; D6 reportes, exportacion y calendario habil (horas corridas y dias habiles); D7 sede = un ambito con la Coordinacion regional como `DIRECCION`; D8 ciclo de vida de la sede (PROYECTADA, ACTIVA, CERRADA); D9 lectura nacional por materia de las Direcciones de UPR, UPD y UEP. Precisiones de cierre: ingreso sin distinguir mayusculas, descargas con nombre neutro, aviso de hitos omitidos permanente. Decision para 0.6.0: produccion es una instancia nueva en modo institucional (no una migracion que borre datos); la validacion se cierra con `Close-Validation.ps1` y se elimina por completo con constancia, antes del 15/12/2026.
+- Pendientes:
+  - (a) Antes de instalar en la VM:
+    1. G15 en Windows: `Build.ps1 -IncludeJava` con Node 24 portable, `Check-Scripts.ps1` en Windows PowerShell 5.1, `SOURCE_SHA256.txt`, paquete `release\SIGER-<fecha>.zip` y etiqueta `v0.5.0` (antecedentes arriba).
+    2. Consultas previas de solo lectura en la validacion 0.4.0 (`docs/DESPLIEGUE_VM.md`, incluida la de usuarios con mayusculas).
+    3. Respaldo y ensayo obligatorio con `Restore-Check.ps1`, con las cifras de `docs/ACTUALIZACION_0_5_0.md`.
+    4. `Update.ps1` como la cuenta de servicio, `Start.ps1` y comprobaciones posteriores.
+    5. Recorridos de `docs/PRUEBAS_MANUALES_0_5_0.md`.
+    6. `Recover-Ti.ps1` en Windows (en G15 con una instancia de pruebas propia, o en la VM).
+    7. Clave de auditoria del buscador con `New-AuditSearchKey.ps1`, en la VM y como la cuenta del servicio (opcional).
+  - (b) Para produccion:
+    1. Calificacion institucional antes de usar datos personales reales.
+    2. Correo por Microsoft Graph (desactivado; envio real sin probar).
+    3. Antivirus institucional para liberar originales (Defender o ClamAV; sin el, cuarentena).
+    4. Firewall entrante limitado y certificado HTTPS institucional, si los funcionarios no entran por RDP.
+    5. Estructura real (`estructura-inicial.json`: ambitos, sedes, TI y funcionarios) y, despues, region de cada sede y feriados.
+    6. Sustitucion de SMR en una ventana autorizada: un solo consumidor por cola.
+    7. Respaldos fuera del anfitrion y recuperacion productiva calificada.
+    8. **Fecha critica 15/12/2026 00:00 (America/Santiago)**: produccion consumiendo, o el consumidor de la validacion pausado, para que ninguna entrega ciudadana real llegue a la validacion.
+  - (c) Codigo para 0.6.0:
+    1. Cierre de la validacion con recepciones de prueba autorizadas: `Close-Validation.ps1` hoy rechaza cerrar si hay recepciones del Formulario (la validacion tiene 9).
+    2. Procedimiento de eliminacion de la validacion (base, documentos y respaldos) con constancia documentada; hoy los scripts no incluyen comandos destructivos.
+    3. Comentarios de `Environment.ps1` (`Get-InstancePurpose`) e `Init-Server.ps1` que aun dicen que la validacion "nunca recibe entregas reales".
