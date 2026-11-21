@@ -91,3 +91,27 @@ Formulario Publico deja el acceso temporal con contrasena y queda abierto al pub
 consumidor de la validacion se pausa para que ninguna entrega ciudadana real llegue a ella. La validacion contiene 9
 recepciones reales del Formulario, que son pruebas del responsable con sus propios datos y con autorizacion.
 
+## Precision 0.6.0 - salida a produccion y fin de la validacion
+
+Decisiones del responsable del proyecto del 2026-11-21 (plan en `docs/PLAN_0_6_0.md`); precisan la "Decision para 0.6.0" anterior. Puertos, fechas y entrega de prueba confirmados por el responsable el 2026-11-21. Los gates nombrados (H01, H02...) y los pasos de la VM (V1-V10) son los de ese plan; las decisiones abiertas siguen en el plan y en `docs/BITACORA_0_6_0.md`.
+
+D10. **Produccion reemplaza a la validacion; no conviven.** Produccion es una instancia nueva en `D:\SIGER` (modo institucional, proposito Produccion), inicializada con el mismo release que la validacion actualizada (`-MismoReleaseQue`), con la misma cuenta de servicio (`DDN-SIGER\svc-siger`) y los mismos puertos (MySQL 13326 en loopback, HTTPS 18543). La secuencia es la de la seccion 3 de `docs/PLAN_0_6_0.md`: la validacion se cierra y se retiran sus servicios antes de inicializar produccion, y se elimina despues de acreditar produccion.
+
+D11. **Recepciones de prueba autorizadas.** Una validacion con recepciones del Formulario se cierra solo si se cumplen las tres condiciones:
+1. las recepciones confirmadas coinciden con la cantidad que el responsable declara al pausar definitivamente (hoy 9; 10 con la entrega de prueba de D14);
+2. ninguna recepcion es posterior a esa pausa;
+3. no hay ACK pendientes.
+Si una falla, no se cierra. El cierre no borra nada (la eliminacion es D12). Una validacion sin recepciones se cierra como hasta ahora.
+
+D12. **Eliminacion de la validacion cerrada, con constancia.**
+- Alcance: dentro de `D:\SIGER-VALIDACION` (base, incluidos los esquemas `siger_a_restore_*` de los ensayos de restauracion, documentos, logs, `config\` con los secretos DPAPI y `releases\`); fuera de la raiz, `D:\Respaldos-SIGER-VALIDACION` y los destinos de `Restore-Check.ps1` de esa instancia.
+- Nunca: el `mysqlHome` (compartido con produccion), la raiz de produccion ni nada fuera de `D:`.
+- Constancia en `D:\SIGER-CONSTANCIAS` (fuera de ambas instancias) y en el registro institucional, sin datos ciudadanos ni secretos. Declara como fuera de alcance los respaldos y snapshots de TI (sujetos a su retencion) y la copia que conserva el Formulario, y aclara que la eliminacion es logica, no forense.
+
+D13. **Acreditacion de produccion.** Solo con `Invoke-FormularioPull.ps1 -SoloComprobar` y produccion en automatico a mas tardar el **10/12/2026**, verificando en Auditoria y operacion "Esperando entregas", ciclos corriendo y ultimo exito reciente (un ciclo en pausa tambien registra exito: lo que cuenta es el estado). No hay entregas de prueba en produccion. **Plan B**: si al **12/12/2026** produccion no esta en automatico, se pausa la validacion, se deja en Manual y se retira `validacionPullAutorizada`; las entregas ciudadanas esperan en la cola del Formulario hasta que produccion consuma.
+
+D14. **Entrega de prueba en la validacion 0.6.0.** Despues de actualizar, el responsable hace una entrega de prueba con sus propios datos (antes del 15/12) para ejercitar en la VM la recepcion con el codigo de 0.5.0 (indice de personas e hito `COM_REGISTRADA`). Entre la pausa definitiva de la validacion y produccion en automatico no se hacen entregas de prueba: `reclamar` no filtra y entrega la pendiente mas antigua.
+
+D15. **Alcance del trabajo en la VM.** Solo NEW-SIGER dentro de `D:`. No se inspeccionan ni modifican otros volumenes ni el sistema legado (SMR). Ningun procedimiento de 0.6.0 depende de SMR: `Export-SecretPackage.ps1` no se usa.
+
+D16. **Correo.** Graph no bloquea la salida a produccion: produccion puede partir con el correo desactivado. La credencial de Graph se instala en la VM como la cuenta de servicio, sin SMR (H01).

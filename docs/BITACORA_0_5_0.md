@@ -34,6 +34,8 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G14b | Documentacion: PULL/ACK verificado en la VM | CERRADO |
 | G15 | Build de entrega en Windows | POSTERGADO |
 
+Nota (2026-11-21, gate H00 de 0.6.0): G15 queda absorbido por H06a y H06b de `docs/PLAN_0_6_0.md`; no habra paquete ni build 0.5.0. Sus antecedentes (abajo) rigen con 0.6.0 y el estado se sigue en `docs/BITACORA_0_6_0.md`.
+
 ## Antecedentes para G00 (revision previa del codigo, sin ejecutar)
 
 - Base `cd21f6e` (0.4.0, esquema V10). El README declara 77 pruebas JUnit en 20 clases; en el codigo hay 83 metodos `@Test` en 22 archivos de prueba (`FormularioDocs` no tiene pruebas). G00 registra el conteo real ejecutado.
@@ -471,6 +473,8 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 - Verificacion manual sugerida al usuario: no aplica en la interfaz. Antes del 15/12/2026, en "Auditoria y operacion" de la validacion, comprobar que el Formulario quede "Pausado" (o que produccion ya consuma y la validacion este detenida).
 
 ## Antecedentes para G15 (build de entrega en Windows)
+
+Nota (2026-11-21): absorbido por H06a y H06b de 0.6.0; ver la nota bajo la tabla de estado.
 
 - Punto de partida: `git log --oneline -1` = `gate G14b: documentacion PULL/ACK verificado en la VM`, en `main` de `origin` (`https://github.com/chashmdai/siger-a.git`). Clonar en una carpeta nueva (por ejemplo `C:\siger-a`); no copiar `.tools`, `var`, `node_modules` ni `target` desde Linux. `.gitattributes` fija CRLF en `.ps1`/`.cmd` y LF en `.sql`/`.sh`; no cambiar `core.autocrlf` para el clon.
 - Windows: Windows PowerShell 5.1 (`powershell.exe`, no `pwsh`), Git for Windows (trae Git Bash y `sha256sum`), salida a internet hacia api.adoptium.net, nodejs.org, registry.npmjs.org y repo.maven.apache.org. Todo con `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...`; sin cambiar PATH, JAVA_HOME ni la directiva de forma persistente.

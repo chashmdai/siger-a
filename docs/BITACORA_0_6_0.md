@@ -7,7 +7,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado, con commit y push), BLOQUEADO
 
 | Gate | Titulo | Estado |
 |---|---|---|
-| H00 | Linea base y cierre administrativo de 0.5.0 | ABIERTO |
+| H00 | Linea base y cierre administrativo de 0.5.0 | CERRADO |
 | H01 | Graph: credencial y prueba controlada | ABIERTO |
 | H02 | Cierre de la validacion con recepciones de prueba autorizadas | ABIERTO |
 | H03 | Eliminacion de la validacion cerrada con constancia | ABIERTO |
@@ -65,4 +65,13 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
 
 ## Registros de cierre
 
-(ninguno todavia)
+### H00 - Linea base y cierre administrativo de 0.5.0   (CERRADO)
+- Fecha: 2026-11-21 (commit `gate H00: linea base y cierre administrativo de 0.5.0`; base `a2f055f plan 0.6.0: planificacion`, que registra en la tabla de decisiones los puertos, las fechas y la entrega de prueba confirmados por el responsable).
+- Hecho: sin cambios de codigo. `DECISIONES_FUNCIONALES.md`: "Precision 0.6.0" con D10-D16 copiadas del plan (la "seccion 3" remite a `docs/PLAN_0_6_0.md`; sin la lista de decisiones abiertas); la "Decision para 0.6.0" de G14b queda intacta. `CLAUDE.md`: estado "plan 0.6.0 en curso" (G15 absorbido por H06a/H06b; se mantiene la regla de no trabajar sin instruccion) y lineas 126 y 128 (`SOURCE_SHA256.txt` en H06b; actualizacion 0.4.0 -> 0.6.0 en `ACTUALIZACION_0_6_0.md`). `BITACORA_0_5_0.md`: notas de G15 absorbido, sin reescribir registros. `ACTUALIZACION_0_5_0.md`: aviso "No se ejecuta". `ALCANCE_Y_PENDIENTES.md`: requisito del build pasa a H06a y la actualizacion de la validacion a `ACTUALIZACION_0_6_0.md`.
+- Archivos clave: `CLAUDE.md`, `docs/DECISIONES_FUNCIONALES.md`, `docs/ALCANCE_Y_PENDIENTES.md`, `docs/ACTUALIZACION_0_5_0.md`, `docs/BITACORA_0_5_0.md`.
+- Verificacion: JUnit H2 152 ok + 1 omitida (153 ejecutadas; omitida `DocumentReleaseTest.defenderNoOperativoFallaCerrado`), igual que el cierre de 0.5.0; suite sobre MySQL 8.4.13 (`SELECT VERSION()`, imagen local `mysql:8.4` en contenedor desechable en `127.0.0.1`, esquemas `siger_a_mysql_pruebas` y `siger_a_mysql_inst` creados a mano, contenedor detenido al terminar) 155 ok + 1 omitida (156 ejecutadas, con `MySql84IntegrationTest` 2 y `MySql84UpgradeTest` 1); frontend 73 ok, typecheck y build sin avisos (sin `npm ci`); `Check-Scripts.ps1` con `pwsh`: 31 scripts ok y modo de instancia 8 casos; humo no aplica.
+- Entorno: JDK Temurin 25.0.5 LTS, Maven 3.9.11 (`.tools`), Node v26.13.1 y npm 12.2.3 del sistema (no el Node 24 portable de Windows), PowerShell 7.7.0 (`pwsh`, solo sintaxis), Docker con MySQL 8.4.13.
+- Desvios del plan: ninguno. Ajustes del responsable al aprobar: intro de la Precision con referencia al plan, correccion de `CLAUDE.md:128` y `ALCANCE_Y_PENDIENTES.md:70`, texto del aviso de `ACTUALIZACION_0_5_0.md`.
+- Hallazgos para gates siguientes: `docs/ACTUALIZACION_0_6_0.md` ya esta referido desde `CLAUDE.md`, `ALCANCE_Y_PENDIENTES.md` y `ACTUALIZACION_0_5_0.md`, pero no existe hasta H05. La imagen local `mysql:8.4` es 8.4.13.
+- Pendientes: `README.md:8` (G15 postergado) y `:39` (`ACTUALIZACION_0_5_0.md`), `INSTALACION_VM.md:222` y `DESPLIEGUE_VM.md:188` -> H05 (`DESPLIEGUE_VM.md` secciones 3 y 4 -> H04). `PRUEBAS_MANUALES_0_5_0.md:100` queda como esta (documento de 0.5.0; el aviso se explica en `ACTUALIZACION_0_5_0.md`). Decisiones abiertas restantes en la tabla de arriba.
+- Verificacion manual sugerida al usuario: leer "Precision 0.6.0" al final de `docs/DECISIONES_FUNCIONALES.md` y la seccion "Estado" de `CLAUDE.md`.

@@ -61,14 +61,14 @@ estar detenido (`docs/DESPLIEGUE_VM.md`).
 
 ## Pendientes que NO se presentan como terminados
 
-- **Requisito previo a instalar en la VM: build de entrega en Windows** (G15, POSTERGADO en `docs/BITACORA_0_5_0.md`):
-  `Build.ps1 -IncludeJava` con Node 24 portable, `Check-Scripts.ps1` en Windows PowerShell 5.1, `SOURCE_SHA256.txt` y
-  el paquete `release\SIGER-<fecha>.zip`. La VM se instala con ese paquete: `Init-Server.ps1` y `Update.ps1` exigen
-  su `manifest.json` (y `Update.ps1`, que se haya compilado con pruebas). El orden completo de lo pendiente esta en
-  "Cierre del plan 0.5.0" de la bitacora.
+- **Requisito previo a instalar en la VM: build de entrega en Windows** (H06a de `docs/PLAN_0_6_0.md`, que absorbe el
+  G15 de 0.5.0; `SOURCE_SHA256.txt` en H06b): `Build.ps1 -IncludeJava` con Node 24 portable, `Check-Scripts.ps1` en
+  Windows PowerShell 5.1 y el paquete 0.6.0 `release\SIGER-<fecha>.zip`. La VM se instala con ese paquete:
+  `Init-Server.ps1` y `Update.ps1` exigen su `manifest.json` (y `Update.ps1`, que se haya compilado con pruebas). El
+  orden completo de lo pendiente esta en las secciones 3 y 6 de `docs/PLAN_0_6_0.md`.
 
-- Ejecucion en la VM de la instalacion de 0.5.0, de la actualizacion de la validacion (`docs/ACTUALIZACION_0_5_0.md`),
-  de `Recover-Ti.ps1`, de un envio real por Graph y del analisis con el motor antivirus institucional.
+- Ejecucion en la VM de la instalacion de 0.6.0, de la actualizacion de la validacion 0.4.0 -> 0.6.0 en
+  `docs/ACTUALIZACION_0_6_0.md` (se crea en H05; `docs/ACTUALIZACION_0_5_0.md` no se ejecuta), de `Recover-Ti.ps1`, de un envio real por Graph y del analisis con el motor antivirus institucional.
 - **Produccion (decision para 0.6.0, fecha objetivo antes del 15/12/2026)**: instancia nueva inicializada en modo
   institucional, no una migracion que borre datos. La validacion se cierra con `Close-Validation.ps1` y luego se elimina
   por completo (base, documentos y respaldos), dejando constancia documentada de la eliminacion. Para hacerlo hay que
