@@ -49,6 +49,15 @@ function MySql-ClientFile($Settings,$Secrets,[string]$Account) {
     $lines=@('[client]',"user=$user","password=$password",'host=127.0.0.1',"port=$($Settings.mysqlPort)",'protocol=TCP','ssl-mode=VERIFY_CA',"ssl-ca=$ca")
     [IO.File]::WriteAllLines($path,$lines,[Text.Encoding]::ASCII);return $path
 }
+# Borra un archivo temporal con credenciales (client-*.cnf, claves de keytool, un .p12 candidato). No usa Remove-Item:
+# con -WhatIf del script que llama (o de uno que lo invoco) $WhatIfPreference se propaga y Remove-Item no borra, y con
+# -Confirm pregunta y una respuesta negativa deja el archivo. Falla si el archivo sigue en disco.
+# Check-Scripts.ps1 lo comprueba con -WhatIf y rechaza un Remove-Item nuevo sobre estas variables.
+function Remove-SecretFile([string]$Path) {
+    if([string]::IsNullOrEmpty($Path)){return}
+    if([IO.File]::Exists($Path)){[IO.File]::SetAttributes($Path,[IO.FileAttributes]::Normal);[IO.File]::Delete($Path)}
+    if([IO.File]::Exists($Path)){throw "No se pudo borrar un archivo temporal con credenciales ($(Split-Path $Path -Leaf)). Borralo a mano antes de continuar."}
+}
 function Require-Java25([string]$JavaDirectory){
     if(-not(Test-Path (Join-Path $JavaDirectory 'bin\java.exe'))){throw 'No existe java.exe portable.'}
     $v=(& (Join-Path $JavaDirectory 'bin\java.exe') --version | Out-String)

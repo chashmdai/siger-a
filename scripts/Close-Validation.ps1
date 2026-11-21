@@ -50,7 +50,7 @@ function Read-ClosureFigures {
     try{
         Require-OwnMySql $s $client
         $text=(Invoke-SigerSql $s $client $script:ValidationClosureSql $s.database | Out-String)
-    }finally{Remove-Item -LiteralPath $client}
+    }finally{Remove-SecretFile $client}
     return (ConvertTo-ValidationClosureFigures $text)
 }
 function Show-ClosureFigures($f){
@@ -81,7 +81,7 @@ if(-not $PSCmdlet.ShouldProcess($Root,'Detener SIGER y su motor y marcar cerrada
 New-Item -ItemType Directory -Force -Path $constDir | Out-Null
 if((Get-Item -LiteralPath $constDir).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'La carpeta de constancias no puede ser un enlace.'}
 $probe=Join-Path $constDir ('.prueba-'+[Guid]::NewGuid().ToString('N'))
-[IO.File]::WriteAllText($probe,'',[Text.Encoding]::ASCII);Remove-Item -LiteralPath $probe
+[IO.File]::WriteAllText($probe,'',[Text.Encoding]::ASCII);[IO.File]::Delete($probe)
 
 # Detener solo SIGER y volver a contar con el motor activo: ningun ciclo en curso puede quedar fuera de las cifras.
 & (Join-Path $PSScriptRoot 'Stop.ps1') -Root $Root

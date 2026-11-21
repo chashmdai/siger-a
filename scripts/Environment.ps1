@@ -253,3 +253,249 @@ function Set-SigerServiceEnvironment($Settings,$Secrets) {
     $searchKey=Join-Path $Settings.root 'config\audit-search-key.clixml'
     if(Test-Path -LiteralPath $searchKey -PathType Leaf){Require-PrivateFile $searchKey;$env:SIGER_AUDIT_SEARCH_KEY=Secret-Text (Import-Clixml -LiteralPath $searchKey)}
 }
+
+# --- Eliminacion de la validacion cerrada (Remove-Validation.ps1, D12 de docs/PLAN_0_6_0.md) ------------------------
+# Reglas puras con casos en Check-Scripts.ps1. Las rutas llegan ya normalizadas por el script (GetFullPath, sin '\' final).
+function Get-Prop($Object,[string]$Name){
+    if($null -ne $Object -and $Object.PSObject.Properties[$Name]){return $Object.$Name}
+    return $null
+}
+function Test-PathInside([string]$Child,[string]$Parent){
+    if(-not $Child -or -not $Parent){return $false}
+    $c=$Child.TrimEnd('\');$p=$Parent.TrimEnd('\')
+    return ($c -ieq $p -or $c.StartsWith($p+'\',[StringComparison]::OrdinalIgnoreCase))
+}
+# Un destino es una carpeta de D: (nunca la raiz de la unidad, otro volumen, una ruta UNC ni con '.' o '..'), que no esta
+# dentro ni contiene ninguna ruta protegida ($Protected: nombre -> ruta; produccion, motores, Java, constancias, paquete)
+# y que no se solapa con otro destino.
+function Get-DeletionPathBlockers([string]$Target,$Protected,[string[]]$Others){
+    $out=New-Object System.Collections.Generic.List[string]
+    $t=([string]$Target).TrimEnd('\')
+    if($t -cnotmatch '^[Dd]:(\\[^\\/:*?"<>|\x00-\x1F]+)+$' -or $t -match '(^|\\)\.{1,2}(\\|$)'){$out.Add('FUERA_DE_D');return $out.ToArray()}
+    foreach($name in @($Protected.Keys)){
+        $p=[string]$Protected[$name]
+        if($p -and ((Test-PathInside $t $p) -or (Test-PathInside $p $t))){$out.Add('PROTEGIDA_'+$name)}
+    }
+    foreach($o in @($Others)){if($o -and ((Test-PathInside $t $o) -or (Test-PathInside $o $t))){$out.Add('SOLAPADA');break}}
+    return $out.ToArray()
+}
+# Respaldo de Backup.ps1 de esta instancia: backup.json con el namespace, la raiz de origen y la base de la validacion.
+function Test-BackupOfInstance($Meta,[string]$Root,[string]$Database){
+    $namespace=[string](Get-Prop $Meta 'namespace');$source=[string](Get-Prop $Meta 'sourceRoot');$base=[string](Get-Prop $Meta 'database')
+    return ($namespace -ceq 'SIGER-A-2026' -and $source -and $source.TrimEnd('\') -ieq $Root.TrimEnd('\') -and $base -ceq $Database)
+}
+# Carpeta de -Respaldos que no es un respaldo: cada hijo ($Children: {Path, Meta}; Meta = backup.json leido o $null) es un
+# respaldo de esta instancia o un respaldo incompleto declarado ($Declared). Cualquier otro hijo (archivo, carpeta sin
+# backup.json no declarada, respaldo de otra instancia) la rechaza.
+function Test-BackupContainer($Children,[string]$Root,[string]$Database,[string[]]$Declared){
+    foreach($child in @($Children)){
+        $p=([string]$child.Path).TrimEnd('\')
+        if(@($Declared|Where-Object {$_ -and ([string]$_).TrimEnd('\') -ieq $p}).Count -gt 0){continue}
+        if(-not (Test-BackupOfInstance $child.Meta $Root $Database)){return $false}
+    }
+    return $true
+}
+# Respaldo abortado que declara el responsable (-RespaldosIncompletos de Remove-Validation.ps1): hijo directo de una
+# carpeta de -Respaldos ($Containers: las que no son a su vez un respaldo), sin backup.json ni restore-result.json, sin
+# enlaces y, si trae config-private\instance.json ($HasInstance; $Instance es $null si no se pudo leer), con la raiz y el
+# ownerSid de la validacion. Sin ese archivo se acepta por la declaracion y la constancia lo dice. Vacia = aceptado.
+function Get-IncompleteBackupBlockers([string]$Path,[string[]]$Containers,[bool]$HasBackupJson,[bool]$HasRestoreResult,[int]$Links,[bool]$HasInstance,$Instance,[string]$Root,[string]$OwnerSid){
+    $out=New-Object System.Collections.Generic.List[string]
+    $t=([string]$Path).TrimEnd('\');$i=$t.LastIndexOf('\');$parent=if($i -gt 0){$t.Substring(0,$i)}else{''}
+    if(-not $parent -or @($Containers|Where-Object {$_ -and ([string]$_).TrimEnd('\') -ieq $parent}).Count -eq 0){$out.Add('NO_ES_HIJO_DE_RESPALDOS')}
+    if($HasBackupJson){$out.Add('CON_BACKUP_JSON')}
+    if($HasRestoreResult){$out.Add('CON_RESTORE_RESULT')}
+    if($Links -ne 0){$out.Add('CON_ENLACES')}
+    if($HasInstance){
+        $instanceRoot=[string](Get-Prop $Instance 'root');$sid=[string](Get-Prop $Instance 'ownerSid')
+        if(-not $instanceRoot -or $instanceRoot.TrimEnd('\') -ine $Root.TrimEnd('\') -or -not $sid -or $sid -cne $OwnerSid){$out.Add('INSTANCIA_AJENA')}
+    }
+    return $out.ToArray()
+}
+# Esquema de un ensayo de Restore-Check.ps1 (restore-result.json), o '' si no se reconoce. El script exige ademas que la
+# carpeta de ese esquema exista en el mysql\data de la validacion: el ensayo se hizo sobre su motor y se borra con su raiz.
+function Get-RestoreSchema($Result){
+    $schema=[string](Get-Prop $Result 'schema')
+    if($schema -cnotmatch '^siger_a_restore_[0-9]{14}_[0-9a-f]{6}$'){return ''}
+    $namespace=Get-Prop $Result 'namespace'
+    if($null -ne $namespace -and [string]$namespace -cne 'SIGER-A-RESTORE-CHECK'){return ''}
+    if((Get-Prop $Result 'completed') -eq $true -and $null -eq $namespace){return ''}
+    return $schema
+}
+# Origen e identidad ACK del Formulario de una instancia, sin el resto de las comprobaciones: la validacion puede seguir
+# con formulario-pull.json en AUTOMATICO sin la autorizacion (plan B) y no pasaria Get-FormularioPullConfig. La identidad
+# importada se lee con DPAPI: solo la cuenta duena la abre. $null si falta o no se reconoce.
+function Get-FormularioIdentity($Settings){
+    $config=Join-Path $Settings.root 'config'
+    $file=Join-Path $config 'formulario-pull.json'
+    if(-not(Test-Path -LiteralPath $file -PathType Leaf)){return $null}
+    $pull=Get-Content -LiteralPath $file -Raw|ConvertFrom-Json
+    $origin=[string](Get-Prop $pull 'origin');$keyId=[string](Get-Prop $pull 'ackKeyId')
+    $identity=Join-Path $config 'formulario-ack-identity.clixml'
+    if(Test-Path -LiteralPath $identity -PathType Leaf){$keyId=[string](Get-Prop (Import-Clixml -LiteralPath $identity) 'KeyId')}
+    if($origin -notmatch '^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$' -or $keyId -notmatch '^[A-Za-z0-9_-]{1,64}$'){return $null}
+    return [PSCustomObject]@{Origin=$origin;AckKeyId=$keyId}
+}
+# Bloqueos generales de la eliminacion (lista vacia = se puede eliminar). Remove-Validation.ps1 arma $Facts con:
+#   Purpose, Root, Marker (objeto o $null), MarkerCopy (bool), OwnerMatch (bool), ServiceJson (bool), ServicesForRoot (int),
+#   EngineActive (bool), InUse (int), Links (int), Production ({Purpose,Initialized,Root,OwnerMatch} o $null),
+#   FormularioValidation ({Origin,AckKeyId} o $null), FormularioProduction ({Mode,Origin,AckKeyId} o $null si falta o
+#   Get-FormularioPullConfig falla), GraphValidation (bool), GraphProduction (bool), PreviousOmitted (int).
+# - PROPOSITO / SIN_MARCADOR / MARCADOR_SIN_TIPO / MARCADOR_OTRA_RAIZ / SIN_COPIA_DEL_CIERRE: solo una VALIDACION cerrada
+#   por Close-Validation.ps1 de 0.6.0 (el marcador de 0.4.0 no tiene kind), con la copia identica en las constancias.
+# - CUENTA: la cuenta de ownerSid (lee la identidad ACK y los secretos de produccion con su DPAPI).
+# - SERVICIOS_REGISTRADOS / MOTOR_ACTIVO / ARCHIVOS_EN_USO / ENLACES: servicios retirados, motor detenido (sin pid y con
+#   ibdata1 libre) y ningun archivo abierto por otro proceso; ningun enlace (no se sigue ninguno).
+# - PRODUCCION: una produccion inicializada, de la misma cuenta y con otra raiz.
+# - FORMULARIO_* y GRAPH_PRODUCCION: las unicas copias del Bearer, la identidad ACK y el secreto de Graph de NEW-SIGER
+#   estan en la validacion y en sus respaldos (SMR queda fuera, D15): produccion debe tener el mismo origen y la misma
+#   identidad ACK, en AUTOMATICO (D13 acreditada), y la credencial de Graph si la validacion la tiene.
+# - PENDIENTE_ANTERIOR: un reintento incluye todo lo que la constancia anterior no dejo ELIMINADO y sigue existiendo.
+function Get-ValidationDeletionBlockers($Facts){
+    $f=$Facts;$out=New-Object System.Collections.Generic.List[string]
+    if([string]$f.Purpose -cne 'VALIDACION'){$out.Add('PROPOSITO')}
+    if($null -eq $f.Marker){$out.Add('SIN_MARCADOR')}else{
+        $markerRoot=[string](Get-Prop $f.Marker 'root')
+        if([string](Get-Prop $f.Marker 'kind') -cne 'CIERRE_VALIDACION'){$out.Add('MARCADOR_SIN_TIPO')}
+        elseif(-not $markerRoot -or $markerRoot.TrimEnd('\') -ine ([string]$f.Root).TrimEnd('\')){$out.Add('MARCADOR_OTRA_RAIZ')}
+        if(-not $f.MarkerCopy){$out.Add('SIN_COPIA_DEL_CIERRE')}
+    }
+    if(-not $f.OwnerMatch){$out.Add('CUENTA')}
+    if($f.ServiceJson -or $f.ServicesForRoot -ne 0){$out.Add('SERVICIOS_REGISTRADOS')}
+    if($f.EngineActive){$out.Add('MOTOR_ACTIVO')}
+    if($f.InUse -ne 0){$out.Add('ARCHIVOS_EN_USO')}
+    if($f.Links -ne 0){$out.Add('ENLACES')}
+    $p=$f.Production
+    if($null -eq $p -or -not $p.Initialized -or [string]$p.Purpose -cne 'PRODUCCION' -or -not $p.OwnerMatch -or (Test-PathInside $p.Root $f.Root) -or (Test-PathInside $f.Root $p.Root)){$out.Add('PRODUCCION')}
+    $fv=$f.FormularioValidation;$fp=$f.FormularioProduction
+    if($null -eq $fv){$out.Add('FORMULARIO_VALIDACION')}
+    if($null -eq $fp){$out.Add('FORMULARIO_PRODUCCION')}else{
+        if([string]$fp.Mode -cne 'AUTOMATICO'){$out.Add('FORMULARIO_NO_AUTOMATICO')}
+        if($null -ne $fv){
+            if(([string]$fp.Origin).TrimEnd('/') -ine ([string]$fv.Origin).TrimEnd('/')){$out.Add('FORMULARIO_ORIGEN_DISTINTO')}
+            if([string]$fp.AckKeyId -cne [string]$fv.AckKeyId){$out.Add('FORMULARIO_ACK_DISTINTO')}
+        }
+    }
+    if($f.GraphValidation -and -not $f.GraphProduction){$out.Add('GRAPH_PRODUCCION')}
+    if($f.PreviousOmitted -ne 0){$out.Add('PENDIENTE_ANTERIOR')}
+    return $out.ToArray()
+}
+# Recorre un arbol sin seguir enlaces: archivos y bytes, enlaces (en el arbol o en la ruta hasta la unidad) y archivos que
+# no se pueden abrir en exclusiva (abiertos por el motor, Java u otro proceso, o sin acceso). No escribe nada.
+function Get-TreeInventory([string]$Path){
+    $r=[PSCustomObject]@{Files=[long]0;Bytes=[long]0;Links=0;InUse=0}
+    $top=New-Object IO.DirectoryInfo($Path)
+    $up=$top.Parent
+    while($null -ne $up){if(($up.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){$r.Links++};$up=$up.Parent}
+    if(($top.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){$r.Links++;return $r}
+    $stack=New-Object 'System.Collections.Generic.Stack[IO.DirectoryInfo]';$stack.Push($top)
+    while($stack.Count -gt 0){
+        $dir=$stack.Pop();$entries=$null
+        try{$entries=@($dir.GetFileSystemInfos())}catch{$r.InUse++;continue}
+        foreach($e in $entries){
+            if(($e.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){$r.Links++;continue}
+            if($e -is [IO.DirectoryInfo]){$stack.Push($e);continue}
+            $r.Files++;$r.Bytes+=$e.Length
+            if(Test-FileInUse $e.FullName){$r.InUse++}
+        }
+    }
+    return $r
+}
+function Test-FileInUse([string]$Path){
+    try{$stream=[IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None);$stream.Dispose();return $false}catch{return $true}
+}
+# Constancia de la eliminacion: lista cerrada de campos (Check-Scripts.ps1 falla si se agrega uno). Solo rutas, cifras,
+# fechas, cuenta, motivo, huellas y codigos: nunca nombres de archivos, contenido, datos ciudadanos ni secretos.
+$script:DeletionRecordFields=@('kind','result','startedUtc','completedUtc','executedBy','reason','validation','closure','production','previous','elements','restoreSchemas','outOfScope','note')
+$script:DeletionElementFields=@('type','path','files','bytes','evidence','result','remainingFiles')
+function New-ValidationDeletionRecord($Validation,$Closure,[string]$ProductionRoot,$Previous,$Elements,[int]$RestoreSchemas,[string]$Reason,[string]$Account){
+    $items=@(foreach($e in @($Elements)){[ordered]@{type=[string]$e.Type;path=[string]$e.Path;files=[long]$e.Files;bytes=[long]$e.Bytes;evidence=[string]$e.Evidence;result='PENDIENTE';remainingFiles=$null}})
+    return [ordered]@{
+        kind='ELIMINACION_VALIDACION';result='EN_CURSO';startedUtc=(Get-Date).ToUniversalTime().ToString('o');completedUtc=$null
+        executedBy=$Account;reason=$Reason
+        validation=[ordered]@{root=[string]$Validation.root;database=[string]$Validation.database;jarSha256=[string]$Validation.jarSha256}
+        closure=[ordered]@{file=[string]$Closure.file;sha256=[string]$Closure.sha256;closedUtc=[string]$Closure.closedUtc;communications=$Closure.communications;confirmed=$Closure.confirmed}
+        production=[ordered]@{root=$ProductionRoot}
+        previous=$(if($Previous){[ordered]@{file=[string]$Previous.File;sha256=[string]$Previous.Sha256;result=[string](Get-Prop $Previous.Record 'result')}}else{$null})
+        elements=$items;restoreSchemas=$RestoreSchemas
+        outOfScope=@('Respaldos y snapshots de TI de la VM y de su almacenamiento: sujetos a su propia retencion.',
+            'Copia de las entregas que conserva el Formulario (la retirada tras el ACK no esta habilitada).',
+            'Datos de esta validacion restaurados en otro motor o copiados fuera de las rutas de esta constancia.')
+        note='Eliminacion logica con el sistema de archivos; no es una eliminacion forense (no sobrescribe el disco).'}
+}
+function Save-DeletionRecord($Record,[string]$Path,[switch]$New){
+    $bytes=(New-Object Text.UTF8Encoding($false)).GetBytes(($Record|ConvertTo-Json -Depth 8))
+    $target=if($New){$Path}else{$Path+'.new'}
+    $stream=[IO.File]::Open($target,$(if($New){[IO.FileMode]::CreateNew}else{[IO.FileMode]::Create}),[IO.FileAccess]::Write)
+    try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush()}finally{$stream.Dispose()}
+    # [NullString]: PowerShell convierte $null en '' al llamar a .NET, y Replace rechaza una ruta de copia vacia.
+    if(-not $New){[IO.File]::Replace($target,$Path,[NullString]::Value)}
+}
+# Borra un arbol sin seguir enlaces (un enlace detiene la eliminacion). $Last: rutas relativas que se borran al final, en
+# ese orden (en la raiz, instance.json y el marcador de cierre: mientras existan, el script puede repetirse).
+function Remove-DeletionNode([IO.DirectoryInfo]$Directory,$Skip){
+    foreach($e in @($Directory.GetFileSystemInfos())){
+        if(($e.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'Enlace encontrado durante la eliminacion: se detiene sin seguirlo.'}
+        if($e -is [IO.DirectoryInfo]){
+            Remove-DeletionNode $e $Skip
+            if(@($e.GetFileSystemInfos()).Count -eq 0){$e.Delete()}
+        }elseif(-not $Skip.Contains($e.FullName)){$e.Attributes=[IO.FileAttributes]::Normal;$e.Delete()}
+    }
+}
+function Remove-DeletionTree([string]$Path,[string[]]$Last){
+    if(-not [IO.Directory]::Exists($Path)){return}
+    $skip=New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $ordered=@(foreach($relative in @($Last|Where-Object {$_})){
+        $full=$Path;foreach($part in ($relative -split '[\\/]')){$full=Join-Path $full $part}
+        [void]$skip.Add($full);$full
+    })
+    Remove-DeletionNode (New-Object IO.DirectoryInfo($Path)) $skip
+    foreach($file in $ordered){if([IO.File]::Exists($file)){[IO.File]::SetAttributes($file,[IO.FileAttributes]::Normal);[IO.File]::Delete($file)}}
+    $skip.Clear();Remove-DeletionNode (New-Object IO.DirectoryInfo($Path)) $skip
+    [IO.Directory]::Delete($Path,$false)
+}
+# Ejecuta la eliminacion: la constancia se escribe (archivo nuevo) antes de borrar y se completa tras cada elemento, en el
+# orden de $Targets ({Path,Last}, el mismo de $Record.elements). Se detiene en el primer fallo: ese elemento queda FALLIDO
+# con los archivos que le quedan y los siguientes NO_INTENTADO; el reintento se hace con lo que queda.
+function Invoke-ValidationDeletion($Record,[string]$RecordPath,$Targets){
+    Save-DeletionRecord $Record $RecordPath -New
+    $failed=$false
+    for($i=0;$i -lt @($Targets).Count;$i++){
+        $item=$Record.elements[$i]
+        if($failed){$item.result='NO_INTENTADO';continue}
+        try{Remove-DeletionTree $Targets[$i].Path $Targets[$i].Last;$item.result='ELIMINADO'}
+        catch{$failed=$true;$item.result='FALLIDO';$item.remainingFiles=$(if([IO.Directory]::Exists($Targets[$i].Path)){(Get-TreeInventory $Targets[$i].Path).Files}else{0})}
+        Save-DeletionRecord $Record $RecordPath
+    }
+    $Record.result=if($failed){'INCOMPLETA'}else{'COMPLETA'}
+    $Record.completedUtc=(Get-Date).ToUniversalTime().ToString('o')
+    Save-DeletionRecord $Record $RecordPath
+    return $Record
+}
+# Ultima constancia de eliminacion de esta raiz en la carpeta de constancias ({File,Sha256,Record} o $null). Una COMPLETA
+# con la raiz aun presente es una incoherencia: falla cerrado.
+function Get-PreviousDeletion([string]$Directory,[string]$Root){
+    if(-not [IO.Directory]::Exists($Directory)){return $null}
+    $found=$null
+    foreach($file in @(Get-ChildItem -LiteralPath $Directory -Filter 'eliminacion-validacion-*.json' -File|Sort-Object Name)){
+        $r=$null;try{$r=Get-Content -LiteralPath $file.FullName -Raw|ConvertFrom-Json}catch{throw "Constancia ilegible en la carpeta de constancias ($($file.Name)). Revisala antes de continuar."}
+        $root=[string](Get-Prop (Get-Prop $r 'validation') 'root')
+        if([string](Get-Prop $r 'kind') -ceq 'ELIMINACION_VALIDACION' -and $root -and $root.TrimEnd('\') -ieq $Root.TrimEnd('\')){
+            $found=[PSCustomObject]@{File=$file.Name;Sha256=(Get-SigerFileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant();Record=$r}
+        }
+    }
+    if($found -and [string](Get-Prop $found.Record 'result') -ceq 'COMPLETA'){throw 'Ya hay una constancia COMPLETA de esta raiz y la raiz sigue presente. Revisa con el responsable.'}
+    return $found
+}
+# Elementos de la constancia anterior que no quedaron ELIMINADO, siguen existiendo y no estan en esta ejecucion.
+function Get-PreviousOmitted($Previous,[string[]]$Current,[scriptblock]$Exists){
+    if($null -eq $Previous){return 0}
+    $n=0
+    foreach($e in @(Get-Prop $Previous.Record 'elements')){
+        if([string](Get-Prop $e 'result') -ceq 'ELIMINADO'){continue}
+        $p=([string](Get-Prop $e 'path')).TrimEnd('\')
+        if(-not $p -or -not (& $Exists $p)){continue}
+        if(@($Current|Where-Object {([string]$_).TrimEnd('\') -ieq $p}).Count -eq 0){$n++}
+    }
+    return $n
+}

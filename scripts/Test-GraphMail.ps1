@@ -33,7 +33,7 @@ $to=$Destinatario.Trim()
 if($mode -eq 'TOKEN' -and $to){throw 'El modo Token no lleva destinatario: no envia correo.'}
 if($mode -eq 'ENVIO' -and -not (Test-GraphRecipient $to ($mail.Domains -split ','))){throw 'Indica en -Destinatario una direccion institucional de un dominio permitido de correo-graph.json.'}
 $secret=Import-Clixml (Join-Path $Root 'config\secrets.clixml');$client=MySql-ClientFile $s $secret 'owner'
-try{Require-OwnMySql $s $client}finally{Remove-Item -LiteralPath $client}
+try{Require-OwnMySql $s $client}finally{Remove-SecretFile $client}
 if($mode -eq 'TOKEN' -and $WhatIfPreference){Write-Host 'WhatIf: se pediria un token a Graph (sin enviar correo).';return}
 if($mode -eq 'ENVIO' -and -not $PSCmdlet.ShouldProcess('un destinatario institucional (texto fijo de prueba)','Enviar UN correo real por Microsoft Graph')){Write-Host 'Envio no confirmado: no se contacto Graph ni se registro una prueba.';return}
 
