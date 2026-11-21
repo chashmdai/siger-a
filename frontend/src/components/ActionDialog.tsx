@@ -18,11 +18,15 @@ export type Field = {
   /** Filtra las opciones por el valor elegido en otro campo (Option.parent). */
   dependsOn?: string;
   value?: string | number | boolean; help?: string; max?: number;
+  /** datetime-local: instante exacto (ms) del valor inicial; si no se cambia, se reenvia sin redondear a minutos. */
+  exact?: number | null;
   /** Selector de destino (type 'destination'): sus datos se envian con las claves de cada comando (payloadFor). */
   destination?: {destinations: Destinations; region?: string | null};
 };
 /** Comando que se confirma en un dialogo: tipo, registro, revision esperada y campos. */
-export type Action = {title: string; type: string; id: number | null; revision: number | null; fields: Field[]; note?: string; after?: (r: Result) => void};
+export type Action = {title: string; type: string; id: number | null; revision: number | null; fields: Field[]; note?: string; after?: (r: Result) => void;
+  /** Rechazo del servidor: el dialogo sigue abierto con su mensaje (por ejemplo, para recargar la pantalla de fondo). */
+  failed?: (e: Error & {status?: number}) => void};
 
 function initialData(fields: Field[]): Row {
   return Object.fromEntries(fields.map(f => [f.key, f.destination ? initialChoice(f.destination.destinations, f.destination.region)
@@ -53,13 +57,15 @@ export function ActionDialog({action, close, completed}: {action: Action; close:
     setError('');
     try {
       const payload = {...data};
-      for (const f of action.fields) if (f.type === 'datetime-local') payload[f.key] = data[f.key] ? new Date(String(data[f.key])).toISOString() : null;
+      for (const f of action.fields) if (f.type === 'datetime-local') payload[f.key] = f.exact != null && f.exact > 0 && data[f.key] === f.value ? new Date(f.exact).toISOString()
+        : data[f.key] ? new Date(String(data[f.key])).toISOString() : null;
       for (const f of action.fields) if (f.destination) {delete payload[f.key]; Object.assign(payload, payloadFor(f.destination.destinations.operation, data[f.key] as Choice));}
       const r = await command(action.type, action.id, action.revision, payload, key);
       (action.after ?? completed)(r);
       exit();
     } catch (e) {
       setError((e as Error).message);
+      action.failed?.(e as Error & {status?: number});
     } finally {
       setBusy(false);
     }

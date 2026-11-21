@@ -1,19 +1,17 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import type {FormEvent} from 'react';
 import type {Row} from '../../lib/rows';
-import {bool, list, number, text, when} from '../../lib/rows';
+import {bool, list, localInput, number, text, when} from '../../lib/rows';
 import {command} from '../../lib/api';
 import {scopeOf} from '../../lib/catalog';
-import {humanize, ROLE_LABELS} from '../../lib/labels';
+import {humanize, LEVEL_LABELS, ROLE_LABELS, SCOPE_STATE_LABELS, SITE_ROLE_LABELS} from '../../lib/labels';
 import type {Context} from '../../app/context';
 import {Icon} from '../../components/Icon';
 import {Busy, Callout, ErrorMessage} from '../../components/Primitives';
 import {useExit} from '../../components/useExit';
-import type {Entry, Grant, Profile, RoleDef, Wanted} from './profile';
-import {countIn, diff, duplicates, grantOf, hasTi, initial, keyOf, liveGrants, payload, periodProblems, TI, toggle, visibleScopes} from './profile';
+import type {Entry, Grant, Level, Profile, RoleDef, ScopeItem, Wanted} from './profile';
+import {columnsFor, countIn, diff, duplicates, grantOf, groupScopes, hasTi, initial, keyOf, liveGrants, offered, payload, periodProblems, profileScopes, startFiltered, TI, toggle, visibleScopes} from './profile';
 
-/** Valor para <input type="datetime-local"> en la zona del navegador. Un inicio 0 (sin fecha registrada) queda vacio. */
-const localInput = (ms: number | null) => ms == null || ms <= 0 ? '' : new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 const fromInput = (value: string) => value ? new Date(value).getTime() : null;
 
 /** Bajo este ancho la matriz no cabe: cada ambito se muestra como una tarjeta expandible. Igual que el corte movil de los modales. */
@@ -46,11 +44,11 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
   const conflicts = duplicates(live);
   const roles = list(ctx.catalog, 'roles') as unknown as RoleDef[];
   const scoped = roles.filter(r => r.reach === 'AMBITO'), institutional = roles.filter(r => r.reach !== 'AMBITO');
-  const used = new Set(live.map(g => g.scope_id));
-  const scopes = list(ctx.catalog, 'scopes').filter(s => s.enabled !== false || used.has(number(s, 'id')));
-  const scopeItems = scopes.map(s => ({id: number(s, 'id'), code: text(s, 'code'), name: text(s, 'name'), enabled: s.enabled !== false}));
+  const regions = list(ctx.catalog, 'regions').map(r => ({code: text(r, 'code'), name: text(r, 'name')}));
+  const scopeItems = profileScopes(list(ctx.catalog, 'scopes'), live, regions);
+  const byId = new Map(scopeItems.map(s => [s.id, s]));
   const narrow = useNarrow();
-  const [onlyWith, setOnlyWith] = useState(true), [query, setQuery] = useState(''), [open, setOpen] = useState<ReadonlySet<number>>(() => new Set());
+  const [onlyWith, setOnlyWith] = useState(() => startFiltered(live)), [query, setQuery] = useState(''), [open, setOpen] = useState<ReadonlySet<number>>(() => new Set());
   const search = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState<Profile>(() => initial(live));
@@ -63,7 +61,9 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
 
   const wanted = payload(profile, now), changes = diff(live, wanted), unchanged = changes.grant.length === 0 && changes.revoke.length === 0;
   const invalid = periodProblems(profile, now), ti = hasTi(profile), locked = busy || uncertain;
-  const label = (role: string, scope: number | null | undefined) => (ROLE_LABELS[role] ?? humanize(role)) + (scope != null ? ' en ' + scopeOf(ctx.catalog, scope) : '');
+  /** En una sede, DIRECCION se muestra como Coordinacion regional (D7). */
+  const roleName = (role: string, level?: Level) => (level === 'REGIONAL' ? SITE_ROLE_LABELS[role] : undefined) ?? ROLE_LABELS[role] ?? humanize(role);
+  const label = (role: string, scope: number | null | undefined) => roleName(role, scope != null ? byId.get(scope)?.level : undefined) + (scope != null ? ' en ' + scopeOf(ctx.catalog, scope) : '');
   const period = (from: number | null, until: number | null) => (from != null && from > now ? 'desde ' + when(from) : 'desde ahora') + (until != null ? ', hasta ' + when(until) : ', sin término');
   /** Periodo de una funcion existente (resumen de revocaciones): no es "desde ahora", ya rige o esta programada. */
   const current = (g: Grant) => (g.valid_from > now ? 'programada desde ' + when(g.valid_from) : g.valid_from > 0 ? 'vigente desde ' + when(g.valid_from) : 'vigente') + (g.valid_until != null ? ', hasta ' + when(g.valid_until) : ', sin término');
@@ -71,9 +71,12 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
 
   const set = (role: string, scope: number | null, on: boolean) => setProfile(p => toggle(p, role, scope, on, live));
   const dates = (e: Entry, patch: Partial<Entry>) => setProfile(p => new Map(p).set(keyOf(e.role, e.scope), {...e, ...patch}));
-  /** Agregar una funcion: no con TI marcada (D2), ni en una cuenta deshabilitada, ni en un ambito deshabilitado. */
-  const blocked = (role: string, scope: number | null, scopeEnabled = true) =>
-    locked || !profile.has(keyOf(role, scope)) && (role !== TI && ti || !enabled || !scopeEnabled);
+  /**
+   * Agregar una funcion: no con TI marcada (D2), ni en una cuenta deshabilitada, ni en un ambito que no admite
+   * funciones (cerrado) ni como Jefatura en una sede (D7). Desmarcar lo que ya esta siempre se puede.
+   */
+  const blocked = (role: string, scope: ScopeItem | null) =>
+    locked || !profile.has(keyOf(role, scope?.id ?? null)) && (role !== TI && ti || !enabled || scope != null && !offered(role, scope));
 
   function review() {
     if (invalid.length) {setError('Revisa la vigencia: el término debe ser posterior al inicio y a la fecha actual.'); return;}
@@ -108,11 +111,12 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
 
   const flip = (scope: number) => setOpen(o => {const next = new Set(o); if (!next.delete(scope)) next.add(scope); return next;});
   const showAll = () => {setOnlyWith(false); search.current?.focus();};
-  const roleName = (role: string) => ROLE_LABELS[role] ?? humanize(role);
-
-  const cards = visibleScopes(scopeItems, profile, live, onlyWith, query, open);
-  const cell = (role: string, scope: number | null, name: string, scopeEnabled = true) => <input type="checkbox" aria-label={name}
-    checked={profile.has(keyOf(role, scope))} disabled={blocked(role, scope, scopeEnabled)} onChange={e => set(role, scope, e.target.checked)}/>;
+  const shown = visibleScopes(scopeItems, profile, live, onlyWith, query, open);
+  const groups = groupScopes(shown, regions);
+  const cell = (role: string, scope: ScopeItem | null, name: string) => <input type="checkbox" aria-label={name}
+    checked={profile.has(keyOf(role, scope?.id ?? null))} disabled={blocked(role, scope)} onChange={e => set(role, scope?.id ?? null, e.target.checked)}/>;
+  /** Estado o region bajo el codigo del ambito: las sedes muestran su region y, si no esta activa, su estado. */
+  const detail = (s: ScopeItem) => [s.name, s.level === 'REGIONAL' ? s.regionName || 'Sin región' : '', s.state !== 'ACTIVA' ? (s.level === 'REGIONAL' ? 'sede ' : '') + (SCOPE_STATE_LABELS[s.state] ?? humanize(s.state)).toLowerCase() : ''].filter(Boolean).join(' · ');
 
   return <dialog ref={dialog} className={'modal profile-modal' + (leaving ? ' closing' : '')} aria-labelledby="profile-title" onCancel={e => {e.preventDefault(); if (!busy) leave();}}>
     <form onSubmit={submit}>
@@ -134,46 +138,48 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
             ? <Callout tone="neutral" title="TI es una función exclusiva">Una cuenta con TI no puede tener ninguna otra función, operativa ni de consulta. Al marcar TI se quitaron las demás; desmárcala para asignar otras funciones.</Callout>
             : <p className="field-help">Marca las funciones por ámbito. Lo que ya tiene la cuenta aparece marcado; desmarcarlo la revoca.</p>}
           <h3 className="profile-subtitle">Funciones por ámbito</h3>
-          {narrow
-          ? <>
-            <div className="profile-scope-tools">
-              <label className="check"><input type="checkbox" checked={onlyWith} onChange={e => setOnlyWith(e.target.checked)}/><span>Solo ámbitos con funciones</span></label>
-              <label className="input-icon"><Icon name="search" size={18}/><input ref={search} type="search" aria-label="Buscar ámbito por código o nombre" placeholder="Buscar ámbito por código o nombre" value={query} onChange={e => setQuery(e.target.value)}/></label>
-            </div>
-            <p className="field-help" aria-live="polite">Mostrando {cards.length} de {scopeItems.length} ámbitos.</p>
-            {cards.length === 0 ? <div className="profile-scope-empty">
-              <p>{query.trim() ? 'Ningún ámbito coincide con la búsqueda' + (onlyWith ? ' entre los que tienen funciones.' : '.') : 'La cuenta no tiene funciones por ámbito.'}</p>
-              {onlyWith && <button type="button" className="sm" onClick={showAll}>{query.trim() ? 'Buscar en todos los ámbitos' : 'Mostrar todos los ámbitos'}</button>}
-            </div> : <ul className="profile-scope-cards">
-              {cards.map(s => {
-                const count = countIn(profile, s.id), expanded = open.has(s.id);
-                return <li key={s.id} className={'profile-scope-card' + (expanded ? ' open' : '')}>
-                  <h4>
-                    <button type="button" className="profile-scope-toggle" aria-expanded={expanded} aria-controls={'profile-scope-' + s.id} onClick={() => flip(s.id)}>
-                      <span className="profile-scope-text"><span className="cell-strong">{s.code}</span><small>{s.name}{s.enabled ? '' : ' (deshabilitado)'}</small></span>
-                      <span className={'chip' + (count > 0 ? ' chip-ok' : '')}>{count === 0 ? 'Sin funciones' : count === 1 ? '1 función' : count + ' funciones'}</span>
-                      <Icon name="down" size={18}/>
-                    </button>
-                  </h4>
-                  {expanded && <ul id={'profile-scope-' + s.id} className="profile-scope-roles">
-                    {scoped.map(r => <li key={r.code}><label className="check">{cell(r.code, s.id, roleName(r.code) + ' en ' + s.code, s.enabled)}<span>{roleName(r.code)}</span></label></li>)}
-                  </ul>}
-                </li>;
-              })}
-            </ul>}
-          </>
-          : <div className="profile-matrix-scroll" role="region" aria-label="Funciones por ámbito" tabIndex={0}>
-              <table className="profile-matrix">
-                <thead><tr><th scope="col">Ámbito</th>{scoped.map(r => <th scope="col" key={r.code}>{ROLE_LABELS[r.code] ?? humanize(r.code)}</th>)}</tr></thead>
-                <tbody>{scopes.map(s => {
-                  const sid = number(s, 'id'), on = s.enabled !== false;
-                  return <tr key={sid}>
-                    <th scope="row"><span className="cell-strong">{text(s, 'code')}</span><small>{text(s, 'name')}{on ? '' : ' (deshabilitado)'}</small></th>
-                    {scoped.map(r => <td key={r.code}>{cell(r.code, sid, (ROLE_LABELS[r.code] ?? r.code) + ' en ' + text(s, 'code'), on)}</td>)}
-                  </tr>;
-                })}</tbody>
-              </table>
-            </div>}
+          <div className="profile-scope-tools">
+            <label className="check"><input type="checkbox" checked={onlyWith} onChange={e => setOnlyWith(e.target.checked)}/><span>Solo ámbitos con funciones</span></label>
+            <label className="input-icon"><Icon name="search" size={18}/><input ref={search} type="search" aria-label="Buscar ámbito por código, nombre o región" placeholder="Buscar ámbito por código, nombre o región" value={query} onChange={e => setQuery(e.target.value)}/></label>
+          </div>
+          <p className="field-help" aria-live="polite">Mostrando {shown.length} de {scopeItems.length} ámbitos.</p>
+          {shown.length === 0 ? <div className="profile-scope-empty">
+            <p>{query.trim() ? 'Ningún ámbito coincide con la búsqueda' + (onlyWith ? ' entre los que tienen funciones.' : '.') : 'La cuenta no tiene funciones por ámbito.'}</p>
+            {onlyWith && <button type="button" className="sm" onClick={showAll}>{query.trim() ? 'Buscar en todos los ámbitos' : 'Mostrar todos los ámbitos'}</button>}
+          </div> : groups.map(g => {
+            const columns = columnsFor(g.level, scoped, live, scopeItems);
+            return <section key={g.level} className="profile-group" aria-labelledby={'profile-group-' + g.level}>
+              <h4 id={'profile-group-' + g.level} className="profile-group-title">{LEVEL_LABELS[g.level]} <small>({g.items.length})</small></h4>
+              {g.level === 'REGIONAL' && <p className="field-help">En las sedes la Coordinación regional se registra como Dirección de la sede y no hay Jefatura. Una sede proyectada admite su dotación, que rige al activarla.</p>}
+              {narrow
+                ? <ul className="profile-scope-cards">
+                  {g.items.map(s => {
+                    const count = countIn(profile, s.id), expanded = open.has(s.id);
+                    return <li key={s.id} className={'profile-scope-card' + (expanded ? ' open' : '')}>
+                      <h5>
+                        <button type="button" className="profile-scope-toggle" aria-expanded={expanded} aria-controls={'profile-scope-' + s.id} onClick={() => flip(s.id)}>
+                          <span className="profile-scope-text"><span className="cell-strong">{s.code}</span><small>{detail(s)}</small></span>
+                          <span className={'chip' + (count > 0 ? ' chip-ok' : '')}>{count === 0 ? 'Sin funciones' : count === 1 ? '1 función' : count + ' funciones'}</span>
+                          <Icon name="down" size={18}/>
+                        </button>
+                      </h5>
+                      {expanded && <ul id={'profile-scope-' + s.id} className="profile-scope-roles">
+                        {columns.map(r => <li key={r.code}><label className="check">{cell(r.code, s, roleName(r.code, g.level) + ' en ' + s.code)}<span>{roleName(r.code, g.level)}</span></label></li>)}
+                      </ul>}
+                    </li>;
+                  })}
+                </ul>
+                : <div className="profile-matrix-scroll" role="region" aria-label={'Funciones por ámbito: ' + LEVEL_LABELS[g.level]} tabIndex={0}>
+                  <table className="profile-matrix">
+                    <thead><tr><th scope="col">{g.level === 'REGIONAL' ? 'Sede' : 'Ámbito'}</th>{columns.map(r => <th scope="col" key={r.code}>{roleName(r.code, g.level)}</th>)}</tr></thead>
+                    <tbody>{g.items.map(s => <tr key={s.id}>
+                      <th scope="row"><span className="cell-strong">{s.code}</span><small>{detail(s)}</small></th>
+                      {columns.map(r => <td key={r.code}>{offered(r.code, s) || profile.has(keyOf(r.code, s.id)) ? cell(r.code, s, roleName(r.code, g.level) + ' en ' + s.code) : <span className="muted" aria-label={'No se ofrece ' + roleName(r.code, g.level) + ' en ' + s.code}>—</span>}</td>)}
+                    </tr>)}</tbody>
+                  </table>
+                </div>}
+            </section>;
+          })}
           <h3 className="profile-subtitle">Funciones institucionales</h3>
           <div className="profile-institutional">
             {institutional.map(r => <label key={r.code} className="check">

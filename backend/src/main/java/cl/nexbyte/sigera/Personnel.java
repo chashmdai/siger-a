@@ -29,9 +29,11 @@ public class Personnel {
                 ti(a);require(id!=a.id()||in.flag("enabled"),"No puedes desactivar tu propia sesion.");
                 var account=db.one("SELECT id,home_scope FROM staff WHERE id=? AND technical=FALSE",id);
                 // Adscripcion principal opcional (0.5.0): permite trasladar cuentas antes de cerrar una sede.
-                Long home=in.optionalId("scope_id");if(home!=null&&home!=n(account,"home_scope"))access.staffableScope(home);
-                db.update("UPDATE staff SET name=?,email=?,enabled=?,home_scope=?,security_version=security_version+1 WHERE id=?",in.text("name",160,true),in.text("email",200,false),in.flag("enabled"),home==null?n(account,"home_scope"):home,id);
-                keepTi();audit(a,"CUENTA_ACTUALIZADA","USUARIO",id,null,in.reason());return Workflow.done("USUARIO",id);
+                Long home=in.optionalId("scope_id"),previous=nullableId(account,"home_scope");if(home!=null&&!home.equals(previous))access.staffableScope(home);
+                db.update("UPDATE staff SET name=?,email=?,enabled=?,home_scope=?,security_version=security_version+1 WHERE id=?",in.text("name",160,true),in.text("email",200,false),in.flag("enabled"),home==null?previous:home,id);
+                // Un traslado deja en la historia el codigo del ambito anterior y del nuevo (sin datos de la persona).
+                String moved=home!=null&&!home.equals(previous)?"Adscripcion: "+scopeCode(previous)+" -> "+scopeCode(home)+". ":"";
+                keepTi();audit(a,"CUENTA_ACTUALIZADA","USUARIO",id,null,moved+in.reason());return Workflow.done("USUARIO",id);
             }
             case "STAFF_RESET" -> {
                 ti(a);db.one("SELECT id FROM staff WHERE id=? AND technical=FALSE",id);String pass=password(in.text("password",72,true));
@@ -92,7 +94,7 @@ public class Personnel {
             case "SCOPE_CLOSE" -> {
                 ti(a);var s=site(id,revision);
                 require(s(s,"state").equals(Access.ACTIVE),"Solo una sede activa se cierra.");
-                var blockers=closeBlockers(id);
+                var blockers=closeBlockers(db,id);
                 require(blockers.isEmpty(),"No se puede cerrar la sede: "+String.join("; ",blockers)+".");
                 db.update("UPDATE org_scope SET state=?,enabled=FALSE,revision=revision+1 WHERE id=?",Access.CLOSED,id);
                 audit(a,"AMBITO_CERRADO","AMBITO",id,id,in.reason());return Workflow.done("AMBITO",id);
@@ -159,6 +161,7 @@ public class Personnel {
         require(b(s,"regional"),"Solo las sedes regionales se activan o cierran.");
         return s;
     }
+    private String scopeCode(Long scope){return scope==null?"sin adscripcion":s(db.one("SELECT code FROM org_scope WHERE id=?",scope),"code");}
     /** Cuentas con funciones vigentes o programadas en el ambito. */
     private List<Long> staffedIn(long scope){
         return db.rows("SELECT DISTINCT user_id FROM role_assignment WHERE scope_id=? AND revoked_at IS NULL AND (valid_until IS NULL OR valid_until>?)",scope,System.currentTimeMillis()).stream().map(r->n(r,"user_id")).toList();
@@ -167,7 +170,7 @@ public class Personnel {
      * Lo que impide cerrar una sede (D8): nada abierto ni pendiente que quede sin quien lo resuelva, y ninguna funcion
      * ni cuenta adscrita. Solo cantidades, sin datos de personas.
      */
-    List<String> closeBlockers(long scope){
+    static List<String> closeBlockers(Db db,long scope){
         long now=System.currentTimeMillis();var out=new ArrayList<String>();
         blocker(out,"REQ abiertos",db.count("SELECT COUNT(*) FROM requirement WHERE principal_scope=? AND state<>'CERRADO'",scope));
         blocker(out,"Casos abiertos",db.count("SELECT COUNT(*) FROM case_record WHERE scope_id=? AND state<>'CERRADO'",scope));

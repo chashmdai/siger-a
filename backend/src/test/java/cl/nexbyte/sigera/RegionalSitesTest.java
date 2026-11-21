@@ -46,6 +46,14 @@ class RegionalSitesTest {
     }
     void profile(long user,List<Map<String,Object>> grants){run("ti","PROFILE_SET",user,version(user),Map.of("grants",grants,"reason",BASIS));}
     static Map<String,Object> at(String role,long scope){return Map.of("role",role,"scope_id",scope);}
+    /** Fila del panel Estructura (administration.structure) que ve TI. */
+    @SuppressWarnings("unchecked") Map<String,Object> structure(long id){
+        return ((List<Map<String,Object>>)queries.administration(access.actor("ti")).get("structure")).stream().filter(s->n(s,"id")==id).findFirst().orElseThrow();
+    }
+    /** El panel muestra los mismos bloqueos con que SCOPE_CLOSE responde 409. */
+    void sameBlockers(long id,String refusal){
+        assertEquals("No se puede cerrar la sede: "+String.join("; ",(List<String>)(List<?>)structure(id).get("close_blockers"))+".",refusal);
+    }
     long site(String code,String region,String state){
         return run("ti","SCOPE_CREATE",null,null,Map.of("unit_code","REG","code",code,"name","Sede sintetica "+code,"site_code","SEDE-"+code,"regional",true,"region_code",region,"state",state,"reason",BASIS)).id();
     }
@@ -146,14 +154,22 @@ class RegionalSitesTest {
         long sol=run("distribucion","COM_ROUTE",c,rev("communication",c),Map.of("scope_id",sur,"reason",BASIS)).id();
         String blocked=refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason());
         assertTrue(blocked.contains("1 SOL pendientes")&&blocked.contains("funciones vigentes o programadas")&&blocked.contains("2 cuentas con adscripcion principal"),blocked);
+        var panel=structure(sur);
+        assertEquals("REGIONAL",s(panel,"level"));assertEquals(coord,n(panel,"head_id"));assertEquals("DIRECCION",s(panel,"head_role"));
+        assertEquals(2L,n(panel,"staff"));assertEquals(1L,n(panel,"pending_sol"));assertEquals(0L,n(panel,"open_req"));
+        sameBlockers(sur,blocked);
 
         // Gestion regional completa: la Coordinacion (DIRECCION) asume, abre un Caso y cierra; el profesional cierra su Caso BAJA.
         long req=run("coord.sur","SOL_ASSUME",sol,rev("solicitation",sol),Map.of("responsible_id",prof,"reason","Asume la sede")).id();
         assertEquals(sur,n(db.one("SELECT principal_scope FROM requirement WHERE id=?",req),"principal_scope"));
         blocked=refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason());
         assertTrue(blocked.contains("1 REQ abiertos")&&!blocked.contains("SOL pendientes"),blocked);
+        sameBlockers(sur,blocked);
+        assertEquals(1L,n(structure(sur),"open_req"));assertEquals(0L,n(structure(sur),"pending_sol"));
         run("coord.sur","REQ_CLASSIFY",req,rev("requirement",req),Map.of("complexity","BAJA","reason","Clasificacion sintetica"));
         long cas=run("coord.sur","REQ_CASE_CREATE",req,rev("requirement",req),Map.of("scope_id",sur,"responsible_id",prof,"objective","Seguimiento regional","matter","UPR")).id();
+        sameBlockers(sur,refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason()));
+        assertEquals(1L,n(structure(sur),"open_cases"));
         assertTrue(refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason()).contains("1 Casos abiertos"));
         run("prof.sur","CASE_CLOSE",cas,rev("case_record",cas),Map.of("reason","Gestion concluida"));
         run("coord.sur","REQ_CLOSE",req,rev("requirement",req),Map.of("reason","Cierre expreso"));
@@ -165,10 +181,16 @@ class RegionalSitesTest {
         long central=scope("UPR-REQ");
         for(long u:List.of(coord,prof))run("ti","STAFF_UPDATE",u,null,Map.of("name","Cuenta trasladada","enabled",true,"scope_id",central,"reason",BASIS));
         assertEquals(central,n(db.one("SELECT home_scope FROM staff WHERE id=?",prof),"home_scope"));
+        // El traslado deja en la historia el codigo del ambito anterior y del nuevo; una edicion sin traslado, no.
+        assertEquals("Adscripcion: REG-SUR -> UPR-REQ. "+BASIS,s(db.one("SELECT note FROM audit_event WHERE action='CUENTA_ACTUALIZADA' AND resource_id=? ORDER BY id DESC LIMIT 1",prof),"note"));
+        run("ti","STAFF_UPDATE",prof,null,Map.of("name","Cuenta trasladada","enabled",true,"scope_id",central,"reason",BASIS));
+        assertEquals(BASIS,s(db.one("SELECT note FROM audit_event WHERE action='CUENTA_ACTUALIZADA' AND resource_id=? ORDER BY id DESC LIMIT 1",prof),"note"));
+        assertEquals(0L,n(structure(sur),"staff"));
         assertTrue(refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur)+1,reason()).contains("cambio"));
         run("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason());
         var row=db.one("SELECT * FROM org_scope WHERE id=?",sur);
         assertEquals("CERRADA",s(row,"state"));assertFalse(b(row,"enabled"));
+        assertTrue(((List<?>)structure(sur).get("close_blockers")).isEmpty(),"una sede cerrada no muestra bloqueos");
 
         // Una sede cerrada no recibe nada: ni destinos, ni cuentas, ni funciones, ni ediciones.
         assertEquals("CERRADA",s(published(sur),"state"));assertTrue(((List<?>)published(sur).get("receives")).isEmpty());
@@ -233,6 +255,16 @@ class RegionalSitesTest {
         assertEquals(events+5,db.count("SELECT COUNT(*) FROM audit_event"));
         assertEquals(5,db.count("SELECT COUNT(*) FROM audit_event WHERE id>? AND actor_id=?",maxEventBefore(events),actor));
         assertEquals(1,db.count("SELECT COUNT(*) FROM audit_event WHERE action='SUBROGANCIA_ACTUALIZADA' AND resource_id=?",sub));
+
+        // Panel Estructura: la subrogancia activa de la sede y su cabeza vigente; AUDITORIA no recibe la estructura.
+        var panel=structure(a);
+        @SuppressWarnings("unchecked") var substitution=(Map<String,Object>)panel.get("substitution");
+        assertEquals(y,n(substitution,"substitute_id"));assertEquals(x,n(substitution,"titular_id"));assertEquals("ACTIVA",s(substitution,"state"));
+        assertEquals(x,n(panel,"head_id"));assertEquals("DIRECCION",s(panel,"head_role"));assertEquals("04",s(panel,"region_code"));
+        assertNull(structure(scope("UPR")).get("substitution"));assertEquals("CENTRAL",s(structure(scope("UPR")),"level"));
+        assertTrue(((List<?>)structure(scope("UPR")).get("close_blockers")).isEmpty(),"el nivel central no se cierra");
+        assertEquals(List.of(),queries.administration(access.actor("auditoria")).get("structure"));
+        assertEquals(db.count("SELECT COUNT(*) FROM org_scope"),((List<?>)queries.administration(access.actor("ti")).get("structure")).size());
 
         // Idempotente: con el marcador no hace nada; sin el, solo queda la superpuesta, que no se toca.
         long after=db.count("SELECT COUNT(*) FROM audit_event"),grants=db.count("SELECT COUNT(*) FROM role_assignment");

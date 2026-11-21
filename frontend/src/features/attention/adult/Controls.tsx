@@ -4,7 +4,7 @@ import {useId, useRef, useState} from 'react';
 import type {ClipboardEvent, ReactNode} from 'react';
 import {LabeledField} from '../../../components/LabeledField';
 import {Icon} from '../../../components/Icon';
-import {communesOf, countryNames, NATIONALITY_PREFIX, nationalityDetail, nationalitySelection, OTHER_NATIONALITY, REGIONS, regionCodes, searchCountries} from './catalog.ts';
+import {communesOf, countryNames, NATIONALITY_PREFIX, nationalityDetail, nationalitySelection, OTHER_NATIONALITY, REGIONS, searchCountries} from './catalog.ts';
 import {canonicalMobile, cleanEmail, formatRunNumber, pasteMobile, pastedRun, runNumber, today} from './identity.ts';
 
 type Value = {value: string; onChange: (value: string) => void; error?: string; onBlur?: () => void};
@@ -74,14 +74,15 @@ export function NationalityField({value, onChange, error, onBlur}: Value) {
 }
 
 /** Region y comuna dependientes (catalogo del Formulario). Cambiar la region limpia la comuna. */
-export function RegionCommuneFields({region, commune, onRegion, onCommune, legacyRegion, legacyCommune, errors}: {region: string; commune: string; onRegion: (v: string) => void; onCommune: (v: string) => void; legacyRegion: string; legacyCommune: string; errors: Record<string, string>}) {
+/** `order`: codigos en el orden publicado por el servidor (orderedRegions), no el de Object.keys. */
+export function RegionCommuneFields({region, commune, order, onRegion, onCommune, legacyRegion, legacyCommune, errors}: {region: string; commune: string; order: readonly string[]; onRegion: (v: string) => void; onCommune: (v: string) => void; legacyRegion: string; legacyCommune: string; errors: Record<string, string>}) {
   const communes = communesOf(region);
   return <>
     <LabeledField label="Región de atención" error={errors.region}>
       <select value={region} onChange={e => {onRegion(e.target.value);onCommune('');}}>
         <option value="">No registrada</option>
         {legacyRegion && <option value={legacyRegion}>Registrada anteriormente: {legacyRegion}</option>}
-        {regionCodes.map(code => <option key={code} value={code}>{REGIONS[code]}</option>)}
+        {order.map(code => <option key={code} value={code}>{REGIONS[code]}</option>)}
       </select>
     </LabeledField>
     <LabeledField label="Comuna de atención" error={errors.commune} help={!region ? 'Selecciona primero una región.' : undefined}>

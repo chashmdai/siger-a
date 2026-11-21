@@ -8,6 +8,7 @@ import {PERSON_ROLE_LABELS} from '../../lib/labels';
 import type {AttentionData, Person} from './schema';
 import {LABELS, MAX_PEOPLE, OPTIONS, PERSON_FIELDS, PERSON_LABELS, PERSON_ROLES, emptyPerson} from './schema';
 import {AdultContact, AdultPresenter} from './adult/AdultSections';
+import {orderedRegions} from './adult/catalog.ts';
 
 /** Controles enlazados a la ficha en edicion; cada cambio marca la pantalla con cambios sin guardar. */
 export type Controls = {
@@ -22,13 +23,16 @@ export type Controls = {
   input: (key: string, type?: string, help?: string, max?: number) => ReactNode;
   area: (key: string, help?: string, required?: boolean) => ReactNode;
   select: (key: string, help?: string) => ReactNode;
+  /** Codigos de region en el orden de catalog.regions (orderedRegions). */
+  regions: readonly string[];
 };
 
 export function controls(form: AttentionData, change: Controls['change'], setPeople: Controls['setPeople'],
-  previous: Record<string, unknown> = {}, errors: Record<string, string> = {}, shown: (key: string) => boolean = () => false, touch: (key: string) => void = () => {}): Controls {
+  previous: Record<string, unknown> = {}, errors: Record<string, string> = {}, shown: (key: string) => boolean = () => false, touch: (key: string) => void = () => {},
+  regions: readonly string[] = orderedRegions(undefined)): Controls {
   const value = (key: string) => String(form[key] ?? '');
   return {
-    form, previous, change, setPeople, touch,
+    form, previous, change, setPeople, touch, regions,
     error: key => errors[key] && shown(key) ? errors[key] : undefined,
     input: (key, type = 'text', help, max = 500) => <LabeledField label={LABELS[key] ?? key} help={help}><input type={type} maxLength={max} value={value(key)} onChange={e => change(key, e.target.value)}/></LabeledField>,
     area: (key, help, required = false) => <LabeledField label={LABELS[key] ?? key} help={help} required={required}><textarea rows={key === 'motive' || key === 'story' ? 4 : 3} required={required} maxLength={key === 'safety_note' ? 1000 : 12000} value={value(key)} onChange={e => change(key, e.target.value)}/></LabeledField>,

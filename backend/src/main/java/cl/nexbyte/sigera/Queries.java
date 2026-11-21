@@ -217,6 +217,7 @@ public class Queries {
         // Avisos de la instancia (sin datos de personas) e incompatibilidades por resolver (D2; heredadas de 0.4.0).
         result.put("warnings",Personnel.warnings(db));
         result.put("incompatibilities",ti?Personnel.tiConflicts(db):List.of());
+        result.put("structure",ti?structure():List.of());
         result.put("substitutions",ti?db.rows("SELECT x.*,d.scope_id,d.titular_id,d.substitute_id FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id ORDER BY x.id DESC"):List.of());
         // Operacion de integraciones para TI: estado, pausa y contadores agregados; sin documentos ni contenidos.
         result.put("integrations",ti?integrations.overview():Map.of());
@@ -229,6 +230,38 @@ public class Queries {
         String administrative=(auditor?"'USUARIO','AMBITO','SUBROGANCIA'":"")+(auditor&&ti?",":"")+(ti?"'USUARIO','SISTEMA','AMBITO','SUBROGANCIA'":"");
         result.put("audit",db.rows("SELECT e.*,u.name AS actor FROM audit_event e JOIN staff u ON u.id=e.actor_id WHERE e.scope_id IN ("+BoardQueries.ids(BoardQueries.grants(a,"AUDITORIA"))+") OR e.resource_type IN ("+administrative+") ORDER BY e.id DESC LIMIT 300"));
         return result;
+    }
+    /**
+     * Panel Estructura (R03b, solo TI): cada ambito con su cabeza vigente (Jefatura, Direccion o Coordinacion regional),
+     * la subrogancia activa o la proxima programada, la dotacion (cuentas con funciones vigentes o programadas), el
+     * volumen abierto y, en las sedes activas, lo que impide cerrarlas (la misma regla de SCOPE_CLOSE). Solo cantidades
+     * e identificadores de cuentas: ningun dato de expedientes ni de personas atendidas.
+     */
+    private List<Map<String,Object>> structure(){
+        long now=System.currentTimeMillis();
+        Map<Long,Long> heads=new HashMap<>(),staffed=counts("SELECT scope_id AS k,COUNT(DISTINCT user_id) AS c FROM role_assignment WHERE scope_id IS NOT NULL AND revoked_at IS NULL AND (valid_until IS NULL OR valid_until>?) GROUP BY scope_id",now);
+        Map<Long,String> headRoles=new HashMap<>();
+        for(var g:db.rows("SELECT g.scope_id,g.user_id,g.role_code FROM role_assignment g JOIN staff u ON u.id=g.user_id WHERE g.role_code IN ('JEFATURA','DIRECCION') AND g.revoked_at IS NULL AND g.valid_from<=? AND (g.valid_until IS NULL OR g.valid_until>?) ORDER BY g.id",now,now))
+            if(heads.putIfAbsent(n(g,"scope_id"),n(g,"user_id"))==null)headRoles.put(n(g,"scope_id"),s(g,"role_code"));
+        Map<Long,Map<String,Object>> subs=new HashMap<>();
+        for(var x:db.rows("SELECT d.scope_id,d.titular_id,d.substitute_id,x.from_ms,x.until_ms FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id WHERE x.ended_ms IS NULL AND x.until_ms>? ORDER BY x.from_ms",now)){
+            var m=new LinkedHashMap<String,Object>(x);m.put("state",n(x,"from_ms")>now?"PROGRAMADA":"ACTIVA");subs.putIfAbsent(n(x,"scope_id"),m);
+        }
+        var req=counts("SELECT principal_scope AS k,COUNT(*) AS c FROM requirement WHERE state<>'CERRADO' GROUP BY principal_scope");
+        var cases=counts("SELECT scope_id AS k,COUNT(*) AS c FROM case_record WHERE state<>'CERRADO' GROUP BY scope_id");
+        var sol=counts("SELECT destination_scope AS k,COUNT(*) AS c FROM solicitation WHERE state='PENDIENTE' GROUP BY destination_scope");
+        return db.rows("SELECT id,code,name,unit_code,area_code,site_code,regional,region_code,state,enabled,opens_ms,revision FROM org_scope ORDER BY id").stream().map(x->{
+            long id=n(x,"id");var row=new LinkedHashMap<String,Object>(x);
+            row.put("level",b(x,"regional")?"REGIONAL":"CENTRAL");
+            row.put("head_id",heads.get(id));row.put("head_role",headRoles.get(id));row.put("substitution",subs.get(id));
+            row.put("staff",staffed.getOrDefault(id,0L));
+            row.put("open_req",req.getOrDefault(id,0L));row.put("open_cases",cases.getOrDefault(id,0L));row.put("pending_sol",sol.getOrDefault(id,0L));
+            row.put("close_blockers",b(x,"regional")&&s(x,"state").equals(Access.ACTIVE)?Personnel.closeBlockers(db,id):List.of());
+            return (Map<String,Object>)row;
+        }).toList();
+    }
+    private Map<Long,Long> counts(String sql,Object...args){
+        Map<Long,Long> out=new HashMap<>();for(var r:db.rows(sql,args))if(r.get("k")!=null)out.put(n(r,"k"),n(r,"c"));return out;
     }
     static Map<String,Object> pick(Map<String,Object> row,String...keys){Map<String,Object> out=new LinkedHashMap<>();for(var key:keys)out.put(key,row.get(key));return out;}
 }

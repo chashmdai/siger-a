@@ -11,6 +11,12 @@ export const ROLE_LABELS: Record<string, string> = {
   AUTORIDAD: 'Autoridad (suprimido)', LECTURA: 'Lectura', CONSULTA_INSTITUCIONAL: 'Consulta institucional', AUDITORIA: 'Auditoría', TI: 'TI',
 };
 
+/** En las sedes regionales la Direccion de la sede es la Coordinacion regional y no hay Jefatura (D7). */
+export const SITE_ROLE_LABELS: Record<string, string> = {DIRECCION: 'Coordinación regional', JEFATURA: 'Jefatura (no admitida en sedes)'};
+/** Estado de un ambito o sede (D8) y nivel del organigrama. */
+export const SCOPE_STATE_LABELS: Record<string, string> = {ACTIVA: 'Activa', PROYECTADA: 'Proyectada', CERRADA: 'Cerrada'};
+export const LEVEL_LABELS: Record<string, string> = {CENTRAL: 'Nivel central', REGIONAL: 'Sedes regionales'};
+
 export const CHANNEL_LABELS: Record<string, string> = {PRESENCIAL: 'Presencial', TELEFONO: 'Teléfono', CORREO: 'Correo', OFICIO: 'Oficio', OTRO: 'Otro'};
 export const RESULT_LABELS: Record<string, string> = {ORIENTACION: 'Orientación', RESPUESTA_DIRECTA: 'Respuesta directa', REMISION_CONCLUIDA: 'Remisión concluida'};
 export const DOCUMENT_LABELS: Record<string, string> = {OFICIO: 'Oficio', INFORME: 'Informe', CORREO: 'Correo', CONSTANCIA: 'Constancia', OTRO: 'Otro', INGRESO: 'Ingreso'};

@@ -75,7 +75,7 @@ export function AdultContact({c}: {c: Controls}) {
       <EmailField label="Correo de contacto" value={v('contact_email')} onChange={x => c.change('contact_email', x)} error={c.error('contact_email')} onBlur={() => c.touch('contact_email')}/>
       {c.select('safe_contact')}
       <span/>
-      <RegionCommuneFields region={v('region')} commune={v('commune')} onRegion={x => {c.change('region', x);c.touch('region');}} onCommune={x => {c.change('commune', x);c.touch('commune');}}
+      <RegionCommuneFields region={v('region')} commune={v('commune')} order={c.regions} onRegion={x => {c.change('region', x);c.touch('region');}} onCommune={x => {c.change('commune', x);c.touch('commune');}}
         legacyRegion={legacyOf(c, 'region')} legacyCommune={legacyOf(c, 'commune')} errors={{region: c.error('region') ?? '', commune: c.error('commune') ?? ''}}/>
     </div>
     {c.area('safety_note', 'Por ejemplo: no llamar al teléfono del hogar; solo contactar en horario laboral.')}

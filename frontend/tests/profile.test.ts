@@ -2,7 +2,7 @@
 // replica la comparacion del servidor (Personnel.profile). node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {countIn, diff, duplicates, fold, grantOf, grantState, hasTi, initial, keyOf, liveGrants, payload, periodProblems, toggle, visibleScopes} from '../src/features/admin/profile.ts';
+import {columnsFor, countIn, diff, duplicates, fold, grantOf, grantState, groupScopes, hasTi, initial, keyOf, liveGrants, offered, payload, periodProblems, profileScopes, startFiltered, toggle, visibleScopes} from '../src/features/admin/profile.ts';
 
 const NOW = Date.parse('2026-11-20T15:00:00.000Z');
 const HOUR = 3_600_000;
@@ -132,4 +132,49 @@ test('una funcion sin fecha de inicio registrada (semillas, inicio 0) se conserv
   assert.equal(grantState(seed[0], NOW), 'VIGENTE');
   assert.deepEqual(payload(initial(seed), NOW), [{role: 'PROFESIONAL', scope_id: 3}]);
   assert.deepEqual(diff(seed, payload(initial(seed), NOW)), {grant: [], revoke: []});
+});
+
+// Perfil agrupado (R03b): Nivel central / Sedes regionales, sedes proyectadas listadas y sin Jefatura en sedes.
+const CATALOG_SCOPES = [
+  {id: 3, code: 'UPR-REQ', name: 'Requerimientos', level: 'CENTRAL', state: 'ACTIVA', enabled: true, region_code: null},
+  {id: 20, code: 'REG-MAG', name: 'Sede Magallanes', level: 'REGIONAL', state: 'ACTIVA', enabled: true, region_code: '12'},
+  {id: 21, code: 'REG-ARI', name: 'Sede Arica', level: 'REGIONAL', state: 'PROYECTADA', enabled: false, region_code: '15'},
+  {id: 22, code: 'REG-OLD', name: 'Sede cerrada', level: 'REGIONAL', state: 'CERRADA', enabled: false, region_code: '05'},
+  {id: 23, code: 'REG-SUR', name: 'Sede cerrada con funciones', level: 'REGIONAL', state: 'CERRADA', enabled: false, region_code: '14'},
+  {id: 9, code: 'UGI', name: 'Unidad cerrada', level: 'CENTRAL', state: 'CERRADA', enabled: false, region_code: null},
+];
+const PUBLISHED = [{code: '15', name: 'Arica y Parinacota'}, {code: '05', name: 'Valparaíso'}, {code: '14', name: 'Los Ríos'}, {code: '12', name: 'Magallanes y de la Antártica Chilena'}];
+const ROLES = ['ADMINISTRATIVO', 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'LECTURA'].map(code => ({code, reach: 'AMBITO', group: 'X'}));
+const siteGrants = [
+  {id: 30, user_id: 7, role_code: 'PROFESIONAL', scope_id: 23, valid_from: NOW - HOUR, valid_until: null, revoked_at: null},
+].map(grantOf);
+
+test('perfil agrupado: proyectadas siempre, cerradas solo con funciones, sedes de norte a sur', () => {
+  const items = profileScopes(CATALOG_SCOPES, siteGrants, PUBLISHED);
+  assert.deepEqual(items.map(s => s.code), ['UPR-REQ', 'REG-MAG', 'REG-ARI', 'REG-SUR']);
+  const groups = groupScopes(items, PUBLISHED);
+  assert.deepEqual(groups.map(g => [g.level, g.items.map(s => s.code)]), [['CENTRAL', ['UPR-REQ']], ['REGIONAL', ['REG-ARI', 'REG-SUR', 'REG-MAG']]]);
+  const arica = items.find(s => s.code === 'REG-ARI')!, sur = items.find(s => s.code === 'REG-SUR')!;
+  assert.equal(arica.regionName, 'Arica y Parinacota');
+  assert.ok(arica.staffable && offered('PROFESIONAL', arica), 'la sede proyectada admite su dotacion');
+  assert.ok(!sur.staffable && !offered('PROFESIONAL', sur), 'la cerrada solo admite revocar');
+  // El buscador tambien encuentra por el nombre de la region, sin tildes.
+  assert.deepEqual(visibleScopes(items, new Map(), siteGrants, false, 'rios').map(s => s.code), ['REG-SUR']);
+  assert.deepEqual(groupScopes(items.filter(s => s.level === 'CENTRAL'), PUBLISHED).map(g => g.level), ['CENTRAL'], 'se omite el grupo vacio');
+});
+
+test('sin Jefatura en sedes, salvo una heredada para revocarla; Direccion se ofrece', () => {
+  const items = profileScopes(CATALOG_SCOPES, [], PUBLISHED), mag = items.find(s => s.code === 'REG-MAG')!;
+  assert.deepEqual(columnsFor('CENTRAL', ROLES, [], items).map(r => r.code), ROLES.map(r => r.code));
+  assert.deepEqual(columnsFor('REGIONAL', ROLES, [], items).map(r => r.code), ['ADMINISTRATIVO', 'PROFESIONAL', 'DIRECCION', 'LECTURA']);
+  assert.ok(!offered('JEFATURA', mag) && offered('DIRECCION', mag));
+  const inherited = [grantOf({id: 40, user_id: 7, role_code: 'JEFATURA', scope_id: 20, valid_from: NOW - HOUR, valid_until: null, revoked_at: null})];
+  assert.ok(columnsFor('REGIONAL', ROLES, inherited, items).some(r => r.code === 'JEFATURA'));
+  assert.ok(!offered('JEFATURA', mag), 'heredada: se muestra pero no se vuelve a ofrecer');
+});
+
+test('el filtro "solo con funciones" arranca activo solo si la cuenta tiene funciones por ambito', () => {
+  assert.equal(startFiltered(live), true);
+  assert.equal(startFiltered([]), false);
+  assert.equal(startFiltered([grantOf({id: 50, user_id: 7, role_code: 'DISTRIBUIDOR', scope_id: null, valid_from: 0, valid_until: null, revoked_at: null})]), false);
 });

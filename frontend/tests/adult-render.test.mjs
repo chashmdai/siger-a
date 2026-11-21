@@ -16,9 +16,9 @@ before(async () => {
 });
 after(async () => {await vite?.close();});
 
-function render(data, previous = {}, shown = () => true) {
+function render(data, previous = {}, shown = () => true, regions) {
   const errors = adult.adultProblems(data, previous);
-  const c = sections.controls(data, () => {}, () => {}, previous, errors, shown, () => {});
+  const c = sections.controls(data, () => {}, () => {}, previous, errors, shown, () => {}, regions);
   return renderToStaticMarkup(createElement(sections.FirstContact, {c}));
 }
 const count = (html, needle) => html.split(needle).length - 1;
@@ -34,6 +34,16 @@ test('ficha adulta: identificacion separada, contacto estructurado y catalogos',
   assert.ok(html.includes('no se consultan ClaveÚnica, Registro Civil ni PISEE'));
   assert.ok(!/verificad[oa] con/i.test(html.replace('no se consultan', '')), 'no presenta datos como verificados');
   assert.ok(!html.includes('Tribunal'), 'no mezcla la escucha NNA');
+});
+
+test('region de atencion en el orden publicado por el catalogo (de norte a sur)', async () => {
+  const catalog = await vite.ssrLoadModule('/src/features/attention/adult/catalog.ts');
+  const published = ['15', '01', '02', '03', '04', '05', '13', '06', '07', '16', '08', '09', '14', '10', '11', '12'].map(code => ({code}));
+  const html = render({...form.emptyForm(), motive: 'Consulta'}, {}, () => true, catalog.orderedRegions(published));
+  const select = html.slice(html.indexOf('Región de atención'), html.indexOf('Comuna de atención'));
+  const codes = [...select.matchAll(/<option value="(\d{2})">/g)].map(m => m[1]);
+  assert.deepEqual(codes, published.map(r => r.code));
+  assert.ok(select.indexOf('Arica y Parinacota') < select.indexOf('Tarapacá') && select.indexOf('Aysén') < select.indexOf('Magallanes'));
 });
 
 test('RUN separado, comunas de la region elegida y errores accesibles', () => {

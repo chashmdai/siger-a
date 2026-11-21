@@ -7,10 +7,20 @@ import countries from './paises.json' with {type: 'json'};
 /** Codigo de region -> nombre, en el orden geografico del catalogo (norte a sur). */
 export const REGIONS: Record<string, string> = territory.regiones;
 const COMMUNES: Record<string, readonly string[]> = territory.comunas;
+/** Codigos de region (para validar y contar). No sirve como orden: JavaScript enumera antes las claves enteras ("10".."16"). */
 export const regionCodes = Object.keys(REGIONS);
 export const communesOf = (region: string): readonly string[] => COMMUNES[region] ?? [];
 export const regionName = (value: string) => REGIONS[value] ?? value;
 export const validRegion = (value: string) => Object.hasOwn(REGIONS, value);
+/**
+ * Orden de las regiones en los desplegables: el que publica el servidor en catalog.regions (orden del Formulario, de
+ * norte a sur, leido del mismo territorio.json). Descarta codigos ajenos al catalogo local y agrega al final los que
+ * falten; sin catalogo publicado, cae al orden de regionCodes.
+ */
+export function orderedRegions(published: readonly {code?: unknown}[] | undefined): string[] {
+  const codes = [...new Set((published ?? []).map(r => String(r.code ?? '')).filter(validRegion))];
+  return [...codes, ...regionCodes.filter(code => !codes.includes(code))];
+}
 export const validCommune = (region: string, commune: string) => communesOf(region).includes(commune);
 
 const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('es').replace(/\s+/g, ' ').trim();

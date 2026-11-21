@@ -11,6 +11,7 @@ import {Icon} from '../../components/Icon';
 import {Callout, ErrorMessage, PageHeader, Panel} from '../../components/Primitives';
 import {humanize, ROLE_LABELS} from '../../lib/labels';
 import {ProfileDialog} from './ProfileDialog';
+import {Structure} from './Structure';
 import {grantOf, grantState} from './profile';
 
 const INTEGRATIONS: [string, string][] = [['FORMULARIO_PULL', 'Consumidor del Formulario Público'], ['CORREO_GRAPH', 'Correo institucional (Microsoft Graph)']];
@@ -118,6 +119,7 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
           {name: 'Acciones TI', render: r => ti ? accountActions(r) : <span className='muted'>Consulta</span>},
         ]}/>
       </Panel>
+      {ti && <Structure ctx={ctx} rows={list(data, 'structure')} users={list(data, 'users')} grants={list(data, 'grants')} openProfile={setProfile}/>}
       {ti && <Panel title='Funciones otorgadas' icon='shield' count={list(data, 'grants').length} description='Vigentes, programadas e historia. Para cambiar las funciones de una cuenta usa su perfil; Revocar retira una sola concesión.'>
         <Table rows={list(data, 'grants')} columns={[
           {name: 'Persona', render: g => nameOf(ctx.catalog, g.user_id)},

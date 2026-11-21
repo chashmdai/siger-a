@@ -3,11 +3,31 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {communesOf, countryNames, matchCountry, matchRegion, NATIONALITY_PREFIX, REGIONS, regionCodes, searchCountries, validCommune, validNationality, validRegion} from '../src/features/attention/adult/catalog.ts';
+import {communesOf, countryNames, matchCountry, matchRegion, NATIONALITY_PREFIX, orderedRegions, REGIONS, regionCodes, searchCountries, validCommune, validNationality, validRegion} from '../src/features/attention/adult/catalog.ts';
 import {birthDateProblem, canonicalMobile, documentNumberProblem, formatRunNumber, nameProblem, normalizeName, pasteMobile, pastedRun, validEmail, validRun} from '../src/features/attention/adult/identity.ts';
 import {adultProblems, documentSummary, fullName, legacyValue, SCHEMA_VERSION, upgrade} from '../src/features/attention/adult/adultForm.ts';
 
 const json = (path: string) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
+
+/** Orden del Formulario (de norte a sur) tal como lo publica el servidor en catalog.regions (RegionalSitesTest). */
+const PUBLISHED = ['15', '01', '02', '03', '04', '05', '13', '06', '07', '16', '08', '09', '14', '10', '11', '12'];
+
+test('regiones de la ficha en el orden publicado por el catalogo, no en el de Object.keys', () => {
+  // Object.keys enumera primero las claves enteras: la lista partiria en Los Lagos (10).
+  assert.equal(regionCodes[0], '10');
+  // El orden publicado coincide con el del archivo del Formulario (el texto de territorio.json, no el objeto).
+  const text = readFileSync(new URL('../src/features/attention/adult/territorio.json', import.meta.url), 'utf8');
+  const block = text.slice(text.indexOf('"regiones"'), text.indexOf('"comunas"'));
+  assert.deepEqual([...block.matchAll(/"(\d{2})":/g)].map(m => m[1]), PUBLISHED);
+  const ordered = orderedRegions(PUBLISHED.map(code => ({code, name: REGIONS[code]})));
+  assert.deepEqual(ordered, PUBLISHED);
+  assert.equal(REGIONS[ordered[0]], 'Arica y Parinacota');
+  assert.equal(REGIONS[ordered.at(-1)!], 'Magallanes y de la Antártica Chilena');
+  // Un codigo ajeno o repetido se descarta; una region que falte se agrega al final, sin perder ninguna.
+  assert.deepEqual(orderedRegions([{code: '99'}, {code: '05'}, {code: '05'}, {code: '13'}]).slice(0, 2), ['05', '13']);
+  assert.equal(orderedRegions([{code: '05'}]).length, 16);
+  assert.equal(orderedRegions(undefined).length, 16);
+});
 
 test('catalogos identicos a los del servidor y al Formulario Publico', () => {
   for (const name of ['territorio.json', 'paises.json'])

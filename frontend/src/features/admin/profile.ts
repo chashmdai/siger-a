@@ -106,9 +106,56 @@ export {fold} from '../../lib/text.ts';
  * cuenta ya tenia (desmarcar no hace desaparecer la tarjeta) y los que el usuario dejo abiertos. El buscador
  * compara codigo y nombre, cada palabra por separado.
  */
-export function visibleScopes<S extends {id: number; code: string; name: string}>(scopes: S[], profile: Profile, live: Grant[], onlyWith: boolean, query: string, open: ReadonlySet<number> = new Set()) {
+export function visibleScopes<S extends {id: number; code: string; name: string; regionName?: string}>(scopes: S[], profile: Profile, live: Grant[], onlyWith: boolean, query: string, open: ReadonlySet<number> = new Set()) {
   const words = fold(query).split(' ').filter(Boolean);
   const held = new Set(live.map(g => g.scope_id));
   return scopes.filter(s => (!onlyWith || countIn(profile, s.id) > 0 || held.has(s.id) || open.has(s.id))
-    && words.every(w => fold(s.code + ' ' + s.name).includes(w)));
+    && words.every(w => fold(s.code + ' ' + s.name + ' ' + (s.regionName ?? '')).includes(w)));
 }
+
+/** El filtro "solo con funciones" arranca activo solo si la cuenta ya tiene funciones por ambito (decision R03b). */
+export const startFiltered = (live: Grant[]) => live.some(g => g.scope_id != null);
+
+export type Level = 'CENTRAL' | 'REGIONAL';
+/** Ambito del perfil, a partir de catalog.scopes (level, state, region_code, enabled). */
+export type ScopeItem = {id: number; code: string; name: string; level: Level; state: string; region: string | null; regionName: string; staffable: boolean};
+type Region = {code: string; name: string};
+
+/** Admite funciones nuevas: activo, o sede PROYECTADA (dotacion preparada; regla Access.staffableScope). Nunca CERRADA. */
+export const staffable = (s: {enabled?: unknown; state?: unknown}) => s.enabled !== false || s.state === 'PROYECTADA';
+
+/**
+ * Ambitos del perfil: los que admiten funciones (activos y sedes proyectadas, aunque no tengan funciones) y los
+ * cerrados o deshabilitados solo si la cuenta tiene funciones en ellos (para poder revocarlas).
+ */
+export function profileScopes(scopes: Record<string, unknown>[], live: Grant[], regions: Region[]): ScopeItem[] {
+  const used = new Set(live.map(g => g.scope_id)), names = new Map(regions.map(r => [r.code, r.name]));
+  return scopes.filter(s => staffable(s) || used.has(Number(s.id))).map(s => {
+    const region = s.region_code == null || s.region_code === '' ? null : String(s.region_code);
+    return {id: Number(s.id), code: String(s.code ?? ''), name: String(s.name ?? ''), level: s.level === 'REGIONAL' || s.regional === true ? 'REGIONAL' : 'CENTRAL',
+      state: String(s.state ?? (s.enabled === false ? 'CERRADA' : 'ACTIVA')), region, regionName: region ? names.get(region) ?? region : '', staffable: staffable(s)};
+  });
+}
+
+/**
+ * Grupos Nivel central / Sedes regionales (se omite el vacio). Las sedes siguen el orden de catalog.regions (de norte
+ * a sur) y, dentro de una region, el codigo; las sedes sin region van al final.
+ */
+export function groupScopes<S extends {level: Level; region: string | null; code: string}>(items: S[], regions: Region[]): {level: Level; items: S[]}[] {
+  const rank = new Map(regions.map((r, i) => [r.code, i]));
+  const at = (s: S) => s.region != null && rank.has(s.region) ? rank.get(s.region) as number : regions.length;
+  const sites = items.filter(s => s.level === 'REGIONAL').sort((a, b) => at(a) - at(b) || a.code.localeCompare(b.code, 'es'));
+  return [{level: 'CENTRAL' as Level, items: items.filter(s => s.level === 'CENTRAL')}, {level: 'REGIONAL' as Level, items: sites}].filter(g => g.items.length > 0);
+}
+
+/** En las sedes no hay Jefatura (D7): se muestra solo si la cuenta conserva una heredada en una sede, para revocarla. */
+export const JEFATURA = 'JEFATURA';
+export function columnsFor(level: Level, roles: RoleDef[], live: Grant[], scopes: ScopeItem[]) {
+  if (level === 'CENTRAL') return roles;
+  const sites = new Set(scopes.filter(s => s.level === 'REGIONAL').map(s => s.id));
+  const inherited = live.some(g => g.role_code === JEFATURA && sites.has(g.scope_id as number));
+  return roles.filter(r => r.code !== JEFATURA || inherited);
+}
+
+/** Se puede agregar la funcion en el ambito: admite funciones y no es Jefatura en una sede. */
+export const offered = (role: string, scope: ScopeItem) => scope.staffable && !(role === JEFATURA && scope.level === 'REGIONAL');

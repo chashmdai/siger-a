@@ -15,6 +15,9 @@ export function when(value: unknown) {
 }
 
 /** Valor para <input type="datetime-local"> en la zona del navegador, desplazado en milisegundos. */
+/** Valor para <input type="datetime-local"> en la zona del navegador. Un instante nulo o 0 (sin fecha registrada) queda vacio. */
+export const localInput = (ms: number | null | undefined) => ms == null || ms <= 0 ? '' : new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
 export function localTime(delta = 0) {
   const d = new Date(Date.now() + delta);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);

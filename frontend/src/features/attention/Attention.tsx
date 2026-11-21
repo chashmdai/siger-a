@@ -25,6 +25,7 @@ import {PreparedFiles} from './PreparedFiles';
 import {OriginalUpload} from './OriginalUpload';
 import {Preview} from './Preview';
 import {adultProblems, upgrade} from './adult/adultForm.ts';
+import {orderedRegions} from './adult/catalog.ts';
 
 type Pending = {type: string; id: number | null; revision: number | null; data: Row; key: string};
 
@@ -78,7 +79,9 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
   const setPeople = (update: (people: Person[]) => Person[]) => {setForm(old => ({...old, people: update(old.people)})); setDirty(true);};
   const problems = adultProblems(form, saved);
   const touch = (key: string) => setTouched(old => old.has(key) ? old : new Set(old).add(key));
-  const c = controls(form, change, setPeople, saved, problems, key => attempted || touched.has(key), touch);
+  // Regiones en el orden que publica el servidor (catalog.regions), de norte a sur.
+  const regionOrder = orderedRegions(list(ctx.catalog, 'regions'));
+  const c = controls(form, change, setPeople, saved, problems, key => attempted || touched.has(key), touch, regionOrder);
 
   function goStep(n: number) {
     setStep(n);
