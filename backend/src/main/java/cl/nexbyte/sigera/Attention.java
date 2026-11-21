@@ -158,8 +158,10 @@ public class Attention {
         String channel=in.choice("channel",Lifecycle.CHANNELS);
         String subject=in.text("subject",240,false);if(subject.isBlank())subject=s(data,"motive").replaceAll("\\s+"," ");if(subject.length()>240)subject=subject.substring(0,240);
         String safety=(s(data,"safe_contact").equals("NO_CONTACTAR")?"NO CONTACTAR. ":s(data,"safe_contact").equals("VERIFICAR")?"Verificar antes de contactar. ":"")+s(data,"safety_note");
-        long com=db.insert("INSERT INTO communication(channel,received_ms,created_ms,created_by,origin_scope,presenter,identity_document,subject,body,state,contact_email,contact_phone,contact_restrictions,presenter_domicile) VALUES(?,?,?,?,?,?,?,?,?,'ATENDIDA',?,?,?,?)",channel,received,now(),a.id(),scope,s(data,"presenter_name"),s(data,"identity_document"),subject,s(data,"motive"),s(data,"contact_email"),s(data,"contact_phone"),safety.length()>1000?safety.substring(0,1000):safety,s(data,"presenter_domicile"));
+        long t=now();
+        long com=db.insert("INSERT INTO communication(channel,received_ms,created_ms,created_by,origin_scope,presenter,identity_document,subject,body,state,contact_email,contact_phone,contact_restrictions,presenter_domicile) VALUES(?,?,?,?,?,?,?,?,?,'ATENDIDA',?,?,?,?)",channel,received,t,a.id(),scope,s(data,"presenter_name"),s(data,"identity_document"),subject,s(data,"motive"),s(data,"contact_email"),s(data,"contact_phone"),safety.length()>1000?safety.substring(0,1000):safety,s(data,"presenter_domicile"));
         life.comFolio(com);
+        life.milestone("COM_REGISTRADA","COM",com,com,null,null,a.id(),null,scope,t,null);
         long principal=access.solDestination(new Input(Map.of("scope_id",scope))).scope();
         long req=life.insertReq(a,com,null,principal,a.id(),scope);
         String serialized=json.writeValueAsString(data);boolean follow=s(data,"course").equals("SEGUIMIENTO");
@@ -194,7 +196,9 @@ public class Attention {
         if(kind.equals("PROFESIONAL")){user=in.id("user_id");access.assignable(user,target);require(!Objects.equals(user,nullableId(r,"attention_user"))||target!=n(r,"attention_scope"),"La persona ya esta a cargo de esta atencion.");}
         else target=access.solDestination(in).scope();
         String reason=in.text("reason",2000,true);
-        db.update("INSERT INTO attention_handoff(requirement_id,from_user,from_scope,sent_by,sent_ms,target_scope,target_user,recipient_kind,reason) VALUES(?,?,?,?,?,?,?,?,?)",id,n(r,"attention_user"),n(r,"attention_scope"),a.id(),now(),target,user,kind,reason);
+        long t=now();
+        long handoff=db.insert("INSERT INTO attention_handoff(requirement_id,from_user,from_scope,sent_by,sent_ms,target_scope,target_user,recipient_kind,reason) VALUES(?,?,?,?,?,?,?,?,?)",id,n(r,"attention_user"),n(r,"attention_scope"),a.id(),t,target,user,kind,reason);
+        life.milestone("ENTREGA_ENVIADA","ENTREGA",handoff,n(r,"communication_id"),id,null,a.id(),user,target,t,null);
         db.update("UPDATE requirement SET revision=revision+1 WHERE id=?",id);
         db.audit(a.id(),"ATENCION_ENTREGADA","REQ",id,n(r,"principal_scope"),"Destino "+target+". "+reason);
         if(user!=null)access.notice(user,"Tienes una primera atencion para recibir y continuar.","REQ",id);
@@ -209,7 +213,9 @@ public class Attention {
         String decision=in.choice("decision","RECIBIDA","DEVUELTA","RETIRADA");String reason=in.text("reason",2000,true);
         if(decision.equals("RETIRADA")){if(!access.reqMain(a,r))Problem.denied();}else if(!receiving(a,h))Problem.denied();
         if(decision.equals("RECIBIDA"))db.update("UPDATE requirement SET attention_user=?,attention_scope=? WHERE id=?",a.id(),n(h,"target_scope"),id);
-        db.update("UPDATE attention_handoff SET state=?,decided_by=?,decided_ms=?,decision_reason=? WHERE id=?",decision,a.id(),now(),reason,n(h,"id"));
+        long t=now();
+        db.update("UPDATE attention_handoff SET state=?,decided_by=?,decided_ms=?,decision_reason=? WHERE id=?",decision,a.id(),t,reason,n(h,"id"));
+        life.milestone("ENTREGA_DECIDIDA","ENTREGA",n(h,"id"),n(r,"communication_id"),id,null,a.id(),nullableId(h,"target_user"),n(h,"target_scope"),t,decision);
         db.update("UPDATE requirement SET revision=revision+1 WHERE id=?",id);
         db.audit(a.id(),"ATENCION_"+decision,"REQ",id,n(r,"principal_scope"),"Entrega "+n(h,"id")+". "+reason);
         access.notice(n(h,"sent_by"),"Tu entrega de primera atencion fue "+decision.toLowerCase(Locale.ROOT)+".","REQ",id);
@@ -224,8 +230,10 @@ public class Attention {
         String result=in.choice("result",Lifecycle.IMMEDIATE_RESULTS);String reason=in.text("reason",12000,true);
         long effective=in.instant("effective_at",true);long received=n(db.one("SELECT received_ms FROM communication WHERE id=?",n(r,"communication_id")),"received_ms");require(effective>=received&&effective<=now(),"La fecha del resultado debe estar entre recepcion y ahora.");
         db.update("INSERT INTO management_note(requirement_id,author_id,effective_ms,registered_ms,body,reserved) VALUES(?,?,?,?,?,FALSE)",id,a.id(),effective,now(),result+": "+reason);
-        db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,revision=revision+1 WHERE id=?",now(),a.id(),reason,id);
-        db.update("INSERT INTO closure_record(requirement_id,case_id,actor_id,closed_ms,mode,reason) VALUES(?,NULL,?,?,?,?)",id,a.id(),now(),"PRIMERA_ATENCION",reason);
+        long t=now();
+        db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,revision=revision+1 WHERE id=?",t,a.id(),reason,id);
+        db.update("INSERT INTO closure_record(requirement_id,case_id,actor_id,closed_ms,mode,reason) VALUES(?,NULL,?,?,?,?)",id,a.id(),t,"PRIMERA_ATENCION",reason);
+        life.reqClosed(a,id,t,"PRIMERA_ATENCION");
         db.audit(a.id(),"ATENCION_RESUELTA","REQ",id,n(r,"principal_scope"),result+". Resultado registrado por quien atendio.");
         access.notifyHeads(n(r,"principal_scope"),"Una primera atencion se resolvio sin Caso.","REQ",id);
         return new Workflow.Result("REQ",id,"Atencion resuelta y REQ cerrado sin SOL ni Caso. Resultado e historial conservados.");

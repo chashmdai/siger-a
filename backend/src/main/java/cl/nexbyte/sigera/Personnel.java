@@ -259,7 +259,8 @@ public class Personnel {
     }
     /**
      * Avisos de administracion sin datos de personas (codigo, cantidad y texto visible): instancia sin TI permanente o
-     * con cuentas que combinan TI con otras funciones. Los mismos codigos se registran en el log al arrancar.
+     * con cuentas que combinan TI con otras funciones, y eventos historicos que la carga de hitos (V14) no reconocio.
+     * Los mismos codigos se registran en el log al arrancar.
      */
     static List<Map<String,Object>> warnings(Db db){
         var out=new ArrayList<Map<String,Object>>();
@@ -271,6 +272,9 @@ public class Personnel {
         long conflicts=tiConflicts(db).size();
         if(conflicts>0)out.add(Map.of("code","TI_INCOMPATIBLE","count",conflicts,
             "message","Hay "+conflicts+(conflicts==1?" cuenta que combina":" cuentas que combinan")+" TI con otras funciones. TI no puede tener otras funciones: resuélvelo en el perfil de cada cuenta."));
+        long omitted=Milestones.omitted(db);
+        if(omitted>0)out.add(Map.of("code","HITOS_OMITIDOS","count",omitted,
+            "message","Hitos reconstruidos con "+omitted+(omitted==1?" omisión":" omisiones")+": eventos históricos de versiones anteriores que la carga inicial no reconoció. La operación no se ve afectada; los reportes de tiempos no consideran esos eventos."));
         return out;
     }
     /** JEFATURA vigentes o programadas en sedes regionales (D7): las que la conversion de arranque no pudo convertir. */

@@ -75,8 +75,10 @@ public class RequirementCommands {
         Rules.requirementClosable((int)db.count("SELECT COUNT(*) FROM case_record WHERE requirement_id=? AND state<>'CERRADO'",id),(int)life.pendingReq(id),a.head(scope));
         require(db.count("SELECT COUNT(*) FROM task_item t JOIN case_record c ON c.id=t.case_id WHERE c.requirement_id=? AND t.state IN "+Lifecycle.OPEN_TASK,id)==0,"El REQ todavia tiene tareas pendientes de sus Casos.");
         String reason=in.reason();
-        db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,revision=revision+1 WHERE id=?",now(),a.id(),reason,id);
+        long t=now();
+        db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,revision=revision+1 WHERE id=?",t,a.id(),reason,id);
         db.update("INSERT INTO closure_record(requirement_id,actor_id,closed_ms,mode,reason) SELECT id,closed_by,closed_ms,'JEFATURA_PRINCIPAL',close_reason FROM requirement WHERE id=?",id);
+        life.reqClosed(a,id,t,"JEFATURA_PRINCIPAL");
         life.changed(a,"REQ_CIERRE_EXPLICITO","REQ",id,scope,reason);
         access.notice(n(r,"created_by"),"Un REQ fue cerrado expresamente por su jefatura principal.","REQ",id);
         return done("REQ",id);
@@ -106,8 +108,10 @@ public class RequirementCommands {
         var destination=access.solDestination(new Input(Map.of("scope_id",selected)));
         long target=destination.scope();
         require(target!=origin,"El destino debe ser distinto.");
+        long t=now();
         long id=db.insert("INSERT INTO flow_request(kind,requirement_id,origin_case_id,origin_scope,target_scope,requested_by,created_ms,reason,objective) VALUES(?,?,?,?,?,?,?,?,?)",
-            kind,req,cas,origin,target,a.id(),now(),in.reason(),in.text("objective",3000,!kind.equals("TRANSFERENCIA")));
+            kind,req,cas,origin,target,a.id(),t,in.reason(),in.text("objective",3000,!kind.equals("TRANSFERENCIA")));
+        life.milestone("FLUJO_SOLICITADO","FLUJO",id,n(r,"communication_id"),req,cas,a.id(),null,target,t,kind);
         life.changed(a,kind+"_SOLICITADA","FLUJO",id,origin,in.reason());
         access.notifyHeads(target,"Tienes una peticion de "+kind.toLowerCase(Locale.ROOT)+".","FLUJO",id);
         life.bumpReq(req);
@@ -150,7 +154,9 @@ public class RequirementCommands {
                 }
             }
         }
-        db.update("UPDATE flow_request SET state=?,decided_by=?,decided_ms=?,decision_reason=?,successor_case_id=?,revision=revision+1 WHERE id=?",decision,a.id(),now(),reason,successor,id);
+        long t=now();
+        db.update("UPDATE flow_request SET state=?,decided_by=?,decided_ms=?,decision_reason=?,successor_case_id=?,revision=revision+1 WHERE id=?",decision,a.id(),t,reason,successor,id);
+        life.milestone("FLUJO_DECIDIDO","FLUJO",id,n(r,"communication_id"),req,nullableId(f,"origin_case_id"),a.id(),null,target,t,decision);
         life.changed(a,kind+"_"+decision,"FLUJO",id,target,reason);
         life.bumpReq(req);
         access.notifyHeads(origin,"Se resolvio una peticion de "+kind.toLowerCase(Locale.ROOT)+".","FLUJO",id);
@@ -185,13 +191,15 @@ public class RequirementCommands {
                     require(approver!=null&&Objects.equals(nullableId(p,"principal_scope_at_approval"),principal)&&access.user(approver).head(principal),"Falta autorizacion vigente de la jefatura principal.");
                 }
                 db.update("UPDATE requirement SET state='ABIERTO',closed_ms=NULL,closed_by=NULL,close_reason=NULL,revision=revision+1 WHERE id=?",req);
-                life.changed(a,"REQ_REACTIVADO","REQ",req,principal,in.reason());
+                long at=life.changed(a,"REQ_REACTIVADO","REQ",req,principal,in.reason());
+                life.milestone("REQ_REACTIVADO","REQ",req,n(r,"communication_id"),req,null,a.id(),null,principal,at,null);
             }
             if(cas!=null){
                 var closedCase=Objects.requireNonNull(c);
                 require(s(closedCase,"state").equals("CERRADO"),"El Caso ya esta abierto.");
                 db.update("UPDATE case_record SET state='EN_GESTION',closed_ms=NULL,closed_by=NULL,closure_mode=NULL,close_reason=NULL,revision=revision+1 WHERE id=?",cas);
-                life.changed(a,"CASO_REABIERTO","CAS",cas.longValue(),scope,in.reason());
+                long at=life.changed(a,"CASO_REABIERTO","CAS",cas.longValue(),scope,in.reason());
+                life.caseMilestone("CASO_REABIERTO","CAS",cas,cas,a.id(),null,at,null);
             }
         }
         db.update("UPDATE reopening SET state=?,decided_by=?,decided_ms=?,decision_reason=?,revision=revision+1 WHERE id=?",decision,a.id(),now(),in.reason(),id);

@@ -50,9 +50,11 @@ public class IntakeCommands {
         long received=in.instant("received_at",true);
         require(received<=now(),"La fecha de recepcion no puede ser futura.");
         String subject=in.text("subject",240,true),body=in.text("body",20000,true);
+        long t=now();
         long com=db.insert("INSERT INTO communication(channel,received_ms,created_ms,created_by,origin_scope,presenter,contact,identity_document,subject,body) VALUES(?,?,?,?,?,?,?,?,?,?)",
-            channel,received,now(),a.id(),scope,in.text("presenter",200,false),in.text("contact",300,false),in.text("identity_document",100,false),subject,body);
+            channel,received,t,a.id(),scope,in.text("presenter",200,false),in.text("contact",300,false),in.text("identity_document",100,false),subject,body);
         life.comFolio(com);
+        life.milestone("COM_REGISTRADA","COM",com,com,null,null,a.id(),null,scope,t,null);
         db.update("UPDATE communication SET contact_email=?,contact_phone=?,contact_restrictions=?,presenter_domicile=? WHERE id=?",
             in.text("contact_email",200,false),in.text("contact_phone",80,false),in.text("contact_restrictions",1000,false),in.text("presenter_domicile",500,false),com);
         persons(com,in.values().get("persons"));
@@ -73,6 +75,7 @@ public class IntakeCommands {
         db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,revision=1 WHERE id=?",effective,a.id(),response,req);
         db.update("UPDATE communication SET state='ATENDIDA',revision=1 WHERE id=?",com);
         db.update("INSERT INTO closure_record(requirement_id,actor_id,closed_ms,mode,reason) VALUES(?,?,?,'PRIMERA_ATENCION',?)",req,a.id(),effective,response);
+        life.reqClosed(a,req,effective,"PRIMERA_ATENCION");
         life.changed(a,"PRIMERA_ATENCION_RESUELTA","REQ",req,scope,response);
         return done("REQ",req);
     }
@@ -105,8 +108,10 @@ public class IntakeCommands {
         }
         // Proyeccion solo al crear; un reenvio sale antes y no toca una COM ya registrada ni sus correcciones.
         var p=o.projection();var c=p.com();
+        long t=now();
         long com=db.insert("INSERT INTO communication(external_source,external_id,channel,received_ms,created_ms,created_by,origin_scope,presenter,contact,identity_document,subject,body) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-            o.source(),o.externalId(),o.channel(),o.receivedMs(),now(),a.id(),scope,c.presenter(),c.contact(),c.identityDocument(),c.subject(),c.body());
+            o.source(),o.externalId(),o.channel(),o.receivedMs(),t,a.id(),scope,c.presenter(),c.contact(),c.identityDocument(),c.subject(),c.body());
+        life.milestone("COM_REGISTRADA","COM",com,com,null,null,a.id(),null,scope,t,null);
         db.update("UPDATE communication SET contact_email=?,contact_phone=?,contact_restrictions=?,presenter_domicile=? WHERE id=?",
             c.contactEmail(),c.contactPhone(),c.contactRestrictions(),c.presenterDomicile(),com);
         life.comFolio(com);
@@ -156,6 +161,7 @@ public class IntakeCommands {
         long req=life.newReq(a,comId,sol,scope,user,attention);
         db.update("UPDATE communication SET state='ENVIADA',revision=revision+1 WHERE id=?",comId);
         life.changed(a,"ASUNCION_INGRESO_PROPIO","SOL",sol,scope,in.reason());
+        life.solAssumed(a,sol,req,true);
         access.notice(user,"Se asigno un REQ por asuncion directa de jefatura.","REQ",req);
         return done("REQ",req);
     }
@@ -172,7 +178,8 @@ public class IntakeCommands {
         String matter=suggestedMatter(in,scope);
         long sol=db.insert("INSERT INTO solicitation(communication_id,destination_scope,requested_area_scope,classification,created_by,created_ms,suggested_matter) VALUES(?,?,?,?,?,?,?)",id,scope,destination.area(),in.reason(),a.id(),now(),matter);
         db.update("UPDATE communication SET state='ENVIADA',revision=revision+1 WHERE id=?",id);
-        life.changed(a,"SOL_DISTRIBUIDA","SOL",sol,scope,matterNote(matter)+in.reason());
+        long at=life.changed(a,"SOL_DISTRIBUIDA","SOL",sol,scope,matterNote(matter)+in.reason());
+        life.solMilestone("SOL_DISTRIBUIDA",sol,a.id(),scope,at,null);
         access.notifySolReceivers(scope,"Tienes una SOL pendiente de asumir.",sol);
         return done("SOL",sol);
     }
@@ -212,13 +219,15 @@ public class IntakeCommands {
                 String matter=suggestedMatter(in,target);
                 require(returned||target!=oldScope||!Objects.equals(destination.area(),nullableId(r,"requested_area_scope"))||!Objects.equals(matter,r.get("suggested_matter")),"El destino, el area y la materia sugerida no cambiaron.");
                 db.update("UPDATE solicitation SET destination_scope=?,requested_area_scope=?,suggested_matter=?,classification=?,state='PENDIENTE',revision=revision+1 WHERE id=?",target,destination.area(),matter,reason,id);
-                life.changed(a,"SOL_REDIRIGIDA","SOL",id,target,"Destino anterior "+oldScope+". "+matterNote(matter)+reason);
+                long at=life.changed(a,"SOL_REDIRIGIDA","SOL",id,target,"Destino anterior "+oldScope+". "+matterNote(matter)+reason);
+                life.solMilestone("SOL_REDIRIGIDA",id,a.id(),target,at,null);
                 access.notifySolReceivers(target,"Una SOL fue remitida a tu ambito.",id);
                 return done("SOL",id);
             }
             case "SOL_RETURN" -> {
                 db.update("UPDATE solicitation SET state='DEVUELTA',revision=revision+1 WHERE id=?",id);
-                life.changed(a,"SOL_DEVUELTA_DISTRIBUCION","SOL",id,oldScope,reason);
+                long at=life.changed(a,"SOL_DEVUELTA_DISTRIBUCION","SOL",id,oldScope,reason);
+                life.solMilestone("SOL_DEVUELTA",id,a.id(),oldScope,at,null);
                 access.notifyDistributors(com,"Una SOL fue devuelta a clasificacion.");
                 return done("SOL",id);
             }
@@ -226,7 +235,8 @@ public class IntakeCommands {
                 String disposition=in.choice("disposition","INVALIDA","DUPLICADA");
                 db.update("UPDATE solicitation SET state='DESCARTADA',revision=revision+1 WHERE id=?",id);
                 db.update("UPDATE communication SET state=?,revision=revision+1 WHERE id=?",disposition,comId);
-                life.changed(a,"SOL_"+disposition,"SOL",id,oldScope,reason);
+                long at=life.changed(a,"SOL_"+disposition,"SOL",id,oldScope,reason);
+                life.solMilestone("SOL_DESCARTADA",id,a.id(),oldScope,at,disposition);
                 return done("SOL",id);
             }
             default -> {
@@ -238,6 +248,7 @@ public class IntakeCommands {
                 if(r.get("suggested_matter")!=null&&access.regional(oldScope))db.update("UPDATE requirement SET matter=? WHERE id=?",s(r,"suggested_matter"),req);
                 db.update("UPDATE solicitation SET state='ASUMIDA',revision=revision+1 WHERE id=?",id);
                 life.changed(a,"SOL_ASUMIDA","SOL",id,oldScope,reason);
+                life.solAssumed(a,id,req,false);
                 access.notice(user,"Se te asigno la atencion de un REQ; si requiere seguimiento debe abrirse un Caso.","REQ",req);
                 return done("REQ",req);
             }

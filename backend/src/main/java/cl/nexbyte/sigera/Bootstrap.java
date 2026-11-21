@@ -20,12 +20,12 @@ import static cl.nexbyte.sigera.Db.*;
 public class Bootstrap implements ApplicationRunner {
     private static final Logger LOG=LoggerFactory.getLogger(Bootstrap.class);
     final Db db;final PasswordEncoder passwords;final TransactionTemplate tx;final ConfigurableApplicationContext ctx;
-    final Path data;final boolean seed,migrate;final String institutional;final PersonIndex persons;
+    final Path data;final boolean seed,migrate;final String institutional;final PersonIndex persons;final Milestones milestones;
     public Bootstrap(Db db,PasswordEncoder passwords,PlatformTransactionManager manager,ConfigurableApplicationContext ctx,
                      @Value("${siger.data}")String data,@Value("${siger.seed-demo:false}")boolean seed,@Value("${siger.migrate-only:false}")boolean migrate,
-                     @Value("${siger.bootstrap-file:}")String institutional,PersonIndex persons){
+                     @Value("${siger.bootstrap-file:}")String institutional,PersonIndex persons,Milestones milestones){
         this.db=db;this.passwords=passwords;this.tx=new TransactionTemplate(manager);this.ctx=ctx;this.data=Path.of(data).toAbsolutePath().normalize();this.seed=seed;this.migrate=migrate;
-        this.institutional=institutional.strip();this.persons=persons;
+        this.institutional=institutional.strip();this.persons=persons;this.milestones=milestones;
     }
     @Override public void run(ApplicationArguments args)throws Exception{
         requireDatabase();
@@ -42,6 +42,7 @@ public class Bootstrap implements ApplicationRunner {
         suppressAuthority();
         convertRegionalHeads();
         persons.rebuild(); // Carga inicial del indice de personas (V12), una sola vez.
+        milestones.rebuild(); // Carga historica de hitos (V14), una sola vez; cuenta lo que no reconoce.
         warnAdministration();
         if(migrate)ctx.close();
     }

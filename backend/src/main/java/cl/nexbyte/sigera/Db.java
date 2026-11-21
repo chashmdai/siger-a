@@ -67,8 +67,12 @@ public class Db {
         }
     }
     public void audit(long actor, String action, String kind, long id, Long scope, String note) {
+        audit(actor, action, kind, id, scope, note, System.currentTimeMillis());
+    }
+    /** Mismo evento con el instante indicado (un hito que se reconstruye desde la auditoria usa ese mismo instante). */
+    public void audit(long actor, String action, String kind, long id, Long scope, String note, long at) {
         update("INSERT INTO audit_event(actor_id,at_ms,action,resource_type,resource_id,scope_id,note) VALUES(?,?,?,?,?,?,?)",
-            actor, System.currentTimeMillis(), action, kind, id, scope, note == null ? "" : note);
+            actor, at, action, kind, id, scope, note == null ? "" : note);
     }
     public static long n(Map<String,Object> r, String k) { return ((Number)r.get(k)).longValue(); }
     public static Long nullableId(Map<String,Object> r, String k) { return r.get(k) == null ? null : n(r,k); }

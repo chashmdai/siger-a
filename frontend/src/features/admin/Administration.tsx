@@ -15,7 +15,7 @@ import {Structure} from './Structure';
 import {grantOf, grantState} from './profile';
 
 const INTEGRATIONS: [string, string][] = [['FORMULARIO_PULL', 'Consumidor del Formulario Público'], ['CORREO_GRAPH', 'Correo institucional (Microsoft Graph)']];
-const WARNING_TITLES: Record<string, string> = {SIN_TI_PERMANENTE: 'Sin cuenta TI permanente', TI_INCOMPATIBLE: 'Cuentas con TI incompatible'};
+const WARNING_TITLES: Record<string, string> = {SIN_TI_PERMANENTE: 'Sin cuenta TI permanente', TI_INCOMPATIBLE: 'Cuentas con TI incompatible', HITOS_OMITIDOS: 'Hitos reconstruidos con omisiones'};
 const MODE_LABELS: Record<string, string> = {DESACTIVADO: 'Desactivado', MANUAL: 'Ciclo manual', AUTOMATICO: 'Automático', GRAPH: 'Graph'};
 const GRANT_STATES: Record<string, string> = {VIGENTE: 'Vigente', PROGRAMADA: 'Programada', VENCIDA: 'Vencida', REVOCADA: 'Revocada'};
 

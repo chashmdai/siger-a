@@ -26,7 +26,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G08b | Buscador: pantalla y paleta | CERRADO |
 | G08c | Buscador: termino fuera de URL y registros | CERRADO |
 | G09 | Calendario habil (V13) | CERRADO |
-| G10 | Hitos (V14) | ABIERTO |
+| G10 | Hitos (V14) | CERRADO |
 | G11 | Reportes: calculo | ABIERTO |
 | G12 | Reportes: interfaz y exportacion | ABIERTO |
 | G13 | Integracion MySQL | ABIERTO |
@@ -363,3 +363,18 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - G13: V13 y `HOLIDAY_*` en `MySql84IntegrationTest` (UNIQUE sobre `region_key`).
 - Pendientes: V13 en MySQL -> G13; recorrido del calendario en `PRUEBAS_MANUALES_0_5_0.md` y nota de actualizacion de la VM ("TI carga los feriados nacionales y regionales del anio en curso y del siguiente") -> G14.
 - Verificacion manual sugerida al usuario: como `ti`, abre Calendario habil: aparece el aviso para el anio actual y el siguiente. Importa `2026-12-25 Navidad`, `2026-09-19 Glorias del Ejercito` y `2026-08-20 Prueba [16]` con una linea mala agregada: nada se registra y se indica la linea; quitala y confirma. Revisa "Fin de semana" en el 19-09 y el alcance "Region Nuble". Agrega `2026-08-20` como nacional: 409. Retira uno y comprueba el evento en Auditoria y operacion. Como `distribucion`, `#calendario` no aparece en el menu.
+
+### G10 - Hitos (V14)   (CERRADO)
+- Fecha: 2026-11-21 (commit `gate G10: hitos`)
+- Hecho:
+  - V14 `milestone` (columnas del plan mas `communication_id` y `detail`; indices (`event`,`at_ms`), `requirement_id`, recurso y COM) y `application_marker.amount`. `Milestones` + `Lifecycle.milestone/caseMilestone/solMilestone/solAssumed/reqClosed`: 26 hitos escritos en la transaccion de cada comando (COM_CREATE/IMMEDIATE, ATTENTION_*, Formulario, COM_ROUTE/ASSUME, SOL_*, REQ_CLOSE, REOPEN_DECIDE, REQ_CASE_CREATE, FLOW_*, CASE_*, TASK_*), cada uno con el instante de su fuente (columna o auditoria: `Lifecycle.changed` devuelve el instante y `Db.audit` acepta `at`).
+  - Carga historica `rebuild()` desde `Bootstrap.run` (tambien `migrate-only`): lotes de 500 COM, cada uno en su transaccion con `db.lock()`, que reemplaza sus propios hitos reconstruidos; solo eventos anteriores al primer hito en vivo; marcador `MILESTONES_V14` al final con la cantidad de omisiones. Lo no reconocido se omite y se cuenta (log solo con cifras y aviso `HITOS_OMITIDOS` "Hitos reconstruidos con N omisiones" en Administracion, titulo en `Administration.tsx`); un error de base de datos detiene el arranque.
+- Archivos clave: `V14__hitos.sql`, `Milestones.java`, `Lifecycle.java`, `Db.java`, `IntakeCommands.java`, `RequirementCommands.java`, `CaseCommands.java`, `Attention.java`, `Bootstrap.java`, `Personnel.java`, `MilestoneTest.java`, `InstitutionalBootstrapTest.java` (constructor), `FormularioServiceTest.java` y `MySql84IntegrationTest.java` (esquema "14"), `frontend/src/features/admin/Administration.tsx`, `CLAUDE.md`
+- Verificacion: JUnit 137 ok + 1 omitida (antes 132 + 1; +5 `MilestoneTest`: recorrido con los 26 hitos y sus campos, rechazo y repeticion sin hitos, carga en lotes de 2 identica a lo escrito e idempotente tambien tras un corte, comando durante el arranque sin duplicar, 5 omisiones de formato antiguo o desconocido con su aviso; Maven informa 138 ejecutadas). Mutaciones: sin el corte de lo escrito en vivo, o con el encargado actual en vez del original, `MilestoneTest` falla. Frontend 64 ok; typecheck ok; build ok. Humo con el JAR (18680, `target/humo-g10`, borrada): dos arranques UP con esquema "14" y marcador `MILESTONES_V14` con 0 omisiones.
+- Desvios del plan (aprobados): columnas `communication_id` y `detail`; `resource_type` por entidad (`ASIGNACION`, `TAREA`, `ENTREGA`, `FLUJO`); hitos `SOL_DESCARTADA` y `SOL_ASUMIDA` con `DIRECTA` en `COM_ASSUME`; `at_ms` siempre instante del sistema (`REQ_CERRADO` = max(cierre, creacion)); corte en el primer hito en vivo; omisiones contadas con aviso (pedido del responsable); `application_marker.amount` agregado para guardarlas.
+- Hallazgos para gates siguientes:
+  - G11: `COM_IMMEDIATE` guarda `requirement.closed_ms` = fecha efectiva declarada (puede ser anterior a la creacion); el hito usa el instante del registro (duracion 0). En la reconstruccion, `TAREA_CREADA` lleva el ejecutor actual y `REQ_CERRADO` el principal actual (un traslado posterior a una reactivacion los cambia). `SOL_REDIRIGIDA` no distingue redirigir de redistribuir una devuelta (la auditoria tampoco); `SOL_DEVUELTA` previa lo indica. `ASIGNACION_ACUSADA` se empareja con `CASO_ASIGNADO` por `resource_id`. Gestion del Caso: espera = tramos `CASO_ESPERA` -> `CASO_REANUDADO`. Los hitos no estan expuestos por API.
+  - G13: probar la reconstruccion de hitos sobre una copia de la base V10 de la instancia de validacion (arranque con `migrate-only` y luego el servicio), revisando el numero de omisiones del marcador y el aviso en Administracion; V14 y `application_marker.amount` en `MySql84IntegrationTest`.
+  - El aviso `HITOS_OMITIDOS` es permanente (no hay accion para descartarlo); si molesta, se decide en G14.
+- Pendientes: V14 y carga historica en MySQL -> G13; recorrido (aviso de omisiones) en `PRUEBAS_MANUALES_0_5_0.md` -> G14
+- Verificacion manual sugerida al usuario: no aplica en la interfaz (sin pantalla hasta G11/G12). Opcional: arrancar una copia de un `var/` 0.4.0 con el perfil local y revisar en el log "Hitos: N reconstruidos en M comunicaciones" y, si hubiera omisiones, el aviso en Administracion como `ti`.

@@ -39,7 +39,11 @@ public class CaseCommands {
         boolean head=a.head(scope),owner=n(c,"responsible_id")==a.id();
         if(type.equals("CASE_ACK")){
             if(!owner)Problem.denied();
-            db.update("UPDATE case_assignment SET acknowledged_ms=? WHERE case_id=? AND current_flag=TRUE AND user_id=? AND acknowledged_ms IS NULL",now(),id,a.id());
+            long t=now();
+            for(var g:db.rows("SELECT id FROM case_assignment WHERE case_id=? AND current_flag=TRUE AND user_id=? AND acknowledged_ms IS NULL",id,a.id())){
+                db.update("UPDATE case_assignment SET acknowledged_ms=? WHERE id=?",t,n(g,"id"));
+                life.caseMilestone("ASIGNACION_ACUSADA","ASIGNACION",n(g,"id"),id,a.id(),a.id(),t,null);
+            }
             life.changed(a,"ASIGNACION_ACUSADA","CAS",id,scope,"Acuse manual.");
             life.bumpCase(id);
             return done("CAS",id);
@@ -122,9 +126,12 @@ public class CaseCommands {
             default -> throw new Problem(400,"Accion no reconocida.");
         }
         life.bumpCase(id);
-        life.changed(a,type,"CAS",id,scope,reason);
+        long at=life.changed(a,type,"CAS",id,scope,reason);
+        if(CASE_MILESTONES.containsKey(type))life.caseMilestone(CASE_MILESTONES.get(type),"CAS",id,id,a.id(),null,at,null);
         return done("CAS",id);
     }
+    /** Hitos (V14) de los comandos de Caso que solo quedan en el historial: la carga historica los lee de ahi. */
+    static final Map<String,String> CASE_MILESTONES=Map.of("CASE_WAIT","CASO_ESPERA","CASE_RESUME","CASO_REANUDADO","CASE_REQUEST_CLOSE","CIERRE_SOLICITADO","CASE_WITHDRAW_CLOSE","CIERRE_RETIRADO","CASE_RETURN","CIERRE_DEVUELTO");
 
     private Result rectify(Actor a,long id,Input in){
         var old=db.one("SELECT * FROM management_note WHERE id=?",id);
@@ -157,8 +164,10 @@ public class CaseCommands {
         if(!access.member(target,c))Problem.denied();
         long due=in.instant("due_at",false);
         int hours=reminderHours(in);
-        db.insert("INSERT INTO task_item(case_id,title,executor_id,created_by,created_ms,due_ms,mandatory,reminder_interval_hours,next_reminder_ms) VALUES(?,?,?,?,?,?,?,?,?)",
-            cas,in.text("title",300,true),user,a.id(),now(),due==0?null:due,false,hours,due==0?null:due);
+        long t=now();
+        long task=db.insert("INSERT INTO task_item(case_id,title,executor_id,created_by,created_ms,due_ms,mandatory,reminder_interval_hours,next_reminder_ms) VALUES(?,?,?,?,?,?,?,?,?)",
+            cas,in.text("title",300,true),user,a.id(),t,due==0?null:due,false,hours,due==0?null:due);
+        life.caseMilestone("TAREA_CREADA","TAREA",task,cas,a.id(),user,t,null);
         life.changed(a,"TAREA_CREADA","CAS",cas,n(c,"scope_id"),"Agenda independiente de actuaciones.");
         access.notice(user,"Tienes una tarea asignada en un Caso.","CAS",cas);
         life.bumpCase(cas);
@@ -201,7 +210,9 @@ public class CaseCommands {
             }
         }
         // Regularizar tareas residuales no reabre ni crea actuaciones.
-        life.changed(a,type,"CAS",cas,n(c,"scope_id"),"Tarea "+id+". "+reason);
+        long at=life.changed(a,type,"CAS",cas,n(c,"scope_id"),"Tarea "+id+". "+reason);
+        if(type.equals("TASK_COMPLETE")||type.equals("TASK_CANCEL"))
+            life.caseMilestone(type.equals("TASK_COMPLETE")?"TAREA_COMPLETADA":"TAREA_CANCELADA","TAREA",id,cas,a.id(),n(t,"executor_id"),at,null);
         life.bumpCase(cas);
         return done("CAS",cas);
     }
