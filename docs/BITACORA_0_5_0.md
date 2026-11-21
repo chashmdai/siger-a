@@ -21,6 +21,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | R03a | Selector de destino y sugerencia por region | CERRADO |
 | R03b | Panel Estructura y perfil agrupado | CERRADO |
 | G07 | Indice de personas (V12) | CERRADO |
+| G07b | Indice de personas: roles excluidos y nombre de preferencia | CERRADO |
 | G08 | Buscador | ABIERTO |
 | G09 | Calendario habil (V13) | ABIERTO |
 | G10 | Hitos (V14) | ABIERTO |
@@ -284,4 +285,18 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - G08: un RUN de la consulta se busca por `run_number`; un RUN escrito sin guion en el texto libre queda como `document_key` (por ejemplo `123456785`), asi que conviene buscar tambien ese valor. Los nombres se buscan palabra por palabra sobre `name_key` con la misma normalizacion (`PersonIndex.nameKey`). Etiquetas nuevas: `REQUIRENTE`, `CURADOR` y los roles del Formulario (`lib/formulario.ts`). La fuente FICHA trae `requirement_id`; las demas se agrupan por `communication_id`.
   - Una COM insertada por SQL en una prueba no queda indexada: llamar a `PersonIndex.refresh(com)` en el fixture.
 - Pendientes: V12 y la carga inicial sobre un MySQL V11 con datos -> G13; recorrido en `PRUEBAS_MANUALES_0_5_0.md` (junto con el buscador) -> G14
+- Verificacion manual sugerida al usuario: no aplica (sin interfaz hasta G08)
+
+### G07b - Indice de personas: roles excluidos y nombre de preferencia   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate G07b: roles excluidos y nombre de preferencia`)
+- Origen: ajustes del responsable a G07 (no llegaron antes del cierre por un problema al pegar el mensaje).
+- Hecho:
+  - Lista de roles permitidos `PersonIndex.ROLES`: REQUIRENTE, CURADOR, NNA, ACOMPANANTE (COM y ficha) y PRESENTADOR, AFECTADO_NNA, ADULTO_RELACIONADO (Formulario). No se indexan `PERSONA_SENALADA` ni `OTRA_PERSONA`, ni un rol desconocido. Los datos de origen (`external_person`, `communication_person`, ficha) no cambian.
+  - El `preferred_name` de nivel superior de la ficha se une a la clave de quien presenta. En ambas modalidades esta en su seccion (persona adulta en GENERAL, "NNA que solicita atencion" en NNA). Si la ficha no trae nombre, forma la referencia por si solo (rol REQUIRENTE, nombre mostrado = nombre de preferencia).
+  - Marcador `PERSON_INDEX_V12B`. Una instancia con el `PERSON_INDEX_V12` de G07 reconstruye todo el indice al arrancar, y `refresh` borra las referencias excluidas. D5 en `DECISIONES_FUNCIONALES.md` registra la decision.
+- Archivos clave: `PersonIndex.java`, `PersonIndexTest.java`, `docs/DECISIONES_FUNCIONALES.md` (D5), `CLAUDE.md`
+- Verificacion: JUnit 113 ok + 1 omitida (sin cambios en el conteo; Maven informa 114 ejecutadas). `PersonIndexTest` agrega aserciones: la persona senalada con nombre queda en `external_person`, pero no en el indice; "otra persona" excluida en la COM manual y en la ficha, acompanante incluido; nombre de preferencia en la clave de quien presenta y como referencia propia en una ficha NNA sin nombre; un indice de G07 con una persona senalada y el marcador anterior se reconstruye sin ella. Mutacion: sin el filtro de roles, `PersonIndexTest` falla. Frontend sin cambios. Humo no aplica.
+- Desvios del plan: ninguno (ajuste de alcance decidido por el responsable).
+- Hallazgos para gates siguientes: G08 no debe ofrecer las personas senaladas como resultado ni filtrar por ellas: no estan en `person_reference`. Una busqueda por nombre de preferencia llega a quien presenta.
+- Pendientes: los de G07 (V12 y la carga inicial en MySQL -> G13; recorrido -> G14)
 - Verificacion manual sugerida al usuario: no aplica (sin interfaz hasta G08)

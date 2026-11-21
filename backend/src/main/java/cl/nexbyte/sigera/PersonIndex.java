@@ -21,11 +21,18 @@ import static cl.nexbyte.sigera.Db.*;
  * la COM proyectada repite al presentador), la ficha vigente de primera atencion (FICHA; la COM es la copia de su
  * primera version y las versiones antiguas no se indexan) o, en una COM manual, la COM (COM) y sus personas
  * relacionadas (COM_PERSONA). Una persona sin nombre, RUN ni documento no genera referencia.
+ *
+ * Solo se indexan quien presenta o requiere, NNA, adulto relacionado, acompanante y curador/a (D5, gate G07b):
+ * nunca la persona senalada del Formulario ni "otra persona" de la COM manual o de la ficha. Es una lista de roles
+ * permitidos: un rol desconocido tampoco se indexa.
  */
 @Service
 public class PersonIndex {
     private static final Logger LOG=LoggerFactory.getLogger(PersonIndex.class);
-    static final String MARKER="PERSON_INDEX_V12";
+    /** G07 uso PERSON_INDEX_V12 e indexaba todos los roles; el marcador nuevo obliga a reconstruir sin los excluidos. */
+    static final String MARKER="PERSON_INDEX_V12B";
+    /** Roles indexados (D5): COM y ficha (REQUIRENTE, CURADOR, NNA, ACOMPANANTE) y Formulario (PRESENTADOR, AFECTADO_NNA, ADULTO_RELACIONADO). */
+    static final Set<String> ROLES=Set.of("REQUIRENTE","CURADOR","NNA","ACOMPANANTE","PRESENTADOR","AFECTADO_NNA","ADULTO_RELACIONADO");
     static final int BATCH=500;
     private final Db db;
     private final TransactionTemplate tx;
@@ -78,6 +85,7 @@ public class PersonIndex {
 
     // --- Fuentes ----------------------------------------------------------------------------------
     private static Optional<Ref> person(String source,String role,String name,String alias,Identity identity,boolean authenticated,Long requirement){
+        if(!ROLES.contains(role))return Optional.empty();
         String display=name==null||name.isBlank()?(alias==null?"":alias.strip()):name.strip();
         String key=nameKey((name==null?"":name)+" "+(alias==null?"":alias));
         if(key==null&&identity.empty())return Optional.empty();
@@ -107,14 +115,18 @@ public class PersonIndex {
             person("COM_PERSONA",s(p,"person_role"),s(p,"name"),null,parse(s(p,"identity_document")),false,null).ifPresent(out::add);
         return out;
     }
-    /** Ficha vigente (1.0 o 1.1): requirente, curador/a conocido/a y personas relacionadas con su nombre de preferencia. */
+    /**
+     * Ficha vigente (1.0 o 1.1): requirente, curador/a conocido/a y personas relacionadas con su nombre de preferencia.
+     * El preferred_name de nivel superior esta en la seccion de quien presenta en ambas modalidades (persona adulta en
+     * GENERAL, NNA que solicita en NNA): se une a su nombre y, si la ficha no trae nombre, forma la referencia por si solo.
+     */
     private void ficha(long req,Map<String,Object> data,List<Ref> out){
         String name=s(data,"presenter_name");
         if(name.isBlank())name=join(s(data,"presenter_first_name"),s(data,"presenter_middle_name"),s(data,"presenter_last_name"),s(data,"presenter_second_last_name"));
         Identity id=!s(data,"presenter_run_number").isEmpty()?run(s(data,"presenter_run_number"),s(data,"presenter_run_dv")):Identity.NONE;
         if(id.empty()&&!s(data,"presenter_document_number").isEmpty())id=document(s(data,"presenter_document_number"));
         if(id.empty())id=parse(s(data,"identity_document"));
-        person("FICHA","REQUIRENTE",name,null,id,false,req).ifPresent(out::add);
+        person("FICHA","REQUIRENTE",name,s(data,"preferred_name"),id,false,req).ifPresent(out::add);
         person("FICHA","CURADOR",s(data,"guardian_name"),null,Identity.NONE,false,req).ifPresent(out::add);
         if(data.get("people") instanceof List<?> people)for(Object raw:people){
             if(!(raw instanceof Map<?,?> p))continue;

@@ -63,7 +63,7 @@ D3. **Funciones combinables.** Una cuenta acumula funciones por ambito o institu
 
 D4. **Consulta institucional** (`CONSULTA_INSTITUCIONAL`): lectura completa de todas las COM, SOL, REQ, Casos, flujos y primeras atenciones, incluidas las fichas NNA y sus versiones, los originales externos del Formulario y los documentos no reservados. **Excluye las constancias y documentos marcados como reservados.** Nunca concede gestion. Toda consulta se audita.
 
-D5. **Buscador de personas y folios.** Por RUN, nombre o folio, sobre los datos declarados de requirentes, adultos y NNA. Es un indice de coincidencias, no un registro maestro: no fusiona identidades ni autentica personas.
+D5. **Buscador de personas y folios.** Por RUN, nombre o folio, sobre los datos declarados de requirentes, adultos y NNA. Es un indice de coincidencias, no un registro maestro: no fusiona identidades ni autentica personas. Solo se indexan quien presenta o requiere, NNA, adulto relacionado, acompanante y curador/a (con su nombre de preferencia); nunca la persona senalada del Formulario ni "otra persona" de la COM manual o de la ficha (decision del responsable, gate G07b).
 
 D6. **Reportes.** `REPORTES` (cifras agregadas por unidad o ambito, sin datos de personas), `REPORTES_PERSONAS` (desglose por funcionario; su concesion es una decision institucional) y `EXPORTACION` (filas sin datos ciudadanos). Los tiempos se informan en **horas corridas y en dias habiles** (lunes a viernes, excluidos los feriados del calendario que mantiene TI).
 
