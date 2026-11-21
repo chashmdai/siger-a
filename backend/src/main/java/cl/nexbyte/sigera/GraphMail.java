@@ -30,7 +30,7 @@ final class GraphMail {
 
     private final String tenant,client,sender,secret;private final Connection connection;
     private final JsonMapper json=JsonMapper.builder().build();
-    private String token;private long tokenUntil;
+    private String token,tokenRequestId;private long tokenUntil;
 
     GraphMail(String tenant,String client,String sender,String secret){this(tenant,client,sender,secret,jdk());}
     GraphMail(String tenant,String client,String sender,String secret,Connection connection){
@@ -51,10 +51,12 @@ final class GraphMail {
             catch(HttpConnectTimeoutException|ConnectException e){throw new NotSent(e);}
             try(var in=r.body()){
                 byte[] bytes=in.readNBytes(32769);if(bytes.length>32768)throw new IOException("Respuesta fuera de limites");
-                return new Response(r.statusCode(),bytes,r.headers().firstValue("Retry-After").orElse(null),r.headers().firstValue("request-id").orElse(null));
+                return new Response(r.statusCode(),bytes,r.headers().firstValue("Retry-After").orElse(null),requestId(r.headers()));
             }
         };
     }
+    /** request-id de Graph o, en el endpoint OAuth (que no lo envia), x-ms-request-id. Se valida despues como GUID. */
+    static String requestId(HttpHeaders headers){return headers.firstValue("request-id").or(()->headers.firstValue("x-ms-request-id")).orElse(null);}
     private static String encode(String v){return URLEncoder.encode(v,StandardCharsets.UTF_8);}
     private static String safeId(String id){return id!=null&&id.matches(GUID)?id.toLowerCase(Locale.ROOT):null;}
     private static long wait(String v){try{return Math.max(1,Math.min(3600,Long.parseLong(v.strip())));}catch(Exception ignored){return 60;}}
@@ -70,8 +72,19 @@ final class GraphMail {
         try{
             var data=json.readTree(r.body());String access=data.path("access_token").asString("");long seconds=data.path("expires_in").asLong(0);
             if(access.isBlank()||access.length()>16000||access.chars().anyMatch(Character::isISOControl)||seconds<60)throw new IllegalArgumentException();
-            token=access;tokenUntil=System.currentTimeMillis()+Math.min(3600,seconds-30)*1000;return null;
+            token=access;tokenUntil=System.currentTimeMillis()+Math.min(3600,seconds-30)*1000;tokenRequestId=safeId(r.requestId());return null;
         }catch(RuntimeException e){return new Result("REINTENTABLE","TOKEN",200,300,null);}
+    }
+
+    /**
+     * Prueba controlada (GraphCheck): descarta el token en cache, pide uno nuevo y NUNCA llama a sendMail. ACEPTADO con
+     * HTTP 200 y el request-id del endpoint OAuth si se obtuvo; si no, el mismo resultado de fallo de la fase TOKEN.
+     */
+    Result checkToken(){
+        synchronized(this){token=null;tokenUntil=0;tokenRequestId=null;}
+        try{var failure=token();if(failure!=null)return failure;}
+        catch(InterruptedException e){Thread.currentThread().interrupt();return new Result("REINTENTABLE","TOKEN",null,60,null);}
+        synchronized(this){return new Result("ACEPTADO","TOKEN",200,0,tokenRequestId);}
     }
 
     Result send(Message m){

@@ -79,7 +79,7 @@ function Require-ProductionPull($Settings){
     throw 'Recepcion real bloqueada: requiere PRODUCCION o validacion institucional expresamente autorizada y consumidor SMR detenido.'
 }
 function Clear-SigerEnvironment {
-    foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO','SIGER_FORMULARIO_TRUSTED_KEYS','SIGER_FOLIO_PREFIX','SIGER_SCHEDULING','SIGER_FORMULARIO_PULL_ENABLED','SIGER_FORMULARIO_PULL_RUN_ONCE','SIGER_FORMULARIO_PULL_ORIGIN','SIGER_FORMULARIO_PULL_TOKEN','SIGER_FORMULARIO_PULL_TOKEN_FILE','SIGER_FORMULARIO_PULL_CA_FILE','SIGER_FORMULARIO_PULL_SCOPE','SIGER_FORMULARIO_ACK_KEY_ID','SIGER_FORMULARIO_ACK_PRIVATE_KEY_FILE','SIGER_FORMULARIO_ACK_PUBLIC_KEY_FILE','SIGER_FORMULARIO_PULL_AUTOMATIC','SIGER_FORMULARIO_PULL_SINGLE_CONSUMER','SIGER_FORMULARIO_ACK_PRIVATE_KEY','SIGER_FORMULARIO_ACK_PUBLIC_KEY','SIGER_MAIL_MODE','SIGER_GRAPH_TENANT','SIGER_GRAPH_CLIENT','SIGER_GRAPH_SENDER','SIGER_GRAPH_CLIENT_SECRET','SIGER_MAIL_ALLOWED_DOMAINS','SIGER_MAIL_LINK','SIGER_STOP_FILE','SIGER_LOG_FILE','SIGER_ENVIRONMENT_LABEL','SIGER_DOCUMENTS_SYNTHETIC_RELEASE','SIGER_AV_ENGINE','SIGER_AV_EXECUTABLE','SIGER_AV_DATABASE','SIGER_BOOTSTRAP_FILE','SIGER_FORMULARIO_PULL_PROBE','SIGER_AUDIT_SEARCH_KEY')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
+    foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO','SIGER_FORMULARIO_TRUSTED_KEYS','SIGER_FOLIO_PREFIX','SIGER_SCHEDULING','SIGER_FORMULARIO_PULL_ENABLED','SIGER_FORMULARIO_PULL_RUN_ONCE','SIGER_FORMULARIO_PULL_ORIGIN','SIGER_FORMULARIO_PULL_TOKEN','SIGER_FORMULARIO_PULL_TOKEN_FILE','SIGER_FORMULARIO_PULL_CA_FILE','SIGER_FORMULARIO_PULL_SCOPE','SIGER_FORMULARIO_ACK_KEY_ID','SIGER_FORMULARIO_ACK_PRIVATE_KEY_FILE','SIGER_FORMULARIO_ACK_PUBLIC_KEY_FILE','SIGER_FORMULARIO_PULL_AUTOMATIC','SIGER_FORMULARIO_PULL_SINGLE_CONSUMER','SIGER_FORMULARIO_ACK_PRIVATE_KEY','SIGER_FORMULARIO_ACK_PUBLIC_KEY','SIGER_MAIL_MODE','SIGER_GRAPH_TENANT','SIGER_GRAPH_CLIENT','SIGER_GRAPH_SENDER','SIGER_GRAPH_CLIENT_SECRET','SIGER_MAIL_ALLOWED_DOMAINS','SIGER_MAIL_LINK','SIGER_STOP_FILE','SIGER_LOG_FILE','SIGER_ENVIRONMENT_LABEL','SIGER_DOCUMENTS_SYNTHETIC_RELEASE','SIGER_AV_ENGINE','SIGER_AV_EXECUTABLE','SIGER_AV_DATABASE','SIGER_BOOTSTRAP_FILE','SIGER_FORMULARIO_PULL_PROBE','SIGER_AUDIT_SEARCH_KEY','SIGER_MAIL_CHECK_MODE','SIGER_MAIL_CHECK_TO')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
 }
 
 # --- Integraciones (configuracion en config\, secretos DPAPI de la cuenta del servicio) -----------------------
@@ -134,20 +134,47 @@ function Set-FormularioPullEnvironment($Pull,[switch]$RunOnce,[switch]$Probe) {
 }
 # correo-graph.json: {"mode":"GRAPH"|"DESACTIVADO","tenant","client","sender","allowedDomains":["defensorianinez.cl"],"link":"https://..."}
 # Secreto del cliente en graph-client-secret.clixml (DPAPI). Sin archivo o con DESACTIVADO no hay correo.
-function Get-GraphMailConfig($Settings) {
+# -CualquierModo (Test-GraphMail.ps1): lee y valida la credencial tambien con DESACTIVADO, sin activar el correo.
+function Get-GraphMailConfig($Settings,[switch]$CualquierModo) {
     $config=Join-Path $Settings.root 'config'
     $file=Join-Path $config 'correo-graph.json'
     if(-not(Test-Path -LiteralPath $file -PathType Leaf)){return $null}
     $mail=Get-Content -LiteralPath $file -Raw|ConvertFrom-Json
     $mode=if($mail.PSObject.Properties['mode']){([string]$mail.mode).ToUpperInvariant()}else{''}
-    if($mode -eq 'DESACTIVADO'){return $null}
-    if($mode -ne 'GRAPH'){throw 'mode en correo-graph.json debe ser GRAPH o DESACTIVADO.'}
+    if(@('GRAPH','DESACTIVADO') -notcontains $mode){throw 'mode en correo-graph.json debe ser GRAPH o DESACTIVADO.'}
+    if($mode -eq 'DESACTIVADO' -and -not $CualquierModo){return $null}
     foreach($name in @('tenant','client','sender')){if(-not $mail.PSObject.Properties[$name] -or -not [string]$mail.$name){throw "Falta '$name' en correo-graph.json."}}
     $domains=@();if($mail.PSObject.Properties['allowedDomains']){$domains=@($mail.allowedDomains|ForEach-Object {[string]$_}|Where-Object {$_})}
     if($domains.Count -eq 0){throw 'correo-graph.json exige allowedDomains (dominios institucionales de los destinatarios).'}
     $secret=Join-Path $config 'graph-client-secret.clixml';Require-PrivateFile $secret
     $link=if($mail.PSObject.Properties['link']){[string]$mail.link}else{''}
-    return [PSCustomObject]@{Tenant=[string]$mail.tenant;Client=[string]$mail.client;Sender=[string]$mail.sender;Domains=($domains -join ',');Link=$link;Secret=$secret}
+    return [PSCustomObject]@{Mode=$mode;Tenant=[string]$mail.tenant;Client=[string]$mail.client;Sender=[string]$mail.sender;Domains=($domains -join ',');Link=$link;Secret=$secret}
+}
+# Formato de la credencial Graph, con las mismas reglas que GraphMail.java (tenant y cliente GUID, remitente, secreto de
+# 20 a 512 caracteres sin caracteres de control) y dominios validos. Lanza un mensaje sin repetir ningun valor.
+function Assert-GraphCredential([string]$Tenant,[string]$Client,[string]$Sender,[string]$Secret,[string[]]$Domains) {
+    if($Tenant -cnotmatch '^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$'){throw 'El Tenant ID no tiene formato GUID.'}
+    if($Client -cnotmatch '^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$'){throw 'El Client ID no tiene formato GUID.'}
+    if($Sender -cnotmatch '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$'){throw 'El remitente no es una direccion de correo valida.'}
+    if(-not $Secret -or $Secret.Length -lt 20 -or $Secret.Length -gt 512 -or $Secret -match '[\x00-\x1f\x7f-\x9f]'){throw 'El secreto del cliente Graph debe tener entre 20 y 512 caracteres, sin caracteres de control.'}
+    $list=@($Domains|Where-Object {$_})
+    if($list.Count -eq 0){throw 'Indica al menos un dominio permitido para los destinatarios.'}
+    foreach($d in $list){if($d -cnotmatch '^[a-z0-9-]+(\.[a-z0-9-]+)+$'){throw 'Dominio permitido con formato invalido (minusculas, sin @).'}}
+}
+# Destinatario de la prueba controlada: direccion valida de un dominio permitido (la misma regla que GraphCheck.java).
+function Test-GraphRecipient([string]$Address,[string[]]$Domains) {
+    if($Address -cnotmatch '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$'){return $false}
+    $domain=$Address.Substring($Address.IndexOf('@')+1).ToLowerInvariant()
+    return (@($Domains|ForEach-Object {([string]$_).Trim().ToLowerInvariant()}) -contains $domain)
+}
+# Proceso de la prueba controlada (Test-GraphMail.ps1): credencial y modo, nunca SIGER_MAIL_MODE (la prueba no usa la
+# cola de avisos y GraphCheck rechaza GRAPH). El destinatario va solo en una variable del proceso.
+function Set-GraphCheckEnvironment($Mail,[string]$Mode,[string]$To) {
+    [Environment]::SetEnvironmentVariable('SIGER_MAIL_MODE',$null,'Process')
+    $env:SIGER_GRAPH_TENANT=$Mail.Tenant;$env:SIGER_GRAPH_CLIENT=$Mail.Client;$env:SIGER_GRAPH_SENDER=$Mail.Sender
+    $env:SIGER_GRAPH_CLIENT_SECRET=Secret-Text (Import-Clixml -LiteralPath $Mail.Secret)
+    $env:SIGER_MAIL_ALLOWED_DOMAINS=$Mail.Domains
+    $env:SIGER_MAIL_CHECK_MODE=$Mode;$env:SIGER_MAIL_CHECK_TO=if($To){$To}else{$null}
 }
 function Set-GraphMailEnvironment($Mail,[switch]$EnqueueOnly) {
     $env:SIGER_MAIL_MODE='GRAPH';$env:SIGER_GRAPH_TENANT=$Mail.Tenant;$env:SIGER_GRAPH_CLIENT=$Mail.Client;$env:SIGER_GRAPH_SENDER=$Mail.Sender

@@ -79,6 +79,30 @@ class GraphMailTest {
         assertEquals("TOKEN",graph(down).send(message()).phase());
     }
 
+    @Test void pruebaDeTokenNoEnviaYPideSiempreUnoNuevo(){
+        // checkToken (prueba controlada, H01): solo OAuth, nunca sendMail, aunque haya un token en cache.
+        var f=new Fake();
+        f.answers.add(new GraphMail.Response(200,"{\"access_token\":\"bearer-sintetico\",\"expires_in\":3600}".getBytes(StandardCharsets.UTF_8),null,"ABCDEF01-2345-4678-9ABC-DEF012345678"));
+        f.token();
+        var g=graph(f);
+        var r=g.checkToken();
+        assertEquals("ACEPTADO",r.state());assertEquals("TOKEN",r.phase());assertEquals(200,r.http());
+        assertEquals("abcdef01-2345-4678-9abc-def012345678",r.requestId());
+        var second=g.checkToken();assertEquals("ACEPTADO",second.state());assertNull(second.requestId(),"token sin request-id");
+        assertEquals(2,f.calls.size());
+        assertTrue(f.calls.stream().allMatch(c->c.uri().toString().endsWith("/oauth2/v2.0/token")),"nunca sendMail");
+        // Fallo de token: mismo resultado que en send.
+        var denied=new Fake().status(401,null);
+        assertEquals("REINTENTABLE",graph(denied).checkToken().state());assertEquals(1,denied.calls.size());
+    }
+
+    @Test void requestIdDeGraphODelEndpointOAuth(){
+        java.util.function.BiPredicate<String,String> all=(a,b)->true;
+        assertEquals("g",GraphMail.requestId(java.net.http.HttpHeaders.of(Map.of("request-id",List.of("g"),"x-ms-request-id",List.of("o")),all)));
+        assertEquals("o",GraphMail.requestId(java.net.http.HttpHeaders.of(Map.of("x-ms-request-id",List.of("o")),all)));
+        assertNull(GraphMail.requestId(java.net.http.HttpHeaders.of(Map.of(),all)));
+    }
+
     @Test void configuracionYMensajeValidados(){
         assertThrows(IllegalStateException.class,()->new GraphMail("no-guid",CLIENT,SENDER,SECRET,new Fake()));
         assertThrows(IllegalStateException.class,()->new GraphMail(TENANT,CLIENT,"sin-arroba",SECRET,new Fake()));

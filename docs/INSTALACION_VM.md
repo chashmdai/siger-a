@@ -298,6 +298,34 @@ Con `config\correo-graph.json` en modo `GRAPH` y el secreto en `config\graph-cli
 - **Envio ambiguo**: un 5xx, una respuesta perdida o un intento interrumpido por caida quedan `AMBIGUO` y **nunca se reenvian solos**. TI decide en Auditoria y operacion reenviar (el destinatario podria recibirlo dos veces) o descartar; la decision queda auditada.
 - Activar el correo no envia avisos anteriores. Con `"mode":"DESACTIVADO"` o sin archivo no hay correo.
 
+#### Credencial y prueba controlada (0.6.0)
+
+Procedimiento de 0.6.0 para instalar la credencial de Graph en una instancia existente (validacion o produccion), sin SMR, sin paquete de secretos y sin tocar la configuracion del Formulario. Todo se ejecuta **como la cuenta de servicio** (la de `ownerSid` en `instance.json`, duena de DPAPI); con otra cuenta los scripts se rechazan.
+
+1. **Instalar la credencial.** Pide el Tenant ID y el Client ID por consola y el secreto como entrada privada; ninguno va como argumento ni se muestra. Valida el formato (GUID, remitente, secreto de 20 a 512 caracteres) y deja `config\graph-client-secret.clixml` (DPAPI) y `config\correo-graph.json` en `"mode":"DESACTIVADO"`: el servicio no envia correo. No sobrescribe: si ya existe cualquiera de los dos archivos, no escribe nada. No contacta Graph.
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Import-GraphCredential.ps1' -Root 'D:\SIGER-A'
+   ```
+
+   `-Remitente` (por defecto `siger@defensorianinez.cl`, el buzon con permiso `Mail.Send`) y `-DominiosPermitidos` (por defecto `defensorianinez.cl`) son opcionales.
+
+2. **Prueba Token.** Un proceso de SIGER sin servidor web ni tareas programadas pide un token OAuth y **no envia correo**. Acredita que la credencial es valida y que la VM sale hacia `login.microsoftonline.com`. Requiere el MySQL propio activo; el servicio puede estar activo o detenido.
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Test-GraphMail.ps1' -Root 'D:\SIGER-A' -Modo Token
+   ```
+
+3. **Un solo Envio**, despues de un Token acreditado, al destinatario institucional fijo (de un dominio permitido). Envia un correo de asunto y texto fijos, sin datos de expedientes. Acredita ademas la salida hacia `graph.microsoft.com` y el permiso `Mail.Send` sobre el remitente. El script **pide confirmacion** antes de enviar (`-WhatIf` no envia). HTTP 202 significa aceptado por Graph, no entregado: confirmar con el destinatario que llego.
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Test-GraphMail.ps1' -Root 'D:\SIGER-A' -Modo Envio -Destinatario '<destinatario institucional fijo>'
+   ```
+
+La prueba no usa la cola de avisos (`mail_outbox`, `mail_attempt`), no escribe en la base y no cambia el modo del correo. Muestra solo modo, estado, fase, HTTP y request-id, y deja esa evidencia con la hora UTC y el SHA-256 del JAR en `run\graph-prueba.json` (sin destinatario, secreto, token, tenant ni cliente), tambien cuando falla. El detalle del arranque queda en `logs\graph-prueba-*.log`. Activar el correo es un paso aparte (`Set-Integration.ps1 -Correo Graph` y reinicio).
+
+`Import-Integrations.ps1 -GraphSecretFile`/`-GraphSecretPrompt` se conserva, pero no se usa en esta secuencia: instala solo el secreto, sin `correo-graph.json`, y si se hubiera usado, `Import-GraphCredential.ps1` se rechaza porque el secreto ya existe.
+
 Se eliminaron las restricciones de laboratorio heredadas de SMR (allowlist de un solo destinatario, presupuesto de cuatro intentos, asunto "[SIGER LAB]" y texto de prueba). Se conservan las salvaguardas: dominio institucional obligatorio, intento durable, AMBIGUO sin reenvio y pausa auditada.
 
 ### Reutilizar credenciales existentes (SMR, Graph, certificado)

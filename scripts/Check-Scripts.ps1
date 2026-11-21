@@ -60,4 +60,25 @@ foreach($case in $purposes){
 try{Set-SigerEnvironment ([PSCustomObject]@{mode='OTRO';root='X:\no-existe';mysqlPort=1;webPort=2;database='siger_a_x'}) $null;throw 'Set-SigerEnvironment acepto un modo desconocido.'}
 catch{if($_.Exception.Message -like 'Set-SigerEnvironment acepto*'){throw}}
 if($env:SPRING_PROFILES_ACTIVE -or $env:SIGER_DB_URL){Clear-SigerEnvironment;throw 'Un modo desconocido dejo variables del proceso definidas.'}
-Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos). No se modifico la configuracion del equipo.')
+# Credencial Graph (Import-GraphCredential.ps1) y destinatario de la prueba controlada (Test-GraphMail.ps1): mismas reglas
+# que GraphMail.java y GraphCheck.java; cada condicion tiene un caso que se rechaza.
+$tenant='11111111-2222-4333-8444-555555555555';$clientId='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';$sender='siger@defensorianinez.cl'
+$secretValue='secreto-sintetico-de-prueba-0123456789';$domainList=@('defensorianinez.cl')
+$graph=@(
+    @{args=@($tenant,$clientId,$sender,$secretValue,$domainList);ok=$true},
+    @{args=@('no-guid',$clientId,$sender,$secretValue,$domainList);ok=$false},
+    @{args=@($tenant,'aaaaaaaa-bbbb-4ccc-8ddd',$sender,$secretValue,$domainList);ok=$false},
+    @{args=@($tenant,$clientId,'sin-arroba',$secretValue,$domainList);ok=$false},
+    @{args=@($tenant,$clientId,$sender,'corto',$domainList);ok=$false},
+    @{args=@($tenant,$clientId,$sender,('x'*513),$domainList);ok=$false},
+    @{args=@($tenant,$clientId,$sender,($secretValue+[char]10),$domainList);ok=$false},
+    @{args=@($tenant,$clientId,$sender,$secretValue,@());ok=$false},
+    @{args=@($tenant,$clientId,$sender,$secretValue,@('@defensorianinez.cl'));ok=$false})
+foreach($case in $graph){
+    $values=$case.args;$got=$true;try{Assert-GraphCredential @values}catch{$got=$false}
+    if($got -ne $case.ok){throw ('Credencial Graph: se esperaba '+$(if($case.ok){'aceptar'}else{'rechazar'})+' el caso '+[array]::IndexOf($graph,$case)+'.')}
+}
+$recipients=@(@{to='persona@defensorianinez.cl';ok=$true},@{to='Persona@DefensoriaNinez.cl';ok=$true},@{to='alguien@example.com';ok=$false},
+    @{to='no es correo';ok=$false},@{to='';ok=$false},@{to='persona@defensorianinez.cl.example.com';ok=$false})
+foreach($case in $recipients){if((Test-GraphRecipient $case.to $domainList) -ne $case.ok){throw ('Destinatario de la prueba Graph inesperado: caso '+[array]::IndexOf($recipients,$case)+'.')}}
+Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos). No se modifico la configuracion del equipo.')

@@ -23,5 +23,7 @@ estructura-inicial.json
 antivirus.json
   Opcional. Sin este archivo los originales quedan en cuarentena (no se liberan). Copiar a config\ y reiniciar.
 
-Los archivos formulario-pull.json, correo-graph.json y los secretos (*.clixml) los crea Import-SecretPackage.ps1 en
-la VM. Nunca se copian secretos en este paquete.
+Los archivos formulario-pull.json y los secretos del Formulario (*.clixml) los crea Import-SecretPackage.ps1 en la VM.
+La credencial de Graph (correo-graph.json en DESACTIVADO y graph-client-secret.clixml) la instala
+Import-GraphCredential.ps1, como la cuenta de servicio, y se acredita con Test-GraphMail.ps1 (0.6.0).
+Nunca se copian secretos en este paquete.
