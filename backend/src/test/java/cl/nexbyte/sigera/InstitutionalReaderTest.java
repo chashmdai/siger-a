@@ -173,6 +173,15 @@ class InstitutionalReaderTest {
   });
   else if(value instanceof List<?> l)for(var item:l)noFaculties(where,item);
  }
+ /** Nombre neutro de la descarga (G14): folio del registro del documento, su numero y la extension del original. */
+ String neutral(long doc,String ext){
+  var d=db.one("SELECT case_id,requirement_id,communication_id FROM document_item WHERE id=?",doc);
+  String folio=d.get("case_id")!=null?s(db.one("SELECT folio FROM case_record WHERE id=?",d.get("case_id")),"folio")
+   :d.get("requirement_id")!=null?s(db.one("SELECT folio FROM requirement WHERE id=?",d.get("requirement_id")),"folio")
+   :s(db.one("SELECT folio FROM communication WHERE id=?",d.get("communication_id")),"folio");
+  assertTrue(folio.matches("[A-Z0-9]+(-[A-Z0-9]+)+"),folio);
+  return folio+"-documento-"+doc+ext;
+ }
  long audits(String action,long actor){return db.count("SELECT COUNT(*) FROM audit_event WHERE action=? AND actor_id=?",action,actor);}
 
  @Test void rolPublicadoEInstitucionalIncompatibleConTi(){
@@ -246,9 +255,15 @@ class InstitutionalReaderTest {
 
  @Test void descargasAuditadasYReservadasDenegadas()throws Exception{
   var f=fixture();var reader=access.actor(READER);long downloads=audits("DESCARGA",reader.id());
-  assertEquals("informe-caso.txt",documents.download(reader,f.caseOpenDoc()).name());
-  assertEquals("oficio-req.txt",documents.download(reader,f.reqOpenDoc()).name());
+  assertEquals(neutral(f.caseOpenDoc(),".txt"),documents.download(reader,f.caseOpenDoc()).name());
+  assertEquals(neutral(f.reqOpenDoc(),".txt"),documents.download(reader,f.reqOpenDoc()).name());
   assertEquals(downloads+2,audits("DESCARGA",reader.id()));
+  // Extension del original solo si es alfanumerica de 1 a 8 caracteres; nunca el resto del nombre.
+  assertEquals("COM-A-000001-documento-7.pdf",Documents.neutralName("COM-A-000001",7,"Ana Perez.PDF"));
+  assertEquals("COM-A-000001-documento-7.gz",Documents.neutralName("COM-A-000001",7,"respaldo.tar.gz"));
+  assertEquals("COM-A-000001-documento-7",Documents.neutralName("COM-A-000001",7,"sin extension"));
+  assertEquals("COM-A-000001-documento-7",Documents.neutralName("COM-A-000001",7,"nota.señal"));
+  assertEquals("COM-A-000001-documento-7",Documents.neutralName("COM-A-000001",7,"x.extensionlarga"));
   for(long reserved:List.of(f.caseReservedDoc(),f.reqReservedDoc()))
    assertEquals(403,assertThrows(Problem.class,()->documents.download(reader,reserved)).status,"documento reservado "+reserved);
   // Y no puede cargar documentos donde solo lee.
@@ -419,7 +434,9 @@ class InstitutionalReaderTest {
   db.update("UPDATE document_item SET quarantined=FALSE WHERE id=?",doc); // Liberacion de TI fuera de esta prueba (DocumentReleaseTest).
   long before=db.count("SELECT COUNT(*) FROM audit_event WHERE action='DESCARGA' AND actor_id=? AND resource_type='COM' AND resource_id=? AND note=?",reader.id(),com,"Documento "+doc);
   var download=documents.download(reader,doc);
-  assertEquals("informe ciudadano.pdf",download.name());
+  assertEquals(neutral(doc,".pdf"),download.name(),"el nombre original (con el de una persona) no viaja en la descarga");
+  assertFalse(download.name().contains("ciudadano"));
+  assertTrue(((List<?>)view.get("documents")).toString().contains("informe ciudadano.pdf"),"la ficha conserva el nombre original");
   assertEquals(content.length,download.size());
   assertArrayEquals(content,Files.readAllBytes(download.path()));
   assertEquals(before+1,db.count("SELECT COUNT(*) FROM audit_event WHERE action='DESCARGA' AND actor_id=? AND resource_type='COM' AND resource_id=? AND note=?",reader.id(),com,"Documento "+doc),
@@ -642,7 +659,7 @@ class InstitutionalReaderTest {
   var cas=detail(DIR_UPD,"CAS",x.caseId());
   assertEquals(List.of(x.openNote()),ids(cas,"notes"));assertEquals(List.of(x.caseOpenDoc()),ids(cas,"documents"));
   db.update("UPDATE staff SET must_change=FALSE WHERE username=?",DIR_UPD);var upd=access.actor(DIR_UPD);
-  assertEquals("informe-caso.txt",documents.download(upd,x.caseOpenDoc()).name());
+  assertEquals(neutral(x.caseOpenDoc(),".txt"),documents.download(upd,x.caseOpenDoc()).name());
   for(long reserved:List.of(x.caseReservedDoc(),x.reqReservedDoc()))assertEquals(403,assertThrows(Problem.class,()->documents.download(upd,reserved)).status);
 
   // La Coordinacion regional conserva la gestion y no ve el aviso.
@@ -704,7 +721,7 @@ class InstitutionalReaderTest {
   @SuppressWarnings("unchecked") var full=(Map<String,Object>)detail(DIR_UPR,"REQ",req).get("attention");
   assertEquals(true,full.get("can_read"));assertNotNull(full.get("form"));
   assertTrue(reads(DIR_UPR,"COM",com));
-  assertEquals("original-ingreso.txt",documents.download(upr,original).name());
+  assertEquals(neutral(original,".txt"),documents.download(upr,original).name());
   assertFalse(reads(DIR_UPR,"CAS",cas));
  }
 

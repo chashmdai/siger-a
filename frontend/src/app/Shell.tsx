@@ -51,7 +51,7 @@ function Sidebar({groups, view, user, refresh, logout, palette, navigate}: Sideb
         <button className="sm" onClick={refresh} title="Volver a consultar tus datos y permisos"><Icon name="refresh" size={16}/>Actualizar</button>
         <button className="sm" onClick={logout}><Icon name="logout" size={16}/>Salir</button>
       </div>
-      <p className="app-meta">Fechas en hora de Chile continental (America/Santiago). Versión 0.4.0.</p>
+      <p className="app-meta">Fechas en hora de Chile continental (America/Santiago). Versión {__SIGER_VERSION__}.</p>
     </div>
   </div>;
 }

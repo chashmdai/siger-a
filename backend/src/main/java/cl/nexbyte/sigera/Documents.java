@@ -239,7 +239,22 @@ public class Documents {
         try(var in=Files.newInputStream(path)){byte[] block=new byte[65536];int count;while((count=in.read(block))!=-1){size+=count;hash.update(block,0,count);}}
         require(size==n(d,"size_bytes")&&HexFormat.of().formatHex(hash.digest()).equals(s(d,"sha256")),"El original no supera la comprobacion de integridad.");
         authorize(active(a.username()),kind,target,false,b(d,"reserved"));
-        db.audit(a.id(),"DESCARGA",kind,target,scope,"Documento "+id);return new Download(path,s(d,"name"),size);
+        db.audit(a.id(),"DESCARGA",kind,target,scope,"Documento "+id);return new Download(path,neutralName(kind,target,id,s(d,"name")),size);
+    }
+    /**
+     * Nombre de la descarga (G14): folio del registro y numero del documento, con la extension del original solo si es
+     * alfanumerica de 1 a 8 caracteres. El nombre original (que puede contener el de una persona) no viaja en
+     * Content-Disposition y por eso no queda en el historial de descargas del navegador; sigue visible en la ficha.
+     */
+    private String neutralName(String kind,long target,long id,String original){
+        String table=switch(kind){case "CAS"->"case_record";case "REQ"->"requirement";default->"communication";};
+        String folio=s(db.one("SELECT folio FROM "+table+" WHERE id=?",target),"folio");
+        return neutralName(folio==null||!folio.matches("[A-Za-z0-9-]{1,48}")?kind+"-"+target:folio,id,original);
+    }
+    static String neutralName(String folio,long id,String original){
+        int dot=original==null?-1:original.lastIndexOf('.');
+        String ext=dot<0?"":original.substring(dot+1).toLowerCase(java.util.Locale.ROOT);
+        return folio+"-documento-"+id+(ext.matches("[a-z0-9]{1,8}")?"."+ext:"");
     }
     private boolean caseCanReadOriginal(Actor a,long communication){
         for(var c:db.rows("SELECT c.* FROM case_record c JOIN requirement r ON r.id=c.requirement_id WHERE r.communication_id=?",communication))if(access.caseSourceDocuments(a,c))return true;

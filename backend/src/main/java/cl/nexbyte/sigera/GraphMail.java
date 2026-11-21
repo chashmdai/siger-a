@@ -44,7 +44,7 @@ final class GraphMail {
     private static Connection jdk(){
         var http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).version(HttpClient.Version.HTTP_1_1).build();
         return (uri,headers,body)->{
-            var b=HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30)).header("User-Agent","SIGER/0.4.0").POST(HttpRequest.BodyPublishers.ofByteArray(body));
+            var b=HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30)).header("User-Agent","SIGER/"+SigerApplication.version()).POST(HttpRequest.BodyPublishers.ofByteArray(body));
             headers.forEach(b::header);
             HttpResponse<java.io.InputStream> r;
             try{r=http.send(b.build(),HttpResponse.BodyHandlers.ofInputStream());}

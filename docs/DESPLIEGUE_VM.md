@@ -150,9 +150,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-In
 
 Reiniciar SIGER. Solo los avisos nuevos generan correo, desde `siger@defensorianinez.cl` y para destinatarios `@defensorianinez.cl`.
 
-## Actualizacion a 0.5.0: inventario de Coordinaciones regionales (antes de actualizar)
+## Actualizacion a 0.5.0: consultas previas (antes de actualizar)
 
-Desde 0.5.0 la Coordinacion regional se registra como `DIRECCION` de su sede (D7). Al primer arranque con 0.5.0, una rutina auditada (`sistema:actualizacion`, marcador `COORDINACION_REGIONAL_050`) convierte cada `JEFATURA` vigente o programada en una sede. Si la sede ya tiene una `DIRECCION` superpuesta, esa `JEFATURA` no se convierte y Administracion muestra el aviso `JEFATURA_EN_SEDE`. Para saber de antemano que hara la rutina, ejecuta en la instancia 0.4.0 (esquema V10) esta consulta de solo lectura con el cliente `mysql` de la VM, sobre el esquema `siger_a_*` de la instancia. No modifica nada.
+Desde 0.5.0 la Coordinacion regional se registra como `DIRECCION` de su sede (D7). Al primer arranque con 0.5.0, una rutina auditada (`sistema:actualizacion`, marcador `COORDINACION_REGIONAL_050`) convierte cada `JEFATURA` vigente o programada en una sede. Si la sede ya tiene una `DIRECCION` superpuesta, esa `JEFATURA` no se convierte y Administracion muestra el aviso `JEFATURA_EN_SEDE`. Para saber de antemano que hara la rutina, y si hay cuentas que no podrian ingresar, ejecuta en la instancia 0.4.0 (esquema V10) estas consultas de solo lectura con el cliente `mysql` de la VM, sobre el esquema `siger_a_*` de la instancia. No modifica nada.
 
 ```sql
 -- 1) JEFATURA vigentes o programadas en sedes regionales: se convertiran en DIRECCION con el mismo periodo.
@@ -175,6 +175,14 @@ WHERE g.role_code='JEFATURA' AND s.regional=TRUE AND g.revoked_at IS NULL AND x.
 ORDER BY s.code, x.id;
 -- 3) Sedes existentes: quedaran ACTIVA (o CERRADA si estan deshabilitadas) y sin region; TI la registra despues.
 SELECT code, name, site_code, enabled FROM org_scope WHERE regional=TRUE ORDER BY code;
+-- 4) Cuentas con mayusculas en el usuario. Desde 0.5.0 el ingreso pasa el usuario a minusculas y exige coincidencia
+--    exacta (en MySQL la comparacion no distingue mayusculas): estas cuentas no podrian ingresar. SIGER siempre las crea
+--    en minusculas, asi que el resultado esperado es vacio; una fila solo puede venir de SQL manual.
+SELECT id, username, enabled, technical FROM staff
+WHERE CAST(username AS BINARY) <> CAST(LOWER(username) AS BINARY)
+ORDER BY id;
 ```
 
-Despues de actualizar, TI registra la region de cada sede (comando `SCOPE_UPDATE`; panel Estructura desde R03) y resuelve en el perfil de cada cuenta las `JEFATURA` que hayan quedado sin convertir.
+Si la consulta 4 devuelve filas, no actualizar: informarlo al responsable del proyecto (no hay comando para renombrar una cuenta).
+
+Despues de actualizar, TI registra la region de cada sede (panel Estructura, `SCOPE_UPDATE`) y resuelve en el perfil de cada cuenta las `JEFATURA` que hayan quedado sin convertir. La secuencia completa de la actualizacion (respaldo, ensayo de restauracion obligatorio, `Update.ps1` y tareas posteriores) esta en `docs/ACTUALIZACION_0_5_0.md`.

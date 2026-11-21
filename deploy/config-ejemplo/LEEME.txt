@@ -5,9 +5,12 @@ estructura-inicial.json
   Contiene SOLO datos institucionales reales: ambitos, la cuenta TI y, opcionalmente, los funcionarios con sus
   funciones. Las claves temporales se generan en la VM (data\bootstrap-usuarios.csv).
   - unidad: UPR, UPD, UEP, UGI, REG, DAI, GAB, DEF o AUD.
-  - funciones de funcionarios: ADMINISTRATIVO, PROFESIONAL, JEFATURA, DIRECCION, LECTURA, AUDITORIA (con "ambito")
-    o DISTRIBUIDOR y TI (institucionales, sin ambito). Una persona puede combinar funciones; se admiten varios
-    distribuidores; una jefatura o direccion por ambito. TI va sola: no se combina con ninguna otra funcion.
+  - funciones de funcionarios: ADMINISTRATIVO, PROFESIONAL, JEFATURA, DIRECCION, LECTURA, AUDITORIA (con "ambito");
+    DISTRIBUIDOR, CONSULTA_INSTITUCIONAL y TI (institucionales, sin ambito); REPORTES, REPORTES_PERSONAS y EXPORTACION
+    ("ambito" opcional: sin ambito = toda la institucion; REPORTES_PERSONAS y EXPORTACION exigen REPORTES en el mismo
+    alcance). Una persona puede combinar funciones; se admiten varios distribuidores; una jefatura o direccion por
+    ambito. TI va sola: no se combina con ninguna otra funcion.
+  - usuario: en minusculas (letras, digitos, punto, guion o guion bajo; 3 a 64). El ingreso no distingue mayusculas.
   - Sedes regionales (desde 0.5.0): un ambito por sede con "regional": true y "region" (codigo de region del
     Formulario: 15 Arica y Parinacota, 01 Tarapaca, 02 Antofagasta, 03 Atacama, 04 Coquimbo, 05 Valparaiso,
     13 Metropolitana, 06 O'Higgins, 07 Maule, 16 Nuble, 08 Biobio, 09 La Araucania, 14 Los Rios, 10 Los Lagos,

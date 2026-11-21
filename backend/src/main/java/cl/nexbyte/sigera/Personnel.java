@@ -187,20 +187,21 @@ public class Personnel {
      */
     static List<String> closeBlockers(Db db,long scope){
         long now=System.currentTimeMillis();var out=new ArrayList<String>();
-        blocker(out,"REQ abiertos",db.count("SELECT COUNT(*) FROM requirement WHERE principal_scope=? AND state<>'CERRADO'",scope));
-        blocker(out,"Casos abiertos",db.count("SELECT COUNT(*) FROM case_record WHERE scope_id=? AND state<>'CERRADO'",scope));
-        blocker(out,"SOL pendientes",db.count("SELECT COUNT(*) FROM solicitation WHERE destination_scope=? AND state='PENDIENTE'",scope));
-        blocker(out,"COM sin encaminar",db.count("SELECT COUNT(*) FROM communication WHERE origin_scope=? AND state='NUEVA'",scope));
-        blocker(out,"SOL devueltas de COM de la sede",db.count("SELECT COUNT(*) FROM solicitation s JOIN communication c ON c.id=s.communication_id WHERE c.origin_scope=? AND s.state='DEVUELTA'",scope));
-        blocker(out,"peticiones entre unidades pendientes",db.count("SELECT COUNT(*) FROM flow_request WHERE state='PENDIENTE' AND (origin_scope=? OR target_scope=?)",scope,scope));
-        blocker(out,"entregas de primera atencion pendientes",db.count("SELECT COUNT(*) FROM attention_handoff WHERE state='PENDIENTE' AND (from_scope=? OR target_scope=?)",scope,scope));
-        blocker(out,"reaperturas pendientes",db.count("SELECT COUNT(*) FROM reopening p JOIN requirement q ON q.id=p.requirement_id LEFT JOIN case_record c ON c.id=p.case_id WHERE p.state='PENDIENTE' AND (q.principal_scope=? OR c.scope_id=?)",scope,scope));
-        blocker(out,"vinculaciones propuestas",db.count("SELECT COUNT(*) FROM communication_link l JOIN requirement q ON q.id=l.requirement_id JOIN communication c ON c.id=l.communication_id WHERE l.state='PROPUESTA' AND (q.principal_scope=? OR c.origin_scope=?)",scope,scope));
-        blocker(out,"funciones vigentes o programadas",db.count("SELECT COUNT(*) FROM role_assignment WHERE scope_id=? AND revoked_at IS NULL AND (valid_until IS NULL OR valid_until>?)",scope,now));
-        blocker(out,"cuentas con adscripcion principal en la sede",db.count("SELECT COUNT(*) FROM staff WHERE home_scope=? AND technical=FALSE",scope));
+        blocker(out,"REQ abierto","REQ abiertos",db.count("SELECT COUNT(*) FROM requirement WHERE principal_scope=? AND state<>'CERRADO'",scope));
+        blocker(out,"Caso abierto","Casos abiertos",db.count("SELECT COUNT(*) FROM case_record WHERE scope_id=? AND state<>'CERRADO'",scope));
+        blocker(out,"SOL pendiente","SOL pendientes",db.count("SELECT COUNT(*) FROM solicitation WHERE destination_scope=? AND state='PENDIENTE'",scope));
+        blocker(out,"COM sin encaminar","COM sin encaminar",db.count("SELECT COUNT(*) FROM communication WHERE origin_scope=? AND state='NUEVA'",scope));
+        blocker(out,"SOL devuelta de una COM de la sede","SOL devueltas de COM de la sede",db.count("SELECT COUNT(*) FROM solicitation s JOIN communication c ON c.id=s.communication_id WHERE c.origin_scope=? AND s.state='DEVUELTA'",scope));
+        blocker(out,"petición entre unidades pendiente","peticiones entre unidades pendientes",db.count("SELECT COUNT(*) FROM flow_request WHERE state='PENDIENTE' AND (origin_scope=? OR target_scope=?)",scope,scope));
+        blocker(out,"entrega de primera atención pendiente","entregas de primera atención pendientes",db.count("SELECT COUNT(*) FROM attention_handoff WHERE state='PENDIENTE' AND (from_scope=? OR target_scope=?)",scope,scope));
+        blocker(out,"reapertura pendiente","reaperturas pendientes",db.count("SELECT COUNT(*) FROM reopening p JOIN requirement q ON q.id=p.requirement_id LEFT JOIN case_record c ON c.id=p.case_id WHERE p.state='PENDIENTE' AND (q.principal_scope=? OR c.scope_id=?)",scope,scope));
+        blocker(out,"vinculación propuesta","vinculaciones propuestas",db.count("SELECT COUNT(*) FROM communication_link l JOIN requirement q ON q.id=l.requirement_id JOIN communication c ON c.id=l.communication_id WHERE l.state='PROPUESTA' AND (q.principal_scope=? OR c.origin_scope=?)",scope,scope));
+        blocker(out,"función vigente o programada","funciones vigentes o programadas",db.count("SELECT COUNT(*) FROM role_assignment WHERE scope_id=? AND revoked_at IS NULL AND (valid_until IS NULL OR valid_until>?)",scope,now));
+        blocker(out,"cuenta con adscripción principal en la sede","cuentas con adscripción principal en la sede",db.count("SELECT COUNT(*) FROM staff WHERE home_scope=? AND technical=FALSE",scope));
         return out;
     }
-    private static void blocker(List<String> out,String what,long count){if(count>0)out.add(count+" "+what);}
+    /** Cantidad con el texto en singular o plural ("1 REQ abierto", "2 REQ abiertos"). */
+    private static void blocker(List<String> out,String one,String many,long count){if(count>0)out.add(count+" "+(count==1?one:many));}
     private record Wanted(Roles.Role role,Long scope,long from,Long until){ }
 
     /**

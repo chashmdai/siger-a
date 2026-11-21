@@ -66,7 +66,7 @@ final class FormularioClient {
     private static String id(String uuid){var u=UUID.fromString(uuid).toString();if(!u.equals(uuid))throw new IllegalArgumentException();return u;}
     private HttpRequest.Builder request(String suffix,Duration timeout){
         return HttpRequest.newBuilder(URI.create(origin+ROOT+suffix)).timeout(timeout)
-            .header("User-Agent","SIGER/0.4.0").header("Authorization","Bearer "+token);
+            .header("User-Agent","SIGER/"+SigerApplication.version()).header("Authorization","Bearer "+token);
     }
     private <T> HttpResponse<T> send(HttpRequest request,HttpResponse.BodyHandler<T> handler)throws Failure{
         try{return http.send(request,handler);}
@@ -89,7 +89,7 @@ final class FormularioClient {
         String zero="00000000-0000-0000-0000-000000000000",path=origin+ROOT+"/"+zero+"/adjuntos/"+zero;
         int[] codes=new int[3];String[] auth={null,"Bearer credencial-sintetica-invalida","Bearer "+token};
         for(int i=0;i<3;i++){
-            var b=HttpRequest.newBuilder(URI.create(path)).timeout(Duration.ofSeconds(10)).header("User-Agent","SIGER/0.4.0").header("X-Reserva",zero).method("HEAD",HttpRequest.BodyPublishers.noBody());
+            var b=HttpRequest.newBuilder(URI.create(path)).timeout(Duration.ofSeconds(10)).header("User-Agent","SIGER/"+SigerApplication.version()).header("X-Reserva",zero).method("HEAD",HttpRequest.BodyPublishers.noBody());
             if(auth[i]!=null)b.header("Authorization",auth[i]);
             codes[i]=send(b.build(),HttpResponse.BodyHandlers.discarding()).statusCode();
         }

@@ -217,6 +217,10 @@ MIGRATION_FAILED/PROMOTION_FAILED bloquean inicio ambiguo. START_FAILED permite 
 
 Los scripts siguen sin ejecutarse aqui sobre Windows/MySQL. Su primera validacion es parte de la prueba guiada, no una evidencia ya obtenida.
 
+### Actualizar a 0.5.0
+
+La secuencia completa (consultas previas, respaldo, ensayo de restauracion obligatorio con `Restore-Check.ps1`, `Update.ps1`, cifras a revisar y tareas de TI posteriores) esta en `docs/ACTUALIZACION_0_5_0.md`. Las consultas previas de solo lectura estan en `docs/DESPLIEGUE_VM.md`. Desde 0.5.0 el ingreso pasa el usuario a minusculas, el CSV de las bandejas exige la funcion `EXPORTACION` y las descargas llevan un nombre neutro (`<FOLIO>-documento-<id>.<ext>`).
+
 ### Supresion de AUTORIDAD al actualizar a 0.5.0
 
 Al primer arranque de 0.5.0 (tambien con `Update.ps1`, que migra con el JAR candidato) una rutina revoca las funciones AUTORIDAD vigentes o programadas. No borra filas: conserva la historia y registra un evento `FUNCION_REVOCADA` por cada una, con el fundamento "Rol suprimido en 0.5.0 (D1)", a nombre de la identidad tecnica `sistema:actualizacion` (sin sesion, sin funciones y fuera de las listas). Se aplica una sola vez (marcador `ROL_AUTORIDAD_SUPRIMIDO_050`). La cuenta que tenia la autoridad sigue existiendo, sin esa funcion.
@@ -242,7 +246,7 @@ La recuperacion se rechaza sin cambios si queda una TI permanente (la administra
 
 ## Operacion permanente 24/7 (V9-V10)
 
-Esta seccion prepara SIGER para operar como servicio permanente. Nada de lo descrito se activa solo: cada paso es una orden explicita del operador. El esquema sube a V10 (`Migrate.ps1` con respaldo previo; `Start.ps1` exige esquema 10).
+Esta seccion prepara SIGER para operar como servicio permanente. Nada de lo descrito se activa solo: cada paso es una orden explicita del operador. El esquema subio a V10 en 0.4.0 y a V14 en 0.5.0 (`Migrate.ps1` con respaldo previo). `Start.ps1` exige la version y el esquema que declara el manifiesto del release (`Build.ps1` los toma de `backend/pom.xml` y de las migraciones).
 
 ### Servicios de Windows (SIGER y su MySQL propio)
 
@@ -358,7 +362,7 @@ Despues de registrar los servicios, en una ventana sin usuarios y **como la cuen
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Test-Service.ps1' -Root 'D:\SIGER-A' -VentanaAutorizada -IncluirMySql
 ```
 
-Comprueba arranque y salud (esquema 10), parada ordenada (registro de parada, menos de 180 s, sin proceso residual y lease del Formulario libre), recuperacion automatica tras terminar Java a la fuerza (nuevo proceso sano y evento de caida) y, con `-IncluirMySql`, la detencion y recuperacion junto al motor propio. Deja el resultado en `logs\prueba-servicio-<fecha>.json` y termina con error si algun paso falla. El reinicio del equipo se prueba aparte (reiniciar en ventana autorizada y luego `Estado.ps1`). El host del servicio tambien tiene un modo de prueba en consola (`service\SigerService.exe --probar <raiz> <segundos> [plazo_ms]`) que no requiere registrar servicios.
+Comprueba arranque y salud (version y esquema del manifiesto; 0.5.0 y 14 en esta version), parada ordenada (registro de parada, menos de 180 s, sin proceso residual y lease del Formulario libre), recuperacion automatica tras terminar Java a la fuerza (nuevo proceso sano y evento de caida) y, con `-IncluirMySql`, la detencion y recuperacion junto al motor propio. Deja el resultado en `logs\prueba-servicio-<fecha>.json` y termina con error si algun paso falla. El reinicio del equipo se prueba aparte (reiniciar en ventana autorizada y luego `Estado.ps1`). El host del servicio tambien tiene un modo de prueba en consola (`service\SigerService.exe --probar <raiz> <segundos> [plazo_ms]`) que no requiere registrar servicios.
 
 ### Procedimiento de sustitucion del consumidor de SMR
 

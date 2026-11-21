@@ -153,7 +153,7 @@ class RegionalSitesTest {
         long c=com("COM para la sede Sur");
         long sol=run("distribucion","COM_ROUTE",c,rev("communication",c),Map.of("scope_id",sur,"reason",BASIS)).id();
         String blocked=refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason());
-        assertTrue(blocked.contains("1 SOL pendientes")&&blocked.contains("funciones vigentes o programadas")&&blocked.contains("2 cuentas con adscripcion principal"),blocked);
+        assertTrue(blocked.contains("1 SOL pendiente;")&&blocked.contains("funciones vigentes o programadas")&&blocked.contains("2 cuentas con adscripción principal"),blocked);
         var panel=structure(sur);
         assertEquals("REGIONAL",s(panel,"level"));assertEquals(coord,n(panel,"head_id"));assertEquals("DIRECCION",s(panel,"head_role"));
         assertEquals(2L,n(panel,"staff"));assertEquals(1L,n(panel,"pending_sol"));assertEquals(0L,n(panel,"open_req"));
@@ -163,14 +163,14 @@ class RegionalSitesTest {
         long req=run("coord.sur","SOL_ASSUME",sol,rev("solicitation",sol),Map.of("responsible_id",prof,"reason","Asume la sede")).id();
         assertEquals(sur,n(db.one("SELECT principal_scope FROM requirement WHERE id=?",req),"principal_scope"));
         blocked=refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason());
-        assertTrue(blocked.contains("1 REQ abiertos")&&!blocked.contains("SOL pendientes"),blocked);
+        assertTrue(blocked.contains("1 REQ abierto")&&!blocked.contains("SOL pendiente"),blocked);
         sameBlockers(sur,blocked);
         assertEquals(1L,n(structure(sur),"open_req"));assertEquals(0L,n(structure(sur),"pending_sol"));
         run("coord.sur","REQ_CLASSIFY",req,rev("requirement",req),Map.of("complexity","BAJA","reason","Clasificacion sintetica"));
         long cas=run("coord.sur","REQ_CASE_CREATE",req,rev("requirement",req),Map.of("scope_id",sur,"responsible_id",prof,"objective","Seguimiento regional","matter","UPR")).id();
         sameBlockers(sur,refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason()));
         assertEquals(1L,n(structure(sur),"open_cases"));
-        assertTrue(refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason()).contains("1 Casos abiertos"));
+        assertTrue(refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason()).contains("1 Caso abierto"));
         run("prof.sur","CASE_CLOSE",cas,rev("case_record",cas),Map.of("reason","Gestion concluida"));
         run("coord.sur","REQ_CLOSE",req,rev("requirement",req),Map.of("reason","Cierre expreso"));
 
