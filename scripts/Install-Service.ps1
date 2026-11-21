@@ -2,7 +2,9 @@
 param(
     [string]$Root='D:\SIGER-A',
     # Cuenta de servicio de SIGER: SIN privilegios administrativos, la misma que inicializo la instancia (DPAPI).
-    [Parameter(Mandatory=$true)][pscredential]$ServiceCredential,
+    # Con -File se pasa el nombre de la cuenta ('DOMINIO\svc-siger') y el script pide la contrasena: un (Get-Credential ...)
+    # en la orden llega como el texto 'System.Management.Automation.PSCredential'.
+    [Parameter(Mandatory=$true)][pscredential][System.Management.Automation.Credential()]$ServiceCredential,
     # Concede a la cuenta el derecho "Iniciar sesion como servicio" en la directiva local (una directiva de dominio puede prevalecer).
     [switch]$ConcederInicioComoServicio
 )
@@ -53,7 +55,7 @@ $right=$false
 try{
     $line=@(Get-LogonRight $policy)
     $right=$line.Count -gt 0 -and $line[0] -match [regex]::Escape('*'+$sid)
-}finally{foreach($f in @($policy,$database)){if(Test-Path -LiteralPath $f){Remove-Item -LiteralPath $f}}}
+}finally{foreach($f in @($policy,$database)){Remove-SecretFile $f}}
 
 $serviceDir=Join-Path $Root 'service';$exe=Join-Path $serviceDir 'SigerService.exe'
 if(Test-Path -LiteralPath $exe){throw 'Ya existe service\SigerService.exe. Revisa una instalacion previa; no se reemplaza.'}
@@ -66,7 +68,7 @@ if(-not $right -and $ConcederInicioComoServicio){
         @('[Unicode]','Unicode=yes','[Version]','signature="$CHICAGO$"','Revision=1','[Privilege Rights]',$entry)|Set-Content -LiteralPath $policy -Encoding Unicode
         if((Invoke-Native {& secedit.exe /configure /db $database /cfg $policy /areas USER_RIGHTS} -Quiet) -ne 0){throw 'secedit no aplico el derecho.'}
         $right=(Get-LogonRight $policy)[0] -match [regex]::Escape('*'+$sid)
-    }finally{foreach($f in @($policy,$database)){if(Test-Path -LiteralPath $f){Remove-Item -LiteralPath $f}}}
+    }finally{foreach($f in @($policy,$database)){Remove-SecretFile $f}}
 }
 
 # Host del servicio compilado aqui con el compilador de .NET Framework de Windows (sin binarios externos).

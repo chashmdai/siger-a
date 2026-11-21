@@ -27,7 +27,7 @@ function Wait-Healthy([int]$Seconds){$t=[Diagnostics.Stopwatch]::StartNew();whil
 function AppPid{$f=Join-Path $Root 'run\app.pid';if(Test-Path -LiteralPath $f){return [int](Get-Content -LiteralPath $f -Raw).Trim()};return $null}
 function Lock-Holder{
     $client=MySql-ClientFile $s $secret 'owner'
-    try{return ((Invoke-SigerSql $s $client 'SELECT IFNULL(holder,'''') FROM formulario_consumer_lock WHERE id=1' $s.database)|Out-String).Trim()}finally{Remove-Item -LiteralPath $client}
+    try{return ((Invoke-SigerSql $s $client 'SELECT IFNULL(holder,'''') FROM formulario_consumer_lock WHERE id=1' $s.database)|Out-String).Trim()}finally{Remove-SecretFile $client}
 }
 $log=Join-Path $Root 'logs\siger.log'
 

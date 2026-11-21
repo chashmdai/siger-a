@@ -23,7 +23,7 @@ $services=Get-SigerServices $s
 if($services -and $services.App.Status -ne 'Stopped'){throw 'Deten el servicio SIGER (Stop.ps1) antes de la recuperacion; su MySQL debe seguir activo.'}
 if(App-Running $s){throw 'Deten SIGER (Stop.ps1) antes de la recuperacion; su MySQL debe seguir activo.'}
 $secret=Import-Clixml (Join-Path $Root 'config\secrets.clixml');$client=MySql-ClientFile $s $secret 'owner'
-try{Require-OwnMySql $s $client}finally{Remove-Item -LiteralPath $client}
+try{Require-OwnMySql $s $client}finally{Remove-SecretFile $client}
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'logs') | Out-Null
 $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'
 $out=Join-Path $Root "logs\recuperacion-ti-$stamp.out.log";$err=Join-Path $Root "logs\recuperacion-ti-$stamp.err.log"

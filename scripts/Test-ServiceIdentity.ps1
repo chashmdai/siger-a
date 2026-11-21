@@ -28,7 +28,7 @@ if(Test-Path -LiteralPath $avFile){
                 'SIGER: archivo sintetico limpio para comprobar el analisis con la cuenta de servicio.'|Set-Content -Encoding ASCII -LiteralPath $probe
                 $text=(& ([string]$av.executable) -Scan -ScanType 3 -File $probe -DisableRemediation 2>&1|Out-String);$code=$LASTEXITCODE
                 $defender=if($code -eq 0 -and $text.Contains("Scanning $probe found no threats")){'OPERATIVO'}elseif($text -match 'Failed with hr = (0x[0-9A-Fa-f]{8})'){"ANALISIS_FALLIDO_$($Matches[1])"}else{"ANALISIS_NO_CONFIRMADO_$code"}
-            }finally{if(Test-Path -LiteralPath $probe){Remove-Item -LiteralPath $probe}}
+            }finally{if([IO.File]::Exists($probe)){[IO.File]::Delete($probe)}}
         }
     }else{$defender='NO_APLICA'}
 }

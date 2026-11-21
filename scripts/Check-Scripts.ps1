@@ -136,11 +136,9 @@ if([IO.File]::Exists($cnf)){throw 'Remove-SecretFile no borro el archivo de cred
 Test-SecretCleanup -Path $cnf -WithRemoveItem -WhatIf
 if(-not [IO.File]::Exists($cnf)){throw 'Control negativo: Remove-Item con -WhatIf deberia dejar el archivo; la prueba ya no detecta el problema.'}
 [IO.File]::Delete($cnf)
-# Ningun Remove-Item nuevo sobre variables de archivos con credenciales (directo o por un foreach sobre ellas). Las
-# apariciones conocidas son pendientes de H04, con su conteo exacto: una nueva falla, y tambien una que ya no aparece
-# (la lista se actualiza al corregir).
+# Ningun Remove-Item sobre variables de archivos con credenciales (directo o por un foreach sobre ellas): los pendientes
+# de H04 se corrigieron en H04a con Remove-SecretFile y ya no se admite ninguno.
 $secretVars=@('client','init','passFile','src','dst','candidate')
-$pendingH04=@{'Backup.ps1'=2;'Init-Server.ps1'=3;'Invoke-FormularioPull.ps1'=1;'Migrate.ps1'=1;'Recover-Ti.ps1'=1;'Restore-Check.ps1'=1;'Service.ps1'=1;'Start.ps1'=1;'Stop.ps1'=1;'Test-Service.ps1'=1}
 $isVar={param($a) $a -is [System.Management.Automation.Language.VariableExpressionAst]}
 foreach($file in $files){
     $ast=[System.Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$null,[ref]$null);$count=0
@@ -151,8 +149,7 @@ foreach($file in $files){
         }
         if(@($names|Where-Object {$secretVars -contains $_}).Count -gt 0){$count++}
     }
-    $expected=if($pendingH04.ContainsKey($file.Name)){$pendingH04[$file.Name]}else{0}
-    if($count -ne $expected){throw ("Archivos con credenciales: $($file.Name) tiene $count Remove-Item sobre "+($secretVars -join ', ')+" y se esperaban $expected. Usa Remove-SecretFile (Common.ps1); si corregiste un pendiente de H04, actualiza la lista.")}
+    if($count -ne 0){throw ("Archivos con credenciales: $($file.Name) tiene $count Remove-Item sobre "+($secretVars -join ', ')+'. Usa Remove-SecretFile (Common.ps1).')}
 }
 # Eliminacion de la validacion (Remove-Validation.ps1, D12): un rechazo por condicion y los casos validos.
 function Merge-Case($Base,$Override){$h=@{};foreach($k in $Base.Keys){$h[$k]=$Base[$k]};foreach($k in $Override.Keys){$h[$k]=$Override[$k]};return [PSCustomObject]$h}
@@ -304,4 +301,269 @@ try{
     if([IO.Directory]::Exists($scratch)){[IO.Directory]::Delete($scratch,$true)}
 }
 $deletionCount=$pathCases.Count+$backupCases.Count+$containerCases.Count+$incCases.Count+$restoreCases.Count+$deletion.Count
-Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf y '+$pendingH04.Count+' pendientes de H04); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento). No se modifico la configuracion del equipo.')
+# --- Proceso propio acreditado por el servicio (App-Running y Require-OwnMySql, H04a) --------------------------------
+# Un caso por condicion de Get-ServiceProcessBlockers y la decision de Test-AppProcess: si WMI oculta ruta y argumentos y
+# la cadena no calza, se lanza el error; nunca se responde "no esta corriendo" (de eso dependen Backup, Restore-Check,
+# Migrate, Update y Recover-Ti).
+function New-ServiceFacts([string]$Kind,$Change){
+    $f=[PSCustomObject]@{Kind=$Kind;ServiceSid='S-1-5-21-9';ExpectedSid='S-1-5-21-9';Host=$null
+        Service=[PSCustomObject]@{State='Running';ProcessId=100;PathName='"D:\SIGER\service\SigerService.exe" "D:\SIGER"'}
+        ExpectedPath='D:\SIGER\service\SigerService.exe D:\SIGER';Process=[PSCustomObject]@{Name='java.exe';ParentProcessId=200}}
+    if($Kind -ceq 'APP'){$f.Host=[PSCustomObject]@{ProcessId=200;Name='powershell.exe';ParentProcessId=100}}
+    if($Kind -ceq 'MYSQL'){
+        $f.Service.PathName='"D:\Herramientas\mysql-8.4\bin\mysqld.exe" --defaults-file=D:\SIGER\mysql\my.ini SIGERMySQL'
+        $f.ExpectedPath='D:\Herramientas\mysql-8.4\bin\mysqld.exe --defaults-file=D:\SIGER\mysql\my.ini SIGERMySQL'
+        $f.Process=[PSCustomObject]@{Name='mysqld.exe';ParentProcessId=100}
+    }
+    if($Change){& $Change $f}
+    return $f
+}
+$serviceCases=@(
+    @{k='APP';c=$null;e=''},@{k='MYSQL';c=$null;e=''},
+    @{k='APP';c={param($f) $f.Process.Name='JAVA.EXE';$f.Host.Name='PowerShell.exe'};e=''},
+    @{k='APP';c={param($f) $f.Service=$null};e='SIN_SERVICIO'},
+    @{k='APP';c={param($f) $f.Service.State='Stopped'};e='SERVICIO_DETENIDO'},
+    @{k='APP';c={param($f) $f.Service.ProcessId=0;$f.Host.ParentProcessId=0};e='SERVICIO_DETENIDO'},
+    @{k='APP';c={param($f) $f.ServiceSid=''};e='CUENTA'},
+    @{k='APP';c={param($f) $f.ServiceSid='S-1-5-21-8'};e='CUENTA'},
+    @{k='APP';c={param($f) $f.ExpectedSid=''};e='CUENTA'},
+    @{k='APP';c={param($f) $f.Service.PathName='"D:\SIGER-VALIDACION\service\SigerService.exe" "D:\SIGER-VALIDACION"'};e='RUTA_SERVICIO'},
+    @{k='APP';c={param($f) $f.ExpectedPath=''};e='RUTA_SERVICIO'},
+    @{k='APP';c={param($f) $f.Process.Name='javaw.exe'};e='EJECUTABLE'},
+    @{k='APP';c={param($f) $f.Process=$null};e='EJECUTABLE,CADENA'},
+    @{k='APP';c={param($f) $f.Host=$null};e='CADENA'},
+    @{k='APP';c={param($f) $f.Host.Name='cmd.exe'};e='CADENA'},
+    @{k='APP';c={param($f) $f.Host.ParentProcessId=101};e='CADENA'},
+    @{k='APP';c={param($f) $f.Host.ProcessId=201};e='CADENA'},
+    @{k='MYSQL';c={param($f) $f.Process.ParentProcessId=101};e='CADENA'},
+    @{k='MYSQL';c={param($f) $f.Process.Name='java.exe'};e='EJECUTABLE'},
+    @{k='MYSQL';c={param($f) $f.Service.PathName='D:\Herramientas\mysql-8.4\bin\mysqld.exe --defaults-file=D:\OTRA\mysql\my.ini SIGERMySQL'};e='RUTA_SERVICIO'},
+    @{k='OTRO';c=$null;e='TIPO'})
+foreach($case in $serviceCases){
+    $got=(@(Get-ServiceProcessBlockers (New-ServiceFacts $case.k $case.c)) -join ',')
+    if($got -cne $case.e){throw ('Proceso por el servicio: caso '+[array]::IndexOf($serviceCases,$case)+' esperaba "'+$case.e+'" y obtuvo "'+$got+'".')}
+}
+$javaExe='D:\SIGER\releases\initial\runtime\java25\bin\java.exe';$jarPath='D:\SIGER\releases\initial\app\siger-a.jar'
+$visible=[PSCustomObject]@{ExecutablePath=$javaExe;CommandLine="`"$javaExe`" -jar `"$jarPath`""}
+$hidden=[PSCustomObject]@{ExecutablePath=$null;CommandLine=$null}
+$partial=[PSCustomObject]@{ExecutablePath=$javaExe;CommandLine=''}
+$okChain={@()};$badChain={@('CADENA')};$failChain={throw 'servicio no legible'};$notCalled={throw 'no debia consultar el servicio'}
+$appCases=@(
+    @{p=$null;x=$javaExe;m=$jarPath;s=$notCalled;e='FALSE'},
+    @{p=$visible;x=$javaExe.ToUpperInvariant();m=$jarPath;s=$notCalled;e='TRUE'},
+    @{p=$visible;x='D:\SIGER-VALIDACION\releases\initial\runtime\java25\bin\java.exe';m=$jarPath;s=$okChain;e='ERROR'},
+    @{p=$visible;x=$javaExe;m='D:\SIGER-VALIDACION\releases\initial\app\siger-a.jar';s=$okChain;e='ERROR'},
+    @{p=$hidden;x=$javaExe;m=$jarPath;s=$okChain;e='TRUE'},
+    @{p=$hidden;x=$javaExe;m=$jarPath;s=$badChain;e='ERROR'},
+    @{p=$hidden;x=$javaExe;m=$jarPath;s=$failChain;e='ERROR'},
+    @{p=$partial;x=$javaExe;m=$jarPath;s=$okChain;e='TRUE'},
+    @{p=$partial;x=$javaExe;m=$jarPath;s=$badChain;e='ERROR'})
+foreach($case in $appCases){
+    $got='ERROR';try{$got=if(Test-AppProcess $case.p $case.x $case.m $case.s){'TRUE'}else{'FALSE'}}catch{if($_.Exception.Message -like 'no debia*'){throw 'Test-AppProcess consulto el servicio con ruta y argumentos visibles.'}}
+    if($got -cne $case.e){throw ('Proceso propio (App-Running): caso '+[array]::IndexOf($appCases,$case)+' esperaba '+$case.e+' y obtuvo '+$got+'. Ante una duda debe lanzar el error, nunca responder que no corre.')}
+}
+# --- Prueba de envio exigida para activar el correo (Set-Integration.ps1 -Correo Graph, H04a) ------------------------
+$probeNow=[datetime]::new(2026,12,8,12,0,0,[DateTimeKind]::Utc)
+function New-GraphProbe($Change){$p=[PSCustomObject]@{modo='ENVIO';estado='ACEPTADO';fase='ENVIO';http=202;requestId=$null;utc='2026-12-08T10:00:00.0000000Z';jarSha256='ABCDEF'};if($Change){& $Change $p};return $p}
+$probeCases=@(
+    @{p=(New-GraphProbe $null);j='ABCDEF';ok=$true},@{p=(New-GraphProbe $null);j='abcdef';ok=$true},
+    @{p=(New-GraphProbe {param($p) $p.utc=[datetime]::new(2026,12,8,1,0,0,[DateTimeKind]::Utc)});j='ABCDEF';ok=$true},
+    @{p=(New-GraphProbe {param($p) $p.utc='2026-12-07T12:30:00Z'});j='ABCDEF';ok=$true},
+    @{p=$null;j='ABCDEF';ok=$false},@{p=(New-GraphProbe $null);j='';ok=$false},
+    @{p=(New-GraphProbe {param($p) $p.modo='TOKEN'});j='ABCDEF';ok=$false},
+    @{p=(New-GraphProbe {param($p) $p.estado='RECHAZADO'});j='ABCDEF';ok=$false},
+    @{p=(New-GraphProbe {param($p) $p.estado='SIN_RESULTADO'});j='ABCDEF';ok=$false},
+    @{p=(New-GraphProbe {param($p) $p.jarSha256='012345'});j='ABCDEF';ok=$false},
+    @{p=(New-GraphProbe {param($p) $p.utc='2026-12-07T11:59:00Z'});j='ABCDEF';ok=$false},
+    @{p=(New-GraphProbe {param($p) $p.utc='2026-12-08T13:00:00Z'});j='ABCDEF';ok=$false},
+    @{p=(New-GraphProbe {param($p) $p.utc='ayer'});j='ABCDEF';ok=$false},
+    @{p=(New-GraphProbe {param($p) $p.utc=$null});j='ABCDEF';ok=$false})
+foreach($case in $probeCases){if((Test-GraphProbeAccredited $case.p $case.j $probeNow) -ne $case.ok){throw ('Prueba de Graph para activar el correo: caso '+[array]::IndexOf($probeCases,$case)+' inesperado.')}}
+$setAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Set-Integration.ps1'),[ref]$null,[ref]$null)
+if(@($setAst.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'Test-GraphProbeAccredited'},$true)).Count -ne 1){throw 'Set-Integration.ps1 debe exigir Test-GraphProbeAccredited antes de activar el correo.'}
+# --- Invocacion con powershell.exe -File (hallazgo de la revision de H03; H04a) ----------------------------------------
+# Con -File cada argumento llega como texto: desde una consola de PowerShell -Ensayos @() se expande a nada, 'a','b'
+# llega como 'a,b' y (Get-Credential ...) como 'System.Management.Automation.PSCredential'; desde cmd, @() llega como el
+# texto '@()'. Se comprueba:
+# 1) ningun script declara un parametro de tipo arreglo, coleccion, diccionario o scriptblock (Get-FileUnsafeParameters);
+# 2) cada lista por texto (ConvertFrom-PathListArgument, ConvertFrom-DomainListArgument) tiene casos y su script la usa;
+# 3) cada orden "powershell.exe ... -File ...\X.ps1 ..." de la guia y de los encabezados de los scripts usa argumentos
+#    literales y enlaza en un proceso hijo (-NoProfile -NonInteractive -File) contra un script de prueba con el mismo
+#    bloque param del real (tipos, ValidateSet, Mandatory y CmdletBinding) y sin su cuerpo; las listas pasan por su
+#    funcion. Datos que se piden por consola: un PSCredential se copia al script de prueba como [string] (sin
+#    Credential()), y la orden debe pasar el nombre literal de la cuenta (DOMINIO\cuenta): el script real pide entonces
+#    solo la contrasena (se acredita en H06b). Lo que el cuerpo pide con Read-Host (Tenant y Client ID, secretos, la ruta
+#    escrita de Remove-Validation.ps1) no es un parametro y no interviene en el enlace. Un parametro obligatorio que
+#    falta en la orden hace fallar al hijo por -NonInteractive: ninguna orden se apoya en la pregunta de PowerShell;
+# 4) controles con -File de lo que fallo en H03 (-Ensayos @(), 'a','b', -Ensayos sin valor, '@()' desde cmd).
+# En Windows (Build.ps1) el hijo es powershell.exe 5.1; con pwsh en Linux solo se acredita la sintaxis de la orden.
+$psExe=(Get-Process -Id $PID).Path
+$lang='System.Management.Automation.Language'
+function Get-FileUnsafeParameters($Ast){
+    if(-not $Ast.ParamBlock){return @()}
+    return @(foreach($p in $Ast.ParamBlock.Parameters){
+        $t=$p.StaticType
+        if($t.IsArray -or $t -eq [scriptblock] -or [Collections.IDictionary].IsAssignableFrom($t) -or ($t -ne [string] -and [Collections.IEnumerable].IsAssignableFrom($t))){$p.Name.VariablePath.UserPath}
+    })
+}
+$unsafeControl=[System.Management.Automation.Language.Parser]::ParseInput('param([string]$A,[string[]]$B,[hashtable]$C,[scriptblock]$D,[object[]]$E,[array]$F,[int]$G,[switch]$H,[pscredential]$I)',[ref]$null,[ref]$null)
+if((@(Get-FileUnsafeParameters $unsafeControl) -join ',') -cne 'B,C,D,E,F'){throw 'Control negativo: la regla de parametros no detecta los tipos que -File no puede pasar.'}
+$listParams=@{'Remove-Validation.ps1'=@{Respaldos='ConvertFrom-PathListArgument';RespaldosIncompletos='ConvertFrom-PathListArgument';Ensayos='ConvertFrom-PathListArgument'};'Import-GraphCredential.ps1'=@{DominiosPermitidos='ConvertFrom-DomainListArgument'}}
+foreach($file in @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1' -File)){
+    $ast=[System.Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$null,[ref]$null)
+    $unsafe=@(Get-FileUnsafeParameters $ast)
+    if($unsafe.Count -gt 0){throw ("$($file.Name): el parametro -"+($unsafe -join ', -')+' no llega con powershell.exe -File (arreglo, coleccion o scriptblock). Usa un texto: rutas separadas por | o NINGUNO (ConvertFrom-PathListArgument).')}
+    if(-not $listParams.ContainsKey($file.Name)){continue}
+    foreach($name in $listParams[$file.Name].Keys){
+        $fn=$listParams[$file.Name][$name]
+        $param=@($ast.ParamBlock.Parameters|Where-Object {$_.Name.VariablePath.UserPath -ceq $name})
+        if($param.Count -ne 1 -or $param[0].StaticType -ne [string]){throw "$($file.Name): falta la lista -$name como texto."}
+        $uses=@($ast.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq $fn -and $a.CommandElements.Count -ge 2 -and $a.CommandElements[1] -is [System.Management.Automation.Language.VariableExpressionAst] -and $a.CommandElements[1].VariablePath.UserPath -ceq $name},$true))
+        if($uses.Count -ne 1){throw "$($file.Name): la lista -$name debe pasar una vez por $fn."}
+    }
+}
+$pathListCases=@(
+    @{t='NINGUNO';e=''},@{t='ninguno';e=''},@{t=' NINGUNO ';e=''},@{t='D:\Respaldos-SIGER-VALIDACION';e='D:\Respaldos-SIGER-VALIDACION'},
+    @{t='D:\a|D:\b';e='D:\a|D:\b'},@{t=' D:\a | D:\b ';e='D:\a|D:\b'},@{t='D:\con espacio|D:\b';e='D:\con espacio|D:\b'},
+    @{t='';e=$null},@{t='   ';e=$null},@{t='@()';e=$null},@{t='@( )';e=$null},@{t='D:\a,D:\b';e=$null},@{t='D:\a|';e=$null},@{t='|D:\a';e=$null},
+    @{t='D:\a||D:\b';e=$null},@{t='NINGUNO|D:\a';e=$null},@{t='D:\a|ninguno';e=$null},@{t='D:\a|D:\a\';e=$null},@{t='D:\a|d:\A';e=$null})
+foreach($case in $pathListCases){
+    $got=$null;try{$r=ConvertFrom-PathListArgument $case.t '-Ensayos';if($r -isnot [string[]]){throw 'tipo'};$got=$r -join '|'}catch{$got=$null}
+    if($got -cne $case.e){throw ('Lista de rutas: caso '+[array]::IndexOf($pathListCases,$case)+' esperaba '+$(if($null -eq $case.e){'rechazo'}else{'"'+$case.e+'"'})+' y obtuvo '+$(if($null -eq $got){'rechazo'}else{'"'+$got+'"'})+'.')}
+}
+$domainListCases=@(
+    @{t='defensorianinez.cl';e='defensorianinez.cl'},@{t='DefensoriaNinez.cl, otro.gob.cl';e='defensorianinez.cl|otro.gob.cl'},@{t='a.cl|b.cl';e='a.cl|b.cl'},
+    @{t='"a.cl","b.cl"';e='a.cl|b.cl'},@{t='''a.cl''';e='a.cl'},@{t='a".cl';e=$null},
+    @{t='';e=$null},@{t='@()';e=$null},@{t='a.cl,,b.cl';e=$null},@{t='a.cl,A.cl';e=$null},@{t='@a.cl';e=$null},@{t='local';e=$null},@{t='a.cl b.cl';e=$null})
+foreach($case in $domainListCases){
+    $got=$null;try{$got=(ConvertFrom-DomainListArgument $case.t) -join '|'}catch{$got=$null}
+    if($got -cne $case.e){throw ('Lista de dominios: caso '+[array]::IndexOf($domainListCases,$case)+' inesperado.')}
+}
+$stubDir=Join-Path ([IO.Path]::GetTempPath()) ('siger-file-'+[Guid]::NewGuid().ToString('N'))
+[void][IO.Directory]::CreateDirectory($stubDir)
+$stubs=@{}
+function Get-ParamStub([string]$Name){
+    if($stubs.ContainsKey($Name)){return $stubs[$Name]}
+    $path=Join-Path $PSScriptRoot $Name
+    if(-not [IO.File]::Exists($path)){throw "Orden documentada con un script que no existe: $Name."}
+    $ast=[System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$null,[ref]$null)
+    $credentials=@();$head='param()'
+    if($ast.ParamBlock){
+        $head=$ast.Extent.Text.Substring(0,$ast.ParamBlock.Extent.EndOffset-$ast.Extent.StartOffset)
+        $credentials=@($ast.ParamBlock.Parameters|Where-Object {$_.StaticType -eq [pscredential]}|ForEach-Object {$_.Name.VariablePath.UserPath})
+        $head=($head -replace '(?i)\[System\.Management\.Automation\.Credential\(\)\]','') -replace '(?i)\[(System\.Management\.Automation\.)?pscredential\]','[string]'
+    }
+    $body=@'
+
+$o=[ordered]@{}
+foreach($k in @($PSBoundParameters.Keys)){$v=$PSBoundParameters[$k];$o[$k]=if($v -is [System.Management.Automation.SwitchParameter]){[bool]$v.IsPresent}else{[string]$v}}
+[Console]::Out.WriteLine('ENLACE:'+(ConvertTo-Json -InputObject $o -Compress))
+exit 0
+'@
+    $stub=Join-Path $stubDir $Name
+    [IO.File]::WriteAllText($stub,$head+$body,(New-Object Text.UTF8Encoding($true)))
+    $check=[System.Management.Automation.Language.Parser]::ParseFile($stub,[ref]$null,[ref]$null)
+    if($check.ParamBlock -and @($check.ParamBlock.Parameters|Where-Object {$_.StaticType -eq [pscredential]}).Count -gt 0){throw "Script de prueba de $Name con un PSCredential: pediria datos por consola."}
+    $stubs[$Name]=[PSCustomObject]@{Name=$Name;Path=$stub;Credentials=$credentials}
+    return $stubs[$Name]
+}
+# Proceso hijo con -File; devuelve los parametros enlazados (texto) o $null si no enlaza.
+function Invoke-FileStub($Stub,[string[]]$Arguments){
+    $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+    try{$out=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $Stub.Path @Arguments 2>&1|ForEach-Object {[string]$_});$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
+    $line=@($out|Where-Object {$_.StartsWith('ENLACE:')})
+    if($code -ne 0 -or $line.Count -ne 1){$script:lastFileError=(@($out|Where-Object {$_ -and -not $_.StartsWith('ENLACE:')})|Select-Object -First 2) -join ' ';return $null}
+    return ($line[0].Substring(7)|ConvertFrom-Json)
+}
+# Argumentos de una orden tal como los recibe el script con -File: solo texto literal.
+function ConvertTo-FileArguments($Elements,[string]$Source){
+    $list=New-Object System.Collections.Generic.List[string]
+    foreach($e in $Elements){
+        if($e -is [System.Management.Automation.Language.CommandParameterAst]){
+            if($null -eq $e.Argument){$list.Add('-'+$e.ParameterName);continue}
+            if($e.Argument -is [System.Management.Automation.Language.VariableExpressionAst] -and @('true','false') -contains $e.Argument.VariablePath.UserPath){$list.Add('-'+$e.ParameterName+':$'+$e.Argument.VariablePath.UserPath);continue}
+        }elseif($e -is [System.Management.Automation.Language.StringConstantExpressionAst]){$list.Add($e.Value);continue}
+        elseif($e -is [System.Management.Automation.Language.ExpandableStringExpressionAst] -and $e.NestedExpressions.Count -eq 0){$list.Add($e.Value);continue}
+        elseif($e -is [System.Management.Automation.Language.ConstantExpressionAst]){$list.Add([string]$e.Value);continue}
+        throw "$Source`: el argumento $($e.Extent.Text) lo evalua la consola y con -File el script recibe texto. Usa texto literal: listas separadas por | o NINGUNO, una cuenta como 'DOMINIO\cuenta'."
+    }
+    return ,$list.ToArray()
+}
+function Get-OrderParts([string]$Text,[string]$Source){
+    $m=[regex]::Match($Text,'(?i)\s-File\s+(.*)$')
+    if(-not $m.Success){throw "$Source`: orden sin -File."}
+    $ast=[System.Management.Automation.Language.Parser]::ParseInput('Orden '+$m.Groups[1].Value,[ref]$null,[ref]$errors)
+    if($errors.Count -gt 0){throw "$Source`: la orden no es PowerShell valido."}
+    $cmd=@($ast.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst]},$false))[0]
+    $elements=@($cmd.CommandElements)
+    if($elements.Count -lt 2 -or $elements[1] -isnot [System.Management.Automation.Language.StringConstantExpressionAst]){throw "$Source`: falta la ruta literal del script."}
+    $leaf=@($elements[1].Value.Split([char[]]@('\','/')))[-1]
+    return [PSCustomObject]@{Script=$leaf;Arguments=(ConvertTo-FileArguments @($elements|Select-Object -Skip 2) $Source)}
+}
+$errors=$null
+foreach($bad in @("-File 'D:\x\scripts\Remove-Validation.ps1' -Ensayos @()","-File 'D:\x\scripts\Remove-Validation.ps1' -Ensayos 'D:\a','D:\b'","-File 'D:\x\scripts\Install-Service.ps1' -ServiceCredential (Get-Credential 'DOMINIO\svc')","-File 'D:\x\scripts\Start.ps1' -Root `$root","-File 'D:\x\scripts\Start.ps1' -Root `"`$(`$x)`"")){
+    $rejected=$false;try{$null=Get-OrderParts (' '+$bad) 'control'}catch{$rejected=$true}
+    if(-not $rejected){throw "Control negativo: se acepto como literal la orden $bad."}
+}
+try{
+    $orders=New-Object System.Collections.Generic.List[object]
+    foreach($guide in @(@('docs','DESPLIEGUE_VM.md'),@('docs','INSTALACION_VM.md'),@('README.md'),@('CLAUDE.md'))){
+        $path=[IO.Path]::Combine([string[]](@($project)+$guide))
+        if(-not [IO.File]::Exists($path)){throw "Falta la guia $($guide -join '/'): las ordenes documentadas se comprueban con -File."}
+        $n=0;foreach($line in [IO.File]::ReadAllLines($path)){$n++;if($line -match '(?i)powershell\.exe\b.*\s-File\s'){$orders.Add([PSCustomObject]@{Source="$($guide -join '/'):$n";Text=$line})}}
+    }
+    foreach($file in @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1' -File)){
+        $n=0;foreach($line in [IO.File]::ReadAllLines($file.FullName)){$n++;if($line -match '(?i)^\s*#\s*powershell\.exe\b.*\s-File\s'){$orders.Add([PSCustomObject]@{Source="scripts/$($file.Name):$n";Text=($line -replace '^\s*#','')})}}
+    }
+    if($orders.Count -lt 30){throw "Se esperaban al menos 30 ordenes documentadas con -File y se encontraron $($orders.Count)."}
+    $seen=@{};$invoked=0
+    foreach($order in $orders){
+        $parts=Get-OrderParts $order.Text $order.Source
+        $stub=Get-ParamStub $parts.Script
+        $key=$parts.Script+[char]0+($parts.Arguments -join [char]0)
+        if(-not $seen.ContainsKey($key)){$seen[$key]=Invoke-FileStub $stub $parts.Arguments;$invoked++}
+        $bound=$seen[$key]
+        if(-not $bound){throw "$($order.Source): la orden de $($parts.Script) no enlaza con powershell.exe -File ($script:lastFileError)."}
+        foreach($c in $stub.Credentials){
+            $v=if($bound.PSObject.Properties[$c]){[string]$bound.$c}else{''}
+            if($v -cnotmatch '^[^\\\s]+\\[^\\\s]+$' -or $v -like '*PSCredential*'){throw "$($order.Source): -$c debe ser el nombre literal de la cuenta (DOMINIO\cuenta); el script pide la contrasena."}
+        }
+        if($listParams.ContainsKey($parts.Script)){
+            foreach($name in $listParams[$parts.Script].Keys){
+                if(-not $bound.PSObject.Properties[$name]){continue}
+                try{$null=& $listParams[$parts.Script][$name] ([string]$bound.$name) "-$name"}catch{throw "$($order.Source): -$name no es una lista valida ($($_.Exception.Message))"}
+            }
+        }
+    }
+    # Controles con -File de lo que fallo en H03 (como lo pasa una consola de PowerShell) y los casos validos.
+    $rv=Get-ParamStub 'Remove-Validation.ps1'
+    $fixed=@('-Root','D:\SIGER-VALIDACION','-Produccion','D:\SIGER','-Motivo','Prueba de enlace','-Respaldos','D:\Respaldos-SIGER-VALIDACION','-RespaldosIncompletos','NINGUNO')
+    function Get-EnsayosOutcome($Bound){if(-not $Bound){return 'NO_ENLAZA'};try{$l=ConvertFrom-PathListArgument ([string]$Bound.Ensayos) '-Ensayos';return ('ACEPTA:'+$l.Count)}catch{return 'RECHAZA'}}
+    $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+    try{
+        $outEmpty=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $rv.Path @fixed -Ensayos @() 2>&1|ForEach-Object {[string]$_})
+        $outPair=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $rv.Path @fixed -Ensayos 'D:\a','D:\b' 2>&1|ForEach-Object {[string]$_})
+    }finally{$ErrorActionPreference=$old}
+    $fromOut={param($out) $l=@($out|Where-Object {$_.StartsWith('ENLACE:')});if($l.Count -eq 1){$l[0].Substring(7)|ConvertFrom-Json}else{$null}}
+    $controls=@(
+        @{n='-Ensayos @() desde PowerShell';o=(Get-EnsayosOutcome (& $fromOut $outEmpty));bad=$true},
+        @{n="-Ensayos 'D:\a','D:\b' desde PowerShell";o=(Get-EnsayosOutcome (& $fromOut $outPair));bad=$true},
+        @{n="-Ensayos '@()' desde cmd";o=(Get-EnsayosOutcome (Invoke-FileStub $rv (@($fixed)+@('-Ensayos','@()'))));bad=$true},
+        @{n='-Ensayos sin valor';o=(Get-EnsayosOutcome (Invoke-FileStub $rv (@($fixed)+@('-Ensayos'))));bad=$true},
+        @{n='-Ensayos NINGUNO';o=(Get-EnsayosOutcome (Invoke-FileStub $rv (@($fixed)+@('-Ensayos','NINGUNO'))));bad=$false;e='ACEPTA:0'},
+        @{n="-Ensayos 'D:\a|D:\b'";o=(Get-EnsayosOutcome (Invoke-FileStub $rv (@($fixed)+@('-Ensayos','D:\a|D:\b'))));bad=$false;e='ACEPTA:2'})
+    foreach($c in $controls){
+        if($c.bad -and $c.o -like 'ACEPTA*'){throw "Invocacion con -File: se acepto $($c.n)."}
+        if(-not $c.bad -and $c.o -cne $c.e){throw "Invocacion con -File: $($c.n) dio $($c.o) y se esperaba $($c.e)."}
+    }
+    $ig=Get-ParamStub 'Import-GraphCredential.ps1'
+    $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+    try{$outDomains=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ig.Path -Root 'D:\SIGER' -DominiosPermitidos 'defensorianinez.cl','otro.gob.cl' 2>&1|ForEach-Object {[string]$_})}finally{$ErrorActionPreference=$old}
+    $b=& $fromOut $outDomains
+    if(-not $b -or ((ConvertFrom-DomainListArgument ([string]$b.DominiosPermitidos)) -join '|') -cne 'defensorianinez.cl|otro.gob.cl'){throw "Invocacion con -File: -DominiosPermitidos 'a','b' desde PowerShell no llego como dos dominios."}
+    $is=Get-ParamStub 'Install-Service.ps1'
+    if(($is.Credentials -join ',') -cne 'ServiceCredential'){throw 'Install-Service.ps1: no se reconocio el PSCredential que se pide por consola.'}
+    $controlCount=$controls.Count+1
+}finally{if([IO.Directory]::Exists($stubDir)){[IO.Directory]::Delete($stubDir,$true)}}
+$invocationSummary="proceso propio por el servicio ($($serviceCases.Count+$appCases.Count) casos); prueba de Graph para activar el correo ($($probeCases.Count) casos); invocacion con -File ($($orders.Count) ordenes documentadas en $invoked procesos, $($pathListCases.Count+$domainListCases.Count) casos de listas y $controlCount controles)"
+Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf, sin Remove-Item); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento); '+$invocationSummary+'. No se modifico la configuracion del equipo.')

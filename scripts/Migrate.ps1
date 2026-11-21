@@ -14,7 +14,7 @@ $jar=$s.activeJar;$hash=$s.jarSha256
 if($CandidateJar){$jar=(Resolve-Path -LiteralPath $CandidateJar).Path;$hash=$CandidateSha256}
 if(-not $hash -or (Get-SigerFileHash $jar -Algorithm SHA256).Hash -ine $hash){throw 'JAR no coincide con manifiesto.'}
 $secret=Import-Clixml (Join-Path $Root 'config\secrets.clixml');$client=MySql-ClientFile $s $secret 'owner'
-try{Require-OwnMySql $s $client}finally{Remove-Item -LiteralPath $client}
+try{Require-OwnMySql $s $client}finally{Remove-SecretFile $client}
 try {
     # Primera migracion: datos sinteticos solo en instancias de pruebas; la institucional aplica su estructura inicial.
     $mode=Get-InstanceMode $s

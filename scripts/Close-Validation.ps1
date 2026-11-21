@@ -84,7 +84,9 @@ $probe=Join-Path $constDir ('.prueba-'+[Guid]::NewGuid().ToString('N'))
 [IO.File]::WriteAllText($probe,'',[Text.Encoding]::ASCII);[IO.File]::Delete($probe)
 
 # Detener solo SIGER y volver a contar con el motor activo: ningun ciclo en curso puede quedar fuera de las cifras.
-& (Join-Path $PSScriptRoot 'Stop.ps1') -Root $Root
+# El cierre ya se confirmo: Stop.ps1 no vuelve a preguntar (con -Confirm heredaria la preferencia y una respuesta
+# negativa dejaria SIGER activo).
+& (Join-Path $PSScriptRoot 'Stop.ps1') -Root $Root -Confirm:$false
 $services=Get-SigerServices $s
 if($services){if((Get-Service -Name $services.Info.serviceName).Status -ne 'Stopped'){throw 'El servicio SIGER no quedo detenido. La validacion no se cerro.'}}
 elseif(App-Running $s){throw 'SIGER sigue activo. La validacion no se cerro.'}
@@ -93,7 +95,7 @@ if(($after|ConvertTo-Json -Compress) -cne ($before|ConvertTo-Json -Compress)){
     Show-ClosureFigures $after
     throw 'Las cifras cambiaron mientras SIGER se detenia. SIGER quedo detenido y la validacion NO se cerro: revisa con el responsable.'
 }
-& (Join-Path $PSScriptRoot 'Stop.ps1') -Root $Root -AlsoMySql
+& (Join-Path $PSScriptRoot 'Stop.ps1') -Root $Root -AlsoMySql -Confirm:$false
 
 $now=(Get-Date).ToUniversalTime()
 $record=[PSCustomObject][ordered]@{

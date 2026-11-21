@@ -19,7 +19,7 @@ try{
     $ok=$false
     for($i=0;$i -lt 120;$i++){if((Invoke-Native {& (Join-Path $s.mysqlHome 'bin\mysql.exe') "--defaults-file=$client" --batch -e 'SELECT 1'} -Quiet) -eq 0){$ok=$true;break};Start-Sleep 1}
     if(-not $ok){throw 'MySQL propio no responde.'};Require-OwnMySql $s $client
-}finally{Remove-Item -LiteralPath $client}
+}finally{Remove-SecretFile $client}
 Free-Port $s.webPort
 $stop=Join-Path $Root 'run\stop.request';if(Test-Path -LiteralPath $stop){Remove-Item -LiteralPath $stop}
 $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'

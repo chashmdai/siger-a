@@ -63,11 +63,61 @@ function Require-Java25([string]$JavaDirectory){
     $v=(& (Join-Path $JavaDirectory 'bin\java.exe') --version | Out-String)
     if($v -notmatch '(?m)^(openjdk|java) 25[.\s]'){throw 'Runtime debe ser Java 25.'}
 }
+# Proceso de un servicio de la instancia cuando WMI oculta su ruta y sus argumentos: a la cuenta de servicio sin
+# elevacion, Win32_Process no entrega ExecutablePath ni CommandLine de los procesos que lanzo el Administrador de
+# servicios (otra sesion de inicio), aunque sean de la misma cuenta. Se acredita entonces por la cadena hasta el servicio
+# registrado en config\service.json: servicio en ejecucion, su cuenta (accountSid), su PathName exacto y el proceso hijo
+# con su nombre. APP: java.exe -> powershell.exe (Service.ps1) -> SigerService.exe. MYSQL: mysqld.exe -> servicio.
+# Regla pura (casos en Check-Scripts.ps1); devuelve las condiciones que fallan, vacio = acreditado.
+function Get-ServiceProcessBlockers($Facts){
+    $codes=@()
+    $svc=$Facts.Service;$p=$Facts.Process
+    if(-not $svc){return @('SIN_SERVICIO')}
+    if([string]$svc.State -cne 'Running' -or [int]$svc.ProcessId -le 0){$codes+='SERVICIO_DETENIDO'}
+    if(-not $Facts.ServiceSid -or [string]$Facts.ServiceSid -cne [string]$Facts.ExpectedSid){$codes+='CUENTA'}
+    if(-not $Facts.ExpectedPath -or ([string]$svc.PathName).Replace('"','').Trim() -ine [string]$Facts.ExpectedPath){$codes+='RUTA_SERVICIO'}
+    $child=if($Facts.Kind -ceq 'APP'){'java.exe'}elseif($Facts.Kind -ceq 'MYSQL'){'mysqld.exe'}else{''}
+    if(-not $child){return @('TIPO')}
+    if(-not $p -or [string]$p.Name -ine $child){$codes+='EJECUTABLE'}
+    if($Facts.Kind -ceq 'APP'){
+        $h=$Facts.Host
+        if(-not $p -or -not $h -or [int]$h.ProcessId -ne [int]$p.ParentProcessId -or [string]$h.Name -ine 'powershell.exe' -or [int]$h.ParentProcessId -ne [int]$svc.ProcessId){$codes+='CADENA'}
+    }elseif(-not $p -or [int]$p.ParentProcessId -ne [int]$svc.ProcessId){$codes+='CADENA'}
+    return $codes
+}
+function Get-ServiceProcessFacts($Settings,$Process,[string]$Kind){
+    $facts=[PSCustomObject]@{Kind=$Kind;Process=$Process;Host=$null;Service=$null;ServiceSid='';ExpectedSid='';ExpectedPath=''}
+    $services=Get-SigerServices $Settings
+    if(-not $services){return $facts}
+    $info=$services.Info
+    $name=if($Kind -ceq 'APP'){[string]$info.serviceName}else{[string]$info.mysqlServiceName}
+    $facts.Service=Get-CimInstance Win32_Service -Filter "Name='$($name.Replace("'","''"))'" -ErrorAction SilentlyContinue
+    if($facts.Service){try{$facts.ServiceSid=(New-Object Security.Principal.NTAccount([string]$facts.Service.StartName)).Translate([Security.Principal.SecurityIdentifier]).Value}catch{}}
+    $facts.ExpectedSid=[string]$info.accountSid
+    $facts.ExpectedPath=if($Kind -ceq 'APP'){"$(Join-Path $Settings.root 'service\SigerService.exe') $($Settings.root)"}else{"$(Join-Path $Settings.mysqlHome 'bin\mysqld.exe') --defaults-file=$(Join-Path $Settings.root 'mysql\my.ini') $name"}
+    if($Kind -ceq 'APP' -and $Process){$facts.Host=Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$Process.ParentProcessId)" -ErrorAction SilentlyContinue}
+    return $facts
+}
+# Decision de App-Running (regla pura; casos y mutaciones en Check-Scripts.ps1): sin proceso, no corre; con ruta y
+# argumentos visibles, deben ser los propios; si WMI los oculta, solo la cadena del servicio lo acredita. Ante cualquier
+# duda lanza el error: nunca responde "no esta corriendo" por defecto (Backup, Restore-Check, Migrate, Update y
+# Recover-Ti dependen de esa respuesta para actuar).
+function Test-AppProcess($Process,[string]$Exe,[string]$Marker,[scriptblock]$ServiceBlockers){
+    if(-not $Process){return $false}
+    if($Process.ExecutablePath -and $Process.CommandLine){
+        if([string]$Process.ExecutablePath -ine $Exe -or ([string]$Process.CommandLine).IndexOf($Marker,[StringComparison]::OrdinalIgnoreCase) -lt 0){throw 'PID no coincide con el ejecutable y configuracion propios. No se toca.'}
+        return $true
+    }
+    $codes=@(& $ServiceBlockers)
+    if($codes.Count -gt 0){throw ('PID no coincide con el ejecutable y configuracion propios, y no se acredito por el servicio Windows ('+($codes -join ',')+'). No se toca.')}
+    return $true
+}
 function App-Running($Settings) {
     $pidfile=Join-Path $Settings.root 'run\app.pid'
     if(-not(Test-Path $pidfile)){return $false}
     $processId=[int](Get-Content $pidfile -Raw).Trim()
-    return $null -ne (Own-Process $processId (Join-Path $Settings.javaHome 'bin\java.exe') $Settings.activeJar)
+    $p=Get-CimInstance Win32_Process -Filter "ProcessId=$processId" -ErrorAction SilentlyContinue
+    return (Test-AppProcess $p (Join-Path $Settings.javaHome 'bin\java.exe') $Settings.activeJar {Get-ServiceProcessBlockers (Get-ServiceProcessFacts $Settings $p 'APP')})
 }
 
 # Windows PowerShell 5.1 convierte la salida de error de un programa nativo en un error terminante cuando se redirige
@@ -102,23 +152,10 @@ function Require-OwnMySql($Settings,[string]$Client) {
     if($p.ExecutablePath -and $p.CommandLine){
         $null=Own-Process $dbpid $exe $ini
     }else{
-        # En la cuenta de servicio, WMI puede ocultar ruta y argumentos del proceso hijo.
-        # Solo se admite el fallback si el servicio, su identidad y su configuracion
-        # coinciden con config\service.json y con el PID hijo del archivo propio.
-        $services=Get-SigerServices $Settings
-        if(-not $services){throw 'MySQL sin ruta de proceso verificable y sin servicio propio registrado.'}
-        $info=$services.Info
-        $name=[string]$info.mysqlServiceName
-        $wqlName=$name.Replace("'","''")
-        $svc=Get-CimInstance Win32_Service -Filter "Name='$wqlName'" -ErrorAction SilentlyContinue
-        if(-not $svc -or $svc.State -ne 'Running'){throw 'Servicio MySQL propio no esta activo.'}
-        $actualSid=''
-        try{$actualSid=(New-Object Security.Principal.NTAccount([string]$svc.StartName)).Translate([Security.Principal.SecurityIdentifier]).Value}catch{}
-        $registeredPath=([string]$svc.PathName).Replace('"','').Trim()
-        $expectedPath="$exe --defaults-file=$ini $name"
-        if(-not $actualSid -or $actualSid -ne [string]$info.accountSid -or $registeredPath -ine $expectedPath -or $p.Name -ine 'mysqld.exe' -or [int]$p.ParentProcessId -ne [int]$svc.ProcessId){
-            throw 'No se acredito el MySQL propio mediante el servicio Windows.'
-        }
+        # En la cuenta de servicio, WMI puede ocultar ruta y argumentos del proceso hijo. Solo se admite si el servicio,
+        # su identidad y su configuracion coinciden con config\service.json y con el PID hijo del archivo propio.
+        $codes=@(Get-ServiceProcessBlockers (Get-ServiceProcessFacts $Settings $p 'MYSQL'))
+        if($codes.Count -gt 0){throw ('No se acredito el MySQL propio mediante el servicio Windows ('+($codes -join ',')+').')}
     }
     $port=(Invoke-SigerSql $Settings $Client 'SELECT @@port' | Out-String).Trim()
     $dir=(Invoke-SigerSql $Settings $Client 'SELECT @@datadir' | Out-String).Trim().Replace('/','\').TrimEnd('\')

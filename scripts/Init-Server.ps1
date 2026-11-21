@@ -4,11 +4,14 @@ param([string]$Root='D:\SIGER-A',[Parameter(Mandatory=$true)][string]$Release,[P
     # servicio SIN privilegios administrativos (sera la duena de DPAPI). Pruebas: datos sinteticos como hasta ahora.
     [Parameter(Mandatory=$true)][ValidateSet('Institucional','Pruebas')][string]$Mode,
     [string]$EstructuraInicial='',
-    # Institucional: Validacion (piloto con datos ficticios, nunca recibe entregas reales) o Produccion.
+    # Institucional: Validacion (piloto con datos ficticios; no recibe entregas del Formulario salvo las de prueba que
+    # autoriza "validacionPullAutorizada": true en instance.json, ver Get-InstancePurpose) o Produccion.
     [ValidateSet('Validacion','Produccion')][string]$Proposito='',
     # Prefijo de folio COM compatible con el comprobante del Formulario. Por defecto SIGER (produccion) o SIGERV (validacion).
     [string]$FolioPrefix='',
-    # Raiz de la instancia de validacion: la produccion debe usar exactamente el mismo JAR validado.
+    # Raiz de la instancia de validacion: exige que la produccion use exactamente el mismo JAR validado (lee su
+    # config\instance.json). No se usa en 0.6.0: la validacion sigue en 0.4.0 y produccion se instala con el paquete
+    # 0.6.0 (salto directo, D10 y D14 de docs/PLAN_0_6_0.md); esa garantia la reemplaza el ensayo de H06b.
     [string]$MismoReleaseQue='',
     # Escuchar en todas las interfaces (no solo 127.0.0.1) para que los funcionarios entren desde sus equipos. El acceso
     # lo restringe una regla de firewall de TI limitada a sus direcciones; este script no cambia el firewall.
@@ -70,7 +73,7 @@ try {
     $ready=$false
     for($i=0;$i -lt 60;$i++){Start-Sleep -Seconds 1;if((Invoke-Native {& $mysqlClient "--defaults-file=$client" --batch --skip-column-names -e 'SELECT 1'} -Quiet) -eq 0){$ready=$true;break}}
     if(-not $ready){throw 'MySQL propio no estuvo disponible; revisar su log privado. No se intervino MySQL80.'}
-} finally { if(Test-Path $init){Remove-Item $init};if($client -and (Test-Path $client)){Remove-Item $client} }
+} finally { Remove-SecretFile $init;Remove-SecretFile $client }
 # Certificado HTTPS SOLO localhost; no se instala confianza global.
 $passFile=Join-Path $Root 'tmp\keytool-pass.txt';$keytool=Join-Path $JavaHome 'bin\keytool.exe';$store=Join-Path $Root 'config\https.p12'
 try {
@@ -78,7 +81,7 @@ try {
     if((Invoke-Native {& $keytool -genkeypair -alias siger-a-local -keyalg RSA -keysize 3072 -validity 365 -dname 'CN=localhost,OU=SIGER' -ext 'SAN=dns:localhost,ip:127.0.0.1' -storetype PKCS12 -keystore $store "-storepass:file" $passFile -noprompt} -Quiet) -ne 0){throw 'No se creo el certificado HTTPS local.'}
     [IO.File]::WriteAllText($passFile,$trust,[Text.Encoding]::ASCII)
     if((Invoke-Native {& $keytool -importcert -alias mysql-local-ca -file (Join-Path $Root 'mysql\data\ca.pem') -keystore (Join-Path $Root 'config\mysql-trust.p12') -storetype PKCS12 '-storepass:file' $passFile -noprompt} -Quiet) -ne 0){throw 'No se creo el truststore de MySQL.'}
-} finally {if(Test-Path $passFile){Remove-Item $passFile}}
+} finally {Remove-SecretFile $passFile}
 Copy-Item $PSScriptRoot (Join-Path $Root 'scripts') -Recurse
 # La estructura inicial queda en config\ (ACL privada) y la aplica la primera migracion, una sola vez.
 if($Mode -eq 'Institucional'){Copy-Item -LiteralPath $EstructuraInicial -Destination (Join-Path $Root 'config\estructura-inicial.json')}

@@ -3,8 +3,9 @@ param(
     [string]$Root='D:\SIGER-A',
     # Buzon remitente con permiso Mail.Send de la aplicacion SIGER-Notificaciones (el de Export-SecretPackage.ps1).
     [string]$Remitente='siger@defensorianinez.cl',
-    # Dominios de los destinatarios permitidos (allowedDomains de correo-graph.json).
-    [string[]]$DominiosPermitidos=@('defensorianinez.cl')
+    # Dominios de los destinatarios permitidos (allowedDomains de correo-graph.json), en un solo texto separados por coma
+    # (powershell.exe -File no pasa arreglos): -DominiosPermitidos 'defensorianinez.cl,otro.cl'.
+    [string]$DominiosPermitidos='defensorianinez.cl'
 )
 # Instala SOLO la credencial de Microsoft Graph (0.6.0, H01) en una instancia existente, sin SMR, sin paquete de
 # secretos y sin el bloque del Formulario. Ejecutar COMO la cuenta de servicio de la instancia (ownerSid de
@@ -16,6 +17,7 @@ param(
 # No sobrescribe: si ya existe cualquiera de los dos archivos, no escribe nada (incluido el secreto que instala
 # Import-Integrations.ps1 -GraphSecret*). No contacta Graph: la credencial se acredita con Test-GraphMail.ps1.
 . (Join-Path $PSScriptRoot 'Environment.ps1')
+$domains=ConvertFrom-DomainListArgument $DominiosPermitidos
 $s=Read-Settings $Root;$config=Join-Path $Root 'config'
 $me=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $owner=if($s.PSObject.Properties['ownerSid']){[string]$s.ownerSid}else{''}
@@ -24,7 +26,6 @@ if($owner -ne $me){throw 'Ejecuta este script como la cuenta de servicio de la i
 $mailFile=Join-Path $config 'correo-graph.json';$secretFile=Join-Path $config 'graph-client-secret.clixml'
 # Ambos destinos se comprueban antes de pedir nada.
 foreach($f in @($mailFile,$secretFile)){if(Test-Path -LiteralPath $f){throw "Ya existe config\$(Split-Path $f -Leaf). No se sobrescribe ni se instala nada; retira la credencial anterior de forma controlada si corresponde reemplazarla."}}
-$domains=@($DominiosPermitidos|ForEach-Object {([string]$_).Trim().ToLowerInvariant()}|Where-Object {$_})
 $sender=$Remitente.Trim()
 $tenant=([string](Read-Host 'Tenant ID (GUID)')).Trim()
 $client=([string](Read-Host 'Client ID de la aplicacion (GUID)')).Trim()
@@ -40,7 +41,7 @@ try{
     $null=Get-GraphMailConfig $s -CualquierModo
 }catch{
     # Sin instalacion parcial: si algo falla despues de escribir el secreto, se retira lo escrito.
-    foreach($f in @($mailFile,$secretFile)){if(Test-Path -LiteralPath $f){Remove-Item -LiteralPath $f}}
+    foreach($f in @($mailFile,$secretFile)){Remove-SecretFile $f}
     throw
 }
 $secure=$null

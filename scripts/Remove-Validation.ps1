@@ -3,14 +3,16 @@ param(
     [string]$Root='D:\SIGER-VALIDACION',
     # Produccion ya acreditada (D13): debe existir, con la misma cuenta y las credenciales del Formulario (y de Graph).
     [string]$Produccion='D:\SIGER',
+    # Las tres listas son un solo texto (powershell.exe -File no pasa arreglos): rutas separadas por | o NINGUNO, que
+    # declara expresamente que no hay ninguna (ConvertFrom-PathListArgument en Environment.ps1).
     # Respaldos de Backup.ps1 de esta validacion: cada ruta es un respaldo (backup.json) o una carpeta cuyos hijos son
-    # todos respaldos de esta validacion (por ejemplo D:\Respaldos-SIGER-VALIDACION). @() si no hay.
-    [Parameter(Mandatory=$true)][AllowEmptyCollection()][string[]]$Respaldos,
+    # todos respaldos de esta validacion (por ejemplo D:\Respaldos-SIGER-VALIDACION).
+    [Parameter(Mandatory=$true)][string]$Respaldos,
     # Respaldos abortados (sin backup.json) que declara el responsable: hijos directos de una carpeta de -Respaldos, sin
-    # restore-result.json ni enlaces y, si traen config-private\instance.json, de esta validacion. @() si no hay.
-    [Parameter(Mandatory=$true)][AllowEmptyCollection()][string[]]$RespaldosIncompletos,
-    # Destinos de Restore-Check.ps1 de esta validacion (restore-result.json con su esquema en el motor propio). @() si no hay.
-    [Parameter(Mandatory=$true)][AllowEmptyCollection()][string[]]$Ensayos,
+    # restore-result.json ni enlaces y, si traen config-private\instance.json, de esta validacion.
+    [Parameter(Mandatory=$true)][string]$RespaldosIncompletos,
+    # Destinos de Restore-Check.ps1 de esta validacion (restore-result.json con su esquema en el motor propio).
+    [Parameter(Mandatory=$true)][string]$Ensayos,
     [Parameter(Mandatory=$true)][string]$Motivo,
     [string]$Constancias='D:\SIGER-CONSTANCIAS')
 # ELIMINA una instancia de VALIDACION ya cerrada (D12 de docs/PLAN_0_6_0.md): su raiz completa (base y esquemas
@@ -23,10 +25,11 @@ param(
 # una validacion que sigue en 0.4.0, despues de Close-Validation.ps1, de Uninstall-Service.ps1 y de acreditar
 # produccion (paso V6). Ejemplo:
 #
-#   powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Remove-Validation.ps1' -Root 'D:\SIGER-VALIDACION' -Produccion 'D:\SIGER' -Respaldos 'D:\Respaldos-SIGER-VALIDACION' -RespaldosIncompletos 'D:\Respaldos-SIGER-VALIDACION\previo-pull-20261109' -Ensayos @() -Motivo 'Eliminacion de la validacion tras acreditar produccion'
+#   powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Remove-Validation.ps1' -Root 'D:\SIGER-VALIDACION' -Produccion 'D:\SIGER' -Respaldos 'D:\Respaldos-SIGER-VALIDACION' -RespaldosIncompletos 'D:\Respaldos-SIGER-VALIDACION\previo-pull-20261109' -Ensayos NINGUNO -Motivo 'Eliminacion de la validacion tras acreditar produccion'
 #
 # Con -WhatIf solo muestra el inventario y los bloqueos, sin escribir nada. Sin -WhatIf pide la confirmacion de
 # PowerShell (ConfirmImpact High) y ademas que se escriba la ruta de la raiz: -Confirm:$false no basta para borrar.
+# Varias rutas en una lista: -Respaldos 'D:\uno|D:\dos'. Se invoca exactamente asi, con -File (tambien en H06b).
 #
 # Bloqueos (Get-ValidationDeletionBlockers y Get-DeletionPathBlockers en Environment.ps1, con casos en Check-Scripts.ps1):
 # marcador de cierre de 0.6.0 (kind CIERRE_VALIDACION) y su copia identica en -Constancias; servicios retirados; motor
@@ -51,6 +54,9 @@ function Full([string]$Path,[string]$What){
     return [IO.Path]::GetFullPath($Path).TrimEnd('\')
 }
 if([string]::IsNullOrWhiteSpace($Motivo) -or $Motivo.Length -gt 500 -or $Motivo -match '[\x00-\x1F\x7F]'){throw 'El motivo es obligatorio, de hasta 500 caracteres y en una sola linea.'}
+$respaldosList=ConvertFrom-PathListArgument $Respaldos '-Respaldos'
+$incompletosList=ConvertFrom-PathListArgument $RespaldosIncompletos '-RespaldosIncompletos'
+$ensayosList=ConvertFrom-PathListArgument $Ensayos '-Ensayos'
 $rootFull=Full $Root 'La raiz';$prodFull=Full $Produccion 'La produccion';$constDir=Full $Constancias 'La carpeta de constancias'
 $package=[IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent)).TrimEnd('\')
 $here=[IO.Path]::GetFullPath((Get-Location).ProviderPath).TrimEnd('\')
@@ -124,7 +130,7 @@ function Get-DeletionPlan {
     }
     # Elementos, en el orden en que se borran: ensayos, respaldos incompletos declarados, respaldos y la raiz.
     $elements=New-Object System.Collections.Generic.List[object]
-    foreach($path in @($Ensayos)){
+    foreach($path in $ensayosList){
         $full=Full $path 'Cada ensayo';$blockers=@();$evidence=''
         if(-not [IO.Directory]::Exists($full)){$blockers+='NO_EXISTE'}else{
             $result=$null;$file=Join-Path $full 'restore-result.json'
@@ -134,9 +140,9 @@ function Get-DeletionPlan {
         }
         $elements.Add([PSCustomObject]@{Type='ENSAYO';Path=$full;Parent='';Last=@();Evidence=$evidence;Blockers=$blockers;Files=0;Bytes=0})
     }
-    $containers=@(foreach($path in @($Respaldos)){$full=Full $path 'Cada respaldo';if([IO.Directory]::Exists($full) -and -not (Test-Path -LiteralPath (Join-Path $full 'backup.json'))){$full}})
+    $containers=@(foreach($path in $respaldosList){$full=Full $path 'Cada respaldo';if([IO.Directory]::Exists($full) -and -not (Test-Path -LiteralPath (Join-Path $full 'backup.json'))){$full}})
     $declared=@()
-    foreach($path in @($RespaldosIncompletos)){
+    foreach($path in $incompletosList){
         $full=Full $path 'Cada respaldo incompleto';$blockers=@();$evidence='';$parent=Split-Path $full -Parent
         if(-not [IO.Directory]::Exists($full)){$blockers+='NO_EXISTE'}else{
             $instanceFile=Join-Path $full 'config-private\instance.json';$hasInstance=Test-Path -LiteralPath $instanceFile -PathType Leaf;$instance=$null
@@ -147,7 +153,7 @@ function Get-DeletionPlan {
         $declared+=$full
         $elements.Add([PSCustomObject]@{Type='RESPALDO_INCOMPLETO_DECLARADO';Path=$full;Parent=$parent;Last=@();Evidence=$evidence;Blockers=$blockers;Files=0;Bytes=0})
     }
-    foreach($path in @($Respaldos)){
+    foreach($path in $respaldosList){
         $full=Full $path 'Cada respaldo';$blockers=@();$evidence=''
         if(-not [IO.Directory]::Exists($full)){$blockers+='NO_EXISTE'}else{
             # Un respaldo (backup.json en la propia ruta) o una carpeta de respaldos (Test-BackupContainer).

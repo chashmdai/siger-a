@@ -24,7 +24,7 @@ D13. **Acreditacion de produccion.** Solo con `Invoke-FormularioPull.ps1 -SoloCo
 
 D14. **La validacion no se actualiza.** Sigue en 0.4.0 (esquema V10) hasta su cierre; los scripts de cierre y eliminacion de 0.6.0 se ejecutan desde la carpeta del paquete sobre esa instancia. No hay entrega de prueba en la VM con el codigo de 0.5.0: la primera recepcion con ese codigo ocurre en produccion, y si falla, el consumidor no confirma el ACK y la entrega queda en la cola del Formulario. Entre la pausa de la validacion y produccion en automatico no se hacen entregas de prueba.
 
-D15. **Alcance del trabajo en la VM.** Solo NEW-SIGER dentro de `D:`. No se inspeccionan ni modifican otros volumenes ni el sistema legado (SMR). Ningun procedimiento de 0.6.0 depende de SMR: `Export-SecretPackage.ps1` no se usa.
+D15. **Alcance del trabajo en la VM.** Solo NEW-SIGER dentro de `D:`. No se inspeccionan ni modifican otros volumenes ni el sistema legado (SMR). Ningun procedimiento de 0.6.0 depende de SMR: `Export-SecretPackage.ps1` no se usa. Precision (H04a, 2026-11-21): consultar el estado del servicio de Windows `SMRRecepcion` desde `Set-Integration.ps1` no es inspeccionar el sistema legado; no se leen archivos, configuracion ni base de SMR, y no se cambia nada.
 
 D16. **Correo.** Graph no bloquea la salida a produccion: produccion puede partir con el correo desactivado. La credencial de Graph se instala en la VM como la cuenta de servicio, sin SMR (H01).
 
@@ -34,7 +34,7 @@ D16. **Correo.** Graph no bloquea la salida a produccion: produccion puede parti
 - Destinatario fijo y cuenta de Windows de la prueba de Graph -> antes de ejecutar H01 en la VM.
 - Acceso de funcionarios por red (firewall y PFX institucional; hoy solo esta verificado RDP) -> antes del paso V4 (decide `-AccesoRed` en produccion).
 - `estructura-inicial.json` real de produccion (ambitos, sedes, TI y funcionarios) -> antes del paso V4.
-- `Set-Integration.ps1 -Formulario Automatico` consulta el estado del servicio `SMRRecepcion` del equipo: confirmar que esa lectura es compatible con D15 -> H04.
+- `Set-Integration.ps1 -Formulario Automatico` consulta el estado del servicio `SMRRecepcion` del equipo: confirmar que esa lectura es compatible con D15 -> H04. Cerrada en H04a (2026-11-21): compatible, con la precision anotada en D15.
 
 ## 1. Punto de partida (verificado en el codigo al planificar)
 

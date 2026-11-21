@@ -48,4 +48,4 @@ try {
     @{namespace='SIGER-A-RESTORE-CHECK';completed=$true;verifiedUtc=(Get-Date).ToUniversalTime().ToString('o');schema=$schema;documentsVerified=$verified;sourceBackup=$BackupDirectory;sourceJarSha256=$backup.jarSha256;note='Ensayo SQL/documentos. No arranca app, no cambia instancia activa, no acredita recuperacion de otra identidad DPAPI.'} | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $Destination 'restore-result.json')
     Write-Host "Restauracion comprobada en $schema y $Destination. No se borro ni sobrescribio la base activa."
 } catch {if(Test-Path $Destination){@{completed=$false;schema=$schema;note='Ensayo fallido; conservar destino y revisar error local.'}|ConvertTo-Json|Set-Content -Encoding UTF8 (Join-Path $Destination 'restore-result.json')};throw}
-finally {if(Test-Path $client){Remove-Item -LiteralPath $client}}
+finally {Remove-SecretFile $client}

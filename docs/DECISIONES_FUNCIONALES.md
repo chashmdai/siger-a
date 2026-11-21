@@ -112,7 +112,7 @@ D13. **Acreditacion de produccion.** Solo con `Invoke-FormularioPull.ps1 -SoloCo
 
 D14. **La validacion no se actualiza.** Sigue en 0.4.0 (esquema V10) hasta su cierre; los scripts de cierre y eliminacion de 0.6.0 se ejecutan desde la carpeta del paquete sobre esa instancia. No hay entrega de prueba en la VM con el codigo de 0.5.0: la primera recepcion con ese codigo ocurre en produccion, y si falla, el consumidor no confirma el ACK y la entrega queda en la cola del Formulario. Entre la pausa de la validacion y produccion en automatico no se hacen entregas de prueba.
 
-D15. **Alcance del trabajo en la VM.** Solo NEW-SIGER dentro de `D:`. No se inspeccionan ni modifican otros volumenes ni el sistema legado (SMR). Ningun procedimiento de 0.6.0 depende de SMR: `Export-SecretPackage.ps1` no se usa.
+D15. **Alcance del trabajo en la VM.** Solo NEW-SIGER dentro de `D:`. No se inspeccionan ni modifican otros volumenes ni el sistema legado (SMR). Ningun procedimiento de 0.6.0 depende de SMR: `Export-SecretPackage.ps1` no se usa. Precision (H04a, 2026-11-21): consultar el estado del servicio de Windows `SMRRecepcion` desde `Set-Integration.ps1` no es inspeccionar el sistema legado; no se leen archivos, configuracion ni base de SMR, y no se cambia nada.
 
 D16. **Correo.** Graph no bloquea la salida a produccion: produccion puede partir con el correo desactivado. La credencial de Graph se instala en la VM como la cuenta de servicio, sin SMR (H01).
 

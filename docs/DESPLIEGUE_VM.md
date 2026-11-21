@@ -53,7 +53,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scr
 Como administrador (registra los servicios con la cuenta de servicio y recuperacion automatica; no los inicia):
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Install-Service.ps1' -Root 'D:\SIGER-VALIDACION' -ServiceCredential (Get-Credential 'DOMINIO\svc-siger') -ConcederInicioComoServicio
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Install-Service.ps1' -Root 'D:\SIGER-VALIDACION' -ServiceCredential 'DOMINIO\svc-siger' -ConcederInicioComoServicio
 ```
 
 Como la cuenta de servicio:
@@ -113,7 +113,7 @@ La copia reutiliza las credenciales ya protegidas con DPAPI de la misma cuenta e
 Como administrador:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Install-Service.ps1' -Root 'D:\SIGER' -ServiceCredential (Get-Credential 'DOMINIO\svc-siger') -ConcederInicioComoServicio
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Install-Service.ps1' -Root 'D:\SIGER' -ServiceCredential 'DOMINIO\svc-siger' -ConcederInicioComoServicio
 ```
 
 Como la cuenta de servicio:

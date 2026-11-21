@@ -20,7 +20,9 @@ if($Formulario){
     if($Formulario -eq 'Automatico'){
         Require-ProductionPull $s
         if(-not $SmrDetenidoConfirmado){throw 'Confirma con -SmrDetenidoConfirmado que el consumidor del Formulario de SMR fue detenido con autorizacion y ya no consume: dos consumidores se repartirian las entregas.'}
-        # Si SMR esta instalado en esta misma maquina, su servicio debe estar detenido y deshabilitado.
+        # Si SMR esta instalado en esta misma maquina, su servicio debe estar detenido y deshabilitado. Consultar el estado
+        # del servicio de Windows SMRRecepcion no es inspeccionar el sistema legado (D15, Precision 0.6.0): no se leen
+        # archivos, configuracion ni base de SMR, y no se cambia nada.
         $smr=Get-CimInstance Win32_Service -Filter "Name='SMRRecepcion'" -ErrorAction SilentlyContinue
         if($smr -and ($smr.State -ne 'Stopped' -or $smr.StartMode -ne 'Disabled')){throw 'El servicio SMRRecepcion de este equipo sigue activo o con inicio habilitado. Detenlo y deshabilitalo con autorizacion antes de activar SIGER.'}
         # Sonda acreditada reciente con la misma configuracion y el release activo.
@@ -41,6 +43,12 @@ if($Correo){
     $file=Join-Path $config 'correo-graph.json'
     if(-not(Test-Path -LiteralPath $file)){throw 'Falta config\correo-graph.json (Import-SecretPackage.ps1 lo crea).'}
     $mail=Get-Content -LiteralPath $file -Raw|ConvertFrom-Json
+    if($Correo -eq 'Graph'){
+        # Prueba controlada reciente con la misma credencial y el release activo (Test-GraphProbeAccredited).
+        $probe=Join-Path $Root 'run\graph-prueba.json'
+        $p=if(Test-Path -LiteralPath $probe){Get-Content -LiteralPath $probe -Raw|ConvertFrom-Json}else{$null}
+        if(-not(Test-GraphProbeAccredited $p $s.jarSha256 (Get-Date).ToUniversalTime())){throw 'Falta una prueba de envio acreditada: ejecuta Test-GraphMail.ps1 -Modo Token y luego -Modo Envio al destinatario fijo. Se exige un Envio ACEPTADO de menos de 24 horas con el release activo (run\graph-prueba.json).'}
+    }
     $mail|Add-Member -NotePropertyName mode -NotePropertyValue $(if($Correo -eq 'Graph'){'GRAPH'}else{'DESACTIVADO'}) -Force
     if($PSCmdlet.ShouldProcess($file,"Correo $Correo")){
         Save-InstanceJson $mail $file

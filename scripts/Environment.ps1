@@ -55,8 +55,9 @@ function Get-InstanceMode($Settings){
     if($value -ceq 'INSTITUCIONAL' -or $value -ceq 'PRUEBAS'){return $value}
     throw "Modo de instancia desconocido en instance.json ('$value'). Se admiten INSTITUCIONAL y PRUEBAS; no se inicia con un modo dudoso."
 }
-# Proposito de una instancia institucional: VALIDACION (piloto con datos ficticios; nunca recibe entregas reales del
-# Formulario) o PRODUCCION. Falla cerrado si falta o es desconocido. Las instancias de pruebas son PRUEBAS.
+# Proposito de una instancia institucional: VALIDACION (piloto con datos ficticios; no recibe entregas del Formulario,
+# salvo las de prueba que autoriza expresamente "validacionPullAutorizada": true en instance.json, como la validacion de
+# la VM hasta su cierre en 0.6.0) o PRODUCCION. Falla cerrado si falta o es desconocido. Las de pruebas son PRUEBAS.
 function Get-InstancePurpose($Settings){
     if((Get-InstanceMode $Settings) -eq 'PRUEBAS'){return 'PRUEBAS'}
     $purpose=$Settings.PSObject.Properties['purpose']
@@ -225,6 +226,51 @@ function Test-GraphRecipient([string]$Address,[string[]]$Domains) {
     if($Address -cnotmatch '^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$'){return $false}
     $domain=$Address.Substring($Address.IndexOf('@')+1).ToLowerInvariant()
     return (@($Domains|ForEach-Object {([string]$_).Trim().ToLowerInvariant()}) -contains $domain)
+}
+# Activar el correo (Set-Integration.ps1 -Correo Graph, 0.6.0 H04a): exige la evidencia de Test-GraphMail.ps1
+# (run\graph-prueba.json) de un Envio ACEPTADO con el JAR activo y de menos de 24 horas, como la sonda del Formulario.
+# Regla pura con casos en Check-Scripts.ps1; un Token, un rechazo, otro JAR, una fecha ilegible o futura no bastan.
+function Test-GraphProbeAccredited($Probe,[string]$JarSha256,[datetime]$NowUtc){
+    if(-not $Probe -or -not $JarSha256){return $false}
+    if([string](Get-Prop $Probe 'modo') -cne 'ENVIO' -or [string](Get-Prop $Probe 'estado') -cne 'ACEPTADO' -or [string](Get-Prop $Probe 'jarSha256') -ine $JarSha256){return $false}
+    $raw=Get-Prop $Probe 'utc'
+    if($raw -is [datetime]){$at=$raw.ToUniversalTime()}else{
+        $at=[datetime]::MinValue
+        if(-not [datetime]::TryParse([string]$raw,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind,[ref]$at)){return $false}
+        $at=$at.ToUniversalTime()
+    }
+    return ($at -le $NowUtc.AddMinutes(5) -and $at -ge $NowUtc.AddHours(-24))
+}
+# Listas por parametro (0.6.0, H04a). Con powershell.exe -File cada argumento llega como texto: un arreglo no se puede
+# pasar (@() llega como el texto '@()' o se pierde, y 'a','b' llega como 'a,b'). Por eso las listas son un solo texto.
+# Rutas: separadas por '|' (no es valido en una ruta de Windows) o la palabra NINGUNO, que declara expresamente que no
+# hay ninguna. Falla ante texto vacio, @(), una coma (un arreglo de PowerShell convertido a texto), NINGUNO mezclado con
+# rutas, tramos vacios o rutas repetidas. No normaliza: cada script valida despues cada ruta.
+function ConvertFrom-PathListArgument([string]$Text,[string]$What){
+    $t=([string]$Text).Trim()
+    $hint="$What`: indica las rutas separadas por | o la palabra NINGUNO."
+    if(-not $t){throw $hint}
+    if($t -ieq 'NINGUNO'){return ,([string[]]@())}
+    if($t.Contains('@(')){throw "$What`: @() no llega al script con -File. Para declarar que no hay ninguna, escribe NINGUNO."}
+    if($t.Contains(',')){throw "$What`: una coma indica una lista de PowerShell, que -File recibe como un solo texto. $hint"}
+    $items=@($t.Split('|')|ForEach-Object {$_.Trim()})
+    foreach($item in $items){
+        if(-not $item){throw "$What`: hay un tramo vacio entre separadores |."}
+        if($item -ieq 'NINGUNO'){throw "$What`: NINGUNO no se combina con rutas."}
+    }
+    for($i=0;$i -lt $items.Count;$i++){for($j=$i+1;$j -lt $items.Count;$j++){if($items[$i].TrimEnd('\') -ieq $items[$j].TrimEnd('\')){throw "$What`: una ruta esta repetida."}}}
+    return ,([string[]]$items)
+}
+# Dominios permitidos de Graph: separados por coma o por '|', en minusculas, sin repetidos y con el formato de
+# Assert-GraphCredential; al menos uno. 'a.cl','b.cl' escrito en una consola de PowerShell llega con -File como a.cl,b.cl
+# (Windows PowerShell 5.1) o como "a.cl","b.cl" (PowerShell 7): se quitan las comillas de cada tramo.
+function ConvertFrom-DomainListArgument([string]$Text){
+    $t=([string]$Text).Trim()
+    if(-not $t -or $t.Contains('@(')){throw 'Indica los dominios permitidos separados por coma (por ejemplo defensorianinez.cl).'}
+    $items=@($t.Split([char[]]@(',','|'))|ForEach-Object {$_.Trim().Trim([char[]]@('"',"'")).ToLowerInvariant()})
+    foreach($d in $items){if($d -cnotmatch '^[a-z0-9-]+(\.[a-z0-9-]+)+$'){throw 'Dominio permitido con formato invalido (minusculas, sin @, separados por coma).'}}
+    if(@($items|Select-Object -Unique).Count -ne $items.Count){throw 'Un dominio permitido esta repetido.'}
+    return ,([string[]]$items)
 }
 # Proceso de la prueba controlada (Test-GraphMail.ps1): credencial y modo, nunca SIGER_MAIL_MODE (la prueba no usa la
 # cola de avisos y GraphCheck rechaza GRAPH). El destinatario va solo en una variable del proceso.

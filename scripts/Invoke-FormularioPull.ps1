@@ -24,7 +24,7 @@ if(-not $SoloComprobar -and $pull.Mode -eq 'AUTOMATICO'){throw 'formulario-pull.
 $mail=Get-GraphMailConfig $s
 
 $secret=Import-Clixml (Join-Path $config 'secrets.clixml');$client=MySql-ClientFile $s $secret 'owner'
-try{Require-OwnMySql $s $client}finally{Remove-Item -LiteralPath $client}
+try{Require-OwnMySql $s $client}finally{Remove-SecretFile $client}
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'logs') | Out-Null
 $stamp=Get-Date -Format 'yyyyMMdd-HHmmss';$kind=if($SoloComprobar){'formulario-sonda'}else{'formulario-pull'}
 $out=Join-Path $Root "logs\$kind-$stamp.out.log";$err=Join-Path $Root "logs\$kind-$stamp.err.log"

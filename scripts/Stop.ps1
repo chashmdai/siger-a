@@ -22,7 +22,7 @@ if(Test-Path $pidfile){
 if($AlsoMySql){
     if(App-Running $s){throw 'SIGER debe estar detenido antes de parar su motor.'}
     $secret=Import-Clixml (Join-Path $Root 'config\secrets.clixml');$client=MySql-ClientFile $s $secret 'owner'
-    try {if($PSCmdlet.ShouldProcess("127.0.0.1:$($s.mysqlPort)",'Apagar MySQL propio con autenticacion')){if((Invoke-Native {& (Join-Path $s.mysqlHome 'bin\mysqladmin.exe') "--defaults-file=$client" shutdown}) -ne 0){throw 'No se pudo confirmar la parada MySQL.'}}}finally{Remove-Item $client}
+    try {if($PSCmdlet.ShouldProcess("127.0.0.1:$($s.mysqlPort)",'Apagar MySQL propio con autenticacion')){if((Invoke-Native {& (Join-Path $s.mysqlHome 'bin\mysqladmin.exe') "--defaults-file=$client" shutdown}) -ne 0){throw 'No se pudo confirmar la parada MySQL.'}}}finally{Remove-SecretFile $client}
     # mysqladmin vuelve al aceptar la orden; el motor termina despues de vaciar sus archivos. Se espera a que salga su
     # propio proceso (mismo ejecutable y my.ini) para que el cierre del piloto, el retiro de servicios o un respaldo no
     # actuen con el motor aun escribiendo. Nunca se fuerza su termino.
