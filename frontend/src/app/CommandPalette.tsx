@@ -4,20 +4,18 @@ import {Icon} from '../components/Icon';
 import type {IconName} from '../components/Icon';
 import {useExit} from '../components/useExit';
 import type {MenuGroup} from './menu';
-import {boardRoute} from './routes';
 import {openSearch, paletteEntry} from '../features/search/search';
+import {boardEntries, openBoardSearch} from '../features/worklist/boardSearch';
 
 type Entry = {id: string; section: string; label: string; hint?: string; icon: IconName; route: string; run?: () => void};
-
-/** Bandejas donde la busqueda por folio o texto tiene sentido, en orden de uso. */
-const SEARCHABLE: [path: string, label: string][] = [['req', 'Requerimientos'], ['cas', 'Casos'], ['atenciones', 'Primeras atenciones'], ['com', 'Comunicaciones'], ['sol', 'Solicitudes']];
 
 const normalize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('es-CL');
 
 /**
  * Paleta para ir a cualquier pantalla o buscar sin recorrer menus (Ctrl+K). Solo navega: no lista resultados.
  * "Buscar persona o folio" deja el termino en la pestana y abre #buscar (sin el termino en la ruta); un folio
- * exacto abre su ficha desde esa vista. La busqueda en bandejas usa el alcance autorizado de la sesion.
+ * exacto abre su ficha desde esa vista. La busqueda en bandejas usa el alcance autorizado de la sesion y, como el
+ * buscador, deja el texto en la pestana y abre la bandeja sin el texto en la ruta (G08c).
  */
 export function CommandPalette({groups, canSearch, close}: {groups: MenuGroup[]; canSearch: boolean; close: () => void}) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -30,9 +28,9 @@ export function CommandPalette({groups, canSearch, close}: {groups: MenuGroup[];
     const q = normalize(query.trim());
     const pages: Entry[] = groups.flatMap(g => g.items.map(i => ({id: 'go:' + i.path, section: g.title, label: i.label, hint: i.hint, icon: i.icon, route: i.path})))
       .filter(e => !q || normalize(e.label + ' ' + (e.hint ?? '') + ' ' + e.section).includes(q));
-    const searches: Entry[] = query.trim() ? SEARCHABLE.filter(([path]) => available.has(path)).map(([path, label]) => ({
-      id: 'search:' + path, section: 'Buscar en bandejas', label: `Buscar «${query.trim()}» en ${label}`, icon: 'search' as IconName, route: boardRoute(path, '', query.trim()),
-    })) : [];
+    const searches: Entry[] = boardEntries(query, available).map(b => ({
+      id: 'search:' + b.path, section: 'Buscar en bandejas', label: b.label, icon: 'search' as IconName, route: b.route, run: () => openBoardSearch(b.path, b.query),
+    }));
     const person = paletteEntry(query, canSearch);
     const people: Entry[] = person && 'term' in person ? [{id: 'person', section: 'Buscador', label: person.label, icon: 'user', route: person.route, run: () => openSearch(person.term)}] : [];
     // Un folio escrito (por ejemplo REQ-...) prioriza la busqueda sobre la navegacion.

@@ -3,7 +3,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  alternatives, apiPath, chileDay, clearSearch, exactTarget, FILTER_THRESHOLD, formatRun, interpretation, matchReason, nextIndex, paletteEntry,
+  alternatives, apiBody, chileDay, clearSearch, emptyNotes, exactTarget, FOLIO_ONLY_NOTE, NO_PERSON_NOTE, FILTER_THRESHOLD, formatRun, interpretation, matchReason, nextIndex, paletteEntry,
   periodRange, primaryTarget, readSearch, saveSearch, scopeLabel, SEARCH_ROUTE, searchable, SHORT_HINT, showFilters, startSearch, summaryLines, tooShort,
 } from '../src/features/search/search.ts';
 import type {Store} from '../src/features/search/search.ts';
@@ -24,7 +24,7 @@ test('la ruta nunca contiene el término: siempre #buscar, sin parámetros', () 
     assert.equal(route, SEARCH_ROUTE);
     assert.equal(route, 'buscar');
     for (const piece of [term, encodeURIComponent(term), term.split(' ')[0], term.replace(/\D/g, '')].filter(p => p.length >= 3)) assert.ok(!route.includes(piece), term);
-    assert.deepEqual(parseRoute(route), {view: 'buscar', filter: '', query: '', isDetail: false, kind: 'buscar', id: undefined});
+    assert.deepEqual(parseRoute(route), {view: 'buscar', filter: '', isDetail: false, kind: 'buscar', id: undefined});
     // El termino queda solo en la pestana.
     assert.equal(readSearch(store)?.q, term.trim());
     const entry = paletteEntry(term, true);
@@ -66,12 +66,12 @@ test('largo del término y pista del correlativo corto', () => {
   assert.deepEqual(entry, {label: 'Buscar persona o folio «REQ-A-12»', term: 'REQ-A-12', route: 'buscar'});
 });
 
-test('consulta al servidor con lectura y filtros; período en hora de Chile', () => {
+test('consulta al servidor: término y filtros en el cuerpo del POST; período en hora de Chile', () => {
   const now = new Date('2026-03-01T02:30:00Z'); // 28 de febrero en Chile (UTC-3)
   assert.equal(chileDay(now), '2026-02-28');
-  assert.equal(apiPath({q: ' Ana Pérez '}, now), '/search?q=Ana+P%C3%A9rez');
-  const path = new URLSearchParams(apiPath({q: '12345678', as: 'RUN', role: 'NNA', open: true, scope: 7, region: '05', period: 'd30'}, now).split('?')[1]);
-  assert.deepEqual(Object.fromEntries(path), {q: '12345678', as: 'RUN', role: 'NNA', open: 'true', scope: '7', region: '05', from: '2026-01-30', to: '2026-02-28'});
+  assert.deepEqual(apiBody({q: ' Ana Pérez '}, now), {q: 'Ana Pérez'});
+  assert.deepEqual(apiBody({q: '12345678', as: 'RUN', role: 'NNA', open: true, scope: 7, region: '05', period: 'd30', fresh: true}, now),
+    {q: '12345678', as: 'RUN', role: 'NNA', open: true, scope: 7, region: '05', from: '2026-01-30', to: '2026-02-28'});
   assert.deepEqual(periodRange({q: 'x', period: 'm12'}, now), {from: '2025-03-01', to: '2026-02-28'});
   assert.deepEqual(periodRange({q: 'x', period: 'custom', from: '2026-01-01'}, now), {from: '2026-01-01', to: undefined});
   assert.deepEqual(periodRange({q: 'x'}, now), {});
@@ -131,4 +131,17 @@ test('teclado: flechas, Inicio y Fin entre resultados', () => {
   assert.equal(nextIndex('End', 0, 3), 2);
   assert.equal(nextIndex('Tab', 0, 3), null);
   assert.equal(nextIndex('ArrowDown', 0, 0), null);
+});
+
+test('sin coincidencias de persona: aviso siempre y, si la cuenta no lee COM ni fichas, por qué', () => {
+  const empty = (type: string) => ({type, total: 0, groups: []});
+  assert.deepEqual(emptyNotes({can_find_people: true}, empty('NOMBRE')), [NO_PERSON_NOTE]);
+  assert.deepEqual(emptyNotes({can_find_people: true}, empty('RUN')), [NO_PERSON_NOTE]);
+  assert.deepEqual(emptyNotes({can_find_people: false}, empty('DOCUMENTO')), [NO_PERSON_NOTE, FOLIO_ONLY_NOTE]);
+  assert.match(NO_PERSON_NOTE, /no significa que la persona no tenga registros/);
+  assert.match(FOLIO_ONLY_NOTE, /REQ y Casos por folio/);
+  // Un folio no es una coincidencia de persona; con resultados o demasiados no hay aviso.
+  assert.deepEqual(emptyNotes({can_find_people: false}, empty('FOLIO')), []);
+  assert.deepEqual(emptyNotes({can_find_people: false}, {type: 'NOMBRE', total: 1, groups: [{}]}), []);
+  assert.deepEqual(emptyNotes({can_find_people: true}, {type: 'NOMBRE', too_many: true, groups: []}), []);
 });

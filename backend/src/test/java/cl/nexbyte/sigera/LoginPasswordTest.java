@@ -110,6 +110,45 @@ class LoginPasswordTest {
         assertEquals(200,browser.password(temp,"Nueva-clave-atomica-2026").statusCode());
     }
 
+    /**
+     * G08c: el texto del buscador y de las bandejas viaja en el cuerpo de un POST con CSRF, nunca en la URL. GET responde
+     * 405 (antes del manejador generico, que daria 500) y la respuesta por HTTP es la misma del servicio.
+     */
+    @Test void buscadorYBandejasSoloPorPostConCsrf()throws Exception{
+        String user="distribucion",fresh="Nueva-clave-buscador-2026";
+        var first=new Browser();
+        assertEquals(204,first.login(user,temporary(user)));
+        assertEquals(200,first.password(temporary(user),fresh).statusCode());
+        var browser=new Browser();
+        assertEquals(204,browser.login(user,fresh));
+        browser.session();
+
+        var get=browser.send("GET","/search?q="+enc("Ana Pérez"),null,null);
+        assertEquals(405,get.statusCode(),get.body());
+        assertTrue(get.headers().firstValue("Allow").orElse("").contains("POST"));
+        assertFalse(get.body().contains("Ana"),"el error no devuelve el termino");
+        assertEquals(405,browser.send("GET","/worklist/com?q="+enc("Ana"),null,null).statusCode());
+
+        String json="{\"q\":\"Ana Pérez\",\"open\":true}";
+        var noCsrf=browser.http.send(java.net.http.HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/search")).header("Content-Type","application/json")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(json)).build(),java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertEquals(403,noCsrf.statusCode(),"POST sin token CSRF");
+        assertEquals(415,browser.send("POST","/search","text/plain",json).statusCode());
+
+        var post=browser.send("POST","/search","application/json",json);
+        assertEquals(200,post.statusCode(),post.body());
+        var expected=search.search(access.actor(user),"Ana Pérez",null,PersonSearch.Filters.of(null,true,null,null,null,null));
+        assertEquals(mapper.readTree(mapper.writeValueAsString(expected)),mapper.readTree(post.body()));
+
+        var board=browser.send("POST","/worklist/com","application/json","{\"page\":0,\"size\":25,\"q\":\"\",\"filter\":\"all\"}");
+        assertEquals(200,board.statusCode(),board.body());
+        assertEquals(mapper.readTree(mapper.writeValueAsString(boards.page(access.actor(user),"com",0,25,"","all",null))),mapper.readTree(board.body()));
+        var defaults=browser.send("POST","/worklist/com","application/json","{}");
+        assertEquals(mapper.readTree(board.body()),mapper.readTree(defaults.body()),"mismos valores por defecto que el GET anterior");
+    }
+    @Autowired PersonSearch search;@Autowired Access access;@Autowired BoardQueries boards;
+    final tools.jackson.databind.json.JsonMapper mapper=tools.jackson.databind.json.JsonMapper.builder().build();
+
     @Test void arranqueRechazaBaseDeSoloLectura()throws Exception{
         String file=Path.of("target","ro-"+UUID.randomUUID()).toAbsolutePath().toString().replace('\\','/');
         try(var c=DriverManager.getConnection("jdbc:h2:file:"+file+";MODE=MySQL","sa","");var st=c.createStatement()){

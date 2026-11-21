@@ -474,3 +474,7 @@ dialog.modal.profile-modal { --modal-width: 980px; }
   .search-chain.nested { margin-left: .3rem; padding-left: .7rem; }
 }
 @media (prefers-reduced-motion: reduce) { .search-group { transition: none; } }
+
+/* Buscador sin coincidencias de persona (G08c): cada aviso en su linea. */
+.search-empty-note {display: block;}
+.search-empty-note + .search-empty-note {margin-top: .5rem;}

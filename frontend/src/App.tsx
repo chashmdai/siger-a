@@ -19,9 +19,27 @@ import WorkspaceList from './features/worklist/WorkspaceList';
 import Intake from './features/intake/Intake';
 import Attention from './features/attention/Attention';
 import Search from './features/search/Search';
-import {clearSearch, sessionStore} from './features/search/search';
+import {clearSearch} from './features/search/search';
+import {clearBoardSearch, legacyRoute} from './features/worklist/boardSearch';
+import {sessionStore} from './lib/tabStore';
 
-const currentRoute = () => location.hash.slice(1) || 'inicio';
+/**
+ * Ruta actual. Una ruta antigua con texto (#req?q=..., G08c) se reemplaza por la misma sin el texto, que pasa a la
+ * pestana: el texto de una busqueda nunca queda en la direccion ni en el historial.
+ */
+function currentRoute() {
+  const raw = location.hash.slice(1) || 'inicio';
+  const clean = legacyRoute(raw, sessionStore());
+  if (clean === null) return raw;
+  location.replace('#' + clean);
+  return clean;
+}
+/** Sin sesion no queda texto de busqueda (buscador ni bandejas) en la pestana. */
+function clearTabSearches() {
+  const store = sessionStore();
+  clearSearch(store);
+  clearBoardSearch(store);
+}
 
 /** Mensajes propios para comandos de distribucion; el resto usa el mensaje del servidor. */
 const SOL_MESSAGES: Record<string, string> = {
@@ -47,8 +65,8 @@ export default function App() {
         setWorkspace(w);
         setUnread((await api.request<{unread: number}>('/notices/unread')).unread);
       } else {
-        // Sin sesion no queda ningun termino de busqueda en la pestana (G08b).
-        clearSearch(sessionStore());
+        // Sin sesion no queda ningun termino de busqueda en la pestana (G08b, G08c).
+        clearTabSearches();
         setCatalog({});
         setWorkspace({});
         setDetail(null);
@@ -124,7 +142,7 @@ export default function App() {
     if (!allowLeave()) return;
     try {
       await api.request('/logout', {method: 'POST'});
-      clearSearch(sessionStore());
+      clearTabSearches();
       setS(null);
       setAction(null);
       setDetail(null);
@@ -140,12 +158,12 @@ export default function App() {
   const user = s.user;
   if (user.must_change) return <PasswordChange user={user} done={() => {setS(null); reload();}}/>;
 
-  const {view, filter, query, isDetail, kind} = parseRoute(route);
+  const {view, filter, isDetail, kind} = parseRoute(route);
   const ctx: Context = {user, catalog, act: setAction, go, reload, message: setMessage};
   const groups = menuFor(user, unread);
   let content;
   if (isDetail) content = detail ? <Detail kind={kind} row={detail} ctx={ctx}/> : error ? null : <div className="detail-loading" role="status" aria-label="Cargando ficha"><Skeleton title lines={2}/><span className="skeleton block"/><Skeleton lines={4}/></div>;
-  else if (BOARDS.includes(view)) content = <WorkspaceList key={view} kind={view} initialFilter={filter} initialQuery={query} ctx={ctx} version={tick}/>;
+  else if (BOARDS.includes(view)) content = <WorkspaceList key={view} kind={view} initialFilter={filter} ctx={ctx} version={tick}/>;
   else switch (view) {
     case 'atencion': content = <Attention ctx={ctx} completed={r => completed(r)}/>; break;
     case 'buscar': content = user.can_search ? <Search ctx={ctx}/> : <Dashboard ctx={ctx} version={tick}/>; break;

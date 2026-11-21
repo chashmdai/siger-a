@@ -1,5 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
-import {request} from '../../lib/api';
+import {postJson} from '../../lib/api';
+import {sessionStore} from '../../lib/tabStore';
+import {BOARD_SEARCH_EVENT, readBoardQuery, saveBoardQuery} from './boardSearch';
 import type {Row} from '../../lib/rows';
 import {list, number, text, when} from '../../lib/rows';
 import {nameOf, scopeOf, scopes} from '../../lib/catalog';
@@ -82,13 +84,24 @@ function opener(kind: string, ctx: Context): ((r: Row) => void) | undefined {
   return r => ctx.go(BOARD_DETAIL[kind] ?? 'FLUJO', number(r, 'id'));
 }
 
-/** Bandeja paginada en el servidor: busqueda, filtro y ambito se aplican sobre el alcance autorizado. */
-export default function WorkspaceList({kind, initialFilter, initialQuery = '', ctx, version}: {kind: string; initialFilter: string; initialQuery?: string; ctx: Context; version: number}) {
+/**
+ * Bandeja paginada en el servidor: busqueda, filtro y ambito se aplican sobre el alcance autorizado. El texto de busqueda
+ * (G08c) va en el cuerpo de POST /api/worklist/{kind}, nunca en la ruta ni en la URL, y se recuerda solo en la pestana.
+ */
+export default function WorkspaceList({kind, initialFilter, ctx, version}: {kind: string; initialFilter: string; ctx: Context; version: number}) {
+  const initialQuery = readBoardQuery(sessionStore(), kind);
   const [state, setState] = useState(defaultFilter(kind, initialFilter)), [q, setQ] = useState(initialQuery), [query, setQuery] = useState(initialQuery), [scope, setScope] = useState('');
   const [page, setPage] = useState(0), [data, setData] = useState<Row | null>(null), [busy, setBusy] = useState(true), [error, setError] = useState('');
   const board = BOARDS[kind];
   useEffect(() => {setState(defaultFilter(kind, initialFilter)); setPage(0);}, [kind, initialFilter]);
-  useEffect(() => {setQ(initialQuery); setQuery(initialQuery); setPage(0);}, [initialQuery]);
+  // La paleta puede dejar otro texto para esta misma bandeja abierta.
+  useEffect(() => {
+    const reread = () => {const next = readBoardQuery(sessionStore(), kind); setQ(next); setQuery(next); setPage(0);};
+    window.addEventListener(BOARD_SEARCH_EVENT, reread);
+    return () => window.removeEventListener(BOARD_SEARCH_EVENT, reread);
+  }, [kind]);
+  // El texto aplicado queda en la pestana para volver desde una ficha con la misma busqueda.
+  useEffect(() => {saveBoardQuery(sessionStore(), kind, query);}, [kind, query]);
   // La busqueda se aplica sola tras una breve pausa al escribir; Enter la aplica de inmediato.
   const typing = useRef(0);
   useEffect(() => {
@@ -100,9 +113,7 @@ export default function WorkspaceList({kind, initialFilter, initialQuery = '', c
   useEffect(() => {
     let active = true;
     setBusy(true);
-    const params = new URLSearchParams({page: String(page), size: String(PAGE_SIZE), q: query, filter: state});
-    if (scope) params.set('scope', scope);
-    void request('/worklist/' + kind + '?' + params)
+    void postJson('/worklist/' + kind, {page, size: PAGE_SIZE, q: query, filter: state, scope: scope ? Number(scope) : undefined})
       .then(r => {if (active) {setData(r); setError('');}})
       .catch(e => {if (active) setError((e as Error).message);})
       .finally(() => {if (active) setBusy(false);});

@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import type {KeyboardEvent, ReactNode} from 'react';
-import {request} from '../../lib/api';
+import {postJson} from '../../lib/api';
 import type {Row} from '../../lib/rows';
 import {list, number, obj, text, when} from '../../lib/rows';
 import {FLOW_LABELS, humanize, MATTER_LABELS} from '../../lib/labels';
@@ -11,7 +11,7 @@ import {Callout, EmptyState, ErrorMessage, PageHeader, Skeleton} from '../../com
 import {SearchField} from './SearchField';
 import type {Period, SearchState} from './search';
 import {
-  alternatives, apiPath, clearSearch, exactTarget, filtered, formatRun, interpretation, MATCH_ROLE_LABELS, matchReason, nextIndex, primaryTarget,
+  alternatives, apiBody, clearSearch, emptyNotes, exactTarget, filtered, formatRun, interpretation, MATCH_ROLE_LABELS, matchReason, nextIndex, primaryTarget,
   READING_LABELS, READING_TITLES, readSearch, saveSearch, scopeLabel, SEARCH_EVENT, SEARCH_ROUTE, searchable, sessionStore, showFilters, shownReadings,
   SOURCE_LABELS, startSearch, summaryLines, UNCERTAIN, withoutFilters,
 } from './search';
@@ -40,7 +40,7 @@ export default function Search({ctx}: {ctx: Context}) {
     if (!state || !searchable(state.q)) {setData(null); setError(''); return;}
     let live = true;
     setLoading(true);
-    request(apiPath(state, new Date())).then(r => {
+    postJson('/search', apiBody(state, new Date())).then(r => {
       if (!live) return;
       const exact = state.fresh ? exactTarget(r) : null;
       if (state.fresh) saveSearch(store, {...state, fresh: false});
@@ -90,7 +90,7 @@ export default function Search({ctx}: {ctx: Context}) {
     {loading && !data && <div aria-busy="true" aria-label="Buscando"><Skeleton title lines={4}/></div>}
     {data && <div ref={results} onKeyDown={keys} aria-busy={loading}>
       <Interpretation data={data} state={state!} update={update}/>
-      {readings.map(r => <Reading key={text(r, 'type')} reading={r} multiple={multiple} state={state!} update={update} ctx={ctx}/>)}
+      {readings.map(r => <Reading key={text(r, 'type')} reading={r} notes={emptyNotes(data, r)} multiple={multiple} state={state!} update={update} ctx={ctx}/>)}
     </div>}
   </section>;
 }
@@ -109,7 +109,7 @@ function Interpretation({data, state, update}: {data: Row; state: SearchState; u
   </div>;
 }
 
-function Reading({reading, multiple, state, update, ctx}: {reading: Row; multiple: boolean; state: SearchState; update: (s: SearchState) => void; ctx: Context}) {
+function Reading({reading, notes, multiple, state, update, ctx}: {reading: Row; notes: string[]; multiple: boolean; state: SearchState; update: (s: SearchState) => void; ctx: Context}) {
   const type = text(reading, 'type'), groups = list(reading, 'groups'), total = number(reading, 'total');
   const titleId = 'lectura-' + type;
   return <section className="search-reading" aria-labelledby={titleId}>
@@ -124,7 +124,7 @@ function Reading({reading, multiple, state, update, ctx}: {reading: Row; multipl
     {reading.more === true && reading.too_many !== true && <Callout tone="neutral">{text(reading, 'message')}</Callout>}
     {reading.too_many !== true && groups.length === 0 && <EmptyState compact icon="search" title={filtered(state) ? 'Sin resultados con estos filtros' : 'Sin resultados que puedas leer'}
       actions={filtered(state) ? <button type="button" className="sm" onClick={() => update(withoutFilters(state))}>Quitar filtros</button> : undefined}>
-      La búsqueda solo muestra lo que tus funciones permiten leer. Prueba con el RUN, otro orden del nombre o un folio.
+      {notes.length > 0 ? notes.map(n => <span key={n} className="search-empty-note">{n}</span>) : 'La búsqueda solo muestra lo que tus funciones permiten leer. Prueba con el RUN, otro orden del nombre o un folio.'}
     </EmptyState>}
     {groups.length > 0 && <ol className="search-results" aria-label={multiple ? READING_TITLES[type] : 'Resultados'}>
       {groups.map((g, i) => <Group key={i} group={g}/>)}

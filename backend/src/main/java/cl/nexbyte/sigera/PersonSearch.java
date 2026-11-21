@@ -189,6 +189,8 @@ public class PersonSearch {
         var out=new LinkedHashMap<String,Object>();
         out.put("detected",term.detected());out.put("available",List.copyOf(term.available().keySet()));out.put("forced",as==null||as.isBlank()?null:as);
         out.put("limit",LIMIT);out.put("readings",readings);
+        // G08c: la pantalla explica por que una cuenta (por ejemplo, solo LECTURA) no ve coincidencias de persona.
+        out.put("can_find_people",a.findsPeople());
         return out;
     }
     String hmac(String canonical){

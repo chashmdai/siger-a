@@ -59,12 +59,18 @@ public class Api {
         }catch(RuntimeException e){return ResponseEntity.status(503).body(Map.of("status","UNAVAILABLE","version",releaseVersion));}
     }
     @GetMapping("/dashboard") public Map<String,Object> dashboard(Authentication a){return boards.dashboard(access.actor(name(a)));}
-    @GetMapping("/worklist/{kind}") public Map<String,Object> page(Authentication a,@PathVariable String kind,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="25")int size,@RequestParam(defaultValue="")String q,@RequestParam(defaultValue="all")String filter,@RequestParam(required=false)Long scope){return boards.page(access.actor(name(a)),kind,page,size,q,filter,scope);}
-    /** Buscador de personas y folios (G08): filtra por los permisos de lectura de la sesion y audita sin el termino en claro. */
-    @GetMapping("/search") public Map<String,Object> search(Authentication a,@RequestParam(defaultValue="")String q,@RequestParam(name="as",required=false)String as,
-            @RequestParam(required=false)String role,@RequestParam(defaultValue="false")boolean open,@RequestParam(required=false)Long scope,@RequestParam(required=false)String region,
-            @RequestParam(required=false)String from,@RequestParam(required=false)String to){
-        return search.search(access.actor(name(a)),q,as,PersonSearch.Filters.of(role,open,scope,region,from,to));
+    /** Bandeja paginada (G08c): POST con el texto en el cuerpo, nunca en la URL; CSRF como todo POST. GET responde 405. */
+    record WorklistBody(Integer page,Integer size,String q,String filter,Long scope){}
+    @PostMapping("/worklist/{kind}") public Map<String,Object> page(Authentication a,@PathVariable String kind,@RequestBody WorklistBody b){
+        return boards.page(access.actor(name(a)),kind,b.page()==null?0:b.page(),b.size()==null?25:b.size(),b.q()==null?"":b.q(),b.filter()==null||b.filter().isBlank()?"all":b.filter(),b.scope());
+    }
+    /**
+     * Buscador de personas y folios (G08): filtra por los permisos de lectura de la sesion y audita sin el termino en claro.
+     * Desde G08c es POST con el termino y los filtros en el cuerpo JSON, nunca en la URL; CSRF como todo POST. GET responde 405.
+     */
+    record SearchBody(String q,String as,String role,Boolean open,Long scope,String region,String from,String to){}
+    @PostMapping("/search") public Map<String,Object> search(Authentication a,@RequestBody SearchBody b){
+        return search.search(access.actor(name(a)),b.q()==null?"":b.q(),b.as(),PersonSearch.Filters.of(b.role(),Boolean.TRUE.equals(b.open()),b.scope(),b.region(),b.from(),b.to()));
     }
     @GetMapping("/intake/documents") public List<Map<String,Object>> draftDocuments(Authentication a){return documents.drafts(name(a));}
     @PostMapping(value="/intake/documents",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)

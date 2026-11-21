@@ -3,7 +3,10 @@ package cl.nexbyte.sigera;
 import java.util.Map;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -19,6 +22,11 @@ public class ApiErrors {
         }
         return ResponseEntity.status(p.status).body(Map.of("message",p.getMessage()));}
     @ExceptionHandler({IllegalArgumentException.class,HttpMessageNotReadableException.class}) ResponseEntity<?> invalid(Exception e){return ResponseEntity.badRequest().body(Map.of("message","Solicitud invalida. Revisa los campos enviados."));}
+    /** Metodo no admitido (por ejemplo GET a /api/search, que solo acepta POST desde G08c): 405 con Allow, sin registrar la URL. */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class) ResponseEntity<?> method(HttpRequestMethodNotSupportedException e){
+        var r=ResponseEntity.status(405);var allowed=e.getSupportedHttpMethods();if(allowed!=null)r.allow(allowed.toArray(HttpMethod[]::new));
+        return r.body(Map.of("message","Metodo no admitido para esta operacion."));}
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class) ResponseEntity<?> media(Exception e){return ResponseEntity.status(415).body(Map.of("message","Formato de solicitud no admitido."));}
     @ExceptionHandler(DataIntegrityViolationException.class) ResponseEntity<?> duplicate(Exception e){return ResponseEntity.status(409).body(Map.of("message","La operacion entra en conflicto con un registro existente. Actualiza la ficha."));}
     @ExceptionHandler(MaxUploadSizeExceededException.class) ResponseEntity<?> upload(Exception e){return ResponseEntity.status(413).body(Map.of("message","El archivo supera 25 MiB."));}
     @ExceptionHandler(Exception.class) ResponseEntity<?> other(Exception e){

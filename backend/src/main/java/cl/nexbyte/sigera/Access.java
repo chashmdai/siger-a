@@ -22,6 +22,13 @@ public class Access {
          * nacional por materia (D9). TI y AUDITORIA sola no. Regla del buscador y de can_search en la sesion.
          */
         public boolean readsRecords() { return !matters.isEmpty()||grants.stream().anyMatch(g -> Roles.readsRecords(g.role())); }
+        /**
+         * Puede tener coincidencias de persona en el buscador (G08c): sus funciones abren la COM o la ficha de primera
+         * atencion (Visibility.comRead/attentionRead): una funcion operativa, la consulta institucional o una lectura por
+         * materia. LECTURA sola no: lee REQ y Casos de su ambito (los encuentra por folio) y una COM solo si es una COM
+         * hija admitida en uno de esos Casos, por lo que la pantalla le explica por que no ve personas.
+         */
+        public boolean findsPeople() { return institutionalReader()||!matters.isEmpty()||grants.stream().anyMatch(g -> Roles.opensIntake(g.role())); }
         /** La misma cuenta sin la consulta institucional: distingue lo que lee solo gracias a ella. */
         public Actor withoutInstitutionalReader() {
             return new Actor(id,username,name,homeScope,mustChange,securityVersion,grants.stream().filter(g->!g.role().equals(Roles.CONSULTA_INSTITUCIONAL)).toList(),substitutions,matters);

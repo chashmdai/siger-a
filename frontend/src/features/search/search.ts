@@ -1,6 +1,7 @@
 /**
  * Buscador de personas y folios (0.5.0, D5, gate G08b): logica pura de la pantalla #buscar, la paleta y el campo de
- * Inicio. El motor es GET /api/search (PersonSearch): aqui solo se arma la consulta y se presentan sus resultados.
+ * Inicio. El motor es POST /api/search (PersonSearch; G08c: el termino va en el cuerpo): aqui solo se arma la consulta
+ * y se presentan sus resultados.
  *
  * Privacidad (decision del responsable): el termino y los filtros nunca van en la ruta. La vista es siempre "#buscar",
  * sin parametros; el estado vive solo en sessionStorage de la pestana (para volver de una ficha a los resultados) y se
@@ -10,6 +11,8 @@ import type {Row} from '../../lib/rows.ts';
 import {list, number, obj, text} from '../../lib/rows.ts';
 import {EXTERNAL_ROLE_LABELS} from '../../lib/formulario.ts';
 import {PERSON_ROLE_LABELS} from '../../lib/labels.ts';
+import type {Store} from '../../lib/tabStore.ts';
+import {sessionStore} from '../../lib/tabStore.ts';
 
 /** Ruta unica de la vista. Nunca lleva el termino. */
 export const SEARCH_ROUTE = 'buscar';
@@ -36,14 +39,10 @@ export type SearchState = {
   /** Busqueda recien enviada: un folio exacto abre su ficha. Al volver de la ficha ya no se reabre. */
   fresh?: boolean;
 };
-export type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+export type {Store};
+export {sessionStore};
 
 const KEY = 'siger-busqueda';
-
-/** sessionStorage de la pestana o null si el navegador lo bloquea (la busqueda sigue funcionando sin volver). */
-export function sessionStore(): Store | null {
-  try {return globalThis.sessionStorage ?? null;} catch {return null;}
-}
 export function readSearch(store: Store | null): SearchState | null {
   try {
     const raw = store?.getItem(KEY);
@@ -94,18 +93,31 @@ export function periodRange(state: SearchState, now: Date): {from?: string; to?:
   return {};
 }
 
-/** Consulta a /api/search (no es la ruta de la vista: el termino viaja al servidor, no al historial). */
-export function apiPath(state: SearchState, now: Date) {
-  const p = new URLSearchParams({q: state.q.trim()});
-  if (state.as) p.set('as', state.as);
-  if (state.role) p.set('role', state.role);
-  if (state.open) p.set('open', 'true');
-  if (state.scope) p.set('scope', String(state.scope));
-  if (state.region) p.set('region', state.region);
+/** Cuerpo de POST /api/search (G08c): el termino y los filtros viajan en el cuerpo, nunca en una URL ni en el historial. */
+export type SearchBody = {q: string; as?: string; role?: string; open?: boolean; scope?: number; region?: string; from?: string; to?: string};
+export function apiBody(state: SearchState, now: Date): SearchBody {
+  const body: SearchBody = {q: state.q.trim()};
+  if (state.as) body.as = state.as;
+  if (state.role) body.role = state.role;
+  if (state.open) body.open = true;
+  if (state.scope) body.scope = state.scope;
+  if (state.region) body.region = state.region;
   const {from, to} = periodRange(state, now);
-  if (from) p.set('from', from);
-  if (to) p.set('to', to);
-  return '/search?' + p.toString();
+  if (from) body.from = from;
+  if (to) body.to = to;
+  return body;
+}
+/** Lecturas de persona: un folio no es una coincidencia de persona. */
+export const PERSON_READINGS = ['RUN', 'DOCUMENTO', 'NOMBRE'];
+export const NO_PERSON_NOTE = 'Solo se muestran coincidencias en registros que puedes leer. Que no aparezca nada no significa que la persona no tenga registros.';
+export const FOLIO_ONLY_NOTE = 'Tu función permite encontrar REQ y Casos por folio; las personas aparecen solo si puedes leer la comunicación o la ficha.';
+/**
+ * Avisos de una lectura de persona sin coincidencias (G08c). El servidor indica con can_find_people si las funciones de
+ * la cuenta abren alguna COM o ficha (por ejemplo, solo LECTURA no): la pantalla no lo calcula.
+ */
+export function emptyNotes(response: Row, reading: Row): string[] {
+  if (!PERSON_READINGS.includes(text(reading, 'type')) || reading.too_many === true || list(reading, 'groups').length > 0) return [];
+  return response.can_find_people === false ? [NO_PERSON_NOTE, FOLIO_ONLY_NOTE] : [NO_PERSON_NOTE];
 }
 /** Filtros activos (para mostrarlos aunque el resultado ya sea corto y poder quitarlos). */
 export const filtered = (s: SearchState) => Boolean(s.role || s.open || s.scope || s.region || s.period);

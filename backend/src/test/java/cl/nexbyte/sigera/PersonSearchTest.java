@@ -289,12 +289,31 @@ class PersonSearchTest {
         assertEquals("Dirección UPD",s(sol,"receiver"));assertEquals(access.solReceiverLabel(scope("UPD")),s(sol,"receiver"));
         assertEquals("Coordinación regional: "+s(db.one("SELECT name FROM org_scope WHERE code='REG-DEMO'"),"name"),access.solReceiverLabel(scope("REG-DEMO")));
     }
+    @Test @Order(9) void cuerpoDeLaConsultaYCoincidenciasDePersona(){
+        data();db.update("UPDATE staff SET must_change=FALSE");
+        // G08c: el endpoint recibe el termino y los filtros en el cuerpo (POST) y responde lo mismo que el servicio.
+        var body=new Api.SearchBody("ana",null,"NNA",true,null,null,null,null);
+        assertEquals(find(READER,"ana",null,PersonSearch.Filters.of("NNA",true,null,null,null,null)),api.search(auth(READER),body));
+        assertEquals(find(READER,"ana"),api.search(auth(READER),new Api.SearchBody("ana",null,null,null,null,null,null,null)));
+        assertEquals(400,assertThrows(Problem.class,()->api.search(auth(READER),new Api.SearchBody(null,null,null,null,null,null,null,null))).status,"sin termino");
+        // Si la cuenta puede tener coincidencias de persona: sus funciones abren la COM o la ficha.
+        for(String who:List.of(READER,"profesional","administrativo","distribucion","coordinacion.requerimientos","direccion.upd","coordinacion.regional"))
+            assertEquals(true,find(who,"ana").get("can_find_people"),who);
+        // Solo LECTURA (gabinete): encuentra su Caso por folio, pero ninguna persona.
+        assertEquals(false,find("gabinete","ana").get("can_find_people"));
+        assertFalse(access.actor("gabinete").findsPeople());
+        String caseFolio=s(db.one("SELECT folio FROM case_record WHERE id=?",data().caseId()),"folio");
+        assertEquals(1,n(only(find("gabinete",caseFolio)),"total"));
+        assertEquals(0,n(only(find("gabinete","Carla Muñoz")),"total"),"la persona de su propio Caso no aparece");
+    }
     @Autowired Api api;
-    @SuppressWarnings("unchecked") Map<String,Object> sessionUser(String who){
+    org.springframework.security.core.Authentication auth(String who){
         var u=db.one("SELECT id,username,password_hash,security_version FROM staff WHERE username=?",who);
         var principal=new SecurityConfig.Principal(n(u,"id"),who,s(u,"password_hash"),n(u,"security_version"),true);
-        var auth=new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(principal,null,principal.getAuthorities());
+        return new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(principal,null,principal.getAuthorities());
+    }
+    @SuppressWarnings("unchecked") Map<String,Object> sessionUser(String who){
         var csrf=new org.springframework.security.web.csrf.DefaultCsrfToken("X-CSRF-TOKEN","_csrf","token-sintetico");
-        return (Map<String,Object>)api.session(auth,csrf).get("user");
+        return (Map<String,Object>)api.session(auth(who),csrf).get("user");
     }
 }

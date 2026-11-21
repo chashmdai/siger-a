@@ -44,5 +44,10 @@ public final class Roles {
         var role=BY_CODE.get(code);
         return role!=null&&(role.group().equals("OPERATIVA")||role.group().equals("CONSULTA"));
     }
+    /** Funcion que abre comunicaciones o fichas de primera atencion de su ambito (G08c): las operativas. */
+    public static boolean opensIntake(String code) {
+        var role=BY_CODE.get(code);
+        return role!=null&&role.group().equals("OPERATIVA");
+    }
     public static List<Map<String,Object>> json() { return ALL.stream().map(Role::json).toList(); }
 }
