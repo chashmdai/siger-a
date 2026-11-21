@@ -16,9 +16,12 @@ import static cl.nexbyte.sigera.Db.*;
 /**
  * Verificacion en un MySQL 8.4 AISLADO y desechable (no el de ninguna instancia ni MySQL80): solo se ejecuta con
  * -Dsiger.mysql.base=jdbc:mysql://127.0.0.1:<puerto> -Dsiger.mysql.user=... -Dsiger.mysql.password=... y esquemas
- * siger_a_mysql_pruebas / siger_a_mysql_inst creados para la prueba. Aplica V1-V10 con Flyway y ejercita sobre MySQL el
+ * siger_a_mysql_pruebas / siger_a_mysql_inst creados para la prueba. Aplica V1-V14 con Flyway y ejercita sobre MySQL el
  * SQL nuevo: ciclo PULL/ACK con productor SINTETICO, consumidor automatico, latidos, outbox con Graph FALSO, comandos
- * de TI, consultas de administracion, liberacion documental e inicializacion institucional. Sin red real.
+ * de TI, consultas de administracion, liberacion documental, rutinas de arranque de 0.5.0, unicidad del calendario
+ * (V13) e inicializacion institucional. Sin red real. El resto de 0.5.0 (sedes, materia, buscador, reportes, perfil)
+ * se verifica con la suite completa sobre MySQL ({@link MySqlSuite}) y la actualizacion desde 0.4.0 con
+ * {@link MySql84UpgradeTest}.
  */
 class MySql84IntegrationTest {
     static final String BASE=System.getProperty("siger.mysql.base");
@@ -33,13 +36,26 @@ class MySql84IntegrationTest {
         return new SpringApplicationBuilder(SigerApplication.class).web(WebApplicationType.NONE).profiles("test").run(args.stream().map(a->"--"+a).toArray(String[]::new));
     }
 
-    @Test void migracionesV1aV10YOperacionContinuaSobreMySql84()throws Exception{
+    @Test void migracionesV1aV14YOperacionContinuaSobreMySql84()throws Exception{
         try(var ctx=app("siger_a_mysql_pruebas",List.of("siger.seed-demo=true","siger.folio-prefix=COMA","siger.formulario-trusted-keys="+FormularioDocs.trustFile(),
                 "siger.mail.mode=GRAPH","siger.mail.allowed-domains=defensorianinez.cl"))){
             var db=ctx.getBean(Db.class);
             assertTrue(s(db.one("SELECT VERSION() AS v"),"v").startsWith("8.4."),"MySQL 8.4");
-            for(int v=1;v<=10;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
+            for(int v=1;v<=14;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
             assertEquals("14",ctx.getBean(Api.class).health().getBody().get("schema"));
+            // Rutinas de arranque de 0.5.0 sobre las semillas: marcadores, hitos sin omisiones y la sede con Coordinacion como DIRECCION.
+            for(String marker:List.of(Bootstrap.AUTHORITY_MARKER,Bootstrap.REGIONAL_HEAD_MARKER,PersonIndex.MARKER,Milestones.MARKER))
+                assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",marker),marker);
+            assertEquals(0,Milestones.omitted(db));
+            assertEquals(1,db.count("SELECT COUNT(*) FROM role_assignment g JOIN org_scope o ON o.id=g.scope_id JOIN staff u ON u.id=g.user_id WHERE o.code='REG-DEMO' AND u.username='coordinacion.regional' AND g.role_code='DIRECCION' AND g.revoked_at IS NULL"));
+            assertEquals(0,db.count("SELECT COUNT(*) FROM role_assignment g JOIN org_scope o ON o.id=g.scope_id WHERE o.regional=TRUE AND g.role_code='JEFATURA' AND g.revoked_at IS NULL"));
+            // V13: el UNIQUE (holiday_day, region_key) rige tambien con region nula (nacional = 'NAC') en MySQL.
+            db.update("DELETE FROM business_holiday WHERE holiday_day LIKE '2098-%'");
+            long tiId=n(db.one("SELECT id FROM staff WHERE username='ti'"),"id");
+            db.update("INSERT INTO business_holiday(holiday_day,region_code,region_key,name,created_by,created_ms) VALUES('2098-01-02',NULL,'NAC','Prueba nacional',?,1)",tiId);
+            db.update("INSERT INTO business_holiday(holiday_day,region_code,region_key,name,created_by,created_ms) VALUES('2098-01-02','05','05','Prueba regional',?,1)",tiId);
+            assertThrows(org.springframework.dao.DuplicateKeyException.class,()->db.update("INSERT INTO business_holiday(holiday_day,region_code,region_key,name,created_by,created_ms) VALUES('2098-01-02',NULL,'NAC','Repetido',?,1)",tiId));
+            db.update("DELETE FROM business_holiday WHERE holiday_day LIKE '2098-%'");
 
             // Ciclo PULL/ACK con el productor sintetico: COM, originales, comprobante y ACK; respuesta perdida conciliada.
             var k=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
@@ -110,7 +126,7 @@ class MySql84IntegrationTest {
         Files.writeString(dir.resolve("estructura.json"),InstitutionalBootstrapTest.VALID);
         try(var ctx=app("siger_a_mysql_inst",List.of("siger.bootstrap-file="+dir.resolve("estructura.json")))){
             var db=ctx.getBean(Db.class);
-            assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version='10' AND success=TRUE"));
+            assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version='14' AND success=TRUE"));
             assertEquals(1,db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE"));
             assertEquals(3,db.count("SELECT COUNT(*) FROM org_scope"));
             assertEquals(0,db.count("SELECT COUNT(*) FROM staff WHERE LOWER(name) LIKE '%sintetic%'"));

@@ -29,7 +29,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G10 | Hitos (V14) | CERRADO |
 | G11 | Reportes: calculo | CERRADO |
 | G12 | Reportes: interfaz y exportacion | CERRADO |
-| G13 | Integracion MySQL | ABIERTO |
+| G13 | Integracion MySQL | CERRADO |
 | G14 | Cierre de version | ABIERTO |
 
 ## Antecedentes para G00 (revision previa del codigo, sin ejecutar)
@@ -412,3 +412,31 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 - Pendientes: reportes, exportacion y perfil en `MySql84IntegrationTest` -> G13; recorrido de reportes y exportacion en `PRUEBAS_MANUALES_0_5_0.md` -> G14.
 - Verificacion manual sugerida al usuario: como `ti`, abre el perfil de una cuenta y en "Reportes y exportacion" marca Reportes y Exportacion en "Toda la institucion" (Exportacion queda deshabilitada hasta marcar Reportes); agrega el ambito UPR y marca solo Reportes. Entra con esa cuenta: menu "Reportes de gestion", consulta REQ total agrupado por ambito y luego Volumen; exporta REQ y abre el archivo en una planilla (columnas separadas, coma decimal, ambito por codigo). En una bandeja, "Exportar CSV" aparece; con una cuenta sin Exportacion no aparece.
 
+### G13 - Integracion MySQL   (CERRADO)
+- Fecha: 2026-11-21 (commit `gate G13: integracion MySQL`)
+- Hecho:
+  - Modo suite sobre MySQL: `MySqlSuite` (`ContextCustomizerFactory` en `src/test/resources/META-INF/spring.factories`), activo solo con `-Dsiger.mysql.suite=true` y un `siger.mysql.base` en `127.0.0.1`. Cada `jdbc:h2:mem:<nombre>` pasa a `siger_a_mysql_<nombre>`, recreado vacio una vez por JVM. Cubre V11-V14, sedes, materia, lector, buscador, calendario, hitos, reportes, exportacion y perfil con las mismas aserciones de H2. `FormularioServiceTest` y `FormularioRunOnceTest` arman su propia aplicacion y siguen en H2.
+  - `MySql84IntegrationTest`: V1-V14, los 4 marcadores de arranque, `MILESTONES_V14` sin omisiones, la Coordinacion de REG-DEMO como DIRECCION y el UNIQUE (`holiday_day`, `region_key`) de V13 con region nula.
+  - `MySql84UpgradeTest` (opcional, solo con el MySQL aislado): carga `upgrade/siger-0.4.0-sintetico.sql` en `siger_a_mysql_upgrade`, arranca con `migrate-only` y luego normal (sin cambios entre ambos) y verifica: V11-V14 y marcadores; 14 AUTORIDAD revocadas por `sistema:actualizacion`; JEFATURA de sede convertida, con la subrogancia repuntada y el titular solo profesional; 10 referencias iguales al refresco de cada COM y busqueda por RUN; 62 hitos reconstruidos (25 eventos), 0 omisiones y sin avisos; REQ total sobre los hitos reconstruidos.
+  - Intercalacion `utf8mb4_0900_ai_ci`: la suite no fallo por ella. El inventario de unicidades y comparaciones encontro un caso, y se corrigio: en MySQL `username=?` no distinguia mayusculas ni tildes ("tí" entraba como "ti") y cada variante de mayusculas tenia su propio cupo de 30 intentos. `SecurityConfig.loginName` pasa el usuario a minusculas (como `STAFF_CREATE`), exige coincidencia exacta en Java y usa un solo cupo. Sin riesgo: los ambitos se guardan en mayusculas; los folios y UUID los genera el sistema; `name_key`, `document_key` y `region_key` se normalizan antes de comparar.
+  - SQL de pruebas no portable: `InstitutionalReaderTest.snapshot` (`table_schema='public'` -> `SCHEMA()`) y `MilestoneTest` (`LIMIT` en subconsulta `IN`). No se encontro SQL de produccion incompatible con MySQL 8.4.
+- Procedimiento del volcado (scripts en el scratchpad, fuera del repositorio):
+  1. `git worktree add --detach <tmp>/siger-040 cd21f6e` y `mvnw package -DskipTests`.
+  2. Esquema vacio `siger_a_mysql_upgrade040` (utf8mb4_0900_ai_ci). JAR 0.4.0 con `SIGER_MIGRATE=true`, `SIGER_SEED_DEMO=true` y `SIGER_SCHEDULING=false` hasta health UP con esquema 10, y se detiene.
+  3. `Upgrade040DataTest`, clase solo del worktree, ejecuta con `flow.run` de 0.4.0: 8 COM (RUN, pasaporte, NNA, acompanante y "otra persona"); SOL distribuidas, devuelta, redistribuida, descartada y asumidas; REQ cerrado y reactivado; Casos con acuse, tareas, espera, devolucion y retiro de cierre; colaboracion, derivacion y transferencia rechazada; ficha GENERAL 1.1 con entrega y Caso; ficha NNA resuelta en el acto; `COM_IMMEDIATE`; una COM sin encaminar; y la subrogancia de REG-DEMO activada por `autoridad` hasta 2099, para que siga viva.
+  4. `UPDATE staff SET password_hash='volcado-sintetico-sin-acceso'`, y `mysqldump --single-transaction --skip-dump-date --skip-comments --no-tablespaces --set-gtid-purged=OFF --skip-extended-insert`, con una cabecera de origen.
+  5. Revisado: solo semillas demo y textos sinteticos, sin hashes, correos, rutas ni nombres del equipo.
+- Actualizacion con el JAR real (cuarto esquema): `migrate-only` (como `Migrate.ps1`) sale con 0 y luego hay dos arranques normales con health UP, esquema "14" y conteos identicos. En el log: "14 concesiones revocadas en 1 cuentas", "1 jefaturas convertidas en Direccion y 0 sin convertir", "10 referencias en 8 comunicaciones", "62 reconstruidos". `MILESTONES_V14.amount` = 0.
+- Archivos clave: `MySqlSuite.java`, `META-INF/spring.factories`, `MySql84UpgradeTest.java`, `upgrade/siger-0.4.0-sintetico.sql`, `MySql84IntegrationTest.java`, `SecurityConfig.java`, `LoginPasswordTest.java`, `InstitutionalReaderTest.java`, `MilestoneTest.java`, `CLAUDE.md`
+- Verificacion:
+  - H2: JUnit 152 ok + 1 omitida (antes 151 + 1; +1 `LoginPasswordTest.ingresoSinDistinguirMayusculasNiAceptarTildesYUnSoloCupo`). Maven informa 153 ejecutadas; las 3 de MySQL se omiten sin el servidor.
+  - MySQL 8.4.13 en contenedor: suite completa 155 ok + 1 omitida (156 ejecutadas). `MySql84IntegrationTest` y `MySql84UpgradeTest` tambien pasan sobre esquemas recreados.
+  - Mutacion: sin `persons.rebuild()`, `MySql84UpgradeTest` falla.
+  - Frontend 73 ok; typecheck ok; build ok (sin cambios). Humo no aplica: el ingreso se probo por HTTP en `LoginPasswordTest`.
+- Desvios del plan: la cobertura de 0.5.0 en MySQL se hace con la suite completa y no con consultas copiadas en `MySql84IntegrationTest` (aprobado). Se uso un volcado sintetico en vez de una copia de la base de validacion (decision del responsable). Se definio el ingreso sin distinguir mayusculas.
+- Hallazgos para gates siguientes: `/api/health` sigue diciendo "0.4.0" en ambos JAR; el esquema es lo que los distingue. Sin semillas, REG-DEMO queda sin region ("Sede sin region asignada"), como las sedes de la VM. El modo suite crea unos 27 esquemas `siger_a_mysql_*` en el servidor desechable.
+- Pendientes:
+  - G14: verificacion con datos reales en la VM. Restaurar un respaldo de la instancia de validacion con `Restore-Check.ps1` (esquema nuevo `siger_a_restore_*`) y arrancar 0.5.0 con `migrate-only` sobre ese esquema (`--spring.main.web-application-type=none --siger.migrate-only=true`, como `Migrate.ps1`). Revisar en el log las cifras de supresion, conversion, indice e hitos; revisar `MILESTONES_V14.amount` y el aviso `HITOS_OMITIDOS` en Administracion.
+  - G14: `Recover-Ti.ps1` y `TiRecovery` sobre MySQL y Windows.
+  - G14: recorridos en `PRUEBAS_MANUALES_0_5_0.md`.
+- Verificacion manual sugerida al usuario: con el contenedor arriba, `sh ./mvnw -B -ntp -f backend/pom.xml test -Dsiger.mysql.suite=true -Dsiger.mysql.base=jdbc:mysql://127.0.0.1:13384 -Dsiger.mysql.user=root -Dsiger.mysql.password=...`. Opcional: ingresar como `TI` (mayusculas) en una instancia local: entra como `ti`. `tí` no entra.

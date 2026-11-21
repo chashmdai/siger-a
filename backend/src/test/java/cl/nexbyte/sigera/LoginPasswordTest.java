@@ -88,6 +88,22 @@ class LoginPasswordTest {
         assertEquals(2,audits(user,"LOGIN"));
     }
 
+    /**
+     * G13: el mismo resultado en H2 y en MySQL (utf8mb4_0900_ai_ci). El ingreso no distingue mayusculas (las cuentas se
+     * guardan en minusculas), no acepta otra cuenta por una tilde y todas las variantes comparten el cupo de intentos.
+     */
+    @Test void ingresoSinDistinguirMayusculasNiAceptarTildesYUnSoloCupo()throws Exception{
+        String user="auditoria",temp=temporary(user);
+        var accented=new Browser();
+        assertEquals(401,accented.login("auditoría",temp),"una tilde no es la misma cuenta");
+        var upper=new Browser();
+        assertEquals(204,upper.login("AUDITORIA",temp));
+        assertTrue(upper.session().contains("\"username\":\"auditoria\""),"la sesion usa la cuenta canonica");
+        // El ingreso anterior ya uso 1 de los 30 intentos del cupo; 29 mas con otras mayusculas lo agotan.
+        for(int i=0;i<29;i++)assertEquals(401,new Browser().login(i%2==0?"Auditoria":"auditoriA","clave-incorrecta-"+i));
+        assertEquals(429,new Browser().login(user,temp),"las variantes de mayusculas agotan el mismo cupo");
+    }
+
     @Test void ingresoSinAuditoriaNoQuedaAbiertoYElCambioDeClaveEsAtomico()throws Exception{
         String user="administrativo",temp=temporary(user);
         var browser=new Browser();

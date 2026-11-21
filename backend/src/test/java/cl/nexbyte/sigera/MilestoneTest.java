@@ -209,7 +209,9 @@ class MilestoneTest {
         assertEquals(ids,db.rows("SELECT id FROM milestone ORDER BY id"));
         // Un corte antes del marcador: los lotes repetidos reemplazan sus hitos reconstruidos, sin duplicar.
         db.update("DELETE FROM application_marker WHERE code=?",Milestones.MARKER);
-        db.update("DELETE FROM milestone WHERE id IN (SELECT id FROM milestone ORDER BY id DESC LIMIT 5)");
+        // Los 5 ultimos (MySQL no admite LIMIT en una subconsulta IN: se toma el corte aparte).
+        long cut=n(db.one("SELECT id FROM milestone ORDER BY id DESC LIMIT 1 OFFSET 4"),"id");
+        assertEquals(5,db.update("DELETE FROM milestone WHERE id>=?",cut));
         milestones.rebuild();
         assertEquals(live,lines());
     }

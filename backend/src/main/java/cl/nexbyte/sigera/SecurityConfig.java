@@ -53,8 +53,15 @@ public class SecurityConfig {
         }
         r.setStatus(204);
     }
+    /**
+     * Nombre de ingreso canonico (G13): las cuentas se guardan en minusculas (STAFF_CREATE), asi que el ingreso no distingue
+     * mayusculas. La cuenta se acepta solo si coincide exactamente: en MySQL (utf8mb4_0900_ai_ci) "username=?" tampoco
+     * distingue tildes, y sin esta comparacion "tí" entraria como "ti" en MySQL pero no en H2.
+     */
+    static String loginName(String raw){return raw==null?"":raw.toLowerCase(Locale.ROOT);}
     @Bean UserDetailsService users(Db db){return username->{
-        var rows=db.rows("SELECT * FROM staff WHERE username=? AND technical=FALSE",username);
+        String name=loginName(username);
+        var rows=db.rows("SELECT * FROM staff WHERE username=? AND technical=FALSE",name).stream().filter(r->name.equals(s(r,"username"))).toList();
         if(rows.isEmpty())throw new UsernameNotFoundException("Credenciales invalidas");
         var u=rows.getFirst();return new Principal(n(u,"id"),s(u,"username"),s(u,"password_hash"),n(u,"security_version"),b(u,"enabled"));
     };}
@@ -74,7 +81,9 @@ public class SecurityConfig {
                 if(q.getRequestURI().equals("/api/login")&&q.getMethod().equals("POST")){
                     long now=System.currentTimeMillis();
                     if(attempts.size()>2000)attempts.entrySet().removeIf(e->now-e.getValue()[0]>900000);
-                    String key=q.getRemoteAddr()+":"+Objects.toString(q.getParameter("username"),"").substring(0,Math.min(64,Objects.toString(q.getParameter("username"),"").length()));
+                    // Un solo cupo por cuenta: las variantes de mayusculas comparten la clave (antes, en MySQL, cada una tenia el suyo).
+                    String name=loginName(q.getParameter("username"));
+                    String key=q.getRemoteAddr()+":"+name.substring(0,Math.min(64,name.length()));
                     var bucket=attempts.compute(key,(k,v)->v==null||now-v[0]>900000?new long[]{now,1}:new long[]{v[0],v[1]+1});
                     if(bucket[1]>30){r.setStatus(429);r.setHeader("Retry-After","900");return;}
                 }

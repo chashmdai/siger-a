@@ -376,11 +376,11 @@ class InstitutionalReaderTest {
   */
  Map<String,Long> snapshot(){
   var out=new TreeMap<String,Long>();
-  var tables=db.rows("SELECT LOWER(table_name) AS t FROM information_schema.tables WHERE LOWER(table_schema)='public' AND table_type='BASE TABLE' ORDER BY 1");
+  var tables=db.rows("SELECT LOWER(table_name) AS t FROM information_schema.tables WHERE LOWER(table_schema)=LOWER(SCHEMA()) AND table_type='BASE TABLE' ORDER BY 1");
   assertTrue(tables.size()>40,"tablas del esquema: "+tables.size());
   for(var row:tables){
    String table=s(row,"t");out.put(table+".filas",db.count("SELECT COUNT(*) FROM "+table));
-   if(db.count("SELECT COUNT(*) FROM information_schema.columns WHERE LOWER(table_schema)='public' AND LOWER(table_name)=? AND LOWER(column_name)='revision'",table)>0)
+   if(db.count("SELECT COUNT(*) FROM information_schema.columns WHERE LOWER(table_schema)=LOWER(SCHEMA()) AND LOWER(table_name)=? AND LOWER(column_name)='revision'",table)>0)
     out.put(table+".revision",db.count("SELECT COALESCE(SUM(revision),0) FROM "+table));
   }
   out.put("staff.security_version",db.count("SELECT COALESCE(SUM(security_version),0) FROM staff"));
