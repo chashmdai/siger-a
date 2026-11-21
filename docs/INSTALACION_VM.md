@@ -317,6 +317,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Impo
 
 DPAPI exige que SMR y SIGER usen la misma cuenta de Windows; si no, el script lo informa y no importa nada. Reutilizar la identidad ACK de SMR evita instalar otra clave en el Formulario, pero obliga a que SMR **no** vuelva a confirmar entregas mientras SIGER consume. El certificado HTTPS se usa tras reiniciar; el enlace sigue en 127.0.0.1 (abrir la red es otra decision).
 
+### Clave de auditoria del buscador (opcional, 0.5.0)
+
+El buscador de personas y folios audita cada consulta (evento `BUSQUEDA`) con el tipo de termino y la cantidad de resultados, nunca con el termino. Con la clave, agrega la huella HMAC-SHA256 del termino normalizado: con la misma clave se puede comprobar despues si un RUN, nombre o folio fue buscado. Sin la clave no hay huella. Se genera una sola vez con la cuenta del servicio:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\New-AuditSearchKey.ps1' -Root 'D:\SIGER-A'
+```
+
+Queda en `config\audit-search-key.clixml` (DPAPI de esa cuenta). El servicio la lee al iniciar (variable de proceso `SIGER_AUDIT_SEARCH_KEY`, minimo 32 caracteres; una clave mas corta detiene el arranque). El script no la imprime ni la sobrescribe: si se reemplaza, las huellas anteriores dejan de poder compararse. No viaja en el paquete de secretos; produccion genera la suya.
+
 ### Monitoreo y latidos vencidos
 
 - `Estado.ps1`: servicios, salud HTTPS, esquema y estado de cada integracion (`DESACTIVADO`, `MANUAL`, `INICIANDO`, `ESPERANDO_ENTREGAS`, `RECIBIENDO`, `OCUPADO`, `PAUSADO`, `DEGRADADO`, `SIN_LATIDO`; correo: `OPERATIVO`, `ENVIANDO`, `PAUSADO`, `DEGRADADO`, `SIN_LATIDO`).

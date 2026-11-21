@@ -498,7 +498,16 @@ class InstitutionalReaderTest {
   for(String who:List.of(READER,MIXED,HEAD_READER,HEAD,PROF,ADMIN,DIST,"gabinete",DIR_UPR,DIR_UPD,DIR_UEP,COORD,PROF_REG,"ti")){
    var a=access.actor(who);
    expected(a).forEach((kind,ids)->assertEquals(ids,board(a,kind,"all"),who+" / "+kind));
+   // G08a: predicados SQL del buscador = Attention.mayRead, Queries.solVisible y la regla de coincidencias visibles.
+   var v=boards.visibility(a);
+   assertEquals(where("SELECT r.* FROM requirement r WHERE EXISTS(SELECT 1 FROM attention_record t WHERE t.requirement_id=r.id)",r->attention.mayRead(a,r)),
+    where("SELECT r.id FROM requirement r WHERE EXISTS(SELECT 1 FROM attention_record t WHERE t.requirement_id=r.id) AND "+v.attentionRead("r"),r->true),who+" / ficha");
+   assertEquals(where("SELECT * FROM solicitation",q->queries.solVisible(a,q)),where("SELECT s.id FROM solicitation s JOIN communication c ON c.id=s.communication_id WHERE "+v.solChain("s","c"),q->true),who+" / SOL de la cadena");
+   assertEquals(where("SELECT * FROM person_reference",p->access.comRead(a,db.one("SELECT * FROM communication WHERE id=?",n(p,"communication_id")))
+     ||s(p,"source").equals("FICHA")&&attention.mayRead(a,db.one("SELECT * FROM requirement WHERE id=?",n(p,"requirement_id")))),
+    where("SELECT p.id FROM "+PersonSearch.REFERENCES+" WHERE "+PersonSearch.visible(v),q->true),who+" / coincidencias");
   }
+  assertTrue(db.count("SELECT COUNT(*) FROM person_reference WHERE source='FICHA'")>0&&db.count("SELECT COUNT(*) FROM person_reference WHERE source='FORMULARIO'")>0,"el fixture tiene coincidencias de ficha y del Formulario");
   // El lector ve las bandejas de expedientes completas; tareas y avisos siguen siendo personales.
   var reader=access.actor(READER);
   for(var e:Map.of("com","communication","sol","solicitation","req","requirement","cas","case_record","flujos","flow_request").entrySet())

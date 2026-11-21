@@ -19,11 +19,11 @@ import static cl.nexbyte.sigera.Db.*;
 public class Api {
     final Attention attention;final BoardQueries boards;volatile boolean ready;
     final Access access;final Workflow flow;final Queries queries;final Documents documents;final Db db;final PasswordEncoder passwords;
-    final Integrations integrations;final String environment;final String releaseVersion;
-    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,
+    final Integrations integrations;final PersonSearch search;final String environment;final String releaseVersion;
+    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,
                @org.springframework.beans.factory.annotation.Value("${siger.environment-label:}")String environment,BuildProperties buildProperties){
         this.attention=attention;this.access=access;this.flow=flow;this.queries=queries;this.documents=documents;this.db=db;this.passwords=passwords;this.boards=boards;
-        this.integrations=integrations;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
+        this.integrations=integrations;this.search=search;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
     }
     private String name(Authentication auth){if(auth==null||!(auth.getPrincipal() instanceof SecurityConfig.Principal))throw new Problem(401,"Inicia sesion.");return auth.getName();}
     @GetMapping("/session") public Map<String,Object> session(Authentication auth,CsrfToken csrf){
@@ -60,6 +60,12 @@ public class Api {
     }
     @GetMapping("/dashboard") public Map<String,Object> dashboard(Authentication a){return boards.dashboard(access.actor(name(a)));}
     @GetMapping("/worklist/{kind}") public Map<String,Object> page(Authentication a,@PathVariable String kind,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="25")int size,@RequestParam(defaultValue="")String q,@RequestParam(defaultValue="all")String filter,@RequestParam(required=false)Long scope){return boards.page(access.actor(name(a)),kind,page,size,q,filter,scope);}
+    /** Buscador de personas y folios (G08): filtra por los permisos de lectura de la sesion y audita sin el termino en claro. */
+    @GetMapping("/search") public Map<String,Object> search(Authentication a,@RequestParam(defaultValue="")String q,@RequestParam(name="as",required=false)String as,
+            @RequestParam(required=false)String role,@RequestParam(defaultValue="false")boolean open,@RequestParam(required=false)Long scope,@RequestParam(required=false)String region,
+            @RequestParam(required=false)String from,@RequestParam(required=false)String to){
+        return search.search(access.actor(name(a)),q,as,PersonSearch.Filters.of(role,open,scope,region,from,to));
+    }
     @GetMapping("/intake/documents") public List<Map<String,Object>> draftDocuments(Authentication a){return documents.drafts(name(a));}
     @PostMapping(value="/intake/documents",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> stageDocument(Authentication a,@RequestParam long scope,@RequestParam UUID key,@RequestParam MultipartFile file)throws Exception{return documents.stage(name(a),scope,key,file);}

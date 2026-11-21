@@ -22,7 +22,8 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | R03b | Panel Estructura y perfil agrupado | CERRADO |
 | G07 | Indice de personas (V12) | CERRADO |
 | G07b | Indice de personas: roles excluidos y nombre de preferencia | CERRADO |
-| G08 | Buscador | ABIERTO |
+| G08a | Buscador: servidor, auditoria y scripts | CERRADO |
+| G08b | Buscador: pantalla y paleta | ABIERTO |
 | G09 | Calendario habil (V13) | ABIERTO |
 | G10 | Hitos (V14) | ABIERTO |
 | G11 | Reportes: calculo | ABIERTO |
@@ -300,3 +301,17 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 - Hallazgos para gates siguientes: G08 no debe ofrecer las personas senaladas como resultado ni filtrar por ellas: no estan en `person_reference`. Una busqueda por nombre de preferencia llega a quien presenta.
 - Pendientes: los de G07 (V12 y la carga inicial en MySQL -> G13; recorrido -> G14)
 - Verificacion manual sugerida al usuario: no aplica (sin interfaz hasta G08)
+
+### G08a - Buscador: servidor, auditoria y scripts   (CERRADO)
+- Fecha: 2026-11-21 (commit `gate G08a: buscador servidor y auditoria`)
+- Origen: G08 dividido por decision del responsable: G08a (servidor, auditoria, scripts, pruebas) y G08b (pantalla y paleta). El responsable confirmo las tres decisiones del inventario (coincidencia visible solo si se lee la COM o la ficha, sin mostrar ni contar lo oculto; tipo DOCUMENTO; `New-AuditSearchKey.ps1`) y agrego cadena completa, relevancia, palabra completa o inicio, lecturas separadas, resumen y filtros.
+- Hecho:
+  - `PersonSearch` + `GET /api/search?q=&as=&role=&open=&scope=&region=&from=&to=` (TI 403; 3-160 caracteres). Lecturas FOLIO (con ceros; un numero solo = correlativo COM/REQ-A/CAS-A), RUN (DV explicito con aviso modulo 11; con puntos; sin separador con dos lecturas; siempre tambien `document_key` del RUN sin guion, con el DV escrito y el correcto), DOCUMENTO y NOMBRE (inicio de palabra, hasta 8). `available`/`detected` y `as` para cambiar la lectura; cada lectura aparte en `readings`.
+  - Visibilidad: `Visibility.attentionRead` (= `Attention.mayRead`) y `Visibility.solChain` (= `Queries.solVisible`). Grupo por COM con COM, SOL (estado, destino), REQ origen y antecedentes ADMITIDOS (sede/region, encargado, ultimo movimiento), Casos (responsable, sede/region, ultimo movimiento) y flujos pendientes, cada paso con su predicado. Relevancia 1-5 y abierto antes que cerrado; `uncertain` en coincidencias por nombre; `summary` y `person` en RUN/DOCUMENTO; `facets` (roles, abiertos/cerrados, regiones, ambitos) y filtros sobre lo legible; `exact` para un folio unico; 50 grupos (`more`), tope 5000 (`too_many`).
+  - Auditoria `BUSQUEDA` (tipo y cantidad por lectura, nombres de filtros); con `siger.audit-search-key` (>= 32) huella HMAC-SHA256 de `TIPO:canonico`. `Environment.ps1` la carga de `config\audit-search-key.clixml` en el servicio y la limpia; `New-AuditSearchKey.ps1` la genera (DPAPI, sin imprimir ni sobrescribir).
+- Archivos clave: `PersonSearch.java`, `BoardQueries.java`, `Api.java`, `application.properties`, `PersonSearchTest.java`, `InstitutionalReaderTest.java`, `scripts/{Environment,New-AuditSearchKey}.ps1`, `docs/INSTALACION_VM.md`, `CLAUDE.md`
+- Verificacion: JUnit 120 ok + 1 omitida (antes 113 + 1; +7 `PersonSearchTest`; `bandejasEquivalentesAAccess` agrega ficha, SOL de la cadena y coincidencias visibles para 14 cuentas; Maven informa 121 ejecutadas). Mutacion: sin el filtro de coincidencias, `PersonSearchTest` falla. `Check-Scripts.ps1` en `pwsh`: 31 scripts ok. Frontend sin cambios. Humo por API con el JAR (18650, H2 en `target/humo-g08a`, borrada): nombre, RUN con resumen, folio con `exact`, correlativo `001`, profesional sin resultados ni conteos, TI 403, 400 por largo; auditoria sin el termino y log sin el termino.
+- Desvios del plan: tipo DOCUMENTO y filtros/relevancia/resumen (aprobados). El minimo de 3 caracteres del plan impide buscar el correlativo `1`: se escribe `001`.
+- Hallazgos para gates siguientes: G08b: la respuesta trae `detected`, `available` y `forced` para "Buscando como ... / cambiar"; abrir la ficha solo si la unica lectura es FOLIO con `exact` y `total` 1; los grupos sin COM legible traen `communication: null`; `facets.scopes` trae el ambito completo y `facets.regions` el codigo (nombre en `catalog.regions`); `level` y `open` ya ordenados por el servidor. G13: `CONCAT(' ',name_key) LIKE ? ESCAPE '!'`, `UNION ALL` y `GROUP BY` del ultimo movimiento en MySQL.
+- Pendientes: pantalla, menu, ruta `#buscar?q=`, paleta Ctrl+K, etiquetas y `tests/search.test.ts` -> G08b; consultas del buscador en `MySql84IntegrationTest` -> G13; recorrido en `PRUEBAS_MANUALES_0_5_0.md` -> G14.
+- Verificacion manual sugerida al usuario: no aplica hasta G08b (sin interfaz). Por API, con sesion: `GET /api/search?q=12.345.678-5`.

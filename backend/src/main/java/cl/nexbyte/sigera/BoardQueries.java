@@ -51,8 +51,24 @@ public class BoardQueries {
         String comRead(String c){if(institutional)return "1=1";return "("+c+".created_by="+a.id()+" OR "+distribution(c)+" OR "+matterCom(c)+" OR EXISTS(SELECT 1 FROM solicitation vs WHERE vs.communication_id="+c+".id AND vs.state='PENDIENTE' AND "+at("vs.destination_scope",receivers)+") OR EXISTS(SELECT 1 FROM requirement vr WHERE vr.communication_id="+c+".id AND ("+reqMain("vr")+" OR "+attentionReceiver("vr")+")) OR EXISTS(SELECT 1 FROM communication_link vl JOIN requirement lr ON lr.id=vl.requirement_id WHERE vl.communication_id="+c+".id AND vl.returned_ms IS NULL AND ("+at("lr.principal_scope",heads)+" OR (vl.state='ADMITIDA' AND ((vl.target_case_id IS NULL AND "+reqMain("lr")+") OR EXISTS(SELECT 1 FROM case_record lc WHERE lc.id=vl.target_case_id AND "+caseRead("lc")+"))))))";}
         /** SOL: la receptora ve las pendientes y Distribucion las devueltas; la consulta institucional, todas; la Direccion, las de su materia en sedes (todo estado). */
         String solRead(String s,String c){return institutional?"1=1":"(("+s+".state='PENDIENTE' AND "+at(s+".destination_scope",receivers)+") OR ("+s+".state='DEVUELTA' AND "+distribution(c)+") OR "+matterSol(s)+")";}
+        /**
+         * Ficha de primera atencion del REQ, como Attention.mayRead: lectura amplia (consulta o materia del REQ), quien la
+         * gestiona, el destinatario de una entrega pendiente o la jefatura o un integrante de un Caso del REQ
+         * (Access.caseSourceDocuments). Con un REQ nulo (LEFT JOIN) es falso.
+         */
+        String attentionRead(String r){
+            if(institutional)return "1=1";
+            return "("+matterReq(r)+" OR "+reqMain(r)+" OR "+attentionReceiver(r)+" OR EXISTS(SELECT 1 FROM case_record sc WHERE sc.requirement_id="+r+".id AND ("+at("sc.scope_id",heads)+" OR ("+at("sc.scope_id",professionals)+" AND (sc.responsible_id="+a.id()+" OR EXISTS(SELECT 1 FROM case_member sm WHERE sm.case_id=sc.id AND sm.user_id="+a.id()+"))))))";
+        }
+        /** SOL de una cadena (ficha de la COM, buscador), como Queries.solVisible: la de la bandeja o la que origino un REQ legible. */
+        String solChain(String s,String c){
+            if(institutional)return "1=1";
+            return "("+solRead(s,c)+" OR EXISTS(SELECT 1 FROM requirement sr WHERE sr.solicitation_id="+s+".id AND "+reqRead("sr")+"))";
+        }
         String flowRead(String f){return institutional?"1=1":"("+at(f+".origin_scope",heads)+" OR "+at(f+".target_scope",heads)+" OR EXISTS(SELECT 1 FROM requirement fr WHERE fr.id="+f+".requirement_id AND "+matterReq("fr")+"))";}
     }
+    /** Predicados de lectura de la cuenta, para otras consultas autorizadas (buscador). */
+    Visibility visibility(Actor a){return new Visibility(a);}
     static List<Long> grants(Actor a,String...roles){var wanted=Set.of(roles);return a.grants().stream().filter(g->g.scope()!=null&&wanted.contains(g.role())).map(Access.Grant::scope).distinct().toList();}
     private record Spec(String select,String from,String permission,String scope,String search,String order){}
     private Spec spec(Visibility v,String kind){
