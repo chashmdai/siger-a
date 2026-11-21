@@ -3,7 +3,10 @@
 Esquema V10 -> V14. Produccion no se actualiza: se instala limpia con el mismo release (`docs/DESPLIEGUE_VM.md`, seccion 4).
 Esta guia es para la instancia de validacion que hoy corre 0.4.0 (`D:\SIGER-VALIDACION` en los ejemplos). El ensayo de
 restauracion se hace igual que en una instancia productiva, porque la instancia puede tener datos ingresados durante la
-validacion. Cada orden es una linea de PowerShell, **como la cuenta de servicio** salvo que se indique otra cosa.
+validacion: entre ellos, 9 recepciones reales del Formulario (pruebas autorizadas del responsable, consumidor en modo
+automatico con `"validacionPullAutorizada": true`). **Fecha critica 15/12/2026 00:00**: desde entonces el Formulario
+queda abierto al publico; antes de esa fecha el consumidor de la validacion se pausa o lo reemplaza produccion
+(`docs/ALCANCE_Y_PENDIENTES.md`). Si la actualizacion se hace despues de esa fecha, pausar el consumidor antes de empezar. Cada orden es una linea de PowerShell, **como la cuenta de servicio** salvo que se indique otra cosa.
 `FECHA` es el sufijo del ZIP del release 0.5.0 (`SIGER-FECHA.zip`), compilado con pruebas (`Build.ps1 -IncludeJava`).
 
 ## Que cambia al actualizar
@@ -19,6 +22,12 @@ validacion. Cada orden es una linea de PowerShell, **como la cuenta de servicio*
 - El ingreso pasa el usuario a minusculas y exige coincidencia exacta.
 - El CSV de las bandejas exige la funcion `EXPORTACION` (en 0.4.0 lo tenia cualquier cuenta con bandeja).
 - Las descargas de documentos llevan un nombre neutro (`<FOLIO>-documento-<id>.<ext>`); el nombre original sigue en la ficha.
+- **No cambia la configuracion de la instancia**: `Update.ps1` copia el release a `releases\update-*`, actualiza `scripts\`
+  y el JAR activo de `config\instance.json`, y conserva el resto de `config\`: las credenciales protegidas con DPAPI
+  (`secrets.clixml`, `formulario-*`, `graph-client-secret.clixml`), `formulario-pull.json` (modo AUTOMATICO),
+  `correo-graph.json` (desactivado) y la autorizacion de recepcion. Por eso se ejecuta **como la cuenta de servicio**,
+  duena de DPAPI: con otra cuenta `Migrate.ps1` no puede leer `secrets.clixml`, la actualizacion queda en
+  `MIGRATION_FAILED` y el arranque se bloquea hasta revisar el diario (ver paso 3).
 
 ## 1. Antes de actualizar (instancia 0.4.0 en marcha)
 
@@ -97,7 +106,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scr
 ```
 
 `Start.ps1` solo informa exito si `/api/health` responde la version `0.5.0` y el esquema `14` del manifiesto. Con los
-servicios registrados, repetir la prueba de servicio (`Test-Service.ps1 -VentanaAutorizada -IncluirMySql`).
+servicios registrados, repetir la prueba de servicio (`Test-Service.ps1 -VentanaAutorizada -IncluirMySql`). Al arrancar,
+el consumidor del Formulario vuelve a su modo (AUTOMATICO, salvo que TI lo haya pausado): `Estado.ps1` y Auditoria y
+operacion deben mostrar "Esperando entregas" y las mismas recepciones confirmadas que antes (9 al 2026-11-21).
 
 ## 4. Comprobaciones despues del arranque (solo lectura)
 
@@ -142,12 +153,20 @@ Como `ti`, en Administracion: revisar los avisos y "Incompatibilidades por resol
    exportaba el CSV de las bandejas en 0.4.0 necesita ahora `EXPORTACION`.
 5. **Subrogancias**: las activa y termina TI (ya no hay autoridad habilitante). La cuenta que tenia AUTORIDAD sigue
    existiendo, sin esa funcion.
-6. Opcional: clave de auditoria del buscador (`New-AuditSearchKey.ps1`, `docs/INSTALACION_VM.md`) antes del primer
-   uso del buscador; sin ella la auditoria registra el tipo y la cantidad, sin huella del termino.
+6. Opcional: clave de auditoria del buscador, antes del primer uso del buscador. Se crea **en la VM, como la cuenta
+   del servicio** (duena de DPAPI; con otra cuenta el servicio no la podra leer), y rige desde el siguiente inicio del
+   servicio. No se copia desde otro equipo ni se sobrescribe una existente. Sin ella la auditoria registra el tipo y la
+   cantidad, sin huella del termino.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\New-AuditSearchKey.ps1' -Root 'D:\SIGER-VALIDACION'
+```
+
 7. Recorrer `docs/PRUEBAS_MANUALES_0_5_0.md` con cuentas de la validacion.
 
 ## 7. Limites
 
-No se ha ejecutado aun en la VM: esta actualizacion, `Update.ps1`/`Restore-Check.ps1` de 0.5.0 ni `Recover-Ti.ps1`. La
+No se ha ejecutado aun en la VM: esta actualizacion, `Update.ps1`/`Restore-Check.ps1` de 0.5.0 ni `Recover-Ti.ps1`. El
+PULL/ACK real si esta verificado en la validacion 0.4.0 (2026-11-21). La
 actualizacion 0.4.0 -> 0.5.0 se probo con un volcado sintetico en MySQL 8.4 (`MySql84UpgradeTest`, gate G13). Un
 fallo se informa con el paso, el mensaje exacto y las cifras, sin datos personales ni secretos.

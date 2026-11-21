@@ -80,3 +80,14 @@ Precisiones de cierre de 0.5.0 (gates G13 y G14, decididas por el responsable):
 - **Descargas con nombre neutro** (G14): un documento se descarga como `<FOLIO>-documento-<id>.<ext>` (folio del registro, numero del documento y la extension del original solo si es alfanumerica de 1 a 8 caracteres). El nombre original, que puede contener el de una persona, sigue visible en la ficha autorizada, pero no queda en el historial de descargas del navegador.
 - **Hitos omitidos** (G14): el aviso de Administracion por eventos historicos que la carga inicial no reconocio es permanente y no se descarta; se documenta en `docs/ACTUALIZACION_0_5_0.md`. Produccion se instala limpia y no tiene historia que reconstruir.
 - El consumidor PULL/ACK del punto 16 existe desde 0.4.0 y sigue inactivo hasta configurarlo.
+
+## Decision para 0.6.0 - produccion y fin de la validacion
+
+Decision del responsable del proyecto del 2026-11-21 (gate G14b): **produccion sera una instancia nueva inicializada en
+modo institucional** (`Init-Server.ps1 -Mode Institucional -Proposito Produccion`), no una migracion que borre datos.
+La instancia de validacion se cierra con `Close-Validation.ps1` y luego **se elimina por completo** (base, documentos y
+respaldos), dejando constancia documentada de la eliminacion. Fecha objetivo: antes del 15/12/2026, fecha en que el
+Formulario Publico deja el acceso temporal con contrasena y queda abierto al publico; hasta que produccion consuma, el
+consumidor de la validacion se pausa para que ninguna entrega ciudadana real llegue a ella. La validacion contiene 9
+recepciones reales del Formulario, que son pruebas del responsable con sus propios datos y con autorizacion.
+

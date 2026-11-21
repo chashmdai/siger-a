@@ -31,6 +31,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G12 | Reportes: interfaz y exportacion | CERRADO |
 | G13 | Integracion MySQL | CERRADO |
 | G14 | Cierre de version | CERRADO |
+| G14b | Documentacion: PULL/ACK verificado en la VM | CERRADO |
 | G15 | Build de entrega en Windows | ABIERTO |
 
 ## Antecedentes para G00 (revision previa del codigo, sin ejecutar)
@@ -455,9 +456,23 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 - Pendientes: G15 (abajo). En la VM, a cargo del responsable: consultas previas, actualizacion de la validacion y recorridos (`ACTUALIZACION_0_5_0.md`, `PRUEBAS_MANUALES_0_5_0.md`).
 - Verificacion manual sugerida al usuario: recorrer `docs/PRUEBAS_MANUALES_0_5_0.md` (al menos secciones 0, 10 y 11) en una instancia local.
 
+### G14b - Documentacion: PULL/ACK verificado en la VM   (CERRADO)
+- Fecha: 2026-11-21 (commit `gate G14b: documentacion PULL/ACK verificado en la VM`)
+- Origen: gate abierto y trabajado en la misma sesion por pedido del responsable, con su dato verificado el 2026-11-21 en "Auditoria y operacion" de la validacion 0.4.0: consumidor del Formulario en automatico, "Esperando entregas", ultimo exito 21-11-26 16:22, sin incidentes, 9 recepciones confirmadas (PULL y ACK), credenciales DPAPI; entregas de prueba del responsable con sus propios datos y autorizacion, sin datos de terceros. Formulario tras acceso temporal con contrasena hasta el 15/12/2026 00:00 (America/Santiago). Graph desactivado.
+- Hecho: `ALCANCE_Y_PENDIENTES` (seccion "Verificado en la VM", PULL/ACK fuera de pendientes, Graph pendiente, fecha critica 15/12/2026 y produccion de 0.6.0); `DESPLIEGUE_VM` (linea 71: la validacion recibe solo con `"validacionPullAutorizada": true` y solo entregas de prueba autorizadas; antes del 15/12/2026 se pausa y pasa a manual o la reemplaza produccion; etiqueta de la pantalla); `ACTUALIZACION_0_5_0` (9 recepciones y fecha critica; `Update.ps1` conserva `config\` y las credenciales DPAPI y debe correr como la cuenta de servicio; consumidor de vuelta en automatico tras `Start.ps1`; `New-AuditSearchKey.ps1` en la VM como la cuenta del servicio). Decision para 0.6.0 en `DECISIONES_FUNCIONALES`. Coherencia: README, `INSTALACION_VM` (encabezado) y `CLAUDE.md` ya no dicen que la validacion "nunca recibe entregas reales".
+- Archivos clave: `docs/{ALCANCE_Y_PENDIENTES,DESPLIEGUE_VM,ACTUALIZACION_0_5_0,DECISIONES_FUNCIONALES,INSTALACION_VM,BITACORA_0_5_0}.md`, `README.md`, `CLAUDE.md`
+- Verificacion: solo documentacion. JUnit H2 152 ok + 1 omitida (153 ejecutadas); sin cambios de codigo ni de frontend. Se verifico en el codigo lo que se afirma: `Test-ValidationPullAuthorized`/`Require-ProductionPull` (`Environment.ps1`), la pausa de `integration_control` (persistente), lo que copia y conserva `Update.ps1` y que `New-AuditSearchKey.ps1` usa DPAPI de la cuenta actual.
+- Desvios del plan: el gate no presento inventario previo: el responsable dio el contenido exacto y pidio cerrarlo en la sesion.
+- Hallazgos para gates siguientes:
+  - **Bloquea la decision de 0.6.0 tal como esta**: `Close-Validation.ps1` rechaza cerrar una validacion con recepciones del Formulario ("No se cierra ni se descarta"); la de la VM tiene 9. Tampoco hay un procedimiento de eliminacion (base, documentos y respaldos) ni de constancia: los scripts no incluyen comandos destructivos. 0.6.0 debe definir ambos (por ejemplo, un reconocimiento expreso de que las recepciones son pruebas autorizadas y un acta de eliminacion).
+  - Los comentarios de `Environment.ps1` (`Get-InstancePurpose`) e `Init-Server.ps1` siguen diciendo que la validacion "nunca recibe entregas reales"; no se tocaron scripts en este gate -> 0.6.0.
+  - Un solo consumidor por cola: produccion no debe activarse en automatico mientras el consumidor de la validacion siga activo.
+- Pendientes: pausa del consumidor de la validacion o produccion consumiendo antes del 15/12/2026 -> responsable; cierre y eliminacion de la validacion -> 0.6.0; G15 sigue ABIERTO.
+- Verificacion manual sugerida al usuario: no aplica en la interfaz. Antes del 15/12/2026, en "Auditoria y operacion" de la validacion, comprobar que el Formulario quede "Pausado" (o que produccion ya consuma y la validacion este detenida).
+
 ## Antecedentes para G15 (build de entrega en Windows)
 
-- Punto de partida: `git log --oneline -1` = `gate G14: cierre de version`, en `main` de `origin` (`https://github.com/chashmdai/siger-a.git`). Clonar en una carpeta nueva (por ejemplo `C:\siger-a`); no copiar `.tools`, `var`, `node_modules` ni `target` desde Linux. `.gitattributes` fija CRLF en `.ps1`/`.cmd` y LF en `.sql`/`.sh`; no cambiar `core.autocrlf` para el clon.
+- Punto de partida: `git log --oneline -1` = `gate G14b: documentacion PULL/ACK verificado en la VM`, en `main` de `origin` (`https://github.com/chashmdai/siger-a.git`). Clonar en una carpeta nueva (por ejemplo `C:\siger-a`); no copiar `.tools`, `var`, `node_modules` ni `target` desde Linux. `.gitattributes` fija CRLF en `.ps1`/`.cmd` y LF en `.sql`/`.sh`; no cambiar `core.autocrlf` para el clon.
 - Windows: Windows PowerShell 5.1 (`powershell.exe`, no `pwsh`), Git for Windows (trae Git Bash y `sha256sum`), salida a internet hacia api.adoptium.net, nodejs.org, registry.npmjs.org y repo.maven.apache.org. Todo con `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...`; sin cambiar PATH, JAVA_HOME ni la directiva de forma persistente.
 - `.tools` debe contener: `java25\` (JDK 25 Windows x64 de Temurin, con `bin\javac.exe`; `java25-manifest.json` se copia al paquete si existe), `node-v24.22.0-win-x64\` (ruta fija por defecto en `Build.ps1`; exige `node.exe` v24 y `npm.cmd`) y `apache-maven-3.9.11\` (lo descarga `mvnw.cmd` si falta). `scripts\Get-Tools.ps1` instala JDK y Node con verificacion SHA-256 y no toca lo que ya existe.
 - Build: `scripts\Build.ps1 -IncludeJava` (sin `-SkipChecks`). Ejecuta `Check-Scripts.ps1` (PS 5.1), valida que `pom.xml`, `package.json` y `package-lock.json` digan 0.5.0, deriva esquema 14, `npm ci`, build, `npm test` (73), `mvnw clean verify` y arma `release\SIGER-<fecha>\` y su ZIP. Esperado en JUnit: 153 ejecutadas en H2; en Windows `DocumentReleaseTest.defenderNoOperativoFallaCerrado` puede correr en vez de omitirse (registrar el resultado tal cual). El `package-lock.json` se genero con npm 12 (lockfileVersion 3): si `npm ci` con Node 24 lo rechaza, detenerse y registrarlo, no regenerarlo en silencio.

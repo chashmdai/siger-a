@@ -68,9 +68,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scr
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Invoke-FormularioPull.ps1' -Root 'D:\SIGER-VALIDACION' -SoloComprobar
 ```
 
-La ultima orden solo comprueba configuracion, DNS, TLS con la CA de SMR y el Bearer (tres `HEAD` sin reclamar ni confirmar nada). La validacion **nunca** recibe entregas reales: el ciclo y el modo automatico se rechazan fuera de produccion.
+La ultima orden solo comprueba configuracion, DNS, TLS con la CA de SMR y el Bearer (tres `HEAD` sin reclamar ni confirmar nada). Fuera de produccion el ciclo y el modo automatico se rechazan, salvo en una validacion con `"validacionPullAutorizada": true` en `config\instance.json` (autorizacion expresa; la pantalla muestra "Validacion institucional - recepcion real controlada"). Asi opera la validacion actual de la VM: recibe solo entregas de prueba autorizadas del responsable del proyecto, porque el Formulario esta tras un acceso temporal con contrasena hasta el **15/12/2026 00:00 (America/Santiago)**; despues queda abierto al publico. **Antes de esa fecha** el consumidor de la validacion se pausa (TI: Auditoria y operacion > Integraciones permanentes > Pausar, con motivo; la pausa queda en la base y sobrevive a los reinicios) y se deja en manual (`Set-Integration.ps1 -Formulario Manual` y reinicio), o se reemplaza por produccion, para que ninguna entrega ciudadana real llegue a la validacion.
 
-Entregar a cada persona su clave temporal de `D:\SIGER-VALIDACION\data\bootstrap-usuarios.csv` por un canal seguro y luego retirar el archivo. La pantalla muestra "Validacion institucional · Datos ficticios"; los funcionarios prueban todos los flujos con datos ficticios en `https://<nombre-de-la-VM>:18543`. El correo queda desactivado.
+Entregar a cada persona su clave temporal de `D:\SIGER-VALIDACION\data\bootstrap-usuarios.csv` por un canal seguro y luego retirar el archivo. La pantalla muestra "Validacion institucional · Datos ficticios" (o "recepcion real controlada" si la recepcion esta autorizada); los funcionarios prueban todos los flujos con datos ficticios en `https://<nombre-de-la-VM>:18543`. El correo queda desactivado.
 
 ## 3. Cerrar el piloto
 
