@@ -1,7 +1,8 @@
 import type {Row} from '../../lib/rows';
 import {list, localTime, number, text} from '../../lib/rows';
 import type {Field} from '../../components/ActionDialog';
-import {fixedSelect, objective, reason, REMINDERS, scopeField} from '../../lib/fields';
+import {destinationField, fixedSelect, objective, reason, REMINDERS} from '../../lib/fields';
+import type {Operation} from '../../lib/destination';
 import {people} from '../../lib/catalog';
 import type {Context} from '../../app/context';
 import {FLOW_LABELS} from '../../lib/labels';
@@ -54,7 +55,7 @@ const FLOW_NOTES: Record<string, string> = {
  */
 export function requestFlow(ctx: Context, kind: string, r: Row, flowKind: string) {
   const fromCase = kind === 'CAS';
-  const fields: Field[] = [fixedSelect('kind', 'Operación', flowKind, FLOW_LABELS[flowKind] ?? flowKind), scopeField(ctx.catalog, 'target_scope'), reason];
+  const fields: Field[] = [fixedSelect('kind', 'Operación', flowKind, FLOW_LABELS[flowKind] ?? flowKind), destinationField(ctx.catalog, flowKind as Operation), reason];
   if (flowKind !== 'TRANSFERENCIA') fields.push({...objective, value: fromCase ? text(r, 'objective') : ''});
   if (flowKind === 'DERIVACION') fields.push(fixedSelect('case_id', 'Caso de origen', number(r, 'id'), text(r, 'folio')));
   ctx.act({

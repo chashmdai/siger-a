@@ -2,7 +2,7 @@ import type {Row} from '../../lib/rows';
 import {bool, number, obj, text} from '../../lib/rows';
 import {humanize, MATTER_LABELS} from '../../lib/labels';
 import {scopeOf, scopeRow, solicitationPeople} from '../../lib/catalog';
-import {choose, decision, reason, routingFields} from '../../lib/fields';
+import {choose, decision, destinationField, reason} from '../../lib/fields';
 import type {Context} from '../../app/context';
 import type {Field} from '../../components/ActionDialog';
 import {Icon} from '../../components/Icon';
@@ -19,11 +19,11 @@ export function SolDetail({r, ctx}: {r: Row; ctx: Context}) {
       <ActionBar label="Decisión">
         {bool(r, 'can_decide') && <>
           <button className="primary" onClick={choice('Asumir SOL y crear REQ', 'SOL_ASSUME', [{key: 'responsible_id', label: 'Profesional encargado de la unidad', type: 'select', required: true, options: solicitationPeople(ctx.catalog, number(r, 'destination_scope'))}, reason], 'Se crea un REQ sin Caso. Si hay seguimiento, abre un Caso desde el REQ.')}><Icon name="check" size={18}/>Asumir y asignar atención</button>
-          <button onClick={choice('Redirigir la misma SOL', 'SOL_ROUTE', [...routingFields(ctx.catalog), reason])}><Icon name="send" size={18}/>Redirigir</button>
+          <button onClick={choice('Redirigir la misma SOL', 'SOL_ROUTE', [destinationField(ctx.catalog, 'SOL', text(obj(r, 'communication'), 'suggested_region')), reason])}><Icon name="send" size={18}/>Redirigir</button>
           <button onClick={choice('Devolver a clasificación', 'SOL_RETURN', [reason], 'La misma SOL vuelve a su distribuidor; no se elimina ni se crea otro ingreso.')}><Icon name="arrowLeft" size={18}/>Devolver a Distribución</button>
           <button onClick={choice('Declarar ingreso inválido o duplicado', 'SOL_DISCARD', [decision([['INVALIDA', 'Inválida'], ['DUPLICADA', 'Duplicada']], 'disposition'), reason], 'No elimina el original. No usar para consultas legítimas resueltas.')}>Inválida o duplicada</button>
         </>}
-        {bool(r, 'can_redistribute') && <button className="primary" onClick={choice('Redistribuir SOL devuelta', 'SOL_ROUTE', [...routingFields(ctx.catalog), reason])}><Icon name="send" size={18}/>Redistribuir</button>}
+        {bool(r, 'can_redistribute') && <button className="primary" onClick={choice('Redistribuir SOL devuelta', 'SOL_ROUTE', [destinationField(ctx.catalog, 'SOL', text(obj(r, 'communication'), 'suggested_region')), reason])}><Icon name="send" size={18}/>Redistribuir</button>}
       </ActionBar>
       <Panel title="Ingreso que la originó" icon="mail" actions={<button className="sm" onClick={() => ctx.go('COM', number(r, 'communication_id'))}>Ver ingreso y documentos<Icon name="right" size={16}/></button>}>
         <h3>{text(com, 'subject')}</h3>

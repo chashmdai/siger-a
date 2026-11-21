@@ -115,10 +115,11 @@ public class Queries {
                 out.put("documents",documents(a,"COM",id));
                 // Solo en la ficha autorizada (comForRead): datos de identificacion y registrales del Formulario.
                 if(c.get("external_source")!=null)out.put("external",external(id));
+                out.put("suggested_region",access.suggestedRegion(id,null));
             }
             case "SOL" -> {
                 var s=db.one("SELECT * FROM solicitation WHERE id=?",id);if(!solVisible(a,s))Problem.denied();scope=n(s,"destination_scope");out=new LinkedHashMap<>(s);
-                var com=access.comForRead(a,n(s,"communication_id"));out.put("communication",com);out.put("can_decide",access.solReceiver(a,scope)&&s(s,"state").equals("PENDIENTE"));
+                var com=new LinkedHashMap<>(access.comForRead(a,n(s,"communication_id")));com.put("suggested_region",access.suggestedRegion(n(s,"communication_id"),null));out.put("communication",com);out.put("can_decide",access.solReceiver(a,scope)&&s(s,"state").equals("PENDIENTE"));
                 out.put("receiving_authority",access.solReceiverLabel(scope));
                 // La consulta institucional tambien ve SOL devueltas: redistribuir sigue siendo de Distribucion.
                 out.put("can_redistribute",s(s,"state").equals("DEVUELTA")&&access.canDistribute(a,com));

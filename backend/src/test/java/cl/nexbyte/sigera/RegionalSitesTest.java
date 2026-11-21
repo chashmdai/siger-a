@@ -1,5 +1,7 @@
 package cl.nexbyte.sigera;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
 import org.junit.jupiter.api.MethodOrderer;
@@ -9,6 +11,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import tools.jackson.databind.json.JsonMapper;
 import static org.junit.jupiter.api.Assertions.*;
 import static cl.nexbyte.sigera.Db.*;
 
@@ -243,6 +246,50 @@ class RegionalSitesTest {
         profile(w,List.of(at("JEFATURA",b),at("PROFESIONAL",b)));
         assertNull(db.one("SELECT revoked_at FROM role_assignment WHERE id=?",gw).get("revoked_at"));
         assertEquals(1,db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code='PROFESIONAL' AND scope_id=? AND revoked_at IS NULL",w,b));
+    }
+    /**
+     * Region sugerida (R03a): el servidor la entrega para proponer la sede en el selector de destino. Formulario: la del
+     * NNA y, si falta, la del adulto; ficha de primera atencion: su region de atencion; solo codigos del catalogo.
+     */
+    @Test @Order(5) void regionSugeridaParaProponerLaSede()throws Exception{
+        db.update("UPDATE staff SET must_change=FALSE");
+        var reader=access.actor("distribucion");
+        // Campos tal como los proyecta ExternalProjection desde el vector NNA 1.1 del productor (nna-region 13).
+        var entrega=JsonMapper.builder().build().readTree(Files.readString(Path.of("src/test/resources/smr/entrega-sintetica-1.1.json"))).path("comunicacion");
+        var campos=ExternalProjection.of(entrega,Instant.now()).fields().stream().filter(f->f.group().equals("CAMPO")).toList();
+        assertTrue(campos.stream().anyMatch(f->f.key().equals("nna-region")&&"13".equals(f.value())));
+        long nna=com("Formulario NNA sintetico");campos.forEach(f->field(nna,f.key(),f.value()));
+        assertEquals("13",regionOf(reader,nna));
+        long adult=com("Formulario adulto sintetico");field(adult,"adult-region","05");
+        assertEquals("05",regionOf(reader,adult));
+        // Con ambas prevalece la del NNA; un codigo fuera del catalogo no se propone y cede a la otra region.
+        long both=com("Ambas regiones");field(both,"adult-region","05");field(both,"nna-region","08");
+        assertEquals("08",regionOf(reader,both));
+        long fallback=com("Region NNA invalida");field(fallback,"nna-region","99");field(fallback,"adult-region","05");
+        assertEquals("05",regionOf(reader,fallback));
+        long invalid=com("Sin region valida");field(invalid,"nna-region","Valparaiso");
+        assertNull(regionOf(reader,invalid));
+        assertNull(regionOf(reader,com("COM manual")));
+
+        // La SOL la entrega en su comunicacion, para redirigir o redistribuir con la misma propuesta.
+        long sol=run("distribucion","COM_ROUTE",adult,rev("communication",adult),Map.of("scope_id",scope("REG-DEMO"),"reason",BASIS)).id();
+        @SuppressWarnings("unchecked") var communication=(Map<String,Object>)queries.detail(access.actor("coordinacion.regional"),"SOL",sol).get("communication");
+        assertEquals("05",communication.get("suggested_region"));
+
+        // Ficha 1.1: region de atencion; sin region o con un texto historico de la ficha 1.0, no hay propuesta.
+        assertEquals("13",attentionRegion(Map.of("schema_version","1.1","region","13","commune","Ñuñoa")));
+        assertNull(attentionRegion(Map.of("schema_version","1.1")));
+        assertNull(attentionRegion(Map.of("schema_version","1.0","region","Santiago Centro")));
+    }
+    void field(long com,String key,String value){
+        db.update("INSERT INTO external_field(communication_id,field_group,person_key,item,field_key,value_text) VALUES(?,'CAMPO',NULL,0,?,?)",com,key,value);
+    }
+    String regionOf(Access.Actor a,long com){return (String)queries.detail(a,"COM",com).get("suggested_region");}
+    @SuppressWarnings("unchecked") String attentionRegion(Map<String,Object> extra){
+        var form=new LinkedHashMap<String,Object>(Map.of("modality","GENERAL","motive","Consulta sintetica de persona adulta","course","EN_ATENCION","people",List.of()));
+        form.putAll(extra);
+        long req=run("administrativo","ATTENTION_CREATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","PRESENCIAL","received_at",ago(60),"form",form)).id();
+        return (String)((Map<String,Object>)queries.detail(access.actor("administrativo"),"REQ",req).get("attention")).get("suggested_region");
     }
     long sql(long user,String role,long scope,long from,Long until){
         return db.insert("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,valid_until,basis) VALUES(?,?,?,?,?,?)",user,role,scope,from,until,"Concesion sintetica de 0.4.0");

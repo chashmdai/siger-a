@@ -4,6 +4,8 @@
  * termino exacto (en milisegundos) y, si se envia, el mismo inicio. Aqui se replica esa comparacion solo para
  * mostrar el resumen "Se otorgan / Se revocan" y para no enviar un perfil sin cambios.
  */
+import {fold} from '../../lib/text.ts';
+
 export type RoleDef = {code: string; reach: string; group: string};
 export type Grant = {id: number; user_id: number; role_code: string; scope_id: number | null; valid_from: number; valid_until: number | null; revoked_at: number | null};
 /** Funcion marcada en el perfil. Las fechas van en milisegundos; from null = desde ahora, until null = sin termino. */
@@ -96,8 +98,8 @@ export function periodProblems(profile: Profile, now: number) {
 /** Funciones marcadas en un ambito (vista movil: contador de cada tarjeta). */
 export const countIn = (profile: Profile, scope: number) => [...profile.values()].filter(e => e.scope === scope).length;
 
-/** Texto comparable: minusculas, sin tildes ni signos, espacios simples. */
-export const fold = (value: string) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+/** Texto comparable (lib/text.ts), reexportado para tests/profile.test.ts. */
+export {fold} from '../../lib/text.ts';
 
 /**
  * Ambitos de la vista movil. Con "solo ambitos con funciones" se listan los que tienen funciones marcadas o que la

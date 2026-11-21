@@ -1,8 +1,8 @@
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import type {FormEvent} from 'react';
 import type {Row} from '../../lib/rows';
 import {bool, ids, list, localTime, number, text} from '../../lib/rows';
-import {nameOf, scopeOf, scopeRow, scopes} from '../../lib/catalog';
+import {nameOf, scopeOf, scopes} from '../../lib/catalog';
 import {fixedSelect, IMMEDIATE_RESULTS} from '../../lib/fields';
 import {labeled, RESULT_LABELS} from '../../lib/labels';
 import type {Context} from '../../app/context';
@@ -11,13 +11,13 @@ import {LabeledField} from '../../components/LabeledField';
 import {ChipRadios} from '../../components/Choice';
 import {Icon} from '../../components/Icon';
 import {Callout} from '../../components/Primitives';
+import {DestinationPicker} from '../../components/DestinationPicker';
+import {destinations, initialChoice, payloadFor, receiver} from '../../lib/destination';
 
 const LOCKED_NOTICE: Record<string, string> = {
   CON_CASO: 'La ficha inicial queda conservada. Las nuevas gestiones se registran en los Casos.',
   RESUELTA: 'Atención resuelta. La nueva información se registra por el circuito de antecedentes, sin sobrescribir esta ficha.',
 };
-/** Funcion que recibe una entrega a jefatura en el ambito elegido. */
-const receiverLabel = (target?: Row) => text(target ?? {}, 'code') === 'UPR-REQ' ? 'Coordinadora de Requerimientos' : target?.regional ? 'Coordinación regional' : 'Dirección de unidad';
 
 /**
  * Continuidad sin Caso: entregar a un profesional habilitado o a la funcion receptora,
@@ -25,16 +25,19 @@ const receiverLabel = (target?: Row) => text(target ?? {}, 'code') === 'UPR-REQ'
  */
 export function AttentionActions({ctx, row, info}: {ctx: Context; row: Row; info: Row}) {
   const [recipient, setRecipient] = useState('PROFESIONAL'), [scope, setScope] = useState(''), [user, setUser] = useState(''), [reason, setReason] = useState('');
-  const target = scopeRow(ctx.catalog, scope);
   const candidates = list(ctx.catalog, 'people').filter(p => ids(p, 'handoff_scopes').includes(Number(scope)));
-  // A jefatura solo se entrega en sedes regionales, Direcciones de unidad o UPR-REQ.
-  const destinations = scopes(ctx.catalog, s => recipient === 'PROFESIONAL' || Boolean(s.regional) || !text(s, 'area_code') || text(s, 'code') === 'UPR-REQ');
+  // A jefatura: selector de destino con lo que el catalogo publica para ENTREGA y la sede de la region de la ficha propuesta.
+  const heads = useMemo(() => destinations(ctx.catalog, 'ENTREGA'), [ctx.catalog]);
+  const region = text(info, 'suggested_region');
+  const [choice, setChoice] = useState(() => initialChoice(heads, region));
+  const professionals = scopes(ctx.catalog);
 
   function send(e: FormEvent) {
     e.preventDefault();
+    const target = recipient === 'PROFESIONAL' ? scope : String(payloadFor('ENTREGA', choice).scope_id ?? '');
     const fields: Field[] = [
-      fixedSelect('recipient_kind', 'Destinatario', recipient, recipient === 'PROFESIONAL' ? 'Profesional' : 'Jefatura'),
-      fixedSelect('scope_id', 'Ámbito', scope, scopeOf(ctx.catalog, scope)),
+      fixedSelect('recipient_kind', 'Destinatario', recipient, recipient === 'PROFESIONAL' ? 'Profesional' : 'Jefatura · ' + receiver(heads, choice)),
+      fixedSelect('scope_id', 'Ámbito', target, scopeOf(ctx.catalog, target)),
       ...(recipient === 'PROFESIONAL' ? [fixedSelect('user_id', 'Profesional', user, nameOf(ctx.catalog, user))] : []),
       {key: 'reason', label: 'Motivo y antecedentes para la continuidad', type: 'textarea', value: reason, required: true, max: 2000},
     ];
@@ -55,18 +58,17 @@ export function AttentionActions({ctx, row, info}: {ctx: Context; row: Row; info
     <section className="panel">
       <div className="panel-head"><div><h2><Icon name="handoff"/>Entregar la atención</h2><p>Puede continuar un profesional habilitado sin esperar la asignación de un Caso. La jefatura principal se conserva.</p></div></div>
       <form onSubmit={send}>
-        <ChipRadios legend="Enviar a" value={recipient} onChange={v => {setRecipient(v); setScope(''); setUser('');}} options={[{value: 'PROFESIONAL', label: 'Profesional disponible'}, {value: 'JEFATURA', label: 'Dirección o coordinación competente'}]}/>
-        <div className="form-grid">
+        <ChipRadios legend="Enviar a" value={recipient} onChange={v => {setRecipient(v); setScope(''); setUser(''); setChoice(initialChoice(heads, region));}} options={[{value: 'PROFESIONAL', label: 'Profesional disponible'}, {value: 'JEFATURA', label: 'Dirección o coordinación competente'}]}/>
+        {recipient === 'PROFESIONAL' ? <div className="form-grid">
           <LabeledField label="Ámbito de destino" required><select required value={scope} onChange={e => {setScope(e.target.value); setUser('');}}>
             <option value="">Seleccionar</option>
-            {destinations.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {professionals.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select></LabeledField>
-          {recipient === 'PROFESIONAL' && <LabeledField label="Profesional habilitado en el destino" required><select required value={user} onChange={e => setUser(e.target.value)}>
+          <LabeledField label="Profesional habilitado en el destino" required><select required value={user} onChange={e => setUser(e.target.value)}>
             <option value="">{scope ? 'Seleccionar' : 'Elige primero el ámbito'}</option>
             {candidates.map(p => <option key={number(p, 'id')} value={number(p, 'id')}>{text(p, 'name')}</option>)}
-          </select></LabeledField>}
-        </div>
-        {recipient === 'JEFATURA' && scope && <p className="receiver"><Icon name="user" size={16}/>Recibe: <strong>{receiverLabel(target)}</strong></p>}
+          </select></LabeledField>
+        </div> : <DestinationPicker destinations={heads} region={region} value={choice} onChange={setChoice}/>}
         <LabeledField label="Motivo de la entrega" required><textarea required maxLength={2000} value={reason} onChange={e => setReason(e.target.value)}/></LabeledField>
         <button className="primary"><Icon name="send" size={18}/>Preparar entrega</button>
       </form>

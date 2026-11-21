@@ -3,7 +3,7 @@ import {bool, list, number, obj, text, when} from '../../lib/rows';
 import {SOURCE_LABELS} from '../../lib/formulario';
 import {ExternalCom} from './ExternalCom';
 import {solicitationPeople} from '../../lib/catalog';
-import {choose, reason, routingFields} from '../../lib/fields';
+import {choose, destinationField, reason} from '../../lib/fields';
 import {CHANNEL_LABELS, humanize, PERSON_ROLE_LABELS} from '../../lib/labels';
 import type {Context} from '../../app/context';
 import {Kind, Status} from '../../components/Status';
@@ -15,7 +15,7 @@ import {ActionBar, DetailGrid} from './parts';
 
 /** Comunicacion: lo recibido, tal como se registro. Distribucion, antecedente o asuncion propia. */
 export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
-  const route = () => choose(ctx, 'Clasificar y enviar SOL', 'COM_ROUTE', r, [...routingFields(ctx.catalog), reason]);
+  const route = () => choose(ctx, 'Clasificar y enviar SOL', 'COM_ROUTE', r, [destinationField(ctx.catalog, 'SOL', text(r, 'suggested_region')), reason]);
   const link = () => choose(ctx, 'Vincular al REQ existente', 'COM_LINK', r, [{key: 'folio', label: 'Folio exacto del REQ', required: true, max: 48}, reason], 'La COM conserva su folio. El vínculo no crea otro REQ ni reabre Casos.');
   const assume = () => choose(ctx, 'Asumir ingreso propio', 'COM_ASSUME', r, [{key: 'responsible_id', label: 'Profesional encargado de la unidad', type: 'select', required: true, options: solicitationPeople(ctx.catalog, number(r, 'origin_scope'))}, reason], 'La jefatura asume directamente un ingreso de su competencia, sin enviarlo artificialmente a central.');
   const restrictions = text(r, 'contact_restrictions');

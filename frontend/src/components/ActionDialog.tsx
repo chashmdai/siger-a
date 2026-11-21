@@ -6,21 +6,27 @@ import {command} from '../lib/api';
 import {Icon} from './Icon';
 import {Busy, Callout, ErrorMessage} from './Primitives';
 import {useExit} from './useExit';
+import {DestinationPicker} from './DestinationPicker';
+import type {Choice, Destinations} from '../lib/destination';
+import {initialChoice, payloadFor} from '../lib/destination';
 
 export type Option = {value: string | number; label: string; parent?: string | number};
 export type Field = {
   key: string; label: string;
-  type?: 'text' | 'textarea' | 'select' | 'datetime-local' | 'checkbox' | 'password';
+  type?: 'text' | 'textarea' | 'select' | 'datetime-local' | 'checkbox' | 'password' | 'destination';
   required?: boolean; options?: Option[];
   /** Filtra las opciones por el valor elegido en otro campo (Option.parent). */
   dependsOn?: string;
   value?: string | number | boolean; help?: string; max?: number;
+  /** Selector de destino (type 'destination'): sus datos se envian con las claves de cada comando (payloadFor). */
+  destination?: {destinations: Destinations; region?: string | null};
 };
 /** Comando que se confirma en un dialogo: tipo, registro, revision esperada y campos. */
 export type Action = {title: string; type: string; id: number | null; revision: number | null; fields: Field[]; note?: string; after?: (r: Result) => void};
 
 function initialData(fields: Field[]): Row {
-  return Object.fromEntries(fields.map(f => [f.key, f.value ?? (f.type === 'checkbox' ? false : '')]));
+  return Object.fromEntries(fields.map(f => [f.key, f.destination ? initialChoice(f.destination.destinations, f.destination.region)
+    : f.value ?? (f.type === 'checkbox' ? false : '')]));
 }
 
 /** Contador visible en textos largos; se destaca al acercarse al limite. */
@@ -48,6 +54,7 @@ export function ActionDialog({action, close, completed}: {action: Action; close:
     try {
       const payload = {...data};
       for (const f of action.fields) if (f.type === 'datetime-local') payload[f.key] = data[f.key] ? new Date(String(data[f.key])).toISOString() : null;
+      for (const f of action.fields) if (f.destination) {delete payload[f.key]; Object.assign(payload, payloadFor(f.destination.destinations.operation, data[f.key] as Choice));}
       const r = await command(action.type, action.id, action.revision, payload, key);
       (action.after ?? completed)(r);
       exit();
@@ -90,7 +97,9 @@ export function ActionDialog({action, close, completed}: {action: Action; close:
       <div className="modal-body">
         {action.note && <Callout>{action.note}</Callout>}
         {action.fields.length === 0 && <p>Esta acción no requiere datos adicionales. Confirma para registrarla.</p>}
-        {action.fields.map(f => <label key={f.key} className={f.type === 'checkbox' ? 'check' : ''}>
+        {action.fields.map(f => f.destination
+          ? <DestinationPicker key={f.key} destinations={f.destination.destinations} region={f.destination.region} value={data[f.key] as Choice} disabled={busy} onChange={c => setData(previous => ({...previous, [f.key]: c}))}/>
+          : <label key={f.key} className={f.type === 'checkbox' ? 'check' : ''}>
           {f.type !== 'checkbox' && <span>{f.label}{f.required && <span className="required-mark" aria-hidden="true">*</span>}</span>}
           {control(f)}
           {f.help && <small>{f.help}</small>}

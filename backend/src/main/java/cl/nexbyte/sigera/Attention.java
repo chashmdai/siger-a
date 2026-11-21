@@ -236,7 +236,8 @@ public class Attention {
         if(readable){
             var original=db.one("SELECT folio,channel,received_ms,created_ms,created_by FROM communication WHERE id=?",n(r,"communication_id"));
             out.put("origin",original);
-            out.put("form",decode(s(record,"data_json")));
+            var form=decode(s(record,"data_json"));out.put("form",form);
+            out.put("suggested_region",access.suggestedRegion(n(r,"communication_id"),form.get("region") instanceof String region?region:null));
             out.put("versions",db.rows("SELECT v.id,v.requirement_revision,v.author_id,v.registered_ms,v.reason,u.name AS author FROM attention_revision v JOIN staff u ON u.id=v.author_id WHERE v.requirement_id=? ORDER BY v.id DESC LIMIT 50",id));
             out.put("handoffs",db.rows("SELECT * FROM attention_handoff WHERE requirement_id=? ORDER BY id DESC LIMIT 50",id).stream().map(h->{var row=new LinkedHashMap<>(h);row.put("can_receive",receiving(a,h));row.put("can_withdraw",s(h,"state").equals("PENDIENTE")&&access.reqMain(a,r));return row;}).toList());
         }else out.put("handoffs",db.rows("SELECT h.id,h.state,h.sent_ms,h.target_scope,h.decided_ms FROM attention_handoff h WHERE requirement_id=? AND (sent_by=? OR from_user=?) ORDER BY id DESC LIMIT 50",id,a.id(),a.id()));

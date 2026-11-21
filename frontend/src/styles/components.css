@@ -148,6 +148,11 @@
 .chip-radios label:has(input:disabled) { opacity: .55; cursor: not-allowed; }
 .field-group { margin: 0 0 1rem; padding: 0; border: 0; }
 .field-group > legend { margin-bottom: .45rem; font-weight: 600; font-size: .9rem; color: var(--ink-800); }
+/* Selector de destino (DestinationPicker): nivel, unidad o region y quien recibe. */
+.destination-picker { display: grid; gap: .5rem; min-width: 0; }
+.destination-picker .field-group { margin-bottom: 0; }
+.destination-picker .form-grid { margin: 0; }
+.destination-picker .receiver { margin: 0; }
 
 /* Grilla de formulario */
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1.1rem; }

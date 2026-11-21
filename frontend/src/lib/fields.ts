@@ -4,6 +4,8 @@ import type {Field} from '../components/ActionDialog';
 import type {Context} from '../app/context';
 import {people, scopes} from './catalog';
 import {labeled, MATTER_LABELS} from './labels';
+import type {Operation} from './destination';
+import {destinations, REGIONAL_MATTERS} from './destination';
 
 // Campos reutilizados por los dialogos de comandos. El servidor valida nuevamente cada valor.
 
@@ -14,8 +16,6 @@ export const REMINDERS = [{value: '0', label: 'Avisar una sola vez'}, {value: '2
 
 export const reason: Field = {key: 'reason', label: 'Fundamento o resultado de la decisión', type: 'textarea', required: true, max: 12000};
 export const matter: Field = {key: 'matter', label: 'Materia del Caso (no es complejidad)', type: 'select', options: labeled(['UPR', 'UPD', 'UEP', 'OTRA'], MATTER_LABELS), required: true};
-/** Materia sugerida de una SOL a una sede y materia del REQ regional (D9). */
-export const REGIONAL_MATTERS = ['UPR', 'UPD', 'UEP'];
 export const reqMatter: Field = {key: 'matter', label: 'Materia del Requerimiento', type: 'select', options: labeled(REGIONAL_MATTERS, MATTER_LABELS), required: true};
 export const objective: Field = {key: 'objective', label: 'Objetivo de esta línea de gestión', type: 'textarea', required: true, max: 3000};
 
@@ -33,23 +33,9 @@ export const fixedSelect = (key: string, label: string, value: string | number, 
 export const decision = (options: [string, string][], key = 'decision'): Field =>
   ({key, label: 'Decisión', type: 'select', required: true, options: options.map(([value, label]) => ({value, label}))});
 
-/** Destino de SOL: unidad o sede obligatoria y area sugerida opcional. */
-export function routingFields(catalog: Row): Field[] {
-  const all = list(catalog, 'scopes').filter(s => s.enabled !== false);
-  const units = all.filter(s => s.regional === true || (!text(s, 'area_code') && ['UPR', 'UPD', 'UEP', 'UGI'].includes(text(s, 'unit_code'))));
-  const areas = all.filter(s => !s.regional && !!text(s, 'area_code'));
-  const roots = new Map<string, number>(units.filter(s => !s.regional).map((s): [string, number] => [text(s, 'unit_code'), number(s, 'id')]));
-  return [
-    {key: 'scope_id', label: 'Unidad o sede de destino', type: 'select', required: true, options: units.map(s => ({value: number(s, 'id'), label: s.regional ? text(s, 'name') : text(s, 'unit_code') + ' · Dirección de unidad'}))},
-    {key: 'area_scope_id', label: 'Área sugerida (opcional)', type: 'select', dependsOn: 'scope_id',
-      options: areas.filter(s => roots.has(text(s, 'unit_code'))).map(s => ({value: number(s, 'id'), label: text(s, 'name') + (text(s, 'code') === 'UPR-REQ' ? ' · llega a la Coordinadora' : ' · recibe la Dirección'), parent: roots.get(text(s, 'unit_code'))})),
-      help: 'Solo el área de Requerimientos de UPR llega directamente a su Coordinadora; las demás áreas las recibe la Dirección.'},
-    // Solo una sede admite materia sugerida (el servidor la rechaza en el nivel central): opciones por sede elegida.
-    {key: 'suggested_matter', label: 'Materia sugerida (opcional, solo sedes regionales)', type: 'select', dependsOn: 'scope_id',
-      options: units.filter(s => s.regional === true).flatMap(s => REGIONAL_MATTERS.map(m => ({value: m, label: MATTER_LABELS[m], parent: number(s, 'id')}))),
-      help: 'La Dirección nacional de esa materia podrá leer la SOL y el REQ que nazca de ella, sin gestionarlos. El REQ la hereda al asumirse.'},
-  ];
-}
+/** Destino de COM_ROUTE/SOL_ROUTE (SOL), FLOW_REQUEST y entregas en dos pasos (lib/destination.ts); region = propuesta del servidor. */
+export const destinationField = (catalog: Row, operation: Operation, region?: string | null): Field =>
+  ({key: 'destination', label: 'Destino', type: 'destination', required: true, destination: {destinations: destinations(catalog, operation), region}});
 
 /** Abre el dialogo de un comando sobre una fila con id y revision. */
 export function choose(ctx: Context, title: string, type: string, row: Row, fields: Field[], note?: string) {

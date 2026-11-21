@@ -282,6 +282,18 @@ public class Access {
     public Map<String,Object> caseForWrite(Actor a,long id) { var r=caseForRead(a,id);if(!caseWrite(a,r))Problem.denied();return r; }
     public Map<String,Object> reqForRead(Actor a,long id) { var r=db.one("SELECT * FROM requirement WHERE id=?",id);if(!reqRead(a,r))Problem.denied();return r; }
     public Map<String,Object> comForRead(Actor a,long id) { var r=db.one("SELECT * FROM communication WHERE id=?",id);if(!comRead(a,r))Problem.denied();return r; }
+    /**
+     * Region declarada para proponer la sede de destino (R03a), solo un codigo del catalogo del Formulario o null.
+     * Ficha de primera atencion: su region de atencion. Formulario: la del NNA y, si falta, la del adulto. Una COM
+     * manual no tiene region. Solo se entrega en fichas ya autorizadas; no decide ningun destino.
+     */
+    public String suggestedRegion(long com,String formRegion){
+        if(AdultIdentity.validRegion(formRegion))return formRegion;
+        var fields=db.rows("SELECT field_key,value_text FROM external_field WHERE communication_id=? AND field_group='CAMPO' AND field_key IN ('nna-region','adult-region')",com);
+        for(String key:List.of("nna-region","adult-region"))for(var f:fields)
+            if(key.equals(s(f,"field_key"))&&AdultIdentity.validRegion(s(f,"value_text")))return s(f,"value_text");
+        return null;
+    }
     /** Aviso interno; con correo Graph activo, su correo se encola en la misma transaccion (MailOutbox). */
     public void notice(long user,String text,String kind,long id) {
         long notice=db.insert("INSERT INTO inbox_notice(user_id,at_ms,text_value,resource_type,resource_id) VALUES(?,?,?,?,?)",user,System.currentTimeMillis(),text,kind,id);

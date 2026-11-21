@@ -18,7 +18,8 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G06 | Consulta institucional: bandejas e interfaz | CERRADO |
 | R01 | Modelo de sede y Coordinacion regional (V11) | CERRADO |
 | R02 | Materia y lectura nacional | CERRADO |
-| R03 | Selector de destino y panel de estructura | ABIERTO |
+| R03a | Selector de destino y sugerencia por region | CERRADO |
+| R03b | Panel Estructura y perfil agrupado | ABIERTO |
 | G07 | Indice de personas (V12) | ABIERTO |
 | G08 | Buscador | ABIERTO |
 | G09 | Calendario habil (V13) | ABIERTO |
@@ -225,3 +226,31 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - `Actor` tiene un componente nuevo (`matters`): quien construya un `Actor` a mano (como `FormularioReception.technical`) debe pasarlo.
 - Pendientes: lectura por materia y `REQ_MATTER` en `MySql84IntegrationTest` -> G13; recorrido en `PRUEBAS_MANUALES_0_5_0.md` -> G14
 - Verificacion manual sugerida al usuario: como `distribucion`, distribuye una COM a la sede sintetica con materia sugerida UPD y comprueba que la materia aparece en la SOL. Como `direccion.upd`, abre esa SOL: ve el aviso "Lectura nacional por materia" y ningun boton de gestion. Como `coordinacion.regional`, asume la SOL, cambia la materia del REQ a UPR con el boton "Materia" y abre un Caso (la materia viene precargada). Luego comprueba que `direccion.upr` ve el REQ y su COM en sus bandejas y que `direccion.upd` ya no los ve.
+
+### R03a - Selector de destino y sugerencia por region   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate R03a: selector de destino y sugerencia por region`)
+- Origen: R03 se dividio por decision del responsable. R03a es el selector de destino en las cuatro operaciones, con la sugerencia por region. R03b (ABIERTO) es el panel Estructura y el perfil agrupado.
+- Hecho:
+  - Servidor (sin migracion): `Access.suggestedRegion` entrega solo un codigo del catalogo. Prevalece la ficha de primera atencion (region de atencion). En el Formulario, la region del NNA y, si falta, la del adulto (CAMPO `nna-region`/`adult-region` de `external_field`; decision (a)). Una COM manual no tiene region. Se publica como `suggested_region` en la ficha COM, en la `communication` de la SOL y en `attention` (si es legible). No decide ningun destino.
+  - Frontend: `lib/destination.ts` (logica pura) y `components/DestinationPicker.tsx`, con el campo `destination` de `ActionDialog` (`destinationField`). Nivel central -> Unidad y Area; Sede regional -> Region (orden de `catalog.regions`, busqueda sin tildes desde 6 regiones), Sede si hay varias y Materia sugerida (solo SOL). Linea "Recibe: ...". Solo ofrece lo que publica `receives`.
+  - En una SOL el area es una sugerencia de cualquier area habilitada. En flujos y entregas solo se ofrecen las areas que reciben (UPR-REQ). Las sedes activas sin region van al grupo final "Sede sin region asignada" (decision (b)).
+  - Lo usan `COM_ROUTE`, `SOL_ROUTE` (redirigir y redistribuir), `FLOW_REQUEST` y la entrega a jefatura de `AttentionActions`. La entrega a un profesional no cambia. Se retiro `routingFields`. `fold` pasa a `lib/text.ts`.
+- Archivos clave: `Access.java`, `Queries.java`, `Attention.java`, `RegionalSitesTest.java`, `frontend/src/lib/{destination,text,fields}.ts`, `components/{DestinationPicker,ActionDialog}.tsx`, `features/detail/{ComDetail,SolDetail,actions}.ts*`, `features/attention/AttentionActions.tsx`, `styles/components.css`, `frontend/tests/destination.test.ts`, `CLAUDE.md`
+- Verificacion:
+  - JUnit 110 ok + 1 omitida (antes 109 + 1; +1 `RegionalSitesTest.regionSugeridaParaProponerLaSede`: vector NNA 1.1 proyectado, adulto, precedencia, codigo invalido, COM manual, SOL y ficha 1.1/1.0; Maven informa 111 ejecutadas).
+  - Frontend 33 ok (antes 27; +6 `destination.test.ts`); typecheck ok; build ok.
+  - Humo con el JAR en una instancia aislada (18630, datos borrados): 16/16 por API, 4 de ellas tras acciones en la interfaz con Playwright: COM a REG-BIO con materia UPD (la lee `direccion.upd`), COM a UPR con area sugerida UPR-RJ, entrega a jefatura con la sede propuesta por la region 08 de la ficha, y colaboracion a REG-BIO sin campo de materia. La sede proyectada no aparece y su `COM_ROUTE` se rechaza.
+- Desvios del plan:
+  - `attention/adult/catalog.ts` conserva su propio `fold` (conserva signos; unificarlo cambiaria la busqueda de paises).
+  - El flujo no propone region (no hay region de la persona en ese contexto).
+- Hallazgos para gates siguientes:
+  - Error previo, fuera de alcance: el select de region de la ficha 1.1 (`attention/adult/Controls.tsx:84`, `regionCodes = Object.keys(REGIONS)`) lista primero las regiones 10 a 16, porque JavaScript ordena antes las claves enteras. El servidor y el selector de destino usan el orden correcto.
+  - Tras `COM_ROUTE`, la distribucion ya no ve la SOL en la ficha COM (`solVisible`): las verificaciones deben leerla con el receptor o con la Direccion de la materia.
+  - Un flujo o una entrega no se puede pedir mientras haya una entrega de primera atencion pendiente (409 "Resuelve primero la entrega...").
+- Alcance de R03b: `administration.structure` (por sede: region, estado, Coordinacion vigente, subrogancia, dotacion, volumen abierto y `closeBlockers`). Panel "Estructura" con Ver funcionarios (perfil), Editar (`SCOPE_UPDATE`), Activar y Cerrar. Perfil agrupado en Nivel central / Sedes regionales, con buscador y "solo con funciones" tambien en escritorio; en las sedes sin JEFATURA, DIRECCION como "Coordinacion regional" y las sedes PROYECTADA listadas aunque no tengan funciones (hoy TI no puede preparar su dotacion desde la interfaz).
+- Pendientes:
+  - Notas de actualizacion de la VM (decision del responsable) -> G14: (1) TI asigna la region a cada sede existente desde el panel Estructura de R03b; mientras no la tenga, la sede aparece en "Sede sin region asignada" y no se propone por region. (2) Cada Coordinacion regional registra con `REQ_MATTER` la materia de sus REQ abiertos.
+  - Orden de regiones de la ficha 1.1 -> G14 (o un gate previo, si el responsable lo aprueba).
+  - Seccion de Inicio para la lectura por materia (hallazgo de R02) -> G11.
+  - Recorrido del selector en `PRUEBAS_MANUALES_0_5_0.md` -> G14.
+- Verificacion manual sugerida al usuario: como `distribucion`, en una COM nueva usa "Distribuir SOL": elige Sede regional, una region y una materia, revisa "Recibe" y confirma; luego, en otra COM, elige Nivel central, UPR y un area. Como `administrativo`, registra una primera atencion con region Valparaiso y en "Entregar la atencion" > "Direccion o coordinacion competente" comprueba que se propone REG-DEMO. Como `ti`, crea una sede proyectada y comprueba que su region no aparece en el selector.
