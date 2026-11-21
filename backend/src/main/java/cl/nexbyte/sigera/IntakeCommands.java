@@ -17,13 +17,15 @@ public class IntakeCommands {
     private final Lifecycle life;
     private final Documents documents;
     private final FormularioKeys formularioKeys;
+    private final PersonIndex index;
 
-    public IntakeCommands(Db db,Access access,Lifecycle life,Documents documents,FormularioKeys formularioKeys){
+    public IntakeCommands(Db db,Access access,Lifecycle life,Documents documents,FormularioKeys formularioKeys,PersonIndex index){
         this.db=db;
         this.access=access;
         this.life=life;
         this.documents=documents;
         this.formularioKeys=formularioKeys;
+        this.index=index;
     }
 
     Result run(Actor a,String type,long id,Long expected,Input in){
@@ -54,6 +56,7 @@ public class IntakeCommands {
         db.update("UPDATE communication SET contact_email=?,contact_phone=?,contact_restrictions=?,presenter_domicile=? WHERE id=?",
             in.text("contact_email",200,false),in.text("contact_phone",80,false),in.text("contact_restrictions",1000,false),in.text("presenter_domicile",500,false),com);
         persons(com,in.values().get("persons"));
+        index.refresh(com);
         documents.attachIntake(a,scope,com,in.values().get("attachment_tokens"));
         life.changed(a,"COM_REGISTRADA","COM",com,scope,"Canal "+channel);
         if(!immediate){
@@ -119,6 +122,7 @@ public class IntakeCommands {
         }
         for(var f:p.fields())db.update("INSERT INTO external_field(communication_id,field_group,person_key,item,field_key,value_text) VALUES(?,?,?,?,?,?)",
             com,f.group(),f.personKey(),f.item(),f.key(),f.value());
+        index.refresh(com);
         life.changed(a,"COM_ORIGINAL_CONSERVADO","COM",com,scope,"Origen "+o.source()+" "+o.externalId());
         return done("COM",com);
     }

@@ -20,7 +20,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | R02 | Materia y lectura nacional | CERRADO |
 | R03a | Selector de destino y sugerencia por region | CERRADO |
 | R03b | Panel Estructura y perfil agrupado | CERRADO |
-| G07 | Indice de personas (V12) | ABIERTO |
+| G07 | Indice de personas (V12) | CERRADO |
 | G08 | Buscador | ABIERTO |
 | G09 | Calendario habil (V13) | ABIERTO |
 | G10 | Hitos (V14) | ABIERTO |
@@ -269,3 +269,19 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 - Hallazgos para gates siguientes: los textos de `closeBlockers` no concuerdan en numero ("1 cuentas", "1 REQ abiertos"); se muestran tal cual en el panel y en el 409 -> G14. Para simular datos heredados en un humo: detener la instancia y usar `org.h2.tools.Shell` (jar de H2 en `~/.m2`) sobre el archivo aislado. `pkill -f` con el puerto en el patron mata el propio shell: buscar el PID con `pgrep -x java`.
 - Pendientes: recorrido del panel Estructura y del perfil agrupado en `PRUEBAS_MANUALES_0_5_0.md` -> G14; seccion de Inicio para la lectura por materia -> G11; estructura en `MySql84IntegrationTest` -> G13.
 - Verificacion manual sugerida al usuario: como `ti`, en Administracion > Estructura revisa REG-DEMO (Coordinacion, dotacion y bloqueos con Cerrar deshabilitado); usa Ver funcionarios y abre el perfil de `coordinacion.regional` (grupos, "Coordinacion regional", sin Jefatura). Crea una sede proyectada, preparale una cuenta desde el perfil y activala desde el panel. Como `administrativo`, en Nueva atencion revisa que la Region de atencion parte en Arica y Parinacota.
+
+### G07 - Indice de personas (V12)   (CERRADO)
+- Fecha: 2026-11-20 (commit `gate G07: indice de personas`)
+- Hecho:
+  - V12 `person_reference` con las columnas del plan, FK a `communication` y `requirement` e indices por `run_number`, `document_key` y `communication_id`. `PersonIndex.refresh(com)` borra y recalcula las referencias de la COM en la transaccion del comando: `createCom` (COM_CREATE/COM_IMMEDIATE), `Attention.create`/`save` y el `conserveExternal` comun a las dos rutas del Formulario (el reenvio idempotente no refresca).
+  - Una sola fuente principal por COM, para no duplicar coincidencias: FORMULARIO (todas las `external_person`, con su rol y `authenticated`; la COM proyectada se omite), FICHA vigente (requirente con RUN o documento estructurado de la 1.1, `guardian_name` como CURADOR y `people[]` con `preferred_name` en `name_key`; `requirement_id` = REQ de la ficha; la COM copiada no se indexa) o, en una COM manual, COM (REQUIRENTE) y COM_PERSONA. Sin nombre, RUN ni documento no hay referencia.
+  - Normalizacion: `name_key` en minusculas, sin tildes (NFKD) ni puntuacion. RUN en texto libre solo con guion y DV, sin puntos ni ceros iniciales y con el DV en mayuscula (un DV invalido se indexa igual). `document_key` solo si no es RUN: mayusculas, letras y digitos, sin etiquetas iniciales (Pasaporte, RUN, DNI...) y con al menos un digito.
+  - Carga inicial `PersonIndex.rebuild()` desde `Bootstrap.run` (despues de `convertRegionalHeads`, tambien con `migrate-only`): lotes de 500 COM, cada uno en su transaccion con `db.lock()`, y el marcador `PERSON_INDEX_V12` al final. El log solo registra cantidades; no se audita (dato derivado).
+- Archivos clave: `V12__indice_personas.sql`, `PersonIndex.java`, `IntakeCommands.java`, `Attention.java`, `Bootstrap.java`, `PersonIndexTest.java`, `InstitutionalBootstrapTest.java` (constructor), `FormularioServiceTest.java` y `MySql84IntegrationTest.java` (esquema "12"), `CLAUDE.md`
+- Verificacion: JUnit 113 ok + 1 omitida (antes 110 + 1; +3 `PersonIndexTest`: normalizacion con tildes, mayusculas, puntos, DV K y documentos; cada fuente indexada con refresco al guardar la ficha y reenvio del Formulario sin duplicar; carga inicial idempotente que reproduce exactamente lo escrito por los comandos, tambien sobre un indice parcial; Maven informa 114 ejecutadas). Mutacion: sin el refresco en `Attention.save`, `PersonIndexTest` falla. Frontend sin cambios (no se ejecuto; 42 ok en R03b). Humo no aplica (sin cambios visibles).
+- Desvios del plan: ninguno. Decisiones aprobadas en el inventario: una fuente principal por COM; tambien se indexa `PERSONA_SENALADA` (todo `external_person`); no se indexa el `preferred_name` de nivel superior de la ficha.
+- Hallazgos para gates siguientes:
+  - G08: un RUN de la consulta se busca por `run_number`; un RUN escrito sin guion en el texto libre queda como `document_key` (por ejemplo `123456785`), asi que conviene buscar tambien ese valor. Los nombres se buscan palabra por palabra sobre `name_key` con la misma normalizacion (`PersonIndex.nameKey`). Etiquetas nuevas: `REQUIRENTE`, `CURADOR` y los roles del Formulario (`lib/formulario.ts`). La fuente FICHA trae `requirement_id`; las demas se agrupan por `communication_id`.
+  - Una COM insertada por SQL en una prueba no queda indexada: llamar a `PersonIndex.refresh(com)` en el fixture.
+- Pendientes: V12 y la carga inicial sobre un MySQL V11 con datos -> G13; recorrido en `PRUEBAS_MANUALES_0_5_0.md` (junto con el buscador) -> G14
+- Verificacion manual sugerida al usuario: no aplica (sin interfaz hasta G08)

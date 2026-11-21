@@ -15,9 +15,10 @@ public class Attention {
     private final Access access;
     private final Documents documents;
     private final Lifecycle life;
+    private final PersonIndex index;
     private final JsonMapper json=JsonMapper.builder().build();
-    public Attention(Db db,Access access,Documents documents,Lifecycle life){
-        this.db=db;this.access=access;this.documents=documents;this.life=life;
+    public Attention(Db db,Access access,Documents documents,Lifecycle life,PersonIndex index){
+        this.db=db;this.access=access;this.documents=documents;this.life=life;this.index=index;
     }
     private long now(){return System.currentTimeMillis();}
     public boolean exists(long req){return db.count("SELECT COUNT(*) FROM attention_record WHERE requirement_id=?",req)>0;}
@@ -163,6 +164,7 @@ public class Attention {
         long req=life.insertReq(a,com,null,principal,a.id(),scope);
         String serialized=json.writeValueAsString(data);boolean follow=s(data,"course").equals("SEGUIMIENTO");
         db.update("INSERT INTO attention_record(requirement_id,modality,data_json,followup_required,updated_by,updated_ms) VALUES(?,?,?,?,?,?)",req,s(data,"modality"),serialized,follow,a.id(),now());
+        index.refresh(com);
         documents.attachIntake(a,scope,com,in.values().get("attachment_tokens"));
         snapshot(a,req,0,"Primer registro con antecedentes disponibles",serialized);
         db.audit(a.id(),"COM_REGISTRADA_ATENCION","COM",com,scope,"Atencion directa. REQ "+req);
@@ -178,6 +180,7 @@ public class Attention {
         long id=n(r,"id");var data=normalize(in,decode(s(db.one("SELECT data_json FROM attention_record WHERE requirement_id=?",id),"data_json")));String reason=in.text("reason",2000,true),serialized=json.writeValueAsString(data);
         boolean follow=s(data,"course").equals("SEGUIMIENTO");boolean was=b(db.one("SELECT followup_required FROM attention_record WHERE requirement_id=?",id),"followup_required");
         db.update("UPDATE attention_record SET modality=?,data_json=?,followup_required=?,updated_by=?,updated_ms=? WHERE requirement_id=?",s(data,"modality"),serialized,follow,a.id(),now(),id);
+        index.refresh(n(r,"communication_id"));
         db.update("UPDATE requirement SET revision=revision+1 WHERE id=?",id);
         snapshot(a,id,n(r,"revision")+1,reason,serialized);
         db.audit(a.id(),"FICHA_COMPLEMENTADA","REQ",id,n(r,"principal_scope"),"Version "+(n(r,"revision")+1)+". "+reason);
