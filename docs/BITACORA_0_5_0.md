@@ -27,7 +27,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
 | G08c | Buscador: termino fuera de URL y registros | CERRADO |
 | G09 | Calendario habil (V13) | CERRADO |
 | G10 | Hitos (V14) | CERRADO |
-| G11 | Reportes: calculo | ABIERTO |
+| G11 | Reportes: calculo | CERRADO |
 | G12 | Reportes: interfaz y exportacion | ABIERTO |
 | G13 | Integracion MySQL | ABIERTO |
 | G14 | Cierre de version | ABIERTO |
@@ -378,3 +378,20 @@ Estados: ABIERTO (por hacer), CERRADO (verificado y con commit), BLOQUEADO (dete
   - El aviso `HITOS_OMITIDOS` es permanente (no hay accion para descartarlo); si molesta, se decide en G14.
 - Pendientes: V14 y carga historica en MySQL -> G13; recorrido (aviso de omisiones) en `PRUEBAS_MANUALES_0_5_0.md` -> G14
 - Verificacion manual sugerida al usuario: no aplica en la interfaz (sin pantalla hasta G11/G12). Opcional: arrancar una copia de un `var/` 0.4.0 con el perfil local y revisar en el log "Hitos: N reconstruidos en M comunicaciones" y, si hubiera omisiones, el aviso en Administracion como `ti`.
+
+### G11 - Reportes: calculo   (CERRADO)
+- Fecha: 2026-11-21 (commit `gate G11: reportes, calculo`)
+- Hecho:
+  - Roles `REPORTES` y `REPORTES_PERSONAS` (`Reach.OPCIONAL`, grupo REPORTES; nulo = institucion) en `GRANT_CREATE`, `PROFILE_SET` y el archivo institucional. `REPORTES_PERSONAS` exige `REPORTES` en el mismo alcance (estado final del perfil, al otorgar y al revocar; al consultar solo rige con su REPORTES). EXPORTACION no se publica (G12).
+  - `Reports` + `POST /api/reports` (CSRF, GET 405; sin REPORTES 403, TI incluida). Alcance en SQL antes de contar: institucion, raiz de unidad (ambitos centrales y, en UPR/UPD/UEP, su materia en sedes), area o sede; no exige `enabled`.
+  - 12 tiempos sobre los hitos, entre ellos Tenencia de SOL (cada llegada hasta su salida, con `exit`), Asuncion (ultima llegada) y SOL total (primera distribucion), pedidos por el responsable. Cada grupo da n, mediana, p90 (PERCENTIL.INCLUSIVE) y maximo, en horas y en dias habiles (region de la sede), con `reconstructed`, `calendar` ("Calculado con el calendario habil vigente." y anios sin feriados) y la espera aparte en Gestion. Hay filtros por periodo, unidad, ambito, region, nivel, complejidad, canal, materia, modalidad y origen. Las agrupaciones son unidad, ambito, region, materia, origen, ambito x materia, salida y persona; REQ total sale separado por origen y Tenencia por salida por defecto.
+  - VOLUMEN (con `regional_without_matter`) y ANTIGUEDAD (0-5, 6-10, 11-20, 21+ dh). Limite de 20.000 filas: 409 "acota el periodo o el ambito". Auditoria `REPORTE` sin valores de filtros. El catalogo publica `reports`; la sesion, `can_report`/`can_report_people`. El perfil muestra y reenvia las concesiones de reportes por ambito (`profile.ts: preserved`).
+- Archivos clave: `Reports.java`, `Roles.java`, `Personnel.java`, `Bootstrap.java`, `Api.java`, `Queries.java`, `ReportsTest.java`, `LoginPasswordTest.java`, `frontend/src/features/admin/{profile.ts,ProfileDialog.tsx}`, `lib/labels.ts`, `tests/profile.test.ts`, `docs/DECISIONES_FUNCIONALES.md` (D6), `CLAUDE.md`
+- Verificacion: JUnit 148 ok + 1 omitida (antes 137 + 1). Hay +10 en `ReportsTest`: conjunto sintetico con mediana 30 h, p90 76 h y [0,1,1,1,3] dh con un feriado nacional; sede con un feriado regional; origen; cruce; alcance; Tenencia con dos redirecciones; Gestion con espera; revision anulada; reconstruidos; volumen; antiguedad; persona; TI 403; limite; auditoria; perfil; sede cerrada. Hay +1 HTTP en `LoginPasswordTest`. Maven informa 149 ejecutadas. Dos mutaciones (region ignorada, anulaciones ignoradas) hacen fallar `ReportsTest`. Frontend 65 ok (antes 64; +1 `profile.test.ts`); typecheck ok; build ok. Humo por API con el JAR (18690, `target/humo-g11`, borrada): 13/13 (catalogo, 409 de REPORTES_PERSONAS, perfil por ambito conservado, TI 403, 405, los 14 reportes 200, separacion por origen, aviso sin feriados, persona 403, 400; log sin errores).
+- Desvios del plan (decididos por el responsable): tramos Tenencia de SOL y SOL total agregados; dimension origen; cruce ambito x materia; reconstruidos por tiempo; REQ regionales sin materia; EXPORTACION y la interfaz por ambito del perfil pasan a G12. Se descarta la seccion de Inicio para la lectura por materia (decision del responsable; cierra el pendiente de R02, R03a y R03b).
+- Hallazgos para gates siguientes:
+  - G12: la pantalla usa `catalog.reports`, `user.can_report` y `can_report_people`. Los grupos traen `group` con sus campos (`scope_code`, `matter`, `origin`, `exit`, `person_name`...) y `dimensions`; los nulos de `matter` son "Sin materia". Hay que mostrar `calendar.warnings` y la nota fija. VOLUMEN no admite agrupacion (400) y ANTIGUEDAD no agrupa por persona ni salida. En el perfil, el contador de la tarjeta movil no cuenta las funciones de ambito opcional (`countIn` con `optionalRoles`).
+  - Ambito de cada tramo = el del hito ancla: Registro = origen de la COM; Distribucion = destino; Tenencia y Apertura = el del inicio; los demas = el del fin (principal al cerrar el REQ, destino del flujo o de la entrega). Un REQ trasladado se cuenta en el principal al cerrar.
+  - G13: el SQL usa `EXISTS` correlacionado, tablas derivadas con `GROUP BY` y `IN (?,..)` por lotes de 500; probarlo en MySQL 8.4.
+- Pendientes: pantalla de reportes, EXPORTACION (CSV) y edicion por ambito de REPORTES en el perfil -> G12; reportes en `MySql84IntegrationTest` -> G13; recorrido en `PRUEBAS_MANUALES_0_5_0.md` -> G14.
+- Verificacion manual sugerida al usuario: no aplica en la interfaz (pantalla en G12). Opcional, por API: como `ti`, otorga "Reportes" a una cuenta desde su perfil. Con esa cuenta, en la consola del navegador con la sesion abierta, envia `POST /api/reports` con `{"report":"REQ_TOTAL","group":"AMBITO_MATERIA"}` y el encabezado CSRF de `/api/session`.

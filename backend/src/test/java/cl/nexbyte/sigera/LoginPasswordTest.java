@@ -146,6 +146,32 @@ class LoginPasswordTest {
         var defaults=browser.send("POST","/worklist/com","application/json","{}");
         assertEquals(mapper.readTree(board.body()),mapper.readTree(defaults.body()),"mismos valores por defecto que el GET anterior");
     }
+    /** G11: reportes solo por POST con CSRF; sin REPORTES, 403; la sesion publica can_report. */
+    @Test void reportesSoloPorPostConCsrf()throws Exception{
+        String user="gabinete",fresh="Nueva-clave-reportes-2026";
+        var first=new Browser();
+        assertEquals(204,first.login(user,temporary(user)));
+        assertEquals(200,first.password(temporary(user),fresh).statusCode());
+        var browser=new Browser();
+        assertEquals(204,browser.login(user,fresh));
+        assertTrue(browser.session().contains("\"can_report\":false"));
+        String json="{\"report\":\"VOLUMEN\"}";
+        assertEquals(403,browser.send("POST","/reports","application/json",json).statusCode(),"sin REPORTES");
+        db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) SELECT id,'REPORTES',NULL,0,'Prueba sintetica' FROM staff WHERE username=?",user);
+        assertTrue(browser.session().contains("\"can_report\":true"));
+        var get=browser.send("GET","/reports?report=VOLUMEN",null,null);
+        assertEquals(405,get.statusCode(),get.body());
+        assertTrue(get.headers().firstValue("Allow").orElse("").contains("POST"));
+        var noCsrf=browser.http.send(java.net.http.HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/reports")).header("Content-Type","application/json")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(json)).build(),java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertEquals(403,noCsrf.statusCode(),"POST sin token CSRF");
+        var post=browser.send("POST","/reports","application/json",json);
+        assertEquals(200,post.statusCode(),post.body());
+        assertEquals("VOLUMEN",mapper.readTree(post.body()).get("report").asString());
+        var period=browser.send("POST","/reports","application/json","{\"report\":\"REQ_TOTAL\",\"from\":\"2026-01-01\",\"to\":\"2026-12-31\",\"group\":\"AMBITO_MATERIA\",\"by_origin\":false}");
+        assertEquals(200,period.statusCode(),period.body());
+        assertEquals("[\"AMBITO\",\"MATERIA\"]",mapper.readTree(period.body()).get("dimensions").toString());
+    }
     @Autowired PersonSearch search;@Autowired Access access;@Autowired BoardQueries boards;
     final tools.jackson.databind.json.JsonMapper mapper=tools.jackson.databind.json.JsonMapper.builder().build();
 

@@ -95,8 +95,19 @@ export function periodProblems(profile: Profile, now: number) {
   return [...profile.values()].filter(e => e.until != null && e.until <= Math.max(e.from ?? 0, now)).map(e => keyOf(e.role, e.scope));
 }
 
-/** Funciones marcadas en un ambito (vista movil: contador de cada tarjeta). */
-export const countIn = (profile: Profile, scope: number) => [...profile.values()].filter(e => e.scope === scope).length;
+/** Funciones marcadas en un ambito (vista movil: contador de cada tarjeta), sin las que esta vista no muestra (skip). */
+export const countIn = (profile: Profile, scope: number, skip: ReadonlySet<string> = new Set()) => [...profile.values()].filter(e => e.scope === scope && !skip.has(e.role)).length;
+
+/** Roles de ambito opcional (REPORTES, G11): la vista los ofrece como casilla institucional. */
+export const optionalRoles = (roles: RoleDef[]) => new Set(roles.filter(r => r.reach === 'OPCIONAL').map(r => r.code));
+/**
+ * Funciones de ambito opcional concedidas en un ambito (por API): esta vista aun no las edita (G12), pero las muestra
+ * y las reenvia tal cual, para que guardar el perfil no las revoque.
+ */
+export const preserved = (profile: Profile, roles: RoleDef[]) => {
+  const optional = optionalRoles(roles);
+  return [...profile.values()].filter(e => e.scope != null && optional.has(e.role));
+};
 
 /** Texto comparable (lib/text.ts), reexportado para tests/profile.test.ts. */
 export {fold} from '../../lib/text.ts';

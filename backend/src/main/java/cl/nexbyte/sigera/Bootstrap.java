@@ -227,11 +227,13 @@ public class Bootstrap implements ApplicationRunner {
                 var role=role(text(g,"funcion",32,true),u);String scope="";
                 if(role.scoped()){scope=text(g,"ambito",48,true);if(!codes.contains(scope))throw invalid("ambito de la funcion de "+u);
                     if(role.code().equals("JEFATURA")&&regionalCodes.contains(scope))throw invalid("la sede "+scope+" no tiene Jefatura: la Coordinacion regional se registra como DIRECCION ("+u+")");}
+                else if(role.optional()){if(!g.path("ambito").isMissingNode()){scope=text(g,"ambito",48,true);if(!codes.contains(scope))throw invalid("ambito de la funcion de "+u);}}
                 else if(!g.path("ambito").isMissingNode())throw invalid("la funcion "+role.code()+" es institucional y no lleva ambito ("+u+")");
                 if(!own.add(role.code()+"@"+scope))throw invalid("funcion "+role.code()+" repetida para "+u);
                 if(Personnel.HEADS.contains(role.code())&&!heads.add(scope))throw invalid("mas de una jefatura o direccion en "+scope);
             }
             if(own.stream().anyMatch(k->k.startsWith(Roles.TI+"@"))&&own.size()>1)throw invalid("TI es incompatible con cualquier otra funcion ("+u+")");
+            for(var k:own)if(k.startsWith(Roles.REPORTES_PERSONAS+"@")&&!own.contains(Roles.REPORTES+k.substring(Roles.REPORTES_PERSONAS.length())))throw invalid("REPORTES_PERSONAS exige REPORTES en el mismo alcance ("+u+")");
         }
 
         Path credentials=data.resolve("bootstrap-usuarios.csv");
@@ -253,7 +255,7 @@ public class Bootstrap implements ApplicationRunner {
             for(var f:staff.isArray()?staff:List.<tools.jackson.databind.JsonNode>of()){
                 long id=account(f,ids,csv);people++;
                 for(var g:f.path("funciones")){var role=Roles.require(text(g,"funcion",32,true));
-                    db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,?,?,?,?)",id,role.code(),role.scoped()?ids.get(text(g,"ambito",48,true)):null,System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);}
+                    db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,?,?,?,?)",id,role.code(),role.scoped()||role.optional()&&!g.path("ambito").isMissingNode()?ids.get(text(g,"ambito",48,true)):null,System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);}
             }
             db.audit(tiId,"CONFIGURACION_INSTITUCIONAL_INICIAL","SISTEMA",0,null,ids.size()+" ambitos, una cuenta TI y "+people+" funcionarios. "+basis);
             db.update("INSERT INTO application_marker(code,applied_ms) VALUES('INSTITUTIONAL_BOOTSTRAP',?)",System.currentTimeMillis());

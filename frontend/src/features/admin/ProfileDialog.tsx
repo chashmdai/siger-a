@@ -10,7 +10,7 @@ import {Icon} from '../../components/Icon';
 import {Busy, Callout, ErrorMessage} from '../../components/Primitives';
 import {useExit} from '../../components/useExit';
 import type {Entry, Grant, Level, Profile, RoleDef, ScopeItem, Wanted} from './profile';
-import {columnsFor, countIn, diff, duplicates, grantOf, groupScopes, hasTi, initial, keyOf, liveGrants, offered, payload, periodProblems, profileScopes, startFiltered, TI, toggle, visibleScopes} from './profile';
+import {columnsFor, countIn, diff, optionalRoles, preserved, duplicates, grantOf, groupScopes, hasTi, initial, keyOf, liveGrants, offered, payload, periodProblems, profileScopes, startFiltered, TI, toggle, visibleScopes} from './profile';
 
 const fromInput = (value: string) => value ? new Date(value).getTime() : null;
 
@@ -154,7 +154,7 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
               {narrow
                 ? <ul className="profile-scope-cards">
                   {g.items.map(s => {
-                    const count = countIn(profile, s.id), expanded = open.has(s.id);
+                    const count = countIn(profile, s.id, optionalRoles(roles)), expanded = open.has(s.id);
                     return <li key={s.id} className={'profile-scope-card' + (expanded ? ' open' : '')}>
                       <h5>
                         <button type="button" className="profile-scope-toggle" aria-expanded={expanded} aria-controls={'profile-scope-' + s.id} onClick={() => flip(s.id)}>
@@ -190,6 +190,7 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
               </span>
             </label>)}
           </div>
+          {preserved(profile, roles).length > 0 && <p className="field-help">Funciones por ámbito que esta vista aún no edita; se conservan al guardar: {preserved(profile, roles).map(e => label(e.role, e.scope)).join('; ')}.</p>}
           {profile.size > 0 && <>
             <h3 className="profile-subtitle">Vigencia (opcional)</h3>
             <p className="field-help">Sin inicio rige desde ahora; sin término no vence. Fechas en la zona horaria de este equipo ({Intl.DateTimeFormat().resolvedOptions().timeZone}).</p>

@@ -2,7 +2,7 @@
 // replica la comparacion del servidor (Personnel.profile). node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {columnsFor, countIn, diff, duplicates, fold, grantOf, grantState, groupScopes, hasTi, initial, keyOf, liveGrants, offered, payload, periodProblems, profileScopes, startFiltered, toggle, visibleScopes} from '../src/features/admin/profile.ts';
+import {columnsFor, countIn, diff, optionalRoles, preserved, duplicates, fold, grantOf, grantState, groupScopes, hasTi, initial, keyOf, liveGrants, offered, payload, periodProblems, profileScopes, startFiltered, toggle, visibleScopes} from '../src/features/admin/profile.ts';
 
 const NOW = Date.parse('2026-11-20T15:00:00.000Z');
 const HOUR = 3_600_000;
@@ -177,4 +177,23 @@ test('el filtro "solo con funciones" arranca activo solo si la cuenta tiene func
   assert.equal(startFiltered(live), true);
   assert.equal(startFiltered([]), false);
   assert.equal(startFiltered([grantOf({id: 50, user_id: 7, role_code: 'DISTRIBUIDOR', scope_id: null, valid_from: 0, valid_until: null, revoked_at: null})]), false);
+});
+
+test('una funcion de reportes por ambito hecha por API se conserva al guardar el perfil (G11)', () => {
+  const roles = [{code: 'PROFESIONAL', reach: 'AMBITO', group: 'OPERATIVA'}, {code: 'REPORTES', reach: 'OPCIONAL', group: 'REPORTES'}, {code: 'REPORTES_PERSONAS', reach: 'OPCIONAL', group: 'REPORTES'}];
+  const own = liveGrants([...grants, grantOf({id: 9, user_id: 7, role_code: 'REPORTES', scope_id: 3, valid_from: NOW - 9 * HOUR, valid_until: null, revoked_at: null})], 7, NOW);
+  const profile = initial(own);
+  // Sin tocar nada: el cuerpo la reenvia con su ambito y no hay diferencias.
+  const body = payload(profile, NOW);
+  assert.deepEqual(body.find(w => w.role === 'REPORTES'), {role: 'REPORTES', scope_id: 3});
+  assert.deepEqual(diff(own, body), {grant: [], revoke: []});
+  // Se lista como conservada y no cuenta en la tarjeta del ambito (la vista no la muestra como casilla).
+  assert.deepEqual(preserved(profile, roles).map(e => keyOf(e.role, e.scope)), ['REPORTES@3']);
+  assert.equal(countIn(profile, 3), 2);
+  assert.equal(countIn(profile, 3, optionalRoles(roles)), 1);
+  // Marcar Reportes institucional la agrega sin quitar la del ambito.
+  const next = toggle(profile, 'REPORTES', null, true, own);
+  const changes = diff(own, payload(next, NOW));
+  assert.deepEqual(changes.grant, [{role: 'REPORTES'}]);
+  assert.deepEqual(changes.revoke, []);
 });

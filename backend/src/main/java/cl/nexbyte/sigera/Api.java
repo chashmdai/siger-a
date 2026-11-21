@@ -19,17 +19,20 @@ import static cl.nexbyte.sigera.Db.*;
 public class Api {
     final Attention attention;final BoardQueries boards;volatile boolean ready;
     final Access access;final Workflow flow;final Queries queries;final Documents documents;final Db db;final PasswordEncoder passwords;
-    final Integrations integrations;final PersonSearch search;final Holidays holidays;final String environment;final String releaseVersion;
-    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,
+    final Integrations integrations;final PersonSearch search;final Holidays holidays;final Reports reports;final String environment;final String releaseVersion;
+    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,Reports reports,
                @org.springframework.beans.factory.annotation.Value("${siger.environment-label:}")String environment,BuildProperties buildProperties){
         this.attention=attention;this.access=access;this.flow=flow;this.queries=queries;this.documents=documents;this.db=db;this.passwords=passwords;this.boards=boards;
-        this.integrations=integrations;this.search=search;this.holidays=holidays;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
+        this.integrations=integrations;this.search=search;this.holidays=holidays;this.reports=reports;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
     }
     private String name(Authentication auth){if(auth==null||!(auth.getPrincipal() instanceof SecurityConfig.Principal))throw new Problem(401,"Inicia sesion.");return auth.getName();}
     @GetMapping("/session") public Map<String,Object> session(Authentication auth,CsrfToken csrf){
         Map<String,Object> result=new LinkedHashMap<>();result.put("csrf",Map.of("token",csrf.getToken(),"header",csrf.getHeaderName()));
         boolean logged=auth!=null&&auth.getPrincipal() instanceof SecurityConfig.Principal;result.put("authenticated",logged);result.put("environment",environment);
-        if(logged){var a=access.actor(name(auth));result.put("user",Map.of("id",a.id(),"username",a.username(),"name",a.name(),"home_scope",a.homeScope(),"must_change",a.mustChange(),"grants",a.grants(),"substitutions",a.substitutions(),"can_search",a.readsRecords()));}
+        if(logged){var a=access.actor(name(auth));var user=new LinkedHashMap<String,Object>();user.put("id",a.id());user.put("username",a.username());user.put("name",a.name());user.put("home_scope",a.homeScope());user.put("must_change",a.mustChange());
+            user.put("grants",a.grants());user.put("substitutions",a.substitutions());user.put("can_search",a.readsRecords());
+            // G11: reportes agregados y su desglose por funcionario (la pantalla llega en G12).
+            user.put("can_report",Reports.canReport(a));user.put("can_report_people",Reports.canReportPeople(a));result.put("user",user);}
         return result;
     }
     @PostMapping("/password") @Transactional public Map<String,String> password(Authentication auth,@RequestBody Map<String,Object> body,HttpServletRequest req){
@@ -72,6 +75,8 @@ public class Api {
     @PostMapping("/search") public Map<String,Object> search(Authentication a,@RequestBody SearchBody b){
         return search.search(access.actor(name(a)),b.q()==null?"":b.q(),b.as(),PersonSearch.Filters.of(b.role(),Boolean.TRUE.equals(b.open()),b.scope(),b.region(),b.from(),b.to()));
     }
+    /** Reportes (G11): filtros en el cuerpo JSON, con CSRF como todo POST; GET responde 405. */
+    @PostMapping("/reports") public Map<String,Object> reports(Authentication a,@RequestBody Reports.Request b){return reports.report(access.actor(name(a)),b);}
     @GetMapping("/intake/documents") public List<Map<String,Object>> draftDocuments(Authentication a){return documents.drafts(name(a));}
     @PostMapping(value="/intake/documents",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> stageDocument(Authentication a,@RequestParam long scope,@RequestParam UUID key,@RequestParam MultipartFile file)throws Exception{return documents.stage(name(a),scope,key,file);}

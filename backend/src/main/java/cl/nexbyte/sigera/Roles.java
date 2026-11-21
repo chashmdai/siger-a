@@ -8,14 +8,23 @@ import java.util.*;
  * Un rol se publica solo cuando ya tiene efecto en el servidor.
  */
 public final class Roles {
-    public enum Reach { AMBITO, INSTITUCIONAL }
+    /** AMBITO = ambito obligatorio; INSTITUCIONAL = sin ambito; OPCIONAL = ambito opcional (nulo = toda la institucion). */
+    public enum Reach { AMBITO, INSTITUCIONAL, OPCIONAL }
     public record Role(String code, Reach reach, String group) {
         public boolean scoped() { return reach==Reach.AMBITO; }
+        public boolean optional() { return reach==Reach.OPCIONAL; }
         public Map<String,Object> json() { return Map.of("code",code,"reach",reach.name(),"group",group); }
     }
     public static final String TI="TI";
     /** D4: lectura de todos los expedientes salvo lo reservado; nunca concede gestion. */
     public static final String CONSULTA_INSTITUCIONAL="CONSULTA_INSTITUCIONAL";
+    /**
+     * D6 (G11): cifras agregadas sin datos de personas, en un alcance opcional (nulo = institucion; raiz de unidad = sus
+     * ambitos centrales; area o sede = ese ambito; raiz de UPR, UPD o UEP = ademas su materia en sedes). No lee expedientes.
+     */
+    public static final String REPORTES="REPORTES";
+    /** Desglose por funcionario de los reportes; exige REPORTES en el mismo alcance (decision institucional). */
+    public static final String REPORTES_PERSONAS="REPORTES_PERSONAS";
     public static final List<Role> ALL=List.of(
         new Role("ADMINISTRATIVO",Reach.AMBITO,"OPERATIVA"),
         new Role("PROFESIONAL",Reach.AMBITO,"OPERATIVA"),
@@ -25,6 +34,8 @@ public final class Roles {
         new Role("LECTURA",Reach.AMBITO,"CONSULTA"),
         new Role(CONSULTA_INSTITUCIONAL,Reach.INSTITUCIONAL,"CONSULTA"),
         new Role("AUDITORIA",Reach.AMBITO,"CONTROL"),
+        new Role(REPORTES,Reach.OPCIONAL,"REPORTES"),
+        new Role(REPORTES_PERSONAS,Reach.OPCIONAL,"REPORTES"),
         new Role(TI,Reach.INSTITUCIONAL,"ADMINISTRACION"));
     private static final Map<String,Role> BY_CODE=new LinkedHashMap<>();
     static { for(var r:ALL)BY_CODE.put(r.code(),r); }

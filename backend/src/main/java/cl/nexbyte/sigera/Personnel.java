@@ -43,12 +43,13 @@ public class Personnel {
             case "GRANT_CREATE" -> {
                 ti(a);long user=in.id("user_id");require(user!=a.id(),"No puedes otorgarte funciones.");access.user(user);
                 var role=Roles.require(in.text("role",32,true));
-                Long scope=null;if(role.scoped()){scope=in.id("scope_id");grantable(role.code(),scope);}
+                Long scope=role.scoped()?Long.valueOf(in.id("scope_id")):role.optional()?in.optionalId("scope_id"):null;if(scope!=null)grantable(role.code(),scope);
                 long from=in.instant("from_at",true),until=in.instant("until_at",false),end=until==0?Long.MAX_VALUE:until;
                 require(until==0||until>Math.max(from,System.currentTimeMillis()),"Periodo invalido para "+role.code()+": el termino debe ser posterior al inicio y a la fecha actual.");
                 List<Object> same=new ArrayList<>(List.of(user,role.code()));if(scope!=null)same.add(scope);same.add(end);same.add(from);
                 require(db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code=? AND "+(scope==null?"scope_id IS NULL":"scope_id=?")+" AND revoked_at IS NULL AND valid_from<? AND (valid_until IS NULL OR valid_until>?)",same.toArray())==0,"La persona ya tiene esa funcion en un periodo superpuesto.");
                 tiCompatible(user,role.code());
+                if(role.code().equals(Roles.REPORTES_PERSONAS))require(liveIn(user,Roles.REPORTES,scope)>0,REPORT_PEOPLE_REQUIRES);
                 if(HEADS.contains(role.code()))headFree(scope,user,from,end);
                 long grant=insertGrant(a,user,role.code(),scope,from,until==0?null:until,in.text("reason",1000,true));
                 epoch(user);keepTi();return Workflow.done("PERMISO",grant);
@@ -57,6 +58,8 @@ public class Personnel {
             case "GRANT_REVOKE" -> {
                 ti(a);var grant=db.one("SELECT * FROM role_assignment WHERE id=?",id);
                 require(n(grant,"user_id")!=a.id(),"No modifiques tus propias funciones.");require(grant.get("revoked_at")==null,"La funcion ya fue revocada.");
+                if(s(grant,"role_code").equals(Roles.REPORTES))require(liveIn(n(grant,"user_id"),Roles.REPORTES_PERSONAS,nullableId(grant,"scope_id"))==0
+                    ||liveIn(n(grant,"user_id"),Roles.REPORTES,nullableId(grant,"scope_id"))>1,"Revoca primero Reportes por persona en ese alcance: exige Reportes en el mismo alcance.");
                 db.update("UPDATE role_assignment SET revoked_at=? WHERE id=? AND revoked_at IS NULL",System.currentTimeMillis(),id);epoch(n(grant,"user_id"));keepTi();
                 audit(a,"FUNCION_REVOCADA","USUARIO",n(grant,"user_id"),nullableId(grant,"scope_id"),s(grant,"role_code")+". "+in.reason());return Workflow.done("PERMISO",id);
             }
@@ -144,6 +147,12 @@ public class Personnel {
         }
     }
     static final Set<String> HEADS=Set.of("JEFATURA","DIRECCION");
+    static final String REPORT_PEOPLE_REQUIRES="Reportes por persona exige la funcion Reportes en el mismo alcance.";
+    /** Funciones vigentes o programadas de la cuenta con ese rol y alcance (nulo = institucional). */
+    private long liveIn(long user,String role,Long scope){
+        List<Object> args=new ArrayList<>(List.of(user,role,System.currentTimeMillis()));if(scope!=null)args.add(scope);
+        return db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code=? AND revoked_at IS NULL AND (valid_until IS NULL OR valid_until>?) AND "+(scope==null?"scope_id IS NULL":"scope_id=?"),args.toArray());
+    }
     static final String REGIONAL_HEAD_REJECTED="Las sedes regionales no tienen Jefatura: la Coordinacion regional se registra como Direccion de la sede (D7).";
     /** Concesion nueva en un ambito: ACTIVA o PROYECTADA (dotacion preparada), nunca CERRADA; sin JEFATURA en sedes (D7). */
     void grantable(String role,long scope){
@@ -204,7 +213,7 @@ public class Personnel {
         String reason=in.text("reason",1000,true);long now=System.currentTimeMillis();
         var wanted=new ArrayList<Wanted>();var keys=new HashSet<String>();
         for(var e:in.list("grants",100)){
-            var role=Roles.require(e.text("role",32,true));Long scope=role.scoped()?e.id("scope_id"):null;
+            var role=Roles.require(e.text("role",32,true));Long scope=role.scoped()?Long.valueOf(e.id("scope_id")):role.optional()?e.optionalId("scope_id"):null;
             require(keys.add(role.code()+"@"+scope),"La funcion "+role.code()+" figura dos veces en el perfil para el mismo ambito.");
             long from=e.instant("from_at",false),until=e.instant("until_at",false);
             require(until==0||until>Math.max(from,now),"Periodo invalido para "+role.code()+": el termino debe ser posterior al inicio y a la fecha actual.");
@@ -221,6 +230,9 @@ public class Personnel {
         require(create.isEmpty()||b(account,"enabled"),"La cuenta esta deshabilitada: su perfil solo admite revocaciones. Habilitala antes de otorgar funciones.");
         var finalRoles=new ArrayList<String>();kept.forEach(g->finalRoles.add(s(g,"role_code")));create.forEach(w->finalRoles.add(w.role().code()));
         require(!finalRoles.contains(Roles.TI)||finalRoles.size()==1,"TI es incompatible con cualquier otra funcion: el perfil no puede combinarla con otras.");
+        // G11: Reportes por persona exige Reportes en el mismo alcance, sobre el estado final.
+        var finalKeys=new HashSet<String>();kept.forEach(g->finalKeys.add(s(g,"role_code")+"@"+nullableId(g,"scope_id")));create.forEach(w->finalKeys.add(w.role().code()+"@"+w.scope()));
+        for(var k:finalKeys)if(k.startsWith(Roles.REPORTES_PERSONAS+"@"))require(finalKeys.contains(Roles.REPORTES+k.substring(Roles.REPORTES_PERSONAS.length())),REPORT_PEOPLE_REQUIRES);
         for(var w:create){
             if(w.scope()!=null)grantable(w.role().code(),w.scope()); // Solo concesiones nuevas: lo que se conserva no se revalida.
             if(HEADS.contains(w.role().code()))headFree(w.scope(),user,w.from()==0?now:w.from(),w.until()==null?Long.MAX_VALUE:w.until());

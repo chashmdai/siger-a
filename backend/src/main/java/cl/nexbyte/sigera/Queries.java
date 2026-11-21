@@ -32,7 +32,7 @@ public class Queries {
             var row=new LinkedHashMap<String,Object>(x);row.put("level",b(x,"regional")?"REGIONAL":"CENTRAL");
             row.put("receives",access.destination(x)?DESTINATION_OPERATIONS:List.of());return (Map<String,Object>)row;}).toList();
         Map<String,Object> result=new LinkedHashMap<>();result.put("scopes",catalogScopes);
-        result.put("regions",AdultIdentity.REGIONS.entrySet().stream().map(e->Map.of("code",e.getKey(),"name",e.getValue())).toList());result.put("units",db.rows("SELECT * FROM org_unit ORDER BY code"));result.put("roles",Roles.json());
+        result.put("regions",AdultIdentity.REGIONS.entrySet().stream().map(e->Map.of("code",e.getKey(),"name",e.getValue())).toList());result.put("units",db.rows("SELECT * FROM org_unit ORDER BY code"));result.put("roles",Roles.json());result.put("reports",Reports.catalog());
         var enabledScopes=catalogScopes.stream().filter(x->b(x,"enabled")).map(x->n(x,"id")).toList();
         boolean registrar=a.grants().stream().anyMatch(g->g.scope()!=null&&a.registrar(g.scope()));
         Map<Long,Actor> actors=new HashMap<>();for(var candidate:access.enabledActors())actors.put(candidate.id(),candidate);
