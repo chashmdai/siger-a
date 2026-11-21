@@ -9,7 +9,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado, con commit y push), BLOQUEADO
 |---|---|---|
 | H00 | Linea base y cierre administrativo de 0.5.0 | CERRADO |
 | H01 | Graph: credencial y prueba controlada | CERRADO |
-| H02 | Cierre de la validacion con recepciones de prueba autorizadas | ABIERTO |
+| H02 | Cierre de la validacion con recepciones de prueba autorizadas | CERRADO |
 | H03 | Eliminacion de la validacion cerrada con constancia | ABIERTO |
 | H04 | Guia de salida a produccion y scripts de operacion | ABIERTO |
 | H05 | Cierre de version en Linux | ABIERTO |
@@ -61,7 +61,23 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
   - `Set-Integration.ps1` consulta `Win32_Service` `SMRRecepcion` (decision abierta frente a D15).
   - `HealthProbe.cs:20` rechaza un certificado vencido: la renovacion lleva fecha.
 - H05: desde 0.5.0 la recepcion escribe `COM_REGISTRADA` y refresca `person_reference` (`IntakeCommands.java:114` y `:130`); con el salto directo (D14) la primera recepcion con ese codigo es la de produccion. `MySql84UpgradeTest` cubre 0.4.0 -> V14 con un volcado sintetico (la VM no se actualiza; la prueba sigue cubriendo la ruta de actualizacion). No hay `ACTUALIZACION_0_6_0.md`: `ACTUALIZACION_0_5_0.md` queda solo como referencia (aviso revisado con el salto directo) y las referencias de `CLAUDE.md:128` y `ALCANCE_Y_PENDIENTES.md:70` ya se corrigieron en el commit `plan 0.6.0: salto directo a produccion`.
+- H05 (agregado del responsable, 2026-11-21): `CLAUDE.md:12` indica `npm ci` para Linux, pero `CLAUDE.md:120` prohibe borrar `frontend/node_modules`, y `npm ci` lo borra. H05 resuelve la contradiccion.
 - H06a y H06b: rigen los "Antecedentes para G15" de `BITACORA_0_5_0.md` (clon nuevo, `.gitattributes`, `.tools`, Node 24, lock de npm 12, revision del paquete, `Recover-Ti.ps1` con una instancia propia y el comando de `SOURCE_SHA256.txt`), con 0.6.0 en lugar de 0.5.0 y el esquema que derive `Build.ps1`.
+
+## Pendientes posteriores a 0.6.0
+
+Fuera del alcance de 0.6.0. Agregados por el responsable el 2026-11-21 (commit de H02); cada uno toma un gate propio cuando se planifique.
+
+- Aviso a distribucion cuando llega una COM del Formulario: hoy no genera aviso ni correo; solo aparece en Inicio ("COM por distribuir") y en la bandeja.
+- Correo de avisos, para despues de que produccion este estable (gate por definir):
+  - folio del registro en el texto del aviso y del correo;
+  - asunto segun el tipo de aviso (por ejemplo "Nueva comunicacion por clasificar" o "Se te distribuyo una SOL");
+  - enlace directo a la ficha, solo con el id (hoy `siger.mail.link` no admite ruta).
+- Contexto de ese pendiente:
+  - los avisos ya existen: `notifyDistributors` al registrar una COM manual (la del Formulario hoy no avisa: `IntakeCommands.conserveExternal` no lo llama) y `notifySolReceivers` al distribuir o redirigir una SOL;
+  - el correo sigue sin antecedentes ni datos ciudadanos (diseno de `MailOutbox`);
+  - el enlace solo sirve si los funcionarios acceden a SIGER por red (decision abierta);
+  - hoy cada cuenta de distribucion recibe un correo por cada COM manual.
 
 ## Registros de cierre
 
@@ -90,3 +106,19 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
   - El proceso de prueba arranca Bootstrap con `siger_a_app` como la sonda; con los marcadores presentes no escribe (instantanea identica). En pruebas con `SpringApplicationBuilder`, un argumento repetido no reemplaza al anterior (`GraphCheckTest.with`).
 - Pendientes: secuencia de Graph y la copia a produccion en `DESPLIEGUE_VM.md` -> H04; recorrido de Graph en `PRUEBAS_MANUALES_0_6_0.md` -> H05; ensayo de ambos scripts en Windows PowerShell 5.1 (rechazo con otra cuenta, no sobrescribe, confirmacion negada sin evidencia, `-WhatIf`, evidencia de un fallo) -> H06b; ejecucion real (Token y un Envio) -> V4, con el destinatario por decidir.
 - Verificacion manual sugerida al usuario: leer "Credencial y prueba controlada (0.6.0)" en `docs/INSTALACION_VM.md`; `sh ./mvnw -B -ntp -f backend/pom.xml test -Dtest=GraphCheckTest,GraphMailTest`.
+
+### H02 - Cierre de la validacion con recepciones de prueba autorizadas   (CERRADO)
+- Fecha: 2026-11-21 (commit `gate H02: cierre de la validacion con recepciones de prueba autorizadas`; antes, commit `plan 0.6.0: salto directo a produccion`, solo documentacion, por decision del responsable). Plan aprobado con PowerShell para la regla, `RECHAZADA` y `acked_ms` como se propuso y tres ajustes (carpeta del paquete sobre 0.4.0, SQL sobre el volcado V10, primer pendiente posterior).
+- Hecho: `Environment.ps1`: `$script:ValidationClosureSql` (una consulta, solo tablas y columnas de V8/V9), `ConvertTo-ValidationClosureFigures` (12 enteros o falla cerrado) y `Get-ValidationClosureBlockers` (D11). `Close-Validation.ps1`: `-RecepcionesDeclaradas` (obligatorio si hay recepciones o COM externas), `-Constancias` (por defecto `D:\SIGER-CONSTANCIAS`, fuera de la raiz y del `mysqlHome`, sin enlaces), `ConfirmImpact='High'`, `-Motivo` de 1 a 500 caracteres en una linea; muestra cifras y todos los bloqueos; tras confirmar detiene SIGER, vuelve a contar con el motor activo y exige cifras identicas antes de detener el motor; marcador y copia `cierre-validacion-<yyyyMMddTHHmmssZ>.json` (nueva, nunca sobrescrita) con `kind` CIERRE_VALIDACION, fecha, cuenta, motivo, raiz, base, JAR y cifras (declaradas, confirmadas, rechazadas, COM externas, hora de la pausa). Todo lo que llama sale de `$PSScriptRoot`; orden de ejemplo en el encabezado.
+- Reglas: sin recepciones ni COM externas, como antes. Con recepciones: PROPOSITO, SIN_DECLARACION, CANTIDAD_DISTINTA (contra las `CONFIRMADA`), REGISTRADA, ACK_PENDIENTE, SIN_PAUSA, POSTERIOR_A_LA_PAUSA (`created_ms` o `registered_ms` >= pausa en cualquier estado, o COM externa creada desde la pausa), COM_EXTERNA_SIN_RECEPCION, ESTADO_DESCONOCIDO. `RECHAZADA` no cuenta ni bloquea salvo posterior a la pausa; `acked_ms` posterior no bloquea.
+- Archivos clave: `scripts/Close-Validation.ps1`, `scripts/Environment.ps1`, `scripts/Check-Scripts.ps1`, `docs/BITACORA_0_6_0.md`.
+- Verificacion: JUnit H2 160 ok + 1 omitida (161; igual que H01); suite sobre MySQL 8.4.13 (contenedor desechable `mysql:8.4` en `127.0.0.1`, esquemas creados a mano, eliminado al terminar) 163 ok + 1 omitida (164; igual que H01); frontend no aplica; `Check-Scripts.ps1` con `pwsh`: 33 scripts, modo 8, Graph 15 y cierre 29 casos (21 de regla y 8 de cifras ilegibles). Mutaciones: 15 de 17 detectadas; las 2 restantes (sin control de cantidad de campos, sin control de entero) siguen rechazadas por otra comprobacion (`$null -lt 0` y la conversion a `[long]`). SQL exacto del script con `mysql --batch --raw --skip-column-names`: 16/16 escenarios sobre `upgrade/siger-0.4.0-sintetico.sql` cargado en V10 y 16/16 sobre ese volcado migrado a V14 (`siger_a_mysql_upgrade`), con filas sinteticas (limite de la pausa, rechazada luego registrada, ACK posterior, COM manual posterior, COM externa sin recepcion); en `siger_a_mysql_sigera_formulario_pull` las cifras coinciden con un GROUP BY independiente. Humo no aplica.
+- Desvios del plan: ninguno en H02. En el commit del salto directo, V4 conserva "y reinicio" tras `Set-Integration.ps1` (el modo se aplica al reiniciar).
+- Agregados del responsable (fuera del alcance del gate): seccion "Pendientes posteriores a 0.6.0" y antecedente de H05 sobre `npm ci`. Redaccion corregida al verificar el codigo: la COM del Formulario no genera aviso (`conserveExternal` no llama a `notifyDistributors`).
+- Hallazgos para gates siguientes:
+  - El ciclo manual (`run-once`) no consulta la pausa: con la pausa definitiva no se ejecuta `Invoke-FormularioPull.ps1` en la validacion (H04, guia). El CHECK de V8 impide un estado desconocido: ESTADO_DESCONOCIDO es defensa.
+  - Conviene correr `Close-Validation.ps1 ... -WhatIf` antes de V1 para ver las cifras: una COM externa anterior al PULL bloquearia con COM_EXTERNA_SIN_RECEPCION.
+  - D13 (plan B: "se pausa la validacion, se deja en Manual...") ya no calza con el salto directo: la validacion se pausa y se cierra en V1-V2, antes de produccion, y el cierre no se revierte (`Start.ps1` rechaza el marcador). El plan B queda en "las entregas esperan en la cola del Formulario"; decision del responsable antes de H04.
+  - H03: el marcador de 0.4.0 no tiene `kind`; la eliminacion debe exigir `kind` CIERRE_VALIDACION y su copia en `-Constancias`. Falta decidir desde que carpeta se ejecuta `Uninstall-Service.ps1` (instancia 0.4.0 o paquete) -> H04, ensayo en H06b.
+- Pendientes: orden de cierre en `DESPLIEGUE_VM.md` seccion 3 (`-RecepcionesDeclaradas 9`, `-WhatIf`, constancias) -> H04; `ALCANCE_Y_PENDIENTES.md:73-76`, `CLAUDE.md:127`, `INSTALACION_VM.md:7` y el recorrido de cierre de `PRUEBAS_MANUALES_0_6_0.md` -> H05; ensayo en Windows desde la carpeta del paquete (un rechazo por condicion, caso valido, `-WhatIf`, confirmacion negada, cifras cambiadas al detener, copia no sobrescrita, cuenta de servicio) -> H06b; ejecucion real -> V2.
+- Verificacion manual sugerida al usuario: leer el encabezado de `scripts/Close-Validation.ps1` y `Get-ValidationClosureBlockers` en `scripts/Environment.ps1`; `pwsh -NoProfile -File scripts/Check-Scripts.ps1`.

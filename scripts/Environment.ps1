@@ -78,6 +78,65 @@ function Require-ProductionPull($Settings){
     if(Test-ValidationPullAuthorized $Settings){return}
     throw 'Recepcion real bloqueada: requiere PRODUCCION o validacion institucional expresamente autorizada y consumidor SMR detenido.'
 }
+# Cierre de una validacion (Close-Validation.ps1, D11 de docs/PLAN_0_6_0.md). Las cifras salen de una sola consulta que
+# usa solo tablas y columnas de V8/V9 (tambien vale sobre una validacion 0.4.0, esquema V10), en este orden y separadas
+# por tabulador: confirmadas, registradas, ACK pendientes, rechazadas, estados desconocidos, COM externas, COM externas
+# sin recepcion, COM totales, pausa vigente (0/1), instante de la pausa en ms (-1 sin pausa), recepciones posteriores
+# a la pausa y COM externas posteriores a la pausa. Falla cerrado ante cualquier cifra que no sea un entero valido.
+$script:ValidationClosureFields=@('confirmed','registered','ackPending','rejected','unknownStates','external','externalWithoutReception','communications','paused','pauseMs','afterPause','externalAfterPause')
+$script:ValidationClosureSql=(@(
+    'SELECT',
+    ' (SELECT COUNT(*) FROM formulario_reception WHERE state=''CONFIRMADA''),',
+    ' (SELECT COUNT(*) FROM formulario_reception WHERE state=''REGISTRADA''),',
+    ' (SELECT COUNT(*) FROM formulario_reception WHERE ack_pending=TRUE),',
+    ' (SELECT COUNT(*) FROM formulario_reception WHERE state=''RECHAZADA''),',
+    ' (SELECT COUNT(*) FROM formulario_reception WHERE state NOT IN (''RECHAZADA'',''REGISTRADA'',''CONFIRMADA'')),',
+    ' (SELECT COUNT(*) FROM communication WHERE external_source IS NOT NULL),',
+    ' (SELECT COUNT(*) FROM communication c WHERE c.external_source IS NOT NULL AND NOT EXISTS(SELECT 1 FROM formulario_reception f WHERE f.communication_id=c.id AND f.state IN (''REGISTRADA'',''CONFIRMADA''))),',
+    ' (SELECT COUNT(*) FROM communication),',
+    ' (SELECT COUNT(*) FROM integration_control WHERE name=''FORMULARIO_PULL'' AND paused=TRUE),',
+    ' (SELECT COALESCE(MAX(updated_ms),-1) FROM integration_control WHERE name=''FORMULARIO_PULL'' AND paused=TRUE),',
+    ' (SELECT COUNT(*) FROM formulario_reception f JOIN integration_control i ON i.name=''FORMULARIO_PULL'' AND i.paused=TRUE WHERE f.created_ms>=i.updated_ms OR f.registered_ms>=i.updated_ms),',
+    ' (SELECT COUNT(*) FROM communication c JOIN integration_control i ON i.name=''FORMULARIO_PULL'' AND i.paused=TRUE WHERE c.external_source IS NOT NULL AND c.created_ms>=i.updated_ms)') -join ' ')
+function ConvertTo-ValidationClosureFigures([string]$Text){
+    $parts=@(([string]$Text).Trim() -split "`t")
+    if($parts.Count -ne $script:ValidationClosureFields.Count){throw 'Cifras de cierre incompletas. No se cierra.'}
+    $figures=[ordered]@{}
+    for($i=0;$i -lt $parts.Count;$i++){
+        if($parts[$i] -notmatch '^-?[0-9]{1,18}$'){throw 'Cifra de cierre no valida. No se cierra.'}
+        $figures[$script:ValidationClosureFields[$i]]=[long]$parts[$i]
+    }
+    foreach($name in $script:ValidationClosureFields){if($name -ne 'pauseMs' -and $figures[$name] -lt 0){throw 'Cifra de cierre negativa. No se cierra.'}}
+    if($figures.paused -gt 1 -or ($figures.paused -eq 1 -and $figures.pauseMs -lt 0) -or ($figures.paused -eq 0 -and $figures.pauseMs -ne -1)){throw 'Estado de pausa incoherente. No se cierra.'}
+    return [PSCustomObject]$figures
+}
+# Bloqueos del cierre (lista vacia = se puede cerrar). Sin recepciones ni COM externas se cierra como antes (sin exigir
+# pausa). Con recepciones rigen las tres condiciones de D11 y la coherencia de los datos:
+# - PROPOSITO: solo VALIDACION; la produccion nunca se cierra.
+# - SIN_DECLARACION / CANTIDAD_DISTINTA: la cantidad que el responsable declaro al pausar es igual a las CONFIRMADA.
+# - REGISTRADA / ACK_PENDIENTE: ninguna recepcion sin confirmar al Formulario.
+# - SIN_PAUSA / POSTERIOR_A_LA_PAUSA: pausa de FORMULARIO_PULL vigente y ninguna recepcion (en cualquier estado, por su
+#   creacion o su registro) ni COM externa creada en el instante de la pausa o despues. El ciclo manual (run-once) no
+#   consulta la pausa: por eso se comprueba aqui. Un ACK confirmado despues de la pausa no es una recepcion.
+# - ESTADO_DESCONOCIDO / COM_EXTERNA_SIN_RECEPCION: datos que este cierre no sabe explicar.
+# Las RECHAZADA no tienen COM ni datos ciudadanos: no entran en la cantidad declarada y bloquean solo si son posteriores
+# a la pausa (prueban que se reclamo despues de pausar).
+function Get-ValidationClosureBlockers([string]$Purpose,$Figures,$Declared){
+    $f=$Figures;$out=New-Object System.Collections.Generic.List[string]
+    if($Purpose -cne 'VALIDACION'){$out.Add('PROPOSITO')}
+    $any=($f.confirmed+$f.registered+$f.ackPending+$f.rejected+$f.unknownStates+$f.external) -gt 0
+    if(-not $any){
+        if($null -ne $Declared -and [long]$Declared -ne 0){$out.Add('CANTIDAD_DISTINTA')}
+        return $out.ToArray()
+    }
+    if($null -eq $Declared){$out.Add('SIN_DECLARACION')}elseif([long]$Declared -ne $f.confirmed){$out.Add('CANTIDAD_DISTINTA')}
+    if($f.registered -gt 0){$out.Add('REGISTRADA')}
+    if($f.ackPending -gt 0){$out.Add('ACK_PENDIENTE')}
+    if($f.unknownStates -gt 0){$out.Add('ESTADO_DESCONOCIDO')}
+    if($f.externalWithoutReception -gt 0){$out.Add('COM_EXTERNA_SIN_RECEPCION')}
+    if($f.paused -ne 1){$out.Add('SIN_PAUSA')}elseif(($f.afterPause+$f.externalAfterPause) -gt 0){$out.Add('POSTERIOR_A_LA_PAUSA')}
+    return $out.ToArray()
+}
 function Clear-SigerEnvironment {
     foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO','SIGER_FORMULARIO_TRUSTED_KEYS','SIGER_FOLIO_PREFIX','SIGER_SCHEDULING','SIGER_FORMULARIO_PULL_ENABLED','SIGER_FORMULARIO_PULL_RUN_ONCE','SIGER_FORMULARIO_PULL_ORIGIN','SIGER_FORMULARIO_PULL_TOKEN','SIGER_FORMULARIO_PULL_TOKEN_FILE','SIGER_FORMULARIO_PULL_CA_FILE','SIGER_FORMULARIO_PULL_SCOPE','SIGER_FORMULARIO_ACK_KEY_ID','SIGER_FORMULARIO_ACK_PRIVATE_KEY_FILE','SIGER_FORMULARIO_ACK_PUBLIC_KEY_FILE','SIGER_FORMULARIO_PULL_AUTOMATIC','SIGER_FORMULARIO_PULL_SINGLE_CONSUMER','SIGER_FORMULARIO_ACK_PRIVATE_KEY','SIGER_FORMULARIO_ACK_PUBLIC_KEY','SIGER_MAIL_MODE','SIGER_GRAPH_TENANT','SIGER_GRAPH_CLIENT','SIGER_GRAPH_SENDER','SIGER_GRAPH_CLIENT_SECRET','SIGER_MAIL_ALLOWED_DOMAINS','SIGER_MAIL_LINK','SIGER_STOP_FILE','SIGER_LOG_FILE','SIGER_ENVIRONMENT_LABEL','SIGER_DOCUMENTS_SYNTHETIC_RELEASE','SIGER_AV_ENGINE','SIGER_AV_EXECUTABLE','SIGER_AV_DATABASE','SIGER_BOOTSTRAP_FILE','SIGER_FORMULARIO_PULL_PROBE','SIGER_AUDIT_SEARCH_KEY','SIGER_MAIL_CHECK_MODE','SIGER_MAIL_CHECK_TO')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
 }
