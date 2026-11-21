@@ -1,6 +1,6 @@
 # SIGER 0.5.0 - actualizar la instancia de validacion de la VM desde 0.4.0
 
-> **No se ejecuta**: la validacion de la VM pasa directamente de 0.4.0 a 0.6.0 con `docs/ACTUALIZACION_0_6_0.md` (se crea en H05). Se conserva como referencia de las rutinas, cifras y lineas del log de 0.5.0, que H05 retoma.
+> **No se ejecuta**: la validacion de la VM no se actualiza; se cierra en 0.4.0 y produccion se instala con 0.6.0 (D14 de `docs/PLAN_0_6_0.md`). Se conserva como referencia de las rutinas, cifras y lineas del log de 0.5.0.
 
 Esquema V10 -> V14. Produccion no se actualiza: se instala limpia con el mismo release (`docs/DESPLIEGUE_VM.md`, seccion 4).
 Esta guia es para la instancia de validacion que hoy corre 0.4.0 (`D:\SIGER-VALIDACION` en los ejemplos). El ensayo de

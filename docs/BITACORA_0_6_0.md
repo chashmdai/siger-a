@@ -23,12 +23,12 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
 | Decision | Antes de | Respuesta |
 |---|---|---|
 | Puertos de produccion iguales a los de la validacion (D10) | H00 | 2026-11-21: confirmados los mismos de la validacion (MySQL 13326 en loopback, HTTPS 18543). |
-| Fechas de la seccion 3 y de D13 (automatico 10/12, plan B 12/12) | H00 | 2026-11-21: confirmadas V1-V3 el 04/12, V5-V7 el 08/12, produccion en automatico a mas tardar el 10/12 y plan B el 12/12. |
-| Entrega de prueba en la validacion 0.6.0 (D14) | H00 | 2026-11-21: confirmada. |
+| Fechas de la seccion 3 y de D13 (automatico 10/12, plan B 12/12) | H00 | 2026-11-21: confirmadas V1-V3 el 04/12, V5-V7 el 08/12, produccion en automatico a mas tardar el 10/12 y plan B el 12/12. Con el salto directo (2026-11-21): la VM desde el 04/12, despues de H06b, con la numeracion V1-V6 de la seccion 3 del plan; automatico y plan B sin cambios. |
+| Entrega de prueba en la validacion 0.6.0 (D14) | H00 | 2026-11-21: reemplazada por el salto directo (D14 revisada). |
 | Etiqueta `v0.5.0` sobre `4cde534` o ninguna | H06b | |
 | Destinatario fijo y cuenta de Windows de la prueba de Graph | V4 | 2026-11-21 (H01): la cuenta de Windows queda resuelta por diseno: la de `ownerSid` en `instance.json` (`svc-siger`); `Import-GraphCredential.ps1` y `Test-GraphMail.ps1` rechazan otra. El destinatario fijo sigue pendiente hasta V4. |
-| Acceso de funcionarios por red (firewall, PFX institucional, `-AccesoRed`) | V8 | |
-| `estructura-inicial.json` real de produccion | V8 | |
+| Acceso de funcionarios por red (firewall, PFX institucional, `-AccesoRed`) | V4 | |
+| `estructura-inicial.json` real de produccion | V4 | |
 | Lectura del estado de `SMRRecepcion` por `Set-Integration.ps1` frente a D15 | H04 | |
 
 ## Antecedentes para H00
@@ -56,11 +56,11 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
 - H03: `Backup.ps1` deja `siger-a.sql`, `documents\`, `config-private\` (secretos DPAPI), `hashes.csv`, `table-counts.csv` y `backup.json` (con `sourceRoot`). `Restore-Check.ps1` deja `documents\` y `restore-result.json` (con `schema`) en su destino y el esquema `siger_a_restore_*` en el MySQL propio, dentro del datadir de la raiz. El `mysqlHome` esta fuera de la raiz (en `DESPLIEGUE_VM.md`, `D:\Herramientas\mysql-8.4`; confirmar en `instance.json`) y lo usa produccion. `Uninstall-Service.ps1` conserva datos y renombra `config\service.json`.
 - H04:
   - `Estado.ps1`: hipotesis por confirmar. Sin elevacion, WMI no entrega `ExecutablePath` ni `CommandLine` del proceso que lanzo el servicio, y `Own-Process` (`Common.ps1:41`) lo trata como "PID no coincide". Tambien afecta al ciclo manual de `Invoke-FormularioPull.ps1` con el servicio arriba (por ejemplo, en la vuelta atras a Manual). No afecta a `Start.ps1` ni `Stop.ps1` con servicios registrados.
-  - `Update.ps1:6-7` acepta el respaldo `previo-pull-20261109-v2`, aunque es anterior a las 9 recepciones.
+  - `Update.ps1:6-7` acepta el respaldo `previo-pull-20261109-v2`, aunque es anterior a las 9 recepciones. Con el salto directo la validacion no se actualiza: la exigencia de antiguedad queda para las actualizaciones futuras de produccion.
   - `DESPLIEGUE_VM.md` seccion 4 copia archivos de Graph que la validacion no tiene.
   - `Set-Integration.ps1` consulta `Win32_Service` `SMRRecepcion` (decision abierta frente a D15).
   - `HealthProbe.cs:20` rechaza un certificado vencido: la renovacion lleva fecha.
-- H05: desde 0.5.0 la recepcion escribe `COM_REGISTRADA` y refresca `person_reference` (`IntakeCommands.java:114` y `:130`); D14 lo ejercita en la VM. `MySql84UpgradeTest` cubre 0.4.0 -> V14 con un volcado sintetico. `ACTUALIZACION_0_5_0.md` (cifras a, b, c y lineas del log) es la base de `ACTUALIZACION_0_6_0.md`.
+- H05: desde 0.5.0 la recepcion escribe `COM_REGISTRADA` y refresca `person_reference` (`IntakeCommands.java:114` y `:130`); con el salto directo (D14) la primera recepcion con ese codigo es la de produccion. `MySql84UpgradeTest` cubre 0.4.0 -> V14 con un volcado sintetico (la VM no se actualiza; la prueba sigue cubriendo la ruta de actualizacion). No hay `ACTUALIZACION_0_6_0.md`: `ACTUALIZACION_0_5_0.md` queda solo como referencia (aviso revisado con el salto directo) y las referencias de `CLAUDE.md:128` y `ALCANCE_Y_PENDIENTES.md:70` ya se corrigieron en el commit `plan 0.6.0: salto directo a produccion`.
 - H06a y H06b: rigen los "Antecedentes para G15" de `BITACORA_0_5_0.md` (clon nuevo, `.gitattributes`, `.tools`, Node 24, lock de npm 12, revision del paquete, `Recover-Ti.ps1` con una instancia propia y el comando de `SOURCE_SHA256.txt`), con 0.6.0 en lugar de 0.5.0 y el esquema que derive `Build.ps1`.
 
 ## Registros de cierre
