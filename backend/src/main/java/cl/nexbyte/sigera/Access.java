@@ -17,6 +17,11 @@ public class Access {
         public boolean registrar(long scope) { return professional(scope)||at("ADMINISTRATIVO",scope); }
         /** Consulta institucional (D4): lee todo salvo lo reservado; ninguna regla de escritura la considera. */
         public boolean institutionalReader() { return role(Roles.CONSULTA_INSTITUCIONAL); }
+        /**
+         * Lee expedientes (G08b): alguna funcion operativa o de consulta vigente (propia o subrogada) o una lectura
+         * nacional por materia (D9). TI y AUDITORIA sola no. Regla del buscador y de can_search en la sesion.
+         */
+        public boolean readsRecords() { return !matters.isEmpty()||grants.stream().anyMatch(g -> Roles.readsRecords(g.role())); }
         /** La misma cuenta sin la consulta institucional: distingue lo que lee solo gracias a ella. */
         public Actor withoutInstitutionalReader() {
             return new Actor(id,username,name,homeScope,mustChange,securityVersion,grants.stream().filter(g->!g.role().equals(Roles.CONSULTA_INSTITUCIONAL)).toList(),substitutions,matters);
@@ -130,8 +135,12 @@ public class Access {
     public String solReceiverLabel(long scope){
         // Tambien para fichas de una sede cerrada, que siguen legibles.
         var s=db.one("SELECT * FROM org_scope WHERE id=?",scope);
-        if(b(s,"regional"))return "Coordinacion regional: "+s(s,"name");
-        return "UPR-REQ".equals(s(s,"code"))?"Coordinadora de Requerimientos":"Direccion "+s(s,"unit_code");
+        return receiverLabel(b(s,"regional"),s(s,"name"),s(s,"code"),s(s,"unit_code"));
+    }
+    /** Quien asume una SOL en ese destino (misma regla que receiver); tambien la usa el buscador. */
+    public static String receiverLabel(boolean regional,String name,String code,String unit){
+        if(regional)return "Coordinación regional: "+name;
+        return "UPR-REQ".equals(code)?"Coordinadora de Requerimientos":"Dirección "+unit;
     }
     public record SolDestination(long scope, Long area) { }
     public SolDestination solDestination(Input in){

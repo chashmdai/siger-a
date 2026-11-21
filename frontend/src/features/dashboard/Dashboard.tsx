@@ -11,6 +11,8 @@ import {Kind, Status} from '../../components/Status';
 import {Icon} from '../../components/Icon';
 import {Callout, EmptyState, ErrorMessage, PageHeader, Panel} from '../../components/Primitives';
 import {ACTIONABLE, greeting, say, today} from './texts';
+import {SearchField} from '../search/SearchField';
+import {openSearch} from '../search/search';
 
 /** Colas resumidas que se muestran en cada espacio de trabajo. */
 const QUEUES_BY_SECTION: Record<string, string[]> = {distribution: ['com'], management: ['sol', 'cas', 'atenciones'], personal: ['tareas', 'atenciones'], overview: [], intake: ['atenciones'], technical: [], audit: [], institutional: []};
@@ -48,6 +50,7 @@ export default function Dashboard({ctx, version}: {ctx: Context; version: number
         {registrar && <a className="button primary" href="#atencion"><Icon name="attention" size={18}/>Nueva atención</a>}
         {operative && <a className="button" href="#nuevo"><Icon name="inbox" size={18}/>Ingreso por clasificar</a>}
       </div>}/>
+    {ctx.user.can_search === true && <div className="dashboard-search"><SearchField compact onSearch={openSearch}/></div>}
     {data.substituting === true && <Callout tone="warn" title="Estás ejerciendo una subrogancia">Ves también las funciones del titular en sus mismos ámbitos. Tu cartera personal se mantiene separada.</Callout>}
     {sections.length > 1 && <div className="workspace-tabs segmented" role="group" aria-label="Espacios de trabajo">
       {sections.map(s => <button aria-pressed={text(s, 'id') === role} key={text(s, 'id')} onClick={() => setSelected(text(s, 'id'))}>{say(text(s, 'title'))}</button>)}

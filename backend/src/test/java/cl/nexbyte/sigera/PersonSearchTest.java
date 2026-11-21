@@ -266,4 +266,35 @@ class PersonSearchTest {
         assertThrows(IllegalStateException.class,()->new PersonSearch(db,boards,"COM-A","corta"));
         assertEquals(0,db.count("SELECT COUNT(*) FROM audit_event WHERE action='BUSQUEDA' AND (LOWER(note) LIKE '%ana%' OR LOWER(note) LIKE '%perez%' OR note LIKE '%12.345%' OR note LIKE '%AB123456%')"),"el termino nunca queda en claro");
     }
+
+    @Test @Order(8) void soloCuentasQueLeenExpedientesYResponsables()throws Exception{
+        data();db.update("UPDATE staff SET must_change=FALSE");
+        // G08b: TI y una cuenta solo con AUDITORIA no buscan (403); la sesion publica can_search con la misma regla.
+        for(String who:List.of("ti","auditoria")){
+            assertFalse(access.actor(who).readsRecords(),who);
+            assertEquals(403,assertThrows(Problem.class,()->find(who,"ana")).status,who);
+            assertEquals(false,sessionUser(who).get("can_search"),who);
+        }
+        for(String who:List.of(READER,"gabinete","profesional","administrativo","distribucion","coordinacion.requerimientos","direccion.upd","coordinacion.regional")){
+            assertTrue(access.actor(who).readsRecords(),who);
+            assertEquals(true,sessionUser(who).get("can_search"),who);
+            assertDoesNotThrow(()->find(who,"ana"),who);
+        }
+        // Responsable de cada paso: quien registro la COM y quien asume la SOL (misma regla que la ficha SOL).
+        long com=com("distribucion","UPR-REQ","Olga Sintética",null);
+        run("distribucion","COM_ROUTE","communication",com,Map.of("scope_id",scope("UPD"),"reason","Competencia UPD"));
+        var group=list(only(find(READER,"olga")),"groups").getFirst();
+        assertEquals(s(db.one("SELECT name FROM staff WHERE username='distribucion'"),"name"),s(map(group,"communication"),"registered_by"));
+        var sol=list(group,"solicitations").getFirst();
+        assertEquals("Dirección UPD",s(sol,"receiver"));assertEquals(access.solReceiverLabel(scope("UPD")),s(sol,"receiver"));
+        assertEquals("Coordinación regional: "+s(db.one("SELECT name FROM org_scope WHERE code='REG-DEMO'"),"name"),access.solReceiverLabel(scope("REG-DEMO")));
+    }
+    @Autowired Api api;
+    @SuppressWarnings("unchecked") Map<String,Object> sessionUser(String who){
+        var u=db.one("SELECT id,username,password_hash,security_version FROM staff WHERE username=?",who);
+        var principal=new SecurityConfig.Principal(n(u,"id"),who,s(u,"password_hash"),n(u,"security_version"),true);
+        var auth=new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(principal,null,principal.getAuthorities());
+        var csrf=new org.springframework.security.web.csrf.DefaultCsrfToken("X-CSRF-TOKEN","_csrf","token-sintetico");
+        return (Map<String,Object>)api.session(auth,csrf).get("user");
+    }
 }

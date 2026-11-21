@@ -25,7 +25,8 @@ import static cl.nexbyte.sigera.Db.*;
  * registro donde esta el dato: la COM (Visibility.comRead) o, para la fuente FICHA, tambien la ficha de primera atencion
  * (Visibility.attentionRead = Attention.mayRead). Quien lee solo un Caso no lo encuentra por persona, pero si por su
  * folio. Cada paso de la cadena (COM, SOL, REQ, Casos, flujos pendientes) se filtra con su propio predicado. Lo que la
- * cuenta no lee no se muestra ni se cuenta (totales, resumen y filtros). TI recibe 403.
+ * cuenta no lee no se muestra ni se cuenta (totales, resumen y filtros). Solo busca una cuenta que lee expedientes
+ * (Actor.readsRecords, G08b): TI y AUDITORIA sola reciben 403.
  *
  * Auditoria: un evento BUSQUEDA por consulta con el tipo de cada lectura y su cantidad de resultados. El termino nunca
  * se guarda en claro ni va al log. Con siger.audit-search-key se agrega la huella HMAC-SHA256 (hex) del termino
@@ -163,7 +164,8 @@ public class PersonSearch {
     static String visible(BoardQueries.Visibility v){return "("+v.comRead("c")+" OR (p.source='FICHA' AND "+v.attentionRead("r")+"))";}
 
     public Map<String,Object> search(Actor a,String q,String as,Filters filters){
-        if(a.role(Roles.TI))Problem.denied();
+        // Solo cuentas con una funcion de lectura de expedientes (G08b): TI y AUDITORIA sola reciben 403.
+        if(!a.readsRecords())Problem.denied();
         var term=term(q);List<Kind> kinds;
         if(as==null||as.isBlank())kinds=term.detected();
         else{
@@ -299,7 +301,7 @@ public class PersonSearch {
         var byCom=new HashMap<Long,Group>();all.forEach(g->byCom.put(g.com,g));
         for(var ids:chunks(byCom.keySet())){
             String in=BoardQueries.ids(ids);
-            for(var c:db.rows("SELECT c.id,c.folio,c.state,c.channel,c.received_ms,c.created_ms,c.origin_scope,c.external_source FROM communication c WHERE c.id IN ("+in+") AND "+v.comRead("c")))byCom.get(n(c,"id")).communication=c;
+            for(var c:db.rows("SELECT c.id,c.folio,c.state,c.channel,c.received_ms,c.created_ms,c.origin_scope,c.external_source,c.created_by FROM communication c WHERE c.id IN ("+in+") AND "+v.comRead("c")))byCom.get(n(c,"id")).communication=c;
             for(var s:db.rows("SELECT s.id,s.communication_id,s.state,s.destination_scope,s.suggested_matter,s.created_ms FROM solicitation s JOIN communication c ON c.id=s.communication_id WHERE s.communication_id IN ("+in+") AND "+v.solChain("s","c")+" ORDER BY s.id"))byCom.get(n(s,"communication_id")).sols.add(s);
             String reqColumns="r.id,r.folio,r.state,r.principal_scope,r.attention_user,r.complexity,r.matter,r.created_ms,r.solicitation_id";
             for(var r:db.rows("SELECT r.communication_id AS cid,'ORIGEN' AS relation,"+reqColumns+" FROM requirement r WHERE r.communication_id IN ("+in+") AND "+v.reqRead("r")
@@ -401,9 +403,11 @@ public class PersonSearch {
         for(var g:shown){
             for(var r:g.reqs){reqIds.add(n(r,"id"));if(r.get("attention_user")!=null)staffIds.add(n(r,"attention_user"));}
             for(var c:g.cases){caseIds.add(n(c,"id"));staffIds.add(n(c,"responsible_id"));}
+            if(g.communication!=null)staffIds.add(n(g.communication,"created_by"));
         }
+        // Las identidades tecnicas (Formulario, actualizacion) no son responsables: la pantalla indica el canal externo.
         var names=new HashMap<Long,String>();
-        for(var ids:chunks(staffIds))for(var u:db.rows("SELECT id,name FROM staff WHERE id IN ("+BoardQueries.ids(ids)+")"))names.put(n(u,"id"),s(u,"name"));
+        for(var ids:chunks(staffIds))for(var u:db.rows("SELECT id,name,technical FROM staff WHERE id IN ("+BoardQueries.ids(ids)+")"))if(!b(u,"technical"))names.put(n(u,"id"),s(u,"name"));
         var last=new HashMap<String,Long>();
         if(!reqIds.isEmpty()||!caseIds.isEmpty())
             for(var e:db.rows("SELECT resource_type,resource_id,MAX(at_ms) AS last_ms FROM audit_event WHERE ((resource_type='REQ' AND resource_id IN ("+BoardQueries.ids(reqIds)+")) OR (resource_type='CAS' AND resource_id IN ("+BoardQueries.ids(caseIds)+"))) AND action NOT IN ("+READ_ACTIONS+") GROUP BY resource_type,resource_id"))
@@ -416,10 +420,11 @@ public class PersonSearch {
             if(g.communication!=null){
                 var c=g.communication;var com=new LinkedHashMap<String,Object>();
                 com.put("id",n(c,"id"));com.put("folio",s(c,"folio"));com.put("state",s(c,"state"));com.put("channel",s(c,"channel"));com.put("external",c.get("external_source")!=null);
-                com.put("received_ms",c.get("received_ms"));com.put("origin",scope.apply(c.get("origin_scope")));
+                com.put("received_ms",c.get("received_ms"));com.put("origin",scope.apply(c.get("origin_scope")));com.put("registered_by",names.get(n(c,"created_by")));
                 m.put("communication",com);
             }else m.put("communication",null);
-            m.put("solicitations",g.sols.stream().map(s->{var x=new LinkedHashMap<String,Object>();x.put("id",n(s,"id"));x.put("state",s(s,"state"));x.put("destination",scope.apply(s.get("destination_scope")));x.put("suggested_matter",s.get("suggested_matter"));x.put("created_ms",s.get("created_ms"));return (Map<String,Object>)x;}).toList());
+            m.put("solicitations",g.sols.stream().map(s->{var x=new LinkedHashMap<String,Object>();x.put("id",n(s,"id"));x.put("state",s(s,"state"));var dest=scopes.get(n(s,"destination_scope"));x.put("destination",dest);
+                x.put("receiver",dest==null?null:Access.receiverLabel("REGIONAL".equals(dest.get("level")),s(dest,"name"),s(dest,"code"),s(dest,"unit_code")));x.put("suggested_matter",s.get("suggested_matter"));x.put("created_ms",s.get("created_ms"));return (Map<String,Object>)x;}).toList());
             m.put("requirements",g.reqs.stream().map(r->{
                 var x=new LinkedHashMap<String,Object>();long id=n(r,"id");
                 x.put("id",id);x.put("folio",s(r,"folio"));x.put("state",s(r,"state"));x.put("relation",s(r,"relation"));x.put("complexity",r.get("complexity"));x.put("matter",r.get("matter"));

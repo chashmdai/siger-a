@@ -18,6 +18,8 @@ import Dashboard from './features/dashboard/Dashboard';
 import WorkspaceList from './features/worklist/WorkspaceList';
 import Intake from './features/intake/Intake';
 import Attention from './features/attention/Attention';
+import Search from './features/search/Search';
+import {clearSearch, sessionStore} from './features/search/search';
 
 const currentRoute = () => location.hash.slice(1) || 'inicio';
 
@@ -45,6 +47,8 @@ export default function App() {
         setWorkspace(w);
         setUnread((await api.request<{unread: number}>('/notices/unread')).unread);
       } else {
+        // Sin sesion no queda ningun termino de busqueda en la pestana (G08b).
+        clearSearch(sessionStore());
         setCatalog({});
         setWorkspace({});
         setDetail(null);
@@ -120,6 +124,7 @@ export default function App() {
     if (!allowLeave()) return;
     try {
       await api.request('/logout', {method: 'POST'});
+      clearSearch(sessionStore());
       setS(null);
       setAction(null);
       setDetail(null);
@@ -143,6 +148,7 @@ export default function App() {
   else if (BOARDS.includes(view)) content = <WorkspaceList key={view} kind={view} initialFilter={filter} initialQuery={query} ctx={ctx} version={tick}/>;
   else switch (view) {
     case 'atencion': content = <Attention ctx={ctx} completed={r => completed(r)}/>; break;
+    case 'buscar': content = user.can_search ? <Search ctx={ctx}/> : <Dashboard ctx={ctx} version={tick}/>; break;
     case 'nuevo': content = <Intake ctx={ctx} completed={r => completed(r)}/>; break;
     case 'subrogancias': content = <Substitutions ctx={ctx} workspace={workspace}/>; break;
     case 'administracion': case 'auditoria': content = <Administration key={view + tick} ctx={ctx} auditOnly={view === 'auditoria'}/>; break;
@@ -154,6 +160,6 @@ export default function App() {
     {error && <ErrorMessage>{isDetail ? 'No fue posible abrir la ficha. ' + error : error}</ErrorMessage>}
     <div className="page" key={isDetail ? route : view}>{content}</div>
     {action && <ActionDialog key={action.type + ':' + action.id} action={action} close={() => setAction(null)} completed={r => completed(r, action)}/>}
-    {palette && <CommandPalette groups={groups} close={() => setPalette(false)}/>}
+    {palette && <CommandPalette groups={groups} canSearch={user.can_search === true} close={() => setPalette(false)}/>}
   </Shell>;
 }

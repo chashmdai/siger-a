@@ -2,7 +2,8 @@
  * Funciones de la sesion. Solo deciden que acciones mostrar: toda autorizacion se valida en el servidor.
  */
 export type Grant = {role: string; scope: number | null};
-export type User = {id: number; username: string; name: string; home_scope: number; must_change: boolean; grants: Grant[]; substitutions: number[]};
+/** can_search: el servidor decide si la cuenta lee expedientes (buscador, G08b); la pantalla no lo calcula. */
+export type User = {id: number; username: string; name: string; home_scope: number; must_change: boolean; grants: Grant[]; substitutions: number[]; can_search?: boolean};
 
 export const REGISTRAR_ROLES = ['ADMINISTRATIVO', 'PROFESIONAL', 'JEFATURA', 'DIRECCION'];
 

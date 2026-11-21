@@ -211,7 +211,7 @@ class RegionalSitesTest {
         var casDetail=queries.detail(lector,"CAS",cas);
         assertEquals("CERRADO",s(casDetail,"state"));assertFalse(((List<?>)casDetail.get("history")).isEmpty());
         var solDetail=queries.detail(lector,"SOL",sol);
-        assertTrue(s(solDetail,"receiving_authority").startsWith("Coordinacion regional"));assertEquals(false,solDetail.get("can_decide"));
+        assertTrue(s(solDetail,"receiving_authority").startsWith("Coordinación regional"));assertEquals(false,solDetail.get("can_decide"));
         assertEquals(c,n(queries.detail(lector,"COM",c),"id"));
         assertEquals(c,n(queries.detail(access.actor("distribucion"),"COM",c),"id"));
     }

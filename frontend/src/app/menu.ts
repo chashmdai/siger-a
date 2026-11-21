@@ -18,6 +18,8 @@ export function menuFor(user: User, unread: number): MenuGroup[] {
   const groups: [string, [MenuItem, boolean][]][] = [
     ['Mi trabajo', [
       [{path: 'inicio', label: 'Inicio', icon: 'home', hint: 'Pendientes y cifras de tus funciones'}, true],
+      // Solo cuentas que leen expedientes (can_search lo decide el servidor): nunca TI ni AUDITORIA sola.
+      [{path: 'buscar', label: 'Buscar persona o folio', icon: 'search', hint: 'RUN, nombre, documento o folio'}, user.can_search === true],
       [{path: 'tareas', label: 'Mis tareas', icon: 'tasks', hint: 'Recordatorios de tus Casos'}, operative],
       [{path: 'avisos', label: 'Mis avisos', icon: 'bell', badge: unread || undefined, hint: 'Avisos internos'}, true],
     ]],

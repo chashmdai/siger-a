@@ -36,5 +36,13 @@ public final class Roles {
         Problem.require(role!=null,"Funcion no disponible.");
         return role;
     }
+    /**
+     * Funcion de lectura de expedientes (G08b): las operativas y las de consulta (LECTURA, CONSULTA_INSTITUCIONAL).
+     * AUDITORIA (control) y TI (administracion) no leen expedientes por si mismas. Es la regla del buscador.
+     */
+    public static boolean readsRecords(String code) {
+        var role=BY_CODE.get(code);
+        return role!=null&&(role.group().equals("OPERATIVA")||role.group().equals("CONSULTA"));
+    }
     public static List<Map<String,Object>> json() { return ALL.stream().map(Role::json).toList(); }
 }

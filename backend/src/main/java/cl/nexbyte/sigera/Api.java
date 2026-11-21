@@ -29,7 +29,7 @@ public class Api {
     @GetMapping("/session") public Map<String,Object> session(Authentication auth,CsrfToken csrf){
         Map<String,Object> result=new LinkedHashMap<>();result.put("csrf",Map.of("token",csrf.getToken(),"header",csrf.getHeaderName()));
         boolean logged=auth!=null&&auth.getPrincipal() instanceof SecurityConfig.Principal;result.put("authenticated",logged);result.put("environment",environment);
-        if(logged){var a=access.actor(name(auth));result.put("user",Map.of("id",a.id(),"username",a.username(),"name",a.name(),"home_scope",a.homeScope(),"must_change",a.mustChange(),"grants",a.grants(),"substitutions",a.substitutions()));}
+        if(logged){var a=access.actor(name(auth));result.put("user",Map.of("id",a.id(),"username",a.username(),"name",a.name(),"home_scope",a.homeScope(),"must_change",a.mustChange(),"grants",a.grants(),"substitutions",a.substitutions(),"can_search",a.readsRecords()));}
         return result;
     }
     @PostMapping("/password") @Transactional public Map<String,String> password(Authentication auth,@RequestBody Map<String,Object> body,HttpServletRequest req){

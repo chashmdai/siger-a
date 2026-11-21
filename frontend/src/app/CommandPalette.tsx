@@ -5,8 +5,9 @@ import type {IconName} from '../components/Icon';
 import {useExit} from '../components/useExit';
 import type {MenuGroup} from './menu';
 import {boardRoute} from './routes';
+import {openSearch, paletteEntry} from '../features/search/search';
 
-type Entry = {id: string; section: string; label: string; hint?: string; icon: IconName; route: string};
+type Entry = {id: string; section: string; label: string; hint?: string; icon: IconName; route: string; run?: () => void};
 
 /** Bandejas donde la busqueda por folio o texto tiene sentido, en orden de uso. */
 const SEARCHABLE: [path: string, label: string][] = [['req', 'Requerimientos'], ['cas', 'Casos'], ['atenciones', 'Primeras atenciones'], ['com', 'Comunicaciones'], ['sol', 'Solicitudes']];
@@ -14,10 +15,11 @@ const SEARCHABLE: [path: string, label: string][] = [['req', 'Requerimientos'], 
 const normalize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('es-CL');
 
 /**
- * Paleta para ir a cualquier pantalla o buscar un folio sin recorrer menus (Ctrl+K).
- * Solo navega: la busqueda se ejecuta en la bandeja con el alcance autorizado de la sesion.
+ * Paleta para ir a cualquier pantalla o buscar sin recorrer menus (Ctrl+K). Solo navega: no lista resultados.
+ * "Buscar persona o folio" deja el termino en la pestana y abre #buscar (sin el termino en la ruta); un folio
+ * exacto abre su ficha desde esa vista. La busqueda en bandejas usa el alcance autorizado de la sesion.
  */
-export function CommandPalette({groups, close}: {groups: MenuGroup[]; close: () => void}) {
+export function CommandPalette({groups, canSearch, close}: {groups: MenuGroup[]; canSearch: boolean; close: () => void}) {
   const ref = useRef<HTMLDialogElement>(null);
   const [query, setQuery] = useState(''), [selected, setSelected] = useState(0);
   const [leaving, exit] = useExit(close, 120);
@@ -31,14 +33,18 @@ export function CommandPalette({groups, close}: {groups: MenuGroup[]; close: () 
     const searches: Entry[] = query.trim() ? SEARCHABLE.filter(([path]) => available.has(path)).map(([path, label]) => ({
       id: 'search:' + path, section: 'Buscar en bandejas', label: `Buscar «${query.trim()}» en ${label}`, icon: 'search' as IconName, route: boardRoute(path, '', query.trim()),
     })) : [];
+    const person = paletteEntry(query, canSearch);
+    const people: Entry[] = person && 'term' in person ? [{id: 'person', section: 'Buscador', label: person.label, icon: 'user', route: person.route, run: () => openSearch(person.term)}] : [];
     // Un folio escrito (por ejemplo REQ-...) prioriza la busqueda sobre la navegacion.
-    return /\d/.test(query) ? [...searches, ...pages] : [...pages, ...searches];
-  }, [groups, query]);
+    return [...people, ...(/\d/.test(query) ? [...searches, ...pages] : [...pages, ...searches])];
+  }, [groups, query, canSearch]);
+  const shortHint = (() => {const p = paletteEntry(query, canSearch); return p && 'hint' in p ? p.hint : '';})();
 
   const current = Math.min(selected, Math.max(0, entries.length - 1));
   function choose(e?: Entry) {
     if (!e) return;
-    location.hash = e.route;
+    if (e.run) e.run();
+    else location.hash = e.route;
     exit();
   }
   function keys(e: KeyboardEvent) {
@@ -54,11 +60,13 @@ export function CommandPalette({groups, close}: {groups: MenuGroup[]; close: () 
     <div className="palette-search">
       <Icon name="search"/>
       <input autoFocus role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant={entries.length ? 'palette-' + current : undefined}
-        aria-label="Escribe una pantalla, un folio o un texto" placeholder="Escribe una pantalla, un folio o un texto…" value={query}
+        autoComplete="off" spellCheck={false} aria-label={canSearch ? 'Escribe una pantalla, un RUN, un nombre o un folio' : 'Escribe una pantalla, un folio o un texto'}
+        placeholder={canSearch ? 'Escribe una pantalla, un RUN, un nombre o un folio…' : 'Escribe una pantalla, un folio o un texto…'} value={query}
         onChange={e => {setQuery(e.target.value); setSelected(0);}} onKeyDown={keys}/>
       <kbd>Esc</kbd>
     </div>
     <ul className="palette-list" id="palette-list" role="listbox" aria-label="Resultados">
+      {shortHint && <li className="palette-section palette-hint" role="presentation">{shortHint}</li>}
       {entries.length === 0 && <li className="palette-section" role="presentation">Sin resultados. Prueba con otra palabra.</li>}
       {entries.map((e, i) => {
         const heading = e.section !== lastSection ? <li className="palette-section" role="presentation" key={'s' + e.section}>{e.section}</li> : null;
