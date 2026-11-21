@@ -172,6 +172,56 @@ class LoginPasswordTest {
         assertEquals(200,period.statusCode(),period.body());
         assertEquals("[\"AMBITO\",\"MATERIA\"]",mapper.readTree(period.body()).get("dimensions").toString());
     }
+    /**
+     * Exportaciones (G12) por HTTP: el CSV de bandejas exige EXPORTACION (403 sin ella) y sigue acotado a lo que la cuenta
+     * lee; ambos CSV traen BOM, punto y coma, fecha aaaa-mm-dd hh:mm y el ambito por su codigo. La exportacion de Reportes
+     * es POST con CSRF (GET 405).
+     */
+    @Test void exportacionesConPuntoYComaYCodigoDeAmbito()throws Exception{
+        String user="coordinacion.requerimientos",fresh="Nueva-clave-exportacion-2026";
+        var first=new Browser();
+        assertEquals(204,first.login(user,temporary(user)));
+        assertEquals(200,first.password(temporary(user),fresh).statusCode());
+        db.update("UPDATE staff SET must_change=FALSE WHERE username IN (?,'profesional.regional')",user);
+        long scope=n(db.one("SELECT id FROM org_scope WHERE code='UPR-REQ'"),"id");
+        var mine=flow.run(user,new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("scope_id",scope,"channel","TELEFONO","received_at",java.time.Instant.now().minusSeconds(60).toString(),"subject","Asunto exportable","body","Relato exportable")));
+        long site=n(db.one("SELECT id FROM org_scope WHERE code='REG-DEMO'"),"id");
+        var foreign=flow.run("profesional.regional",new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("scope_id",site,"channel","TELEFONO","received_at",java.time.Instant.now().minusSeconds(60).toString(),"subject","Asunto ajeno","body","Relato ajeno")));
+        var browser=new Browser();
+        assertEquals(204,browser.login(user,fresh));
+        assertTrue(browser.session().contains("\"can_export\":false"));
+        assertEquals(403,browser.send("GET","/export?kind=COM",null,null).statusCode(),"bandejas sin EXPORTACION");
+        assertEquals(403,browser.send("POST","/reports/export/REQ","application/json","{}").statusCode(),"reportes sin EXPORTACION");
+        // EXPORTACION sin REPORTES en el mismo alcance no rige.
+        db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) SELECT id,'EXPORTACION',NULL,0,'Prueba sintetica' FROM staff WHERE username=?",user);
+        assertTrue(browser.session().contains("\"can_export\":false"));
+        assertEquals(403,browser.send("GET","/export?kind=COM",null,null).statusCode());
+        db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) SELECT id,'REPORTES',NULL,0,'Prueba sintetica' FROM staff WHERE username=?",user);
+        assertTrue(browser.session().contains("\"can_export\":true"));
+        var board=browser.send("GET","/export?kind=COM",null,null);
+        assertEquals(200,board.statusCode(),board.body());
+        assertTrue(board.headers().firstValue("Content-Type").orElse("").startsWith("text/csv"));
+        String body=board.body();
+        assertTrue(body.startsWith("\ufeff\"folio\";\"estado\";\"ambito\";\"creado\"\r\n"),body);
+        String folio=s(db.one("SELECT folio FROM communication WHERE id=?",mine.id()),"folio");
+        var row=body.lines().filter(l->l.startsWith("\""+folio+"\";")).findFirst().orElseThrow(()->new AssertionError(body));
+        assertTrue(row.matches("\"[^\"]+\";\"NUEVA\";\"UPR-REQ\";\"\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}\""),row);
+        assertFalse(body.contains(";\""+scope+"\";"),"el ambito va por su codigo, no por su id");
+        // Acotado a lo que la cuenta lee: la COM registrada por otra cuenta (sin encaminar) no aparece; ni asuntos ni relatos.
+        assertFalse(body.contains(s(db.one("SELECT folio FROM communication WHERE id=?",foreign.id()),"folio")),body);
+        assertFalse(body.contains("Asunto")||body.contains("Relato"),body);
+        var get=browser.send("GET","/reports/export/REQ",null,null);
+        assertEquals(405,get.statusCode());assertTrue(get.headers().firstValue("Allow").orElse("").contains("POST"));
+        var noCsrf=browser.http.send(java.net.http.HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/reports/export/REQ")).header("Content-Type","application/json")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{}")).build(),java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertEquals(403,noCsrf.statusCode(),"POST sin token CSRF");
+        var rows=browser.send("POST","/reports/export/REQ","application/json","{\"from\":\"2026-01-01\",\"to\":\"2026-12-31\"}");
+        assertEquals(200,rows.statusCode(),rows.body());
+        assertTrue(rows.headers().firstValue("Content-Disposition").orElse("").contains("siger-req-2026-01-01-2026-12-31.csv"));
+        assertTrue(rows.body().startsWith("\ufeff\""+String.join("\";\"",Reports.REQ_COLUMNS)+"\"\r\n"),rows.body());
+        assertEquals(1,db.count("SELECT COUNT(*) FROM audit_event e JOIN staff s ON s.id=e.actor_id WHERE s.username=? AND e.action='EXPORTACION' AND e.note LIKE 'Exportacion REQ%'",user));
+    }
+    @Autowired Workflow flow;
     @Autowired PersonSearch search;@Autowired Access access;@Autowired BoardQueries boards;
     final tools.jackson.databind.json.JsonMapper mapper=tools.jackson.databind.json.JsonMapper.builder().build();
 

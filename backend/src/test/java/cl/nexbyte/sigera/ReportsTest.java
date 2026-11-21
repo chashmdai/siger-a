@@ -358,4 +358,119 @@ class ReportsTest {
             assertEquals(1L,m(report("rep.inst",q("VOLUMEN",null,null)).get("req")).get("regional_without_matter"));
         }finally{db.update("UPDATE org_scope SET state='ACTIVA',enabled=TRUE WHERE id=?",site);}
     }
+
+    /** CSV de la exportacion: sin BOM, filas separadas por punto y coma y celdas sin comillas. */
+    static List<List<String>> parse(byte[] bytes){
+        String text=new String(bytes,java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(text.startsWith("\ufeff"),"BOM UTF-8");
+        var out=new ArrayList<List<String>>();
+        for(var line:text.substring(1).split("\r\n")){
+            if(line.isEmpty())continue;
+            var cells=new ArrayList<String>();
+            for(var c:line.split(";",-1)){assertTrue(c.startsWith("\"")&&c.endsWith("\""),"celda entre comillas: "+line);cells.add(c.substring(1,c.length()-1).replace("\"\"","\""));}
+            out.add(cells);
+        }
+        return out;
+    }
+    static Map<String,String> line(List<List<String>> csv,String folio){
+        var header=csv.getFirst();var found=csv.stream().skip(1).filter(r->r.getFirst().equals(folio)).toList();
+        assertEquals(1,found.size(),folio);var out=new LinkedHashMap<String,String>();
+        for(int i=0;i<header.size();i++)out.put(header.get(i),found.getFirst().get(i));
+        return out;
+    }
+    String folio(String table,long id){return s(db.one("SELECT folio FROM "+table+" WHERE id=?",id),"folio");}
+
+    @Test @Order(11) void exportacionCsvSinDatosCiudadanosConAlcanceYLimite(){
+        var d=data();
+        reporter("rep.exp","REPORTES","EXPORTACION");reporter("rep.exp.upr","REPORTES@UPR","EXPORTACION@UPR");
+        reporter("rep.exp.sola","EXPORTACION");reporter("rep.exp.mixto","REPORTES@UPR","EXPORTACION");
+        // Formato: coma decimal, fechas en hora de Chile, inyeccion de formulas neutralizada.
+        assertEquals("1,5",Csv.decimal(1.5));assertEquals("2,25",Csv.decimal(2.25));assertEquals("30",Csv.decimal(30));assertEquals("0",Csv.decimal(0));
+        assertEquals("2026-03-02 09:00",Csv.when(at(3,2,9)));assertNull(Csv.when(null));
+        assertEquals("\"'=1+1\"",Csv.cell("=1+1"));assertEquals("\"a \"\"b\"\"\"",Csv.cell("a \"b\""));
+        // EXPORTACION solo rige con REPORTES en el mismo alcance; sin ella (o como TI), 403.
+        assertTrue(Reports.canExport(access.actor("rep.exp")));assertTrue(Reports.canExport(access.actor("rep.exp.upr")));
+        for(var who:List.of("rep.exp.sola","rep.exp.mixto","rep.inst","ti",HEAD)){
+            assertFalse(Reports.canExport(access.actor(who)),who);
+            assertEquals(403,assertThrows(Problem.class,()->reports.export(access.actor(who),"REQ",q(null,null,null))).status,who);
+        }
+        assertEquals(400,assertThrows(Problem.class,()->reports.export(access.actor("rep.exp"),"COM",q(null,null,null))).status);
+        // REQ: columnas exactas, ambito por su codigo y tiempos de los tramos (30 h = 1 dh con el feriado del miercoles 4).
+        var req=reports.export(access.actor("rep.exp"),"REQ",q(null,null,null));
+        var csv=parse(req.bytes());
+        assertEquals(Reports.REQ_COLUMNS,csv.getFirst());
+        assertEquals(csv.size()-1,req.rows());assertTrue(req.filename().matches("siger-req-\\d{4}-\\d{2}-\\d{2}-\\d{4}-\\d{2}-\\d{2}\\.csv"),req.filename());
+        long thirty=n(db.one("SELECT r.id FROM requirement r JOIN communication c ON c.id=r.communication_id WHERE c.subject='REQ sintetico 30'"),"id");
+        var row=line(csv,folio("requirement",thirty));
+        assertEquals("UPR-REQ",row.get("ambito"));assertEquals("UPR",row.get("unidad"));assertEquals("CENTRAL",row.get("nivel"));assertEquals("SOL",row.get("origen"));
+        assertEquals("TELEFONO",row.get("canal"));assertEquals("MANUAL",row.get("ingreso"));assertEquals("CERRADO",row.get("estado"));
+        assertEquals("30",row.get("h_req_total"));assertEquals("1",row.get("dh_req_total"));assertEquals("0",row.get("casos"));assertEquals("",row.get("h_primer_caso"));
+        assertTrue(row.get("creado").matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")&&row.get("cerrado").matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"),row.toString());
+        var regional=line(csv,folio("requirement",d.regionalOpen()));
+        assertEquals("REG-DEMO",regional.get("ambito"));assertEquals("REGIONAL",regional.get("nivel"));assertEquals("05",regional.get("region"));
+        assertEquals("ABIERTO",regional.get("estado"));assertEquals("",regional.get("cerrado"));assertEquals("",regional.get("h_req_total"));
+        var withCase=line(csv,folio("requirement",d.tenureReq()));
+        assertEquals("1",withCase.get("casos"));
+        // Ningun dato ciudadano ni de funcionarios: asunto, relato, motivo, objetivo, nombres.
+        String text=new String(req.bytes(),java.nio.charset.StandardCharsets.UTF_8);
+        var people=db.rows("SELECT name FROM staff WHERE technical=FALSE").stream().map(r->s(r,"name")).toList();
+        for(var forbidden:List.of("REQ sintetico","Relato sintetico","Orientacion","Cierre sintetico","Asumida","Clasificacion"))assertFalse(text.contains(forbidden),forbidden);
+        for(var name:people)assertFalse(text.contains(name),name);
+        // Casos: gestion de 168 h menos 24 h de espera (5 dh menos 1), contada solo con el Caso cerrado.
+        String caseState=s(db.one("SELECT state FROM case_record WHERE id=?",d.cas()),"state");
+        db.update("UPDATE case_record SET state='CERRADO',closed_ms=? WHERE id=?",at(5,11,9),d.cas());
+        try{
+            var cases=reports.export(access.actor("rep.exp"),"CAS",q(null,null,null));
+            var ccsv=parse(cases.bytes());
+            assertEquals(Reports.CASE_COLUMNS,ccsv.getFirst());
+            var c=line(ccsv,folio("case_record",d.cas()));
+            assertEquals(folio("requirement",d.tenureReq()),c.get("folio_req"));assertEquals("UPR-REQ",c.get("ambito"));assertEquals("UPR",c.get("materia"));
+            assertEquals("144",c.get("h_gestion"));assertEquals("4",c.get("dh_gestion"));assertEquals("24",c.get("h_espera"));assertEquals("1",c.get("dh_espera"));
+            assertEquals("2026-05-11 09:00",c.get("cerrado"));
+            String ctext=new String(cases.bytes(),java.nio.charset.StandardCharsets.UTF_8);
+            assertFalse(ctext.contains("Seguimiento sintetico"));for(var name:people)assertFalse(ctext.contains(name),name);
+        }finally{db.update("UPDATE case_record SET state=?,closed_ms=NULL WHERE id=?",caseState,d.cas());}
+        // Alcance: la raiz de UPR ve sus ambitos centrales y, en sedes, solo su materia.
+        var upr=parse(reports.export(access.actor("rep.exp.upr"),"REQ",q(null,null,null)).bytes());
+        int scopeCol=Reports.REQ_COLUMNS.indexOf("ambito"),matterCol=Reports.REQ_COLUMNS.indexOf("materia");
+        var codes=new HashSet<String>();for(var r:db.rows("SELECT code FROM org_scope WHERE unit_code='UPR' AND regional=FALSE"))codes.add(s(r,"code"));
+        assertTrue(upr.size()>1);
+        for(var r:upr.subList(1,upr.size()))assertTrue(codes.contains(r.get(scopeCol))||r.get(scopeCol).equals("REG-DEMO")&&r.get(matterCol).equals("UPR"),r.toString());
+        assertEquals(1,upr.stream().skip(1).filter(r->r.get(scopeCol).equals("REG-DEMO")).count());
+        assertTrue(csv.stream().skip(1).filter(r->r.get(scopeCol).equals("REG-DEMO")).count()>=3);
+        // Limite: 409 sin archivo truncado; acotando el ambito y la materia, responde.
+        reports.limit=2;
+        try{
+            var e=assertThrows(Problem.class,()->reports.export(access.actor("rep.exp"),"REQ",q(null,null,null)));
+            assertEquals(409,e.status);assertTrue(e.getMessage().contains("acota el periodo o el ámbito"),e.getMessage());
+            var narrow=reports.export(access.actor("rep.exp"),"REQ",new Reports.Request(null,null,null,null,scope("REG-DEMO"),null,null,null,null,"UPD",null,null,null,null,null));
+            assertEquals(1,narrow.rows());
+        }finally{reports.limit=Reports.LIMIT;}
+        // Auditoria: tipo, cantidad y solo los nombres de los filtros.
+        var e=db.one("SELECT * FROM audit_event WHERE action='EXPORTACION' ORDER BY id DESC LIMIT 1");
+        assertEquals(user("rep.exp"),n(e,"actor_id"));
+        String note=s(e,"note");
+        assertTrue(note.contains("Exportacion REQ")&&note.contains("filas 1")&&note.contains("ambito")&&note.contains("materia"),note);
+        for(var value:List.of("REG-DEMO","UPD;",String.valueOf(scope("REG-DEMO"))))assertFalse(note.contains(value),value+" en "+note);
+    }
+
+    @Test @Order(12) void exportacionExigeReportesEnElMismoAlcance(){
+        data();
+        reporter("rep.exp.perfil","REPORTES@UPD");
+        long id=user("rep.exp.perfil"),ti=user("ti");
+        var grant=assertThrows(Problem.class,()->run("ti","GRANT_CREATE",null,null,Map.of("user_id",id,"role","EXPORTACION","from_at",Instant.now().toString(),"reason","Sin REPORTES institucional")));
+        assertEquals(Personnel.EXPORT_REQUIRES,grant.getMessage());
+        var orphan=assertThrows(Problem.class,()->run("ti","PROFILE_SET","staff",id,Map.of("grants",List.of(Map.of("role","REPORTES","scope_id",scope("UPD")),Map.of("role","EXPORTACION")),"reason","Sin REPORTES institucional")));
+        assertEquals(Personnel.EXPORT_REQUIRES,orphan.getMessage());
+        run("ti","PROFILE_SET","staff",id,Map.of("grants",List.of(Map.of("role","REPORTES","scope_id",scope("UPD")),Map.of("role","EXPORTACION","scope_id",scope("UPD"))),"reason","Exportacion de UPD"));
+        assertTrue(Reports.canExport(access.actor("rep.exp.perfil")));
+        long reportes=n(db.one("SELECT id FROM role_assignment WHERE user_id=? AND role_code='REPORTES' AND revoked_at IS NULL",id),"id");
+        var revoke=assertThrows(Problem.class,()->run("ti","GRANT_REVOKE",null,reportes,Map.of("reason","Revoca")));
+        assertEquals(409,revoke.status);assertTrue(revoke.getMessage().contains("Exportacion"),revoke.getMessage());
+        // TI no combina con EXPORTACION (D2) y el catalogo la publica con ambito opcional.
+        assertThrows(Problem.class,()->run("ti","GRANT_CREATE",null,null,Map.of("user_id",ti,"role","EXPORTACION","from_at",Instant.now().toString(),"reason","Autoconcesion")));
+        var mixed=assertThrows(Problem.class,()->run("ti","PROFILE_SET","staff",id,Map.of("grants",List.of(Map.of("role","TI"),Map.of("role","EXPORTACION")),"reason","Mezcla")));
+        assertTrue(mixed.getMessage().contains("TI es incompatible"),mixed.getMessage());
+        assertTrue(Roles.json().contains(Map.of("code","EXPORTACION","reach","OPCIONAL","group","REPORTES")));
+    }
 }

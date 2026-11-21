@@ -10,7 +10,7 @@ import {Icon} from '../../components/Icon';
 import {Busy, Callout, ErrorMessage} from '../../components/Primitives';
 import {useExit} from '../../components/useExit';
 import type {Entry, Grant, Level, Profile, RoleDef, ScopeItem, Wanted} from './profile';
-import {columnsFor, countIn, diff, optionalRoles, preserved, duplicates, grantOf, groupScopes, hasTi, initial, keyOf, liveGrants, offered, payload, periodProblems, profileScopes, startFiltered, TI, toggle, visibleScopes} from './profile';
+import {columnsFor, countIn, diff, needsReportes, optionalRoles, reportScopes, toggleReport, duplicates, grantOf, groupScopes, hasTi, initial, keyOf, liveGrants, offered, payload, periodProblems, profileScopes, startFiltered, TI, toggle, visibleScopes} from './profile';
 
 const fromInput = (value: string) => value ? new Date(value).getTime() : null;
 
@@ -43,13 +43,15 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
   const live = useMemo(() => liveGrants(grants.map(grantOf), id, now), [grants, id, now]);
   const conflicts = duplicates(live);
   const roles = list(ctx.catalog, 'roles') as unknown as RoleDef[];
-  const scoped = roles.filter(r => r.reach === 'AMBITO'), institutional = roles.filter(r => r.reach !== 'AMBITO');
+  const scoped = roles.filter(r => r.reach === 'AMBITO'), institutional = roles.filter(r => r.reach === 'INSTITUCIONAL'), optional = roles.filter(r => r.reach === 'OPCIONAL');
   const regions = list(ctx.catalog, 'regions').map(r => ({code: text(r, 'code'), name: text(r, 'name')}));
   const scopeItems = profileScopes(list(ctx.catalog, 'scopes'), live, regions);
   const byId = new Map(scopeItems.map(s => [s.id, s]));
   const narrow = useNarrow();
   const [onlyWith, setOnlyWith] = useState(() => startFiltered(live)), [query, setQuery] = useState(''), [open, setOpen] = useState<ReadonlySet<number>>(() => new Set());
   const search = useRef<HTMLInputElement>(null);
+  /** Ambitos agregados al bloque de reportes en esta edicion (aun sin funciones marcadas). */
+  const [reportAdded, setReportAdded] = useState<ReadonlySet<number>>(() => new Set());
 
   const [profile, setProfile] = useState<Profile>(() => initial(live));
   const [step, setStep] = useState<'edit' | 'confirm'>('edit');
@@ -76,7 +78,7 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
    * funciones (cerrado) ni como Jefatura en una sede (D7). Desmarcar lo que ya esta siempre se puede.
    */
   const blocked = (role: string, scope: ScopeItem | null) =>
-    locked || !profile.has(keyOf(role, scope?.id ?? null)) && (role !== TI && ti || !enabled || scope != null && !offered(role, scope));
+    locked || !profile.has(keyOf(role, scope?.id ?? null)) && (role !== TI && ti || !enabled || scope != null && !offered(role, scope) || needsReportes(profile, role, scope?.id ?? null));
 
   function review() {
     if (invalid.length) {setError('Revisa la vigencia: el término debe ser posterior al inicio y a la fecha actual.'); return;}
@@ -113,6 +115,8 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
   const showAll = () => {setOnlyWith(false); search.current?.focus();};
   const shown = visibleScopes(scopeItems, profile, live, onlyWith, query, open);
   const groups = groupScopes(shown, regions);
+  const reportRows = reportScopes(profile, roles, reportAdded, scopeItems.map(s => s.id));
+  const addable = scopeItems.filter(s => s.staffable && !reportRows.includes(s.id));
   const cell = (role: string, scope: ScopeItem | null, name: string) => <input type="checkbox" aria-label={name}
     checked={profile.has(keyOf(role, scope?.id ?? null))} disabled={blocked(role, scope)} onChange={e => set(role, scope?.id ?? null, e.target.checked)}/>;
   /** Estado o region bajo el codigo del ambito: las sedes muestran su region y, si no esta activa, su estado. */
@@ -190,7 +194,32 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
               </span>
             </label>)}
           </div>
-          {preserved(profile, roles).length > 0 && <p className="field-help">Funciones por ámbito que esta vista aún no edita; se conservan al guardar: {preserved(profile, roles).map(e => label(e.role, e.scope)).join('; ')}.</p>}
+          {optional.length > 0 && <>
+            <h3 className="profile-subtitle">Reportes y exportación</h3>
+            <p className="field-help">Cifras agregadas sin datos de personas. Toda la institución, o un ámbito: la raíz de una unidad abarca sus ámbitos centrales (y, en UPR, UPD o UEP, su materia en las sedes); un área o una sede, solo ese ámbito. Reportes por persona y Exportación exigen Reportes en el mismo alcance.</p>
+            <div className="profile-matrix-scroll" role="region" aria-label="Reportes y exportación por alcance" tabIndex={0}>
+              <table className="profile-matrix profile-reports">
+                <thead><tr><th scope="col">Alcance</th>{optional.map(r => <th scope="col" key={r.code}>{ROLE_LABELS[r.code] ?? humanize(r.code)}</th>)}</tr></thead>
+                <tbody>{reportRows.map(scope => {
+                  const item = scope == null ? null : byId.get(scope) ?? null, name = scope == null ? 'Toda la institución' : item?.code ?? scopeOf(ctx.catalog, scope);
+                  return <tr key={scope ?? 'institucion'}>
+                    <th scope="row"><span className="cell-strong">{name}</span>{item && <small>{detail(item)}</small>}</th>
+                    {optional.map(r => <td key={r.code}><input type="checkbox" aria-label={(ROLE_LABELS[r.code] ?? r.code) + ' en ' + name}
+                      checked={profile.has(keyOf(r.code, scope))} disabled={blocked(r.code, item)}
+                      onChange={e => setProfile(p => toggleReport(p, r.code, scope, e.target.checked, live))}/></td>)}
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
+            {addable.length > 0 && <label className="profile-report-add"><span>Agregar un ámbito o sede</span>
+              <select value="" disabled={locked || ti || !enabled} onChange={e => {const id = Number(e.target.value); if (id) setReportAdded(x => new Set(x).add(id));}}>
+                <option value="">Elegir…</option>
+                {groupScopes(addable, regions).map(g => <optgroup key={g.level} label={LEVEL_LABELS[g.level]}>
+                  {g.items.map(s => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
+                </optgroup>)}
+              </select>
+            </label>}
+          </>}
           {profile.size > 0 && <>
             <h3 className="profile-subtitle">Vigencia (opcional)</h3>
             <p className="field-help">Sin inicio rige desde ahora; sin término no vence. Fechas en la zona horaria de este equipo ({Intl.DateTimeFormat().resolvedOptions().timeZone}).</p>

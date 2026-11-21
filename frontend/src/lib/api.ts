@@ -82,3 +82,32 @@ export function stageIntakeDocument(scope: string, key: string, file: File) {
 }
 export const draftDocuments = () => request<Row[]>('/intake/documents');
 export const discardDraft = (token: string) => request('/intake/documents/' + encodeURIComponent(token), {method: 'DELETE'});
+
+// --- Exportacion (G12) --------------------------------------------------------------------
+/**
+ * Descarga un archivo pedido por POST (los filtros van en el cuerpo, nunca en la URL), con el token CSRF. El nombre
+ * sale de Content-Disposition; un rechazo trae el mensaje del servidor (403, 409 por el limite de filas).
+ */
+export async function downloadPost(path: string, body: unknown, fallback: string, nameOf: (header: string | null, fallback: string) => string) {
+  track(1);
+  try {
+    const headers = new Headers({'Content-Type': 'application/json'});
+    if (csrf) headers.set(csrf.header, csrf.token);
+    const response = await fetch('/api' + path, {method: 'POST', headers, body: JSON.stringify(body), credentials: 'same-origin', cache: 'no-store'});
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 428) window.dispatchEvent(new Event('siger-session'));
+      const data: Row = await response.json().catch(() => ({}));
+      throw Object.assign(new Error(text(data, 'message') || GENERIC_ERRORS[response.status] || `No se pudo generar el archivo (${response.status}).`), {status: response.status});
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nameOf(response.headers.get('Content-Disposition'), fallback);
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } finally {
+    track(-1);
+  }
+}

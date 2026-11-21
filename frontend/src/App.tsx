@@ -21,6 +21,7 @@ import WorkspaceList from './features/worklist/WorkspaceList';
 import Intake from './features/intake/Intake';
 import Attention from './features/attention/Attention';
 import Search from './features/search/Search';
+import Reports from './features/reports/Reports';
 import {clearSearch} from './features/search/search';
 import {clearBoardSearch, legacyRoute} from './features/worklist/boardSearch';
 import {sessionStore} from './lib/tabStore';
@@ -171,6 +172,7 @@ export default function App() {
     case 'buscar': content = user.can_search ? <Search ctx={ctx}/> : <Dashboard ctx={ctx} version={tick}/>; break;
     case 'nuevo': content = <Intake ctx={ctx} completed={r => completed(r)}/>; break;
     case 'subrogancias': content = <Substitutions ctx={ctx} workspace={workspace}/>; break;
+    case 'reportes': content = user.can_report ? <Reports ctx={ctx}/> : <Dashboard ctx={ctx} version={tick}/>; break;
     case 'calendario': content = has(user, 'TI') ? <Calendar key={tick} ctx={ctx}/> : <Dashboard ctx={ctx} version={tick}/>; break;
     case 'administracion': case 'auditoria': content = <Administration key={view + tick} ctx={ctx} auditOnly={view === 'auditoria'}/>; break;
     default: content = <Dashboard ctx={ctx} version={tick}/>;

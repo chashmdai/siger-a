@@ -128,7 +128,8 @@ export default function WorkspaceList({kind, initialFilter, ctx, version}: {kind
     <PageHeader eyebrow={<><Icon name={board?.icon ?? 'inbox'} size={14}/>Bandeja</>} title={board?.title ?? kind} lead={board?.lead}
       aside={<>
         {data && <span className="result-count" aria-live="polite"><strong className="tabular">{total.toLocaleString('es-CL')}</strong> {total === 1 ? 'registro' : 'registros'}</span>}
-        {['req', 'cas', 'com'].includes(kind) && <a className="button sm" href={'/api/export?kind=' + kind.toUpperCase()}><Icon name="download" size={16}/>Exportar CSV</a>}
+        {/* G12: el resumen exige EXPORTACION (el servidor responde 403 sin ella) y sigue acotado a lo que la cuenta lee. */}
+        {ctx.user.can_export === true && ['req', 'cas', 'com'].includes(kind) && <a className="button sm" href={'/api/export?kind=' + kind.toUpperCase()}><Icon name="download" size={16}/>Exportar CSV</a>}
       </>}/>
     {kind === 'tareas' && <Callout tone="warn">Toda tarea pendiente bloquea el cierre del Caso. Los avisos internos requieren que SIGER esté encendido.</Callout>}
     <div className="board-tools">

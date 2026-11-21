@@ -2,7 +2,7 @@
 // replica la comparacion del servidor (Personnel.profile). node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {columnsFor, countIn, diff, optionalRoles, preserved, duplicates, fold, grantOf, grantState, groupScopes, hasTi, initial, keyOf, liveGrants, offered, payload, periodProblems, profileScopes, startFiltered, toggle, visibleScopes} from '../src/features/admin/profile.ts';
+import {columnsFor, countIn, diff, needsReportes, optionalRoles, reportScopes, toggleReport, duplicates, fold, grantOf, grantState, groupScopes, hasTi, initial, keyOf, liveGrants, offered, payload, periodProblems, profileScopes, startFiltered, toggle, visibleScopes} from '../src/features/admin/profile.ts';
 
 const NOW = Date.parse('2026-11-20T15:00:00.000Z');
 const HOUR = 3_600_000;
@@ -179,16 +179,19 @@ test('el filtro "solo con funciones" arranca activo solo si la cuenta tiene func
   assert.equal(startFiltered([grantOf({id: 50, user_id: 7, role_code: 'DISTRIBUIDOR', scope_id: null, valid_from: 0, valid_until: null, revoked_at: null})]), false);
 });
 
-test('una funcion de reportes por ambito hecha por API se conserva al guardar el perfil (G11)', () => {
-  const roles = [{code: 'PROFESIONAL', reach: 'AMBITO', group: 'OPERATIVA'}, {code: 'REPORTES', reach: 'OPCIONAL', group: 'REPORTES'}, {code: 'REPORTES_PERSONAS', reach: 'OPCIONAL', group: 'REPORTES'}];
+test('reportes por alcance: se conservan al guardar, filas por ambito y no cuentan en la tarjeta del ambito (G11, G12)', () => {
+  const roles = [{code: 'PROFESIONAL', reach: 'AMBITO', group: 'OPERATIVA'}, {code: 'REPORTES', reach: 'OPCIONAL', group: 'REPORTES'},
+    {code: 'REPORTES_PERSONAS', reach: 'OPCIONAL', group: 'REPORTES'}, {code: 'EXPORTACION', reach: 'OPCIONAL', group: 'REPORTES'}];
   const own = liveGrants([...grants, grantOf({id: 9, user_id: 7, role_code: 'REPORTES', scope_id: 3, valid_from: NOW - 9 * HOUR, valid_until: null, revoked_at: null})], 7, NOW);
   const profile = initial(own);
   // Sin tocar nada: el cuerpo la reenvia con su ambito y no hay diferencias.
   const body = payload(profile, NOW);
   assert.deepEqual(body.find(w => w.role === 'REPORTES'), {role: 'REPORTES', scope_id: 3});
   assert.deepEqual(diff(own, body), {grant: [], revoke: []});
-  // Se lista como conservada y no cuenta en la tarjeta del ambito (la vista no la muestra como casilla).
-  assert.deepEqual(preserved(profile, roles).map(e => keyOf(e.role, e.scope)), ['REPORTES@3']);
+  // Filas del bloque: institucion siempre, el ambito con REPORTES y los agregados, en el orden del catalogo.
+  assert.deepEqual(reportScopes(profile, roles, new Set(), [5, 4, 3]), [null, 3]);
+  assert.deepEqual(reportScopes(profile, roles, new Set([5]), [5, 4, 3]), [null, 5, 3]);
+  // La tarjeta movil del ambito no cuenta las funciones de reportes (se muestran en su bloque).
   assert.equal(countIn(profile, 3), 2);
   assert.equal(countIn(profile, 3, optionalRoles(roles)), 1);
   // Marcar Reportes institucional la agrega sin quitar la del ambito.
@@ -196,4 +199,25 @@ test('una funcion de reportes por ambito hecha por API se conserva al guardar el
   const changes = diff(own, payload(next, NOW));
   assert.deepEqual(changes.grant, [{role: 'REPORTES'}]);
   assert.deepEqual(changes.revoke, []);
+});
+
+test('Reportes por persona y Exportación exigen Reportes en el mismo alcance; quitar Reportes las quita (G12)', () => {
+  const own = liveGrants([grantOf({id: 9, user_id: 7, role_code: 'REPORTES', scope_id: 3, valid_from: NOW - 9 * HOUR, valid_until: null, revoked_at: null})], 7, NOW);
+  let profile = initial(own);
+  // En el ambito 3 hay Reportes: se puede marcar Exportacion; en la institucion no.
+  assert.equal(needsReportes(profile, 'EXPORTACION', 3), false);
+  assert.equal(needsReportes(profile, 'EXPORTACION', null), true);
+  assert.equal(needsReportes(profile, 'REPORTES_PERSONAS', null), true);
+  assert.equal(needsReportes(profile, 'REPORTES', null), false);
+  profile = toggleReport(profile, 'EXPORTACION', 3, true, own);
+  profile = toggleReport(profile, 'REPORTES_PERSONAS', 3, true, own);
+  assert.deepEqual(diff(own, payload(profile, NOW)).grant, [{role: 'EXPORTACION', scope_id: 3}, {role: 'REPORTES_PERSONAS', scope_id: 3}]);
+  // Una ya marcada siempre se puede quitar.
+  assert.equal(needsReportes(profile, 'EXPORTACION', 3), false);
+  // Quitar Reportes del ambito quita tambien las dependientes de ese ambito, no las de otro.
+  profile = toggleReport(profile, 'REPORTES', null, true, own);
+  profile = toggleReport(profile, 'EXPORTACION', null, true, own);
+  const without = toggleReport(profile, 'REPORTES', 3, false, own);
+  assert.deepEqual([...without.keys()].sort(), ['EXPORTACION@', 'REPORTES@']);
+  assert.deepEqual(diff(own, payload(without, NOW)).revoke.map(g => g.role_code), ['REPORTES']);
 });

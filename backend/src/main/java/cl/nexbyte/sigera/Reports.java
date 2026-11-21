@@ -91,6 +91,11 @@ public class Reports {
         return a.grants().stream().filter(g->g.role().equals(Roles.REPORTES_PERSONAS)&&a.grants().stream().anyMatch(x->x.role().equals(Roles.REPORTES)&&Objects.equals(x.scope(),g.scope()))).toList();
     }
     static boolean canReportPeople(Actor a){return !peopleGrants(a).isEmpty();}
+    /** EXPORTACION que rige (G12): con REPORTES vigente en el mismo alcance. */
+    static List<Access.Grant> exportGrants(Actor a){
+        return a.grants().stream().filter(g->g.role().equals(Roles.EXPORTACION)&&a.grants().stream().anyMatch(x->x.role().equals(Roles.REPORTES)&&Objects.equals(x.scope(),g.scope()))).toList();
+    }
+    static boolean canExport(Actor a){return !exportGrants(a).isEmpty();}
 
     Reach reach(List<Access.Grant> grants){
         boolean all=false;var scopes=new TreeSet<Long>();var matters=new TreeSet<String>();
@@ -204,7 +209,7 @@ public class Reports {
     private static final String FROM="milestone e JOIN communication c ON c.id=e.communication_id LEFT JOIN requirement r ON r.communication_id=e.communication_id"
         +" LEFT JOIN solicitation sol ON sol.communication_id=e.communication_id LEFT JOIN case_record cs ON cs.id=e.case_id"
         +" LEFT JOIN attention_record ar ON ar.requirement_id=r.id JOIN org_scope s ON s.id=e.scope_id";
-    private record Ev(long id,String event,long at,long actor,Long scope,boolean rebuilt){ }
+    record Ev(long id,String event,long at,long actor,Long scope,boolean rebuilt){ }
     /** Un tramo calculado, con sus dimensiones. */
     private record Span(Map<String,Object> dims,String exit,Long person,double hours,double days,boolean rebuilt,double waitHours,double waitDays,boolean waited){ }
 
@@ -235,34 +240,16 @@ public class Reports {
                 +(t.type()==null?"":" AND resource_type=?")+" AND "+t.key()+" IN ("+marks(part.size())+")",args.toArray()))
                 byKey.computeIfAbsent(n(r,"key_id"),k->new ArrayList<>()).add(new Ev(n(r,"id"),s(r,"event"),n(r,"at_ms"),n(r,"actor_id"),nullableId(r,"scope_id"),b(r,"reconstructed")));
         }
-        var spans=new ArrayList<Span>();long earliest=f.from();
-        for(var seq:byKey.values()){
-            // Orden temporal; con el mismo instante, un inicio puro antes que un fin (atencion resuelta en el acto).
-            seq.sort(Comparator.comparingLong(Ev::at).thenComparingInt(e->t.starts().contains(e.event())&&!t.ends().contains(e.event())?0:1).thenComparingLong(Ev::id));
-            Ev open=null;Long waitFrom=null;var waits=new ArrayList<long[]>();
-            for(var e:seq){
-                if(t.waits()){
-                    if(e.event().equals("CASO_ESPERA")&&open!=null&&waitFrom==null)waitFrom=e.at();
-                    if(e.event().equals("CASO_REANUDADO")&&waitFrom!=null){waits.add(new long[]{waitFrom,e.at()});waitFrom=null;}
-                }
-                if(t.ends().contains(e.event())){
-                    Ev start=t.received()?e:open;
-                    if(start!=null){
-                        if(waitFrom!=null)waits.add(new long[]{waitFrom,e.at()});
-                        var anchor=anchors.get(t.anchor()==Anchor.END?e.id():start.id());
-                        boolean inPeriod=e.at()>=f.from()&&e.at()<f.to();
-                        if(anchor!=null&&inPeriod){
-                            long from=t.received()?Math.min(n(anchor,"received_ms"),e.at()):start.at();
-                            earliest=Math.min(earliest,from);
-                            spans.add(span(t,anchor,start,e,from,waits,cal));
-                        }
-                    }
-                    open=null;waitFrom=null;waits.clear();
-                }
-                if(t.resets().contains(e.event())){open=null;waitFrom=null;waits.clear();}
-                if(t.starts().contains(e.event())&&(open==null||!t.firstStart())){open=e;waitFrom=null;waits.clear();}
+        var spans=new ArrayList<Span>();long[] earliest={f.from()};
+        for(var seq:byKey.values())pair(t,seq,(start,e,waits)->{
+            var anchor=anchors.get(t.anchor()==Anchor.END?e.id():start.id());
+            boolean inPeriod=e.at()>=f.from()&&e.at()<f.to();
+            if(anchor!=null&&inPeriod){
+                long from=t.received()?Math.min(n(anchor,"received_ms"),e.at()):start.at();
+                earliest[0]=Math.min(earliest[0],from);
+                spans.add(span(t,anchor,start,e,from,waits,cal));
             }
-        }
+        });
         var dims=dimensions(group,t.code().equals("REQ_TOTAL")&&!Boolean.FALSE.equals(f.q().by_origin())||Boolean.TRUE.equals(f.q().by_origin()),
             t.code().equals("TENENCIA_SOL")&&!Boolean.FALSE.equals(f.q().by_exit())||Boolean.TRUE.equals(f.q().by_exit()));
         var names=people(dims.contains("PERSONA")?spans.stream().map(Span::person).filter(Objects::nonNull).distinct().toList():List.of());
@@ -275,8 +262,35 @@ public class Reports {
         for(var g:groups.entrySet()){var row=new LinkedHashMap<String,Object>();row.put("group",keysOf.get(g.getKey()));row.putAll(stats(g.getValue(),t.waits()));rows.add(row);}
         var out=new LinkedHashMap<String,Object>();
         out.put("kind","TIEMPO");out.put("dimensions",dims);out.put("total",stats(spans,t.waits()));out.put("rows",rows);
-        out.put("calendar",calendarInfo(cal,earliest,f.to()-1));
+        out.put("calendar",calendarInfo(cal,earliest[0],f.to()-1));
         return out;
+    }
+    /** Tramo completo: su inicio, su fin y las esperas dentro de el (lista que se reutiliza: copiarla si se guarda). */
+    interface Sink{void span(Ev start,Ev end,List<long[]> waits);}
+    /**
+     * Emparejamiento comun de reportes y exportacion: recorre la secuencia de hitos de una clave y entrega cada tramo
+     * (fin con el ultimo inicio valido; las anulaciones cierran el inicio abierto; en Gestion, las esperas dentro del tramo).
+     */
+    static void pair(Spec t,List<Ev> seq,Sink sink){
+        // Orden temporal; con el mismo instante, un inicio puro antes que un fin (atencion resuelta en el acto).
+        seq.sort(Comparator.comparingLong(Ev::at).thenComparingInt(e->t.starts().contains(e.event())&&!t.ends().contains(e.event())?0:1).thenComparingLong(Ev::id));
+        Ev open=null;Long waitFrom=null;var waits=new ArrayList<long[]>();
+        for(var e:seq){
+            if(t.waits()){
+                if(e.event().equals("CASO_ESPERA")&&open!=null&&waitFrom==null)waitFrom=e.at();
+                if(e.event().equals("CASO_REANUDADO")&&waitFrom!=null){waits.add(new long[]{waitFrom,e.at()});waitFrom=null;}
+            }
+            if(t.ends().contains(e.event())){
+                Ev start=t.received()?e:open;
+                if(start!=null){
+                    if(waitFrom!=null)waits.add(new long[]{waitFrom,e.at()});
+                    sink.span(start,e,waits);
+                }
+                open=null;waitFrom=null;waits.clear();
+            }
+            if(t.resets().contains(e.event())){open=null;waitFrom=null;waits.clear();}
+            if(t.starts().contains(e.event())&&(open==null||!t.firstStart())){open=e;waitFrom=null;waits.clear();}
+        }
     }
     private Span span(Spec t,Map<String,Object> anchor,Ev start,Ev end,long from,List<long[]> waits,BusinessCalendar cal){
         long to=Math.max(from,end.at());String region=region(anchor);
@@ -383,6 +397,109 @@ public class Reports {
         var counts=new TreeMap<String,Long>();
         for(var r:rows)counts.merge(r.get(col)==null?"":s(r,col),n(r,"n"),Long::sum);
         return counts.entrySet().stream().map(e->{var m=new LinkedHashMap<String,Object>();m.put("value",e.getKey().isEmpty()?null:e.getKey());m.put("count",e.getValue());return (Map<String,Object>)m;}).toList();
+    }
+
+    // --- Exportacion (G12) ------------------------------------------------------------------------
+    /** Columnas del CSV de REQ y de Casos: codigos, folios, fechas y tiempos; nunca nombres, RUN, relato, asunto, motivo ni contactos. */
+    static final List<String> REQ_COLUMNS=List.of("folio","folio_com","origen","ingreso","canal","unidad","ambito","nivel","region","materia","complejidad",
+        "modalidad","estado","creado","cerrado","casos","h_primer_caso","dh_primer_caso","h_req_total","dh_req_total");
+    static final List<String> CASE_COLUMNS=List.of("folio","folio_req","origen","unidad","ambito","nivel","region","materia","complejidad_req","estado",
+        "creado","cerrado","h_acuse","dh_acuse","h_gestion","dh_gestion","h_espera","dh_espera");
+    public record Export(String filename,byte[] bytes,int rows){ }
+    private static Spec time(String code){return TIMES.stream().filter(t->t.code().equals(code)).findFirst().orElseThrow();}
+
+    /**
+     * CSV de REQ o de Casos creados en el periodo (G12), con el alcance de las concesiones EXPORTACION (cada una con REPORTES
+     * en el mismo alcance) y los mismos filtros de los reportes. Los tiempos usan los tramos de los reportes, completos
+     * aunque terminen fuera del periodo: REQ total suma sus ciclos (solo si esta cerrado), Gestion descuenta la espera
+     * (solo si el Caso esta cerrado), Apertura y Acuse toman el primer tramo. Sobre el limite: 409, nunca un archivo truncado.
+     */
+    public Export export(Actor a,String kind,Request q){
+        if(!canExport(a))Problem.denied();
+        if(!"REQ".equals(kind)&&!"CAS".equals(kind))throw new Problem(400,"Exportacion desconocida.");
+        var reach=reach(exportGrants(a));var f=filters(q);var cal=BusinessCalendar.load(db);
+        var csv=kind.equals("REQ")?new Csv(REQ_COLUMNS):new Csv(CASE_COLUMNS);
+        int rows=kind.equals("REQ")?exportReq(csv,reach,f,cal):exportCases(csv,reach,f,cal);
+        db.audit(a.id(),"EXPORTACION","SISTEMA",0,null,"Exportacion "+kind+"; filas "+rows+(f.used().isEmpty()?"":"; filtros: "+String.join(", ",f.used())));
+        return new Export("siger-"+kind.toLowerCase(Locale.ROOT)+"-"+f.fromDay()+"-"+f.toDay()+".csv",csv.bytes(),rows);
+    }
+    private void within(String countSql,Where w){
+        Problem.require(db.count(countSql+w.sql,w.args.toArray())<=limit,TOO_MANY.formatted(String.format(Locale.ROOT,"%,d",limit).replace(',','.')));
+    }
+    /** Hitos de los eventos del tramo para las filas (requirement_id o case_id), agrupados por fila y por la clave del tramo. */
+    private Map<Long,Map<Long,List<Ev>>> sequences(Spec t,String column,List<Long> ids){
+        var out=new HashMap<Long,Map<Long,List<Ev>>>();var events=t.events();
+        for(int i=0;i<ids.size();i+=CHUNK){
+            var part=ids.subList(i,Math.min(ids.size(),i+CHUNK));
+            var args=new ArrayList<Object>(events);if(t.type()!=null)args.add(t.type());args.addAll(part);
+            for(var r:db.rows("SELECT id,event,at_ms,actor_id,scope_id,reconstructed,"+column+" AS row_id,"+t.key()+" AS key_id FROM milestone WHERE event IN ("+marks(events.size())+")"
+                +(t.type()==null?"":" AND resource_type=?")+" AND "+column+" IN ("+marks(part.size())+")",args.toArray()))
+                out.computeIfAbsent(n(r,"row_id"),k->new HashMap<>()).computeIfAbsent(n(r,"key_id"),k->new ArrayList<>())
+                    .add(new Ev(n(r,"id"),s(r,"event"),n(r,"at_ms"),n(r,"actor_id"),nullableId(r,"scope_id"),b(r,"reconstructed")));
+        }
+        return out;
+    }
+    /** Tiempo de una fila: [horas, dias habiles, horas de espera, dias de espera], o null si el tramo no esta completo. */
+    private double[] measure(Spec t,Map<Long,List<Ev>> byKey,String region,BusinessCalendar cal,boolean sum){
+        if(byKey==null)return null;
+        var spans=new ArrayList<double[]>();var firstAt=new ArrayList<Long>();
+        for(var seq:byKey.values())pair(t,seq,(start,end,waits)->{
+            long from=start.at(),to=Math.max(from,end.at());double wh=0,wd=0;
+            for(var x:waits){long a=Math.max(x[0],from),b=Math.min(x[1],to);if(b>a){wh+=BusinessCalendar.hours(a,b);wd+=cal.businessDays(a,b,region);}}
+            spans.add(new double[]{BusinessCalendar.hours(from,to)-wh,cal.businessDays(from,to,region)-wd,wh,wd});firstAt.add(from);
+        });
+        if(spans.isEmpty())return null;
+        if(!sum){int first=0;for(int i=1;i<spans.size();i++)if(firstAt.get(i)<firstAt.get(first))first=i;return spans.get(first);}
+        var total=new double[4];for(var x:spans)for(int i=0;i<4;i++)total[i]+=x[i];
+        return total;
+    }
+    private static Object hours(double[] m,int i){return m==null?null:(Object)Reports.round(m[i]);}
+    private static List<Object> place(Map<String,Object> r){
+        return Arrays.asList(s(r,"unit_code"),s(r,"scope_code"),b(r,"regional")?"REGIONAL":"CENTRAL",region(r));
+    }
+    private int exportReq(Csv csv,Reach reach,Filters f,BusinessCalendar cal){
+        var w=new Where().and("r.created_ms>=? AND r.created_ms<?",f.from(),f.to());apply(w,reach,f,matter(Family.REQ));
+        String from=" FROM requirement r JOIN communication c ON c.id=r.communication_id LEFT JOIN solicitation sol ON sol.communication_id=r.communication_id"
+            +" LEFT JOIN attention_record ar ON ar.requirement_id=r.id JOIN org_scope s ON s.id=r.principal_scope WHERE ";
+        within("SELECT COUNT(*)"+from,w);
+        var rows=db.rows("SELECT r.id,r.folio,c.folio AS com_folio,"+ORIGIN+" AS origin,"+INTAKE+" AS intake,c.channel,s.unit_code,s.code AS scope_code,s.regional,s.region_code,"
+            +"r.matter,r.complexity,ar.modality,r.state,r.created_ms,r.closed_ms,(SELECT COUNT(*) FROM case_record x WHERE x.requirement_id=r.id) AS cases"+from+w.sql+" ORDER BY r.id",w.args.toArray());
+        var ids=rows.stream().map(r->n(r,"id")).toList();
+        var opening=time("APERTURA_CASO");var total=time("REQ_TOTAL");
+        var openSeq=sequences(opening,"requirement_id",ids);var totalSeq=sequences(total,"requirement_id",ids);
+        for(var r:rows){
+            String region=region(r);boolean closed=s(r,"state").equals("CERRADO");
+            var first=measure(opening,openSeq.get(n(r,"id")),region,cal,false);
+            var whole=closed?measure(total,totalSeq.get(n(r,"id")),region,cal,true):null;
+            var cells=new ArrayList<Object>(Arrays.asList(s(r,"folio"),s(r,"com_folio"),s(r,"origin"),s(r,"intake"),s(r,"channel")));
+            cells.addAll(place(r));
+            cells.addAll(Arrays.asList(r.get("matter"),r.get("complexity"),r.get("modality"),s(r,"state"),Csv.when(n(r,"created_ms")),closed?Csv.when(nullableId(r,"closed_ms")):null,
+                n(r,"cases"),hours(first,0),hours(first,1),hours(whole,0),hours(whole,1)));
+            csv.row(cells);
+        }
+        return rows.size();
+    }
+    private int exportCases(Csv csv,Reach reach,Filters f,BusinessCalendar cal){
+        var w=new Where().and("cs.created_ms>=? AND cs.created_ms<?",f.from(),f.to());apply(w,reach,f,matter(Family.CAS));
+        String from=" FROM case_record cs JOIN requirement r ON r.id=cs.requirement_id JOIN communication c ON c.id=r.communication_id LEFT JOIN solicitation sol ON sol.communication_id=r.communication_id"
+            +" LEFT JOIN attention_record ar ON ar.requirement_id=r.id JOIN org_scope s ON s.id=cs.scope_id WHERE ";
+        within("SELECT COUNT(*)"+from,w);
+        var rows=db.rows("SELECT cs.id,cs.folio,r.folio AS req_folio,"+ORIGIN+" AS origin,s.unit_code,s.code AS scope_code,s.regional,s.region_code,cs.matter,r.complexity,cs.state,cs.created_ms,cs.closed_ms"
+            +from+w.sql+" ORDER BY cs.id",w.args.toArray());
+        var ids=rows.stream().map(r->n(r,"id")).toList();
+        var ack=time("ACUSE");var work=time("GESTION_CASO");
+        var ackSeq=sequences(ack,"case_id",ids);var workSeq=sequences(work,"case_id",ids);
+        for(var r:rows){
+            String region=region(r);boolean closed=s(r,"state").equals("CERRADO");
+            var first=measure(ack,ackSeq.get(n(r,"id")),region,cal,false);
+            var managed=closed?measure(work,workSeq.get(n(r,"id")),region,cal,true):null;
+            var cells=new ArrayList<Object>(Arrays.asList(s(r,"folio"),s(r,"req_folio"),s(r,"origin")));
+            cells.addAll(place(r));
+            cells.addAll(Arrays.asList(r.get("matter"),r.get("complexity"),s(r,"state"),Csv.when(n(r,"created_ms")),closed?Csv.when(nullableId(r,"closed_ms")):null,
+                hours(first,0),hours(first,1),hours(managed,0),hours(managed,1),hours(managed,2),hours(managed,3)));
+            csv.row(cells);
+        }
+        return rows.size();
     }
 
     // --- Antiguedad de abiertos --------------------------------------------------------------------

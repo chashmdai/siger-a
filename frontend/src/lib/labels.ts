@@ -8,7 +8,7 @@ export const KIND_SHORT: Record<string, string> = {COM: 'COM', SOL: 'SOL', REQ: 
 /** AUTORIDAD fue suprimido en 0.5.0 (D1): su etiqueta solo se usa para mostrar el historial. */
 export const ROLE_LABELS: Record<string, string> = {
   ADMINISTRATIVO: 'Administrativo', PROFESIONAL: 'Profesional', JEFATURA: 'Jefatura', DIRECCION: 'Dirección', DISTRIBUIDOR: 'Distribución',
-  AUTORIDAD: 'Autoridad (suprimido)', LECTURA: 'Lectura', CONSULTA_INSTITUCIONAL: 'Consulta institucional', AUDITORIA: 'Auditoría', REPORTES: 'Reportes', REPORTES_PERSONAS: 'Reportes por persona', TI: 'TI',
+  AUTORIDAD: 'Autoridad (suprimido)', LECTURA: 'Lectura', CONSULTA_INSTITUCIONAL: 'Consulta institucional', AUDITORIA: 'Auditoría', REPORTES: 'Reportes', REPORTES_PERSONAS: 'Reportes por persona', EXPORTACION: 'Exportación', TI: 'TI',
 };
 
 /** En las sedes regionales la Direccion de la sede es la Coordinacion regional y no hay Jefatura (D7). */
@@ -17,7 +17,8 @@ export const SITE_ROLE_LABELS: Record<string, string> = {DIRECCION: 'Coordinaci�
 export const SCOPE_STATE_LABELS: Record<string, string> = {ACTIVA: 'Activa', PROYECTADA: 'Proyectada', CERRADA: 'Cerrada'};
 export const LEVEL_LABELS: Record<string, string> = {CENTRAL: 'Nivel central', REGIONAL: 'Sedes regionales'};
 
-export const CHANNEL_LABELS: Record<string, string> = {PRESENCIAL: 'Presencial', TELEFONO: 'Teléfono', CORREO: 'Correo', OFICIO: 'Oficio', OTRO: 'Otro'};
+export const CHANNEL_LABELS: Record<string, string> = {PRESENCIAL: 'Presencial', TELEFONO: 'Teléfono', CORREO: 'Correo', OFICIO: 'Oficio', OTRO: 'Otro',
+  FORMULARIO_WEB_PUBLICO: 'Formulario Público', FORMULARIO_WEB_NNA: 'Formulario Público NNA'};
 export const RESULT_LABELS: Record<string, string> = {ORIENTACION: 'Orientación', RESPUESTA_DIRECTA: 'Respuesta directa', REMISION_CONCLUIDA: 'Remisión concluida'};
 export const DOCUMENT_LABELS: Record<string, string> = {OFICIO: 'Oficio', INFORME: 'Informe', CORREO: 'Correo', CONSTANCIA: 'Constancia', OTRO: 'Otro', INGRESO: 'Ingreso'};
 export const PERSON_ROLE_LABELS: Record<string, string> = {NNA: 'NNA', ACOMPANANTE: 'Acompañante', REQUIRENTE: 'Requirente', OTRA_PERSONA: 'Otra persona'};
@@ -28,6 +29,24 @@ export const MATTER_LABELS: Record<string, string> = {
   UPR: 'UPR · Protección de Derechos y Representación Judicial', UPD: 'UPD · Promoción y Difusión de Derechos',
   UEP: 'UEP · Estudios, Publicaciones y Estadísticas', OTRA: 'Otra',
 };
+
+/** Reportes de gestion (G11, G12): codigos de Reports.catalog, agrupaciones, salidas e ingresos. */
+export const REPORT_LABELS: Record<string, string> = {
+  VOLUMEN: 'Volumen', REGISTRO: 'Registro', DISTRIBUCION: 'Distribución', TENENCIA_SOL: 'Tenencia de SOL', ASUNCION: 'Asunción', SOL_TOTAL: 'SOL total',
+  APERTURA_CASO: 'Apertura de Caso', ACUSE: 'Acuse', GESTION_CASO: 'Gestión del Caso', REVISION_CIERRE: 'Revisión de cierre', REQ_TOTAL: 'REQ total',
+  PRIMERA_ATENCION: 'Primera atención', FLUJOS: 'Colaboraciones y traslados', ANTIGUEDAD: 'Antigüedad de abiertos',
+};
+export const REPORT_GROUP_LABELS: Record<string, string> = {
+  NINGUNA: 'Sin agrupar', UNIDAD: 'Unidad', AMBITO: 'Ámbito o sede', REGION: 'Nivel y región', MATERIA: 'Materia', ORIGEN: 'Origen',
+  AMBITO_MATERIA: 'Ámbito y materia', SALIDA: 'Salida', PERSONA: 'Funcionario',
+};
+export const ORIGIN_LABELS: Record<string, string> = {SOL: 'Por SOL', ATENCION_DIRECTA: 'Atención directa'};
+export const INTAKE_LABELS: Record<string, string> = {MANUAL: 'Registro manual', ATENCION_DIRECTA: 'Atención directa', FORMULARIO: 'Formulario Público'};
+export const EXIT_LABELS: Record<string, string> = {
+  SOL_ASUMIDA: 'Asumida', SOL_REDIRIGIDA: 'Redirigida', SOL_DEVUELTA: 'Devuelta a Distribución', SOL_DESCARTADA: 'Descartada',
+  CASO_CERRADO: 'Cierre confirmado', CIERRE_DEVUELTO: 'Término devuelto',
+};
+export const MODALITY_LABELS: Record<string, string> = {GENERAL: 'General', NNA: 'NNA'};
 
 export const STATE_LABELS: Record<string, string> = {
   NUEVA: 'Nueva', ENVIADA: 'Enviada', ASUMIDA: 'Asumida', DEVUELTA: 'Devuelta', DESCARTADA: 'Descartada', VINCULADA: 'Vinculada', ATENDIDA: 'Atendida',

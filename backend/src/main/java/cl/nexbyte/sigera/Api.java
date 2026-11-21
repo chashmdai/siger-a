@@ -31,8 +31,8 @@ public class Api {
         boolean logged=auth!=null&&auth.getPrincipal() instanceof SecurityConfig.Principal;result.put("authenticated",logged);result.put("environment",environment);
         if(logged){var a=access.actor(name(auth));var user=new LinkedHashMap<String,Object>();user.put("id",a.id());user.put("username",a.username());user.put("name",a.name());user.put("home_scope",a.homeScope());user.put("must_change",a.mustChange());
             user.put("grants",a.grants());user.put("substitutions",a.substitutions());user.put("can_search",a.readsRecords());
-            // G11: reportes agregados y su desglose por funcionario (la pantalla llega en G12).
-            user.put("can_report",Reports.canReport(a));user.put("can_report_people",Reports.canReportPeople(a));result.put("user",user);}
+            // G11/G12: reportes agregados, su desglose por funcionario y la exportacion de filas (cada uno con REPORTES en su alcance).
+            user.put("can_report",Reports.canReport(a));user.put("can_report_people",Reports.canReportPeople(a));user.put("can_export",Reports.canExport(a));result.put("user",user);}
         return result;
     }
     @PostMapping("/password") @Transactional public Map<String,String> password(Authentication auth,@RequestBody Map<String,Object> body,HttpServletRequest req){
@@ -77,6 +77,10 @@ public class Api {
     }
     /** Reportes (G11): filtros en el cuerpo JSON, con CSRF como todo POST; GET responde 405. */
     @PostMapping("/reports") public Map<String,Object> reports(Authentication a,@RequestBody Reports.Request b){return reports.report(access.actor(name(a)),b);}
+    /** CSV de REQ o Casos (G12, EXPORTACION): filtros en el cuerpo como en /reports; CSRF; GET responde 405. */
+    @PostMapping("/reports/export/{kind}") public ResponseEntity<byte[]> exportRows(Authentication a,@PathVariable String kind,@RequestBody Reports.Request b){
+        var x=reports.export(access.actor(name(a)),kind,b);return csv(x.filename(),x.bytes());
+    }
     @GetMapping("/intake/documents") public List<Map<String,Object>> draftDocuments(Authentication a){return documents.drafts(name(a));}
     @PostMapping(value="/intake/documents",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> stageDocument(Authentication a,@RequestParam long scope,@RequestParam UUID key,@RequestParam MultipartFile file)throws Exception{return documents.stage(name(a),scope,key,file);}
@@ -95,20 +99,29 @@ public class Api {
         var d=documents.download(access.actor(name(a)),id);
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).contentLength(d.size()).header("Cache-Control","no-store").header("X-Content-Type-Options","nosniff").header("Content-Security-Policy","sandbox").header("Content-Disposition",ContentDisposition.attachment().filename(d.name(),StandardCharsets.UTF_8).build().toString()).body(new FileSystemResource(d.path()));
     }
+    /**
+     * Resumen de bandejas (0.4.0; desde G12 exige EXPORTACION, Reports.canExport): folio, estado, ambito por su codigo y
+     * creacion, solo de lo que la cuenta lee en esa bandeja. Sobre 10000 filas: 409, nunca un archivo truncado.
+     */
     @GetMapping("/export") public ResponseEntity<byte[]> export(Authentication auth,@RequestParam String kind){
-        var a=access.actor(name(auth));if(!Set.of("REQ","CAS","COM").contains(kind))throw new Problem(400,"Reporte desconocido.");
+        var a=access.actor(name(auth));if(!Reports.canExport(a))Problem.denied();if(!Set.of("REQ","CAS","COM").contains(kind))throw new Problem(400,"Reporte desconocido.");
         String board=switch(kind){case "REQ"->"req";case "CAS"->"cas";default->"com";};
+        String scopeColumn=switch(kind){case "REQ"->"principal_scope";case "CAS"->"scope_id";default->"origin_scope";};
         var rows=new ArrayList<Map<String,Object>>();
         for(int page=0;;page++){
             var chunk=boards.page(a,board,page,100,"","all",null);
             Problem.require(((Number)chunk.get("total")).longValue()<=10000,"El resumen excede 10000 filas. Utiliza una extraccion acotada; no se entrega un archivo truncado.");
             @SuppressWarnings("unchecked") var items=(List<Map<String,Object>>)chunk.get("items");rows.addAll(items);
-            if(rows.size()>=((Number)chunk.get("total")).longValue())break;
+            if(items.isEmpty()||rows.size()>=((Number)chunk.get("total")).longValue())break;
         }
-        var out=new StringBuilder("\ufefffolio,estado,ambito,creado\r\n");
-        for(var row:rows)out.append(csv(s(row,"folio"))).append(',').append(csv(s(row,"state"))).append(',').append(csv(Objects.toString(row.getOrDefault("principal_scope",row.getOrDefault("scope_id",row.get("origin_scope"))),""))).append(',').append(csv(s(row,"created_ms"))).append("\r\n");
+        var codes=new HashMap<Long,String>();for(var x:db.rows("SELECT id,code FROM org_scope"))codes.put(n(x,"id"),s(x,"code"));
+        var out=new Csv(List.of("folio","estado","ambito","creado"));
+        for(var row:rows)out.row(Arrays.asList(s(row,"folio"),s(row,"state"),row.get(scopeColumn)==null?null:codes.get(((Number)row.get(scopeColumn)).longValue()),Csv.when(nullableId(row,"created_ms"))));
         db.audit(a.id(),"EXPORTACION","SISTEMA",0,null,"Resumen "+kind+"; filas autorizadas "+rows.size());
-        return ResponseEntity.ok().contentType(new MediaType("text","csv",StandardCharsets.UTF_8)).header("Cache-Control","no-store").header("Content-Disposition",ContentDisposition.attachment().filename("siger-"+kind.toLowerCase(Locale.ROOT)+".csv").build().toString()).body(out.toString().getBytes(StandardCharsets.UTF_8));
+        return csv("siger-"+kind.toLowerCase(Locale.ROOT)+".csv",out.bytes());
     }
-    private static String csv(String s){String safe=s.replace("\r"," ").replace("\n"," ");if(safe.matches("^[=+@\\t-].*"))safe="'"+safe;return "\""+safe.replace("\"","\"\"")+"\"";}
+    private static ResponseEntity<byte[]> csv(String filename,byte[] body){
+        return ResponseEntity.ok().contentType(new MediaType("text","csv",StandardCharsets.UTF_8)).header("Cache-Control","no-store").header("X-Content-Type-Options","nosniff")
+            .header("Content-Disposition",ContentDisposition.attachment().filename(filename).build().toString()).body(body);
+    }
 }

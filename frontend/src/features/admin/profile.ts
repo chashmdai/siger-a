@@ -98,16 +98,31 @@ export function periodProblems(profile: Profile, now: number) {
 /** Funciones marcadas en un ambito (vista movil: contador de cada tarjeta), sin las que esta vista no muestra (skip). */
 export const countIn = (profile: Profile, scope: number, skip: ReadonlySet<string> = new Set()) => [...profile.values()].filter(e => e.scope === scope && !skip.has(e.role)).length;
 
-/** Roles de ambito opcional (REPORTES, G11): la vista los ofrece como casilla institucional. */
+/** Roles de ambito opcional (REPORTES, REPORTES_PERSONAS, EXPORTACION): bloque propio del perfil, por alcance. */
 export const optionalRoles = (roles: RoleDef[]) => new Set(roles.filter(r => r.reach === 'OPCIONAL').map(r => r.code));
+export const REPORTES = 'REPORTES';
+/** Funciones que solo rigen con REPORTES en el mismo alcance (Roles.NEEDS_REPORTES en el servidor). */
+export const NEEDS_REPORTES = new Set(['REPORTES_PERSONAS', 'EXPORTACION']);
+
 /**
- * Funciones de ambito opcional concedidas en un ambito (por API): esta vista aun no las edita (G12), pero las muestra
- * y las reenvia tal cual, para que guardar el perfil no las revoque.
+ * Filas del bloque "Reportes y exportacion": siempre "Toda la institucion" (null) y luego cada ambito con alguna de esas
+ * funciones en el perfil o que el usuario agrego, en el orden de scopes (catalogo).
  */
-export const preserved = (profile: Profile, roles: RoleDef[]) => {
-  const optional = optionalRoles(roles);
-  return [...profile.values()].filter(e => e.scope != null && optional.has(e.role));
-};
+export function reportScopes(profile: Profile, roles: RoleDef[], added: ReadonlySet<number>, order: number[]): (number | null)[] {
+  const optional = optionalRoles(roles), used = new Set<number>(added);
+  for (const e of profile.values()) if (e.scope != null && optional.has(e.role)) used.add(e.scope);
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return [null, ...[...used].sort((a, b) => (rank.get(a) ?? order.length) - (rank.get(b) ?? order.length) || a - b)];
+}
+/** Una funcion dependiente no se marca sin REPORTES en el mismo alcance (si ya esta marcada, siempre se puede quitar). */
+export const needsReportes = (profile: Profile, role: string, scope: number | null) =>
+  NEEDS_REPORTES.has(role) && !profile.has(keyOf(role, scope)) && !profile.has(keyOf(REPORTES, scope));
+/** Como toggle, pero quitar REPORTES quita tambien las funciones que dependen de ella en ese alcance (el servidor las rechazaria). */
+export function toggleReport(profile: Profile, role: string, scope: number | null, on: boolean, live: Grant[]): Profile {
+  let next = toggle(profile, role, scope, on, live);
+  if (!on && role === REPORTES) for (const dependent of NEEDS_REPORTES) next = toggle(next, dependent, scope, false, live);
+  return next;
+}
 
 /** Texto comparable (lib/text.ts), reexportado para tests/profile.test.ts. */
 export {fold} from '../../lib/text.ts';

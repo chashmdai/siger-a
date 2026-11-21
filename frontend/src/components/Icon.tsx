@@ -50,6 +50,7 @@ const PATHS = {
   handoff: ['M4 12h11', 'M11 8l4 4-4 4', 'M19 5v14'],
   layers: ['M12 3 2 8l10 5 10-5z', 'M2 13l10 5 10-5'],
   heart: ['M12 20s-7.5-4.5-7.5-10.2A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7.5 2.8C19.5 15.5 12 20 12 20z'],
+  chart: ['M4 20V4', 'M4 20h16', 'M8 16v-5', 'M12 16V8', 'M16 16v-3', 'M20 16V6'],
   sparkle: ['M12 3v4', 'M12 17v4', 'M3 12h4', 'M17 12h4', 'M6 6l2.5 2.5', 'M15.5 15.5 18 18', 'M18 6l-2.5 2.5', 'M8.5 15.5 6 18'],
 } satisfies Record<string, string[]>;
 export type IconName = keyof typeof PATHS;

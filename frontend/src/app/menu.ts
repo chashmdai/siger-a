@@ -35,6 +35,10 @@ export function menuFor(user: User, unread: number): MenuGroup[] {
       [{path: 'cas', label: 'Casos', icon: 'briefcase'}, institutional || has(user, 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'LECTURA')],
       [{path: 'flujos', label: 'Colaboraciones y traslados', icon: 'flow'}, management || institutional],
     ]],
+    ['Reportes', [
+      // REPORTES vigente (can_report lo decide el servidor): cifras agregadas, sin datos de personas.
+      [{path: 'reportes', label: 'Reportes de gestión', icon: 'chart', hint: 'Volumen, tiempos y antigüedad en horas y días hábiles'}, user.can_report === true],
+    ]],
     ['Administración', [
       [{path: 'subrogancias', label: 'Subrogancias', icon: 'swap'}, has(user, 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'TI')],
       [{path: 'administracion', label: 'Usuarios y permisos', icon: 'shield'}, has(user, 'TI')],

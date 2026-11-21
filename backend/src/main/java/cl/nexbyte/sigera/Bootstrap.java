@@ -233,7 +233,8 @@ public class Bootstrap implements ApplicationRunner {
                 if(Personnel.HEADS.contains(role.code())&&!heads.add(scope))throw invalid("mas de una jefatura o direccion en "+scope);
             }
             if(own.stream().anyMatch(k->k.startsWith(Roles.TI+"@"))&&own.size()>1)throw invalid("TI es incompatible con cualquier otra funcion ("+u+")");
-            for(var k:own)if(k.startsWith(Roles.REPORTES_PERSONAS+"@")&&!own.contains(Roles.REPORTES+k.substring(Roles.REPORTES_PERSONAS.length())))throw invalid("REPORTES_PERSONAS exige REPORTES en el mismo alcance ("+u+")");
+            for(var k:own){String role=k.substring(0,k.indexOf('@'));
+                if(Roles.NEEDS_REPORTES.contains(role)&&!own.contains(Roles.REPORTES+k.substring(role.length())))throw invalid(role+" exige REPORTES en el mismo alcance ("+u+")");}
         }
 
         Path credentials=data.resolve("bootstrap-usuarios.csv");

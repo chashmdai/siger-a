@@ -478,3 +478,33 @@ dialog.modal.profile-modal { --modal-width: 980px; }
 /* Buscador sin coincidencias de persona (G08c): cada aviso en su linea. */
 .search-empty-note {display: block;}
 .search-empty-note + .search-empty-note {margin-top: .5rem;}
+
+/* Reportes de gestion (G12): cifras con su valor siempre en texto; barras solo de apoyo. */
+.report-form .actions { flex-wrap: wrap; }
+.report-splits { display: flex; flex-direction: column; justify-content: flex-end; gap: .25rem; }
+.report-splits label.check { margin-bottom: .5rem; }
+.report-filters { margin-top: .25rem; }
+.report-result { display: flex; flex-direction: column; gap: 0; margin-top: 1.5rem; }
+.report-result-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .75rem; margin: 0 0 1rem; font-size: 1.25rem; color: var(--ink-900); }
+.report-result-title small { font-size: .9rem; font-weight: 500; color: var(--ink-500); }
+.report-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .75rem; margin: 0 0 1.25rem; }
+.report-stats > div { padding: .85rem 1rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.report-stats dt { font-size: .82rem; font-weight: 650; color: var(--ink-600); }
+.report-stats dd { display: flex; flex-direction: column; margin: .2rem 0 0; font-size: 1.55rem; font-weight: 700; line-height: 1.15; color: var(--ink-900); font-variant-numeric: tabular-nums; }
+.report-stats dd small { margin-top: .2rem; font-size: .85rem; font-weight: 500; color: var(--ink-600); }
+.report-tallies { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem 1.75rem; }
+.report-tally h3 { margin: 0 0 .5rem; font-size: .95rem; color: var(--ink-800); }
+.report-tally ul { display: flex; flex-direction: column; gap: .45rem; margin: 0 0 1rem; padding: 0; list-style: none; }
+.report-tally li { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr); align-items: center; gap: .75rem; }
+.report-tally-label { font-size: .88rem; color: var(--ink-700); overflow-wrap: anywhere; }
+.report-bar { display: flex; align-items: center; gap: .6rem; min-width: 9rem; }
+.report-bar-track { flex: 1 1 auto; min-width: 3rem; height: .55rem; background: var(--surface-3); border-radius: 999px; overflow: hidden; }
+.report-bar-fill { display: block; height: 100%; background: var(--primary); border-radius: 999px; transition: width var(--base) var(--ease); }
+.report-bar-value { display: flex; flex-direction: column; flex: 0 0 auto; min-width: 4.5rem; font-weight: 650; color: var(--ink-900); text-align: right; white-space: nowrap; }
+.report-bar-value small { font-weight: 500; color: var(--ink-600); }
+@media (max-width: 640px) {
+  .report-tally li { grid-template-columns: 1fr; gap: .2rem; }
+  .report-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-stats dd { font-size: 1.3rem; }
+}
+@media (prefers-reduced-motion: reduce) { .report-bar-fill { transition: none; } }

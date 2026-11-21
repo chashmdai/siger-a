@@ -25,6 +25,10 @@ public final class Roles {
     public static final String REPORTES="REPORTES";
     /** Desglose por funcionario de los reportes; exige REPORTES en el mismo alcance (decision institucional). */
     public static final String REPORTES_PERSONAS="REPORTES_PERSONAS";
+    /** Exportacion de filas sin datos ciudadanos (G12): CSV de REQ y Casos de Reportes y resumen de bandejas; exige REPORTES en el mismo alcance. */
+    public static final String EXPORTACION="EXPORTACION";
+    /** Funciones que solo rigen con REPORTES vigente en el mismo alcance (G11, G12). */
+    public static final Set<String> NEEDS_REPORTES=Set.of(REPORTES_PERSONAS,EXPORTACION);
     public static final List<Role> ALL=List.of(
         new Role("ADMINISTRATIVO",Reach.AMBITO,"OPERATIVA"),
         new Role("PROFESIONAL",Reach.AMBITO,"OPERATIVA"),
@@ -36,6 +40,7 @@ public final class Roles {
         new Role("AUDITORIA",Reach.AMBITO,"CONTROL"),
         new Role(REPORTES,Reach.OPCIONAL,"REPORTES"),
         new Role(REPORTES_PERSONAS,Reach.OPCIONAL,"REPORTES"),
+        new Role(EXPORTACION,Reach.OPCIONAL,"REPORTES"),
         new Role(TI,Reach.INSTITUCIONAL,"ADMINISTRACION"));
     private static final Map<String,Role> BY_CODE=new LinkedHashMap<>();
     static { for(var r:ALL)BY_CODE.put(r.code(),r); }

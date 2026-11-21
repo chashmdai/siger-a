@@ -75,3 +75,15 @@ test('buscador: nunca para TI ni para una cuenta solo con Auditoría (ni sin fun
   // La pantalla usa el dato del servidor, no lo calcula: sin can_search no hay entrada aunque tenga funciones.
   assert.ok(!paths({...user({role: 'PROFESIONAL', scope: UPR_REQ}), can_search: false}).includes(SEARCH));
 });
+
+test('Reportes de gestión: solo con can_report (lo decide el servidor), también para una cuenta sin otras funciones', () => {
+  const reporter: User = {...user({role: 'REPORTES', scope: null}), can_report: true};
+  assert.deepEqual(paths(reporter), ['inicio', 'avisos', 'reportes']);
+  assert.ok(menuFor(reporter, 0).some(g => g.title === 'Reportes'));
+  // Una concesion que no rige (can_report falso) no muestra la entrada; TI nunca la tiene.
+  assert.ok(!paths(user({role: 'REPORTES', scope: null})).includes('reportes'));
+  assert.ok(!paths(user({role: 'TI', scope: null})).includes('reportes'));
+  // Con otras funciones, se suma al final de su menú, antes de Administración.
+  const mixed = paths({...user({role: 'PROFESIONAL', scope: UPR_REQ}), can_report: true});
+  assert.ok(mixed.indexOf('reportes') > mixed.indexOf('cas') && mixed.indexOf('reportes') < mixed.indexOf('subrogancias'));
+});
