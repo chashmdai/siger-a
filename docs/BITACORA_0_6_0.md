@@ -30,6 +30,7 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
 | Acceso de funcionarios por red (firewall, PFX institucional, `-AccesoRed`) | V4 | |
 | `estructura-inicial.json` real de produccion | V4 | |
 | Lectura del estado de `SMRRecepcion` por `Set-Integration.ps1` frente a D15 | H04 | |
+| Plan B (D13) con el salto directo (hallazgo de H02) | H04 | 2026-11-21: si al 12/12 la validacion todavia no se ha pausado ni cerrado (V1-V2), TI pausa su consumidor en Auditoria y operacion, se deja en Manual con el `Set-Integration.ps1` de la propia instancia 0.4.0 y se retira `validacionPullAutorizada` de su `instance.json`. Si ya esta cerrada y produccion no consume, no hay nada que hacer en la validacion: las entregas esperan en la cola del Formulario hasta completar V4. D13 y el paso B del plan actualizados (commit `plan 0.6.0: plan B con salto directo`). |
 
 ## Antecedentes para H00
 
