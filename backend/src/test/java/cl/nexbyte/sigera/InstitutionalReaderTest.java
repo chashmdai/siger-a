@@ -323,6 +323,9 @@ class InstitutionalReaderTest {
   attempts.put("INTEGRATION_PAUSE",new Attempt(null,1L,anyReason));
   attempts.put("INTEGRATION_RESUME",new Attempt(null,1L,anyReason));
   attempts.put("MAIL_RESOLVE",new Attempt(null,1L,Map.of("decision","DESCARTAR","reason","Intento")));
+  attempts.put("HOLIDAY_ADD",new Attempt(null,null,Map.of("day","2026-12-25","name","Navidad","reason","Intento")));
+  attempts.put("HOLIDAY_IMPORT",new Attempt(null,null,Map.of("lines","2026-12-25 Navidad","reason","Intento")));
+  attempts.put("HOLIDAY_REMOVE",new Attempt(null,1L,anyReason));
 
   return attempts;
  }

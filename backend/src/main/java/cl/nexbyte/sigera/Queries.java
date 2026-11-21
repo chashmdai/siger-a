@@ -226,8 +226,8 @@ public class Queries {
             +"(SELECT COUNT(*) FROM document_scan x WHERE x.document_id=d.id AND x.verdict='INFECTADO') AS detections FROM document_item d "
             +"LEFT JOIN document_scan s ON s.id=(SELECT MAX(y.id) FROM document_scan y WHERE y.document_id=d.id) WHERE d.quarantined=TRUE ORDER BY d.id"):List.of());
         result.put("document_policy",ti?documents.releasePolicy():Map.of());
-        // Auditoria: eventos de su alcance mas toda la administracion de cuentas, ambitos y subrogancias. TI: administracion y sistema.
-        String administrative=(auditor?"'USUARIO','AMBITO','SUBROGANCIA'":"")+(auditor&&ti?",":"")+(ti?"'USUARIO','SISTEMA','AMBITO','SUBROGANCIA'":"");
+        // Auditoria: eventos de su alcance mas toda la administracion de cuentas, ambitos, subrogancias y calendario habil. TI: administracion y sistema.
+        String administrative=(auditor?"'USUARIO','AMBITO','SUBROGANCIA','CALENDARIO'":"")+(auditor&&ti?",":"")+(ti?"'USUARIO','SISTEMA','AMBITO','SUBROGANCIA','CALENDARIO'":"");
         result.put("audit",db.rows("SELECT e.*,u.name AS actor FROM audit_event e JOIN staff u ON u.id=e.actor_id WHERE e.scope_id IN ("+BoardQueries.ids(BoardQueries.grants(a,"AUDITORIA"))+") OR e.resource_type IN ("+administrative+") ORDER BY e.id DESC LIMIT 300"));
         return result;
     }

@@ -39,7 +39,7 @@ class MySql84IntegrationTest {
             var db=ctx.getBean(Db.class);
             assertTrue(s(db.one("SELECT VERSION() AS v"),"v").startsWith("8.4."),"MySQL 8.4");
             for(int v=1;v<=10;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
-            assertEquals("12",ctx.getBean(Api.class).health().getBody().get("schema"));
+            assertEquals("13",ctx.getBean(Api.class).health().getBody().get("schema"));
 
             // Ciclo PULL/ACK con el productor sintetico: COM, originales, comprobante y ACK; respuesta perdida conciliada.
             var k=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();

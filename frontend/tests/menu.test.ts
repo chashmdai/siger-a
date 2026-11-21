@@ -19,7 +19,7 @@ const SEARCH = 'buscar';
 test('lector institucional puro: bandejas de expedientes, sin gestión, tareas ni administración', () => {
   const menu = paths(user(READER));
   assert.deepEqual(menu, ['inicio', SEARCH, 'avisos', 'atenciones', 'com', 'sol', 'req', 'cas', 'flujos']);
-  for (const hidden of ['tareas', 'atencion', 'nuevo', 'subrogancias', 'administracion', 'auditoria']) assert.ok(!menu.includes(hidden), hidden);
+  for (const hidden of ['tareas', 'atencion', 'nuevo', 'subrogancias', 'administracion', 'calendario', 'auditoria']) assert.ok(!menu.includes(hidden), hidden);
   assert.deepEqual(menuFor(user(READER), 0).map(g => g.title), ['Mi trabajo', 'Atención ciudadana', 'Gestión']);
 });
 
@@ -42,7 +42,7 @@ test('Dirección + consulta: mismo menú que la Dirección sola (ya ve todas las
 
 test('TI: solo administración, además de inicio y avisos', () => {
   const menu = paths(user({role: 'TI', scope: null}));
-  assert.deepEqual(menu, [...PERSONAL, 'subrogancias', 'administracion', 'auditoria']);
+  assert.deepEqual(menu, [...PERSONAL, 'subrogancias', 'administracion', 'calendario', 'auditoria']);
   assert.deepEqual(menuFor(user({role: 'TI', scope: null}), 0).map(g => g.title), ['Mi trabajo', 'Administración']);
 });
 

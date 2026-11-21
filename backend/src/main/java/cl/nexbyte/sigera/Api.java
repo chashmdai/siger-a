@@ -19,11 +19,11 @@ import static cl.nexbyte.sigera.Db.*;
 public class Api {
     final Attention attention;final BoardQueries boards;volatile boolean ready;
     final Access access;final Workflow flow;final Queries queries;final Documents documents;final Db db;final PasswordEncoder passwords;
-    final Integrations integrations;final PersonSearch search;final String environment;final String releaseVersion;
-    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,
+    final Integrations integrations;final PersonSearch search;final Holidays holidays;final String environment;final String releaseVersion;
+    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,
                @org.springframework.beans.factory.annotation.Value("${siger.environment-label:}")String environment,BuildProperties buildProperties){
         this.attention=attention;this.access=access;this.flow=flow;this.queries=queries;this.documents=documents;this.db=db;this.passwords=passwords;this.boards=boards;
-        this.integrations=integrations;this.search=search;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
+        this.integrations=integrations;this.search=search;this.holidays=holidays;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
     }
     private String name(Authentication auth){if(auth==null||!(auth.getPrincipal() instanceof SecurityConfig.Principal))throw new Problem(401,"Inicia sesion.");return auth.getName();}
     @GetMapping("/session") public Map<String,Object> session(Authentication auth,CsrfToken csrf){
@@ -78,6 +78,8 @@ public class Api {
     @DeleteMapping("/intake/documents/{key}") public ResponseEntity<Void> discardDocument(Authentication a,@PathVariable UUID key)throws Exception{documents.discard(name(a),key);return ResponseEntity.noContent().build();}
     @GetMapping("/workspace") public Map<String,Object> workspace(Authentication a){return queries.workspace(access.actor(name(a)));}
     @GetMapping("/detail/{kind}/{id}") public Map<String,Object> detail(Authentication a,@PathVariable String kind,@PathVariable long id){return queries.detail(access.actor(name(a)),kind,id);}
+    /** Calendario habil (G09): feriados para TI; las demas cuentas reciben 403. */
+    @GetMapping("/calendar") public Map<String,Object> calendar(Authentication a){return holidays.calendar(access.actor(name(a)));}
     @GetMapping("/administration") public Map<String,Object> administration(Authentication a){return queries.administration(access.actor(name(a)));}
     @PostMapping("/commands") public Workflow.Result command(Authentication a,@RequestBody Workflow.Command command){return flow.run(name(a),command);}
     @PostMapping(value="/documents",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)

@@ -14,8 +14,8 @@ import static cl.nexbyte.sigera.Problem.require;
 @Service
 public class Personnel {
     private final Db db;private final Access access;private final PasswordEncoder passwords;private final Integrations integrations;private final MailOutbox mail;
-    private final Documents documents;
-    public Personnel(Db db,Access access,PasswordEncoder passwords,Integrations integrations,MailOutbox mail,Documents documents){this.db=db;this.access=access;this.passwords=passwords;this.integrations=integrations;this.mail=mail;this.documents=documents;}
+    private final Documents documents;private final Holidays holidays;
+    public Personnel(Db db,Access access,PasswordEncoder passwords,Integrations integrations,MailOutbox mail,Documents documents,Holidays holidays){this.db=db;this.access=access;this.passwords=passwords;this.integrations=integrations;this.mail=mail;this.documents=documents;this.holidays=holidays;}
     public Workflow.Result run(Actor a,String type,long id,Long revision,Input in){
         switch(type){
             case "STAFF_CREATE" -> {
@@ -138,6 +138,8 @@ public class Personnel {
             // Operacion de integraciones: TI pausa o reanuda y decide sobre correos ambiguos. No da acceso a expedientes.
             case "INTEGRATION_PAUSE","INTEGRATION_RESUME" -> {return integrations.control(a,id,revision,type.equals("INTEGRATION_PAUSE"),in.text("reason",1000,true));}
             case "MAIL_RESOLVE" -> {return mail.resolve(a,id,in.choice("decision","REENVIAR","DESCARTAR"),in.reason());}
+            // Calendario habil (G09): feriados nacionales y regionales, con fundamento; retirar borra y deja la historia en auditoria.
+            case "HOLIDAY_ADD","HOLIDAY_IMPORT","HOLIDAY_REMOVE" -> {return holidays.run(a,type,id,in);}
             default -> throw new Problem(400,"Operacion de administracion desconocida.");
         }
     }

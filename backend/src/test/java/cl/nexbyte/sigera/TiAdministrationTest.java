@@ -76,6 +76,9 @@ class TiAdministrationTest {
         admin.put("INTEGRATION_PAUSE",new Object[]{2L,0L,Map.of("reason","x")});
         admin.put("INTEGRATION_RESUME",new Object[]{2L,0L,Map.of("reason","x")});
         admin.put("MAIL_RESOLVE",new Object[]{1L,null,Map.of("decision","DESCARTAR","reason","x")});
+        admin.put("HOLIDAY_ADD",new Object[]{null,null,Map.of("day","2026-12-25","name","Navidad","reason","x")});
+        admin.put("HOLIDAY_IMPORT",new Object[]{null,null,Map.of("lines","2026-12-25 Navidad","reason","x")});
+        admin.put("HOLIDAY_REMOVE",new Object[]{1L,null,Map.of("reason","x")});
         for(String who:List.of("gabinete","direccion.upd","auditoria","distribucion"))
             for(var e:admin.entrySet()){var v=e.getValue();@SuppressWarnings("unchecked") var data=(Map<String,Object>)v[2];
                 assertEquals(403,status(who,e.getKey(),(Long)v[0],(Long)v[1],data),who+" "+e.getKey());}

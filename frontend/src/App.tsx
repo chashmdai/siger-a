@@ -14,6 +14,8 @@ import {CommandPalette} from './app/CommandPalette';
 import Detail from './features/detail/Detail';
 import Administration from './features/admin/Administration';
 import Substitutions from './features/admin/Substitutions';
+import Calendar from './features/admin/Calendar';
+import {has} from './lib/access';
 import Dashboard from './features/dashboard/Dashboard';
 import WorkspaceList from './features/worklist/WorkspaceList';
 import Intake from './features/intake/Intake';
@@ -169,6 +171,7 @@ export default function App() {
     case 'buscar': content = user.can_search ? <Search ctx={ctx}/> : <Dashboard ctx={ctx} version={tick}/>; break;
     case 'nuevo': content = <Intake ctx={ctx} completed={r => completed(r)}/>; break;
     case 'subrogancias': content = <Substitutions ctx={ctx} workspace={workspace}/>; break;
+    case 'calendario': content = has(user, 'TI') ? <Calendar key={tick} ctx={ctx}/> : <Dashboard ctx={ctx} version={tick}/>; break;
     case 'administracion': case 'auditoria': content = <Administration key={view + tick} ctx={ctx} auditOnly={view === 'auditoria'}/>; break;
     default: content = <Dashboard ctx={ctx} version={tick}/>;
   }

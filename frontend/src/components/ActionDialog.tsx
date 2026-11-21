@@ -13,7 +13,7 @@ import {initialChoice, payloadFor} from '../lib/destination';
 export type Option = {value: string | number; label: string; parent?: string | number};
 export type Field = {
   key: string; label: string;
-  type?: 'text' | 'textarea' | 'select' | 'datetime-local' | 'checkbox' | 'password' | 'destination';
+  type?: 'text' | 'textarea' | 'select' | 'date' | 'datetime-local' | 'checkbox' | 'password' | 'destination';
   required?: boolean; options?: Option[];
   /** Filtra las opciones por el valor elegido en otro campo (Option.parent). */
   dependsOn?: string;
@@ -78,7 +78,8 @@ export function ActionDialog({action, close, completed}: {action: Action; close:
     if (f.type === 'select') {
       const options = f.options?.filter(o => !f.dependsOn || String(o.parent) === String(data[f.dependsOn] ?? '')) ?? [];
       return <select required={f.required} value={String(data[f.key] ?? '')} onChange={e => selectChanged(f, e.target.value)}>
-        <option value="">{f.dependsOn && !data[f.dependsOn] ? 'Elige primero el campo anterior' : f.required ? 'Seleccionar' : 'Sin especificar'}</option>
+        {/* Si una opcion ya usa el valor vacio (por ejemplo "Nacional"), no se agrega el marcador. */}
+        {!options.some(o => o.value === '') && <option value="">{f.dependsOn && !data[f.dependsOn] ? 'Elige primero el campo anterior' : f.required ? 'Seleccionar' : 'Sin especificar'}</option>}
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>;
     }
