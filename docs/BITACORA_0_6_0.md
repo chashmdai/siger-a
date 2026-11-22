@@ -18,6 +18,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado, con commit y push), BLOQUEADO
 | H06a | Build de entrega en Windows | CERRADO |
 | H06b | Ensayo en Windows y etiquetas | BLOQUEADO |
 | H06c | Correccion para Windows | CERRADO |
+| H06r | Rotacion de la cuenta de servicio con re-cifrado de secretos | ABIERTO |
 | H06d | Build de entrega | ABIERTO |
 | H06e | Ensayo y etiquetas | ABIERTO |
 
@@ -58,6 +59,14 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
 - No existe todavia una instancia de produccion en `D:`.
 - Restriccion (D15): solo NEW-SIGER dentro de `D:`; no inspeccionar ni modificar otros volumenes ni el sistema legado.
 
+## Datos de la VM: cuenta de servicio (responsable, 2026-11-22, solo lectura, sin cambios)
+
+Origen del gate H06r (agregado por decision del responsable el 2026-11-22, entre H06c y H06d).
+
+- La contrasena de `DDN-SIGER\svc-siger` es desconocida: `runas` da 1326. `net accounts`: umbral de bloqueo Nunca. `net user svc-siger`: activa, la cuenta y la contrasena no expiran, ultimo cambio de contrasena 09/11/2026 16:36, "Contrasena requerida: No". Servicios registrados el 09/11/2026 17:21.
+- Hay una PowerShell abierta como `svc-siger`, con su perfil cargado, que descifra `secrets.clixml` (seis secretos: Owner, App, Migrator, Backup, Tls y Trust), `formulario-pull-token.clixml` y `formulario-ack-identity.clixml` (AckId coincide, clave privada presente). La sesion se mantiene abierta y los servicios intactos hasta tener el respaldo verificado.
+- `SIGER` y `SIGERMySQL` corren como `.\svc-siger`. `Uninstall-Service.ps1` seguido de `Install-Service.ps1` exige esa contrasena: V3 y V4 no se pueden ejecutar tal como estan.
+
 ## Antecedentes por gate (revision del codigo al planificar, sin ejecutar)
 
 - H01: `Import-SecretPackage.ps1:41-42` rechaza si ya existe algun `formulario-*`, y el paquete exige el bloque del Formulario: no sirve para agregar Graph a la validacion ni a produccion. `Export-SecretPackage.ps1` lee SMR (D15). `Environment.ps1` (`Get-GraphMailConfig`) espera `correo-graph.json` (`mode`, `tenant`, `client`, `sender`, `allowedDomains`, `link`) y `graph-client-secret.clixml`. `GraphMail` valida tenant y cliente como GUID y el secreto de 20 a 512 caracteres.
@@ -91,6 +100,7 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
   - **pendiente obligatorio**: `Estado.ps1` (sin el parche de H06b) y `Test-Service.ps1 -VentanaAutorizada -IncluirMySql` completo, como la cuenta de servicio del ensayo y con los scripts del paquete de H06d; tambien `sc.exe sdshow SIGER` y `SIGERMySQL` tras `Install-Service.ps1` (CR solo en SY, BA y el SID de la cuenta) y los eventos "caida simulada solicitada" y "termino inesperadamente". Si algo de esto falla, H06e queda BLOQUEADO;
   - la contrasena de `siger-ensayo` de H06b se perdio: la cuenta se elimina y se vuelve a crear, y la contrasena la define el responsable al crearla, en una consola elevada. Claude Code no la genera ni la guarda. Con la cuenta nueva (otro SID y otro DPAPI) la validacion y la produccion de ensayo se inicializan de nuevo con ella;
   - `Install-Service.ps1` y `runas` los ejecuta el responsable en una consola interactiva: desde la consola de Claude Code, Windows PowerShell 5.1 no abre el cuadro de credenciales y `-ServiceCredential` llega nulo (H06c).
+  - (agregado del responsable al abrir H06r, 2026-11-22) el paso V0 completo de `DESPLIEGUE_VM.md` antes de V1, sobre un paquete exportado y verificado como en P0 (ver la fila H06e del plan).
 
 ## Pendientes posteriores a 0.6.0
 
