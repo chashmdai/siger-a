@@ -301,7 +301,7 @@ function Set-SigerServiceEnvironment($Settings,$Secrets) {
     Set-OriginReleaseEnvironment $Settings
 }
 
-# --- Liberacion por analisis en origen (D17 de docs/PLAN_0_6_0.md, H04c; modo de emergencia) -----------------------
+# --- Liberacion por analisis en origen (D17 de docs/PLAN_0_6_0.md, H04c y H05; modo de emergencia) -----------------
 # config\liberacion-origen.json lo escribe Set-OriginRelease.ps1; SIGER lo lee y lo valida al arrancar (OriginRelease.java,
 # que falla cerrado). La ruta solo la reciben los procesos que registran entregas: el servicio (Set-SigerServiceEnvironment)
 # y el ciclo manual (Invoke-FormularioPull.ps1 sin -SoloComprobar). Nunca Migrate.ps1, Recover-Ti.ps1, Test-GraphMail.ps1
@@ -310,29 +310,16 @@ function Set-OriginReleaseEnvironment($Settings){
     $file=Join-Path $Settings.root 'config\liberacion-origen.json'
     $env:SIGER_ORIGIN_RELEASE_FILE=if(Test-Path -LiteralPath $file -PathType Leaf){$file}else{$null}
 }
-# Zona de Chile continental: id de Windows y, si no existe (PowerShell en Linux), el de IANA.
-function Get-ChileTimeZone {
-    foreach($id in @('Pacific SA Standard Time','America/Santiago')){try{return [TimeZoneInfo]::FindSystemTimeZoneById($id)}catch{}}
-    throw 'No se encontro la zona horaria de Chile en este equipo.'
-}
-# Registro del modo: -Hasta es el ultimo dia (aaaa-mm-dd, Chile) en que rige, entre hoy y 90 dias despues de hoy; el
-# termino ("until") es las 00:00 de Chile del dia siguiente, en UTC. Motivo de 1 a 500 caracteres en una sola linea.
-# Las mismas reglas las aplica OriginRelease.java al arrancar (lista cerrada de campos).
-function New-OriginReleaseRecord([string]$Hasta,[string]$Motivo,[string]$Account,[datetime]$NowUtc){
-    if(([string]$Hasta) -notmatch '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'){throw 'Indica -Hasta como aaaa-mm-dd (ultimo dia en que rige el modo, hora de Chile).'}
-    $last=[datetime]::MinValue
-    if(-not [datetime]::TryParseExact($Hasta,'yyyy-MM-dd',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$last)){throw "Fecha -Hasta invalida ('$Hasta')."}
-    $zone=Get-ChileTimeZone
+# Registro del modo (version 2, sin fecha de termino desde H05: rige hasta configurar un motor admitido o desactivarlo).
+# Motivo de 1 a 500 caracteres en una sola linea. Las mismas reglas las aplica OriginRelease.java al arrancar (lista
+# cerrada de campos: kind, version, id, activatedUtc, account y reason; un campo "until" deja el modo sin efecto).
+function New-OriginReleaseRecord([string]$Motivo,[string]$Account,[datetime]$NowUtc){
     $now=[datetime]::SpecifyKind($NowUtc,[DateTimeKind]::Utc)
-    $today=[TimeZoneInfo]::ConvertTimeFromUtc($now,$zone).Date
-    if($last -lt $today){throw 'La fecha -Hasta ya paso: el modo debe regir al menos hasta el fin de hoy.'}
-    if($last -gt $today.AddDays(90)){throw 'El modo de emergencia rige a lo mas 90 dias: indica una fecha -Hasta dentro de los 90 dias siguientes a hoy.'}
     $reason=([string]$Motivo).Trim()
     if($reason.Length -lt 1 -or $reason.Length -gt 500 -or $reason -match '[\x00-\x1F\x7F]'){throw 'Indica -Motivo (1 a 500 caracteres, una sola linea): decision del responsable y su constancia.'}
     $account=([string]$Account).Trim()
     if($account.Length -lt 1 -or $account.Length -gt 200 -or $account -match '[\x00-\x1F\x7F]'){throw 'Cuenta de Windows no valida.'}
-    $until=[TimeZoneInfo]::ConvertTimeToUtc([datetime]::SpecifyKind($last.AddDays(1),[DateTimeKind]::Unspecified),$zone)
-    return [PSCustomObject][ordered]@{kind='LIBERACION_ORIGEN';version=1;id=[guid]::NewGuid().ToString();activatedUtc=$now.ToString('o');until=$until.ToString('o');account=$account;reason=$reason}
+    return [PSCustomObject][ordered]@{kind='LIBERACION_ORIGEN';version=2;id=[guid]::NewGuid().ToString();activatedUtc=$now.ToString('o');account=$account;reason=$reason}
 }
 
 # --- Eliminacion de la validacion cerrada (Remove-Validation.ps1, D12 de docs/PLAN_0_6_0.md) ------------------------

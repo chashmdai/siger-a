@@ -33,8 +33,7 @@ queda abierto al publico; antes de esa fecha el consumidor de la validacion se p
 
 ## 1. Antes de actualizar (instancia 0.4.0 en marcha)
 
-1. Ejecutar las cuatro consultas de solo lectura de `docs/DESPLIEGUE_VM.md` ("Actualizacion a 0.5.0: consultas
-   previas") y guardar el resultado en un archivo privado. Si la consulta 4 (usuarios con mayusculas) devuelve filas,
+1. Ejecutar las cuatro consultas de solo lectura del anexo ("Anexo: consultas previas") y guardar el resultado en un archivo privado. Si la consulta 4 (usuarios con mayusculas) devuelve filas,
    **no actualizar** e informarlo al responsable del proyecto.
 2. Anotar las cifras de referencia, con la misma consola `mysql`:
 
@@ -172,3 +171,42 @@ No se ha ejecutado aun en la VM: esta actualizacion, `Update.ps1`/`Restore-Check
 PULL/ACK real si esta verificado en la validacion 0.4.0 (2026-11-21). La
 actualizacion 0.4.0 -> 0.5.0 se probo con un volcado sintetico en MySQL 8.4 (`MySql84UpgradeTest`, gate G13). Un
 fallo se informa con el paso, el mensaje exacto y las cifras, sin datos personales ni secretos.
+
+## Anexo: consultas previas (antes de actualizar)
+
+Trasladado desde `docs/DESPLIEGUE_VM.md` en H05 de 0.6.0; se conserva como referencia, igual que el resto de este documento.
+
+Desde 0.5.0 la Coordinacion regional se registra como `DIRECCION` de su sede (D7). Al primer arranque con 0.5.0, una rutina auditada (`sistema:actualizacion`, marcador `COORDINACION_REGIONAL_050`) convierte cada `JEFATURA` vigente o programada en una sede. Si la sede ya tiene una `DIRECCION` superpuesta, esa `JEFATURA` no se convierte y Administracion muestra el aviso `JEFATURA_EN_SEDE`. Para saber de antemano que hara la rutina, y si hay cuentas que no podrian ingresar, ejecuta en la instancia 0.4.0 (esquema V10) estas consultas de solo lectura con el cliente `mysql` de la VM, sobre el esquema `siger_a_*` de la instancia. No modifica nada.
+
+```sql
+-- 1) JEFATURA vigentes o programadas en sedes regionales: se convertiran en DIRECCION con el mismo periodo.
+--    superpuesta=1: hay una DIRECCION que se superpone en la misma sede; no se convertira (aviso JEFATURA_EN_SEDE).
+SELECT s.code AS sede, u.username, g.id AS concesion, FROM_UNIXTIME(g.valid_from/1000) AS desde,
+       IF(g.valid_until IS NULL,NULL,FROM_UNIXTIME(g.valid_until/1000)) AS hasta,
+       EXISTS(SELECT 1 FROM role_assignment d WHERE d.scope_id=g.scope_id AND d.role_code='DIRECCION' AND d.revoked_at IS NULL
+              AND d.valid_from<COALESCE(g.valid_until,9223372036854775807) AND (d.valid_until IS NULL OR d.valid_until>g.valid_from)) AS superpuesta
+FROM role_assignment g JOIN org_scope s ON s.id=g.scope_id JOIN staff u ON u.id=g.user_id
+WHERE g.role_code='JEFATURA' AND s.regional=TRUE AND g.revoked_at IS NULL
+  AND (g.valid_until IS NULL OR g.valid_until>UNIX_TIMESTAMP()*1000)
+ORDER BY s.code, g.id;
+-- 2) Subrogancias vivas (no terminadas ni vencidas) sobre esas concesiones: pasaran a la nueva DIRECCION.
+SELECT s.code AS sede, x.id AS subrogancia, t.username AS titular, b.username AS subrogante,
+       FROM_UNIXTIME(x.from_ms/1000) AS desde, FROM_UNIXTIME(x.until_ms/1000) AS hasta
+FROM substitution_scope ss JOIN substitution x ON x.id=ss.substitution_id JOIN substitution_designation d ON d.id=x.designation_id
+JOIN role_assignment g ON g.id=ss.grant_id JOIN org_scope s ON s.id=g.scope_id
+JOIN staff t ON t.id=d.titular_id JOIN staff b ON b.id=d.substitute_id
+WHERE g.role_code='JEFATURA' AND s.regional=TRUE AND g.revoked_at IS NULL AND x.ended_ms IS NULL AND x.until_ms>UNIX_TIMESTAMP()*1000
+ORDER BY s.code, x.id;
+-- 3) Sedes existentes: quedaran ACTIVA (o CERRADA si estan deshabilitadas) y sin region; TI la registra despues.
+SELECT code, name, site_code, enabled FROM org_scope WHERE regional=TRUE ORDER BY code;
+-- 4) Cuentas con mayusculas en el usuario. Desde 0.5.0 el ingreso pasa el usuario a minusculas y exige coincidencia
+--    exacta (en MySQL la comparacion no distingue mayusculas): estas cuentas no podrian ingresar. SIGER siempre las crea
+--    en minusculas, asi que el resultado esperado es vacio; una fila solo puede venir de SQL manual.
+SELECT id, username, enabled, technical FROM staff
+WHERE CAST(username AS BINARY) <> CAST(LOWER(username) AS BINARY)
+ORDER BY id;
+```
+
+Si la consulta 4 devuelve filas, no actualizar: informarlo al responsable del proyecto (no hay comando para renombrar una cuenta).
+
+Despues de actualizar, TI registra la region de cada sede (panel Estructura, `SCOPE_UPDATE`) y resuelve en el perfil de cada cuenta las `JEFATURA` que hayan quedado sin convertir. La secuencia completa de la actualizacion (respaldo, ensayo de restauracion obligatorio, `Update.ps1` y tareas posteriores) esta en las secciones anteriores.

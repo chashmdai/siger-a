@@ -381,35 +381,36 @@ $probeCases=@(
 foreach($case in $probeCases){if((Test-GraphProbeAccredited $case.p $case.j $probeNow) -ne $case.ok){throw ('Prueba de Graph para activar el correo: caso '+[array]::IndexOf($probeCases,$case)+' inesperado.')}}
 $setAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Set-Integration.ps1'),[ref]$null,[ref]$null)
 if(@($setAst.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'Test-GraphProbeAccredited'},$true)).Count -ne 1){throw 'Set-Integration.ps1 debe exigir Test-GraphProbeAccredited antes de activar el correo.'}
-# --- Liberacion por analisis en origen (Set-OriginRelease.ps1, D17, H04c) --------------------------------------------
-# Termino: fin del dia -Hasta en Chile (00:00 del dia siguiente, en UTC), entre hoy y 90 dias despues; motivo en una linea.
+# --- Liberacion por analisis en origen (Set-OriginRelease.ps1, D17, H04c y H05) --------------------------------------
+# Sin fecha de termino (H05): el registro es version 2, sin "until", y Set-OriginRelease.ps1 no tiene -Hasta. Motivo en
+# una linea de 1 a 500 caracteres; cuenta de 1 a 200 sin caracteres de control.
 $originNow=[datetime]::new(2026,12,4,12,0,0,[DateTimeKind]::Utc)
 $originCases=@(
-    @{h='2026-12-04';m='Decision del responsable';now=$originNow;until='2026-12-05T03:00:00.0000000Z'},
-    @{h='2027-03-04';m='Decision del responsable';now=$originNow;until='2027-03-05T03:00:00.0000000Z'},
-    @{h='2026-12-04';m='Decision del responsable';now=[datetime]::new(2026,12,5,2,30,0,[DateTimeKind]::Utc);until='2026-12-05T03:00:00.0000000Z'},
-    @{h='2027-04-05';m='Cambio de horario';now=[datetime]::new(2027,1,20,12,0,0,[DateTimeKind]::Utc);until='2027-04-06T04:00:00.0000000Z'},
-    @{h='2027-03-05';m='Decision del responsable';now=$originNow;until=$null},
-    @{h='2026-12-03';m='Decision del responsable';now=$originNow;until=$null},
-    @{h='2026-12-03';m='Decision del responsable';now=[datetime]::new(2026,12,4,2,30,0,[DateTimeKind]::Utc);until='2026-12-04T03:00:00.0000000Z'},
-    @{h='04-12-2026';m='Decision del responsable';now=$originNow;until=$null},
-    @{h='2027-02-30';m='Decision del responsable';now=$originNow;until=$null},
-    @{h='';m='Decision del responsable';now=$originNow;until=$null},
-    @{h='2026-12-10';m='';now=$originNow;until=$null},
-    @{h='2026-12-10';m='   ';now=$originNow;until=$null},
-    @{h='2026-12-10';m=('x'*501);now=$originNow;until=$null},
-    @{h='2026-12-10';m=('x'*500);now=$originNow;until='2026-12-11T03:00:00.0000000Z'},
-    @{h='2026-12-10';m=('linea'+[char]10+'otra');now=$originNow;until=$null})
+    @{m='Decision del responsable';a='DDN-SIGER\svc-siger';now=$originNow;ok=$true},
+    @{m='  Decision con espacios  ';a='DDN-SIGER\svc-siger';now=$originNow;ok=$true;r='Decision con espacios'},
+    @{m='Decision del responsable';a='DDN-SIGER\svc-siger';now=[datetime]::new(2036,12,4,12,0,0,[DateTimeKind]::Utc);ok=$true},
+    @{m=('x'*500);a='DDN-SIGER\svc-siger';now=$originNow;ok=$true},
+    @{m='';a='DDN-SIGER\svc-siger';now=$originNow;ok=$false},
+    @{m='   ';a='DDN-SIGER\svc-siger';now=$originNow;ok=$false},
+    @{m=('x'*501);a='DDN-SIGER\svc-siger';now=$originNow;ok=$false},
+    @{m=('linea'+[char]10+'otra');a='DDN-SIGER\svc-siger';now=$originNow;ok=$false},
+    @{m=('tab'+[char]9+'otra');a='DDN-SIGER\svc-siger';now=$originNow;ok=$false},
+    @{m='Decision del responsable';a='';now=$originNow;ok=$false},
+    @{m='Decision del responsable';a=('x'*201);now=$originNow;ok=$false},
+    @{m='Decision del responsable';a=('DDN'+[char]10+'svc');now=$originNow;ok=$false})
 foreach($case in $originCases){
-    $got=$null;try{$got=New-OriginReleaseRecord $case.h $case.m 'DDN-SIGER\svc-siger' $case.now}catch{$got=$null}
-    $gotUntil=if($got){[string]$got.until}else{$null}
-    if($gotUntil -cne $case.until){throw ('Liberacion por analisis en origen: caso '+[array]::IndexOf($originCases,$case)+' dio '+$(if($gotUntil){$gotUntil}else{'rechazo'})+'.')}
+    $got=$null;try{$got=New-OriginReleaseRecord $case.m $case.a $case.now}catch{$got=$null}
+    if([bool]$got -ne $case.ok){throw ('Liberacion por analisis en origen: caso '+[array]::IndexOf($originCases,$case)+' dio '+$(if($got){'registro'}else{'rechazo'})+'.')}
     if($got){
         $names=@($got.PSObject.Properties|ForEach-Object{$_.Name})
-        if(($names -join ',') -cne 'kind,version,id,activatedUtc,until,account,reason' -or $got.kind -cne 'LIBERACION_ORIGEN' -or $got.version -ne 1 -or $got.account -cne 'DDN-SIGER\svc-siger' -or $got.activatedUtc -cne $case.now.ToString('o')){throw 'Liberacion por analisis en origen: registro con otros campos o valores.'}
+        $reason=if($case.ContainsKey('r')){$case.r}else{$case.m}
+        if(($names -join ',') -cne 'kind,version,id,activatedUtc,account,reason' -or $got.kind -cne 'LIBERACION_ORIGEN' -or $got.version -ne 2 -or $got.account -cne $case.a -or $got.reason -cne $reason -or $got.activatedUtc -cne $case.now.ToString('o')){throw 'Liberacion por analisis en origen: registro con otros campos o valores.'}
         $parsed=[guid]::Empty;if(-not [guid]::TryParse([string]$got.id,[ref]$parsed)){throw 'Liberacion por analisis en origen: identificador no es GUID.'}
     }
 }
+$originAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Set-OriginRelease.ps1'),[ref]$null,[ref]$null)
+if((@($originAst.ParamBlock.Parameters|ForEach-Object{$_.Name.VariablePath.UserPath}) -join ',') -cne 'Root,Motivo,Desactivar'){throw 'Set-OriginRelease.ps1: los parametros deben ser -Root, -Motivo y -Desactivar (sin fecha de termino).'}
+if([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Set-OriginRelease.ps1')) -match '(?i)\$Hasta|\buntil\b'){throw 'Set-OriginRelease.ps1 no debe usar -Hasta ni un termino (until).'}
 # La ruta del archivo solo llega a los procesos que registran entregas (servicio y ciclo manual sin -SoloComprobar).
 $originDir=Join-Path ([IO.Path]::GetTempPath()) ('siger-origen-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path (Join-Path $originDir 'config')|Out-Null
@@ -559,7 +560,7 @@ foreach($bad in @("-File 'D:\x\scripts\Remove-Validation.ps1' -Ensayos @()","-Fi
 }
 try{
     $orders=New-Object System.Collections.Generic.List[object]
-    foreach($guide in @(@('docs','DESPLIEGUE_VM.md'),@('docs','INSTALACION_VM.md'),@('README.md'),@('CLAUDE.md'))){
+    foreach($guide in @(@('docs','DESPLIEGUE_VM.md'),@('docs','INSTALACION_VM.md'),@('docs','PRUEBAS_MANUALES_0_6_0.md'),@('README.md'),@('CLAUDE.md'))){
         $path=[IO.Path]::Combine([string[]](@($project)+$guide))
         if(-not [IO.File]::Exists($path)){throw "Falta la guia $($guide -join '/'): las ordenes documentadas se comprueban con -File."}
         $n=0;foreach($line in [IO.File]::ReadAllLines($path)){$n++;if($line -match '(?i)powershell\.exe\b.*\s-File\s'){$orders.Add([PSCustomObject]@{Source="$($guide -join '/'):$n";Text=$line})}}
@@ -615,7 +616,11 @@ try{
     if(-not $b -or ((ConvertFrom-DomainListArgument ([string]$b.DominiosPermitidos)) -join '|') -cne 'defensorianinez.cl|otro.gob.cl'){throw "Invocacion con -File: -DominiosPermitidos 'a','b' desde PowerShell no llego como dos dominios."}
     $is=Get-ParamStub 'Install-Service.ps1'
     if(($is.Credentials -join ',') -cne 'ServiceCredential'){throw 'Install-Service.ps1: no se reconocio el PSCredential que se pide por consola.'}
-    $controlCount=$controls.Count+1
+    # D17 sin fecha de termino (H05): una orden con -Hasta ya no enlaza; con -Motivo o -Desactivar si.
+    $or=Get-ParamStub 'Set-OriginRelease.ps1'
+    if(Invoke-FileStub $or @('-Root','D:\SIGER','-Hasta','2027-03-03','-Motivo','Prueba de enlace')){throw 'Invocacion con -File: Set-OriginRelease.ps1 acepto -Hasta.'}
+    if(-not (Invoke-FileStub $or @('-Root','D:\SIGER','-Motivo','Prueba de enlace')) -or -not (Invoke-FileStub $or @('-Root','D:\SIGER','-Desactivar'))){throw "Invocacion con -File: Set-OriginRelease.ps1 no enlaza con -Motivo o -Desactivar ($script:lastFileError)."}
+    $controlCount=$controls.Count+3
 }finally{if([IO.Directory]::Exists($stubDir)){[IO.Directory]::Delete($stubDir,$true)}}
 $invocationSummary="liberacion por analisis en origen ($($originCases.Count) casos y entrega solo al servicio y al ciclo manual); proceso propio por el servicio ($($serviceCases.Count+$appCases.Count) casos); prueba de Graph para activar el correo ($($probeCases.Count) casos); invocacion con -File ($($orders.Count) ordenes documentadas en $invoked procesos, $($pathListCases.Count+$domainListCases.Count) casos de listas y $controlCount controles)"
 Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf, sin Remove-Item); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento); '+$invocationSummary+'. No se modifico la configuracion del equipo.')

@@ -155,19 +155,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\New-Au
 
 Antivirus: produccion parte **sin motor**; no se crea `config\antivirus.json`. Sin motor, los adjuntos subidos en SIGER
 quedan en cuarentena y no se descargan. Para los originales del Formulario rige el modo de emergencia D17 (liberacion por
-analisis en origen), que se activa aqui, antes del primer inicio, con su fecha de termino (`-Hasta`: ultimo dia en que
-rige, hora de Chile, a lo mas 90 dias despues de hoy) y su fundamento. La orden pide confirmacion y escribe
-`config\liberacion-origen.json`; SIGER lo valida y lo audita al arrancar (Auditoria y operacion), y desde entonces cada
-original del Formulario se libera al registrarse, despues de verificar su SHA-256 firmado, con la auditoria "analisis en
-origen del Formulario" (la ficha lo muestra como "Disponible · analisis en origen"). Sin este paso, o si el modo vence
-o el archivo no es valido, los originales quedan en cuarentena y TI ve el aviso. Renovar, desactivar y agregar un motor
-admitido: seccion 4.
+analisis en origen), que se activa aqui, antes del primer inicio, con su fundamento y **sin fecha de termino**: rige
+hasta que se configure un motor antivirus admitido o se desactive de forma expresa; la revision periodica queda a cargo
+del responsable, segun el acta institucional. La orden pide confirmacion y escribe `config\liberacion-origen.json`;
+SIGER lo valida y lo audita al arrancar (Auditoria y operacion), y desde entonces cada original del Formulario se libera
+al registrarse, despues de verificar su SHA-256 firmado, con la auditoria "analisis en origen del Formulario" (la ficha
+lo muestra como "Disponible · analisis en origen"). Mientras rige, TI ve en Administracion el aviso permanente "Rige el
+modo de emergencia D17". Sin este paso, o si el archivo no es valido, los originales quedan en cuarentena y TI ve el
+aviso. Desactivar y agregar un motor admitido: seccion 4.
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-OriginRelease.ps1' -Root 'D:\SIGER' -Hasta '2027-03-03' -Motivo 'Decision del responsable del 2026-11-21 (D17), con correo y constancia institucional'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-OriginRelease.ps1' -Root 'D:\SIGER' -Motivo 'Decision del responsable del 2026-11-21 (D17), con correo y constancia institucional'
 ```
 
-Se anota la fecha de termino para renovarlo antes (el aviso "por vencer" aparece 7 dias antes).
+Se anota la fecha de activacion (la muestra el aviso) para la revision periodica del responsable.
 
 Detener el motor propio:
 
@@ -262,7 +263,7 @@ Tareas de TI tras el primer arranque:
 2. Calendario habil (`#calendario`): importar los feriados nacionales y regionales de 2026 y 2027 con fundamento. Sin
    ellos, los dias habiles se calculan sin esos feriados y los reportes avisan los anios faltantes.
 3. Estructura: revisar la region de cada sede (viene del archivo) y activar las sedes PROYECTADA cuando abran.
-4. Auditoria y operacion: comprobar el aviso "Liberacion por analisis en origen vigente" con su fecha de termino (D17).
+4. Auditoria y operacion: comprobar el aviso permanente "Rige el modo de emergencia D17" con su fecha de activacion.
    Los adjuntos subidos en SIGER siguen en cuarentena (seccion 4).
 
 ### V6. Eliminacion de la validacion
@@ -342,10 +343,13 @@ Produccion parte sin motor: Microsoft Defender esta inactivo en la VM y el antiv
 Security) no es un motor admitido por SIGER. Mientras tanto rige el modo de emergencia D17 para los originales del
 Formulario (V4) y los adjuntos subidos en SIGER siguen en cuarentena.
 
-**Renovar el modo D17** antes de su termino (al vencer vuelve la cuarentena, sin reiniciar): la orden de V4 con la nueva
-fecha (pide confirmar el reemplazo) y reiniciar con `Stop.ps1` y `Start.ps1`. Al arrancar con el modo vigente, SIGER
-libera tambien los originales del Formulario que quedaron en cuarentena mientras no regia, con la misma verificacion
-(SHA-256 completo de nuevo); nunca un adjunto subido en SIGER ni un original con una deteccion previa.
+El modo D17 **no tiene fecha de termino**: rige hasta que se configure un motor admitido o se desactive con la orden de
+abajo. La revision periodica queda a cargo del responsable, segun el acta institucional; TI ve mientras tanto el aviso
+permanente en Administracion. Repetir la orden de V4 reemplaza el registro (pide confirmarlo; por ejemplo, con un nuevo
+fundamento) y rige desde el reinicio con `Stop.ps1` y `Start.ps1`. Al arrancar con el modo vigente (tambien al volver a
+activarlo tras una desactivacion o un archivo no valido), SIGER libera los originales del Formulario que quedaron en
+cuarentena mientras no regia, con la misma verificacion (SHA-256 completo de nuevo); nunca un adjunto subido en SIGER ni
+un original con una deteccion previa.
 
 **Desactivar el modo D17** (al configurar un motor admitido o al terminar la emergencia), como la cuenta de servicio.
 Renombra el archivo a `config\liberacion-origen.retirado-<UTC>.json` (no borra nada) y rige desde el reinicio; SIGER lo
@@ -373,40 +377,3 @@ Pausar el consumidor (TI, Auditoria y operacion), esperar a que termine su ciclo
 `Set-Integration.ps1 -Root 'D:\SIGER' -Formulario Manual` y reiniciar. Las entregas esperan en la cola del Formulario.
 SMR no se reactiva desde esta guia: se consulta al responsable. Nunca hay dos consumidores activos, y no se borran COM,
 originales, recepciones ni leases para revertir.
-
-## Actualizacion a 0.5.0: consultas previas (antes de actualizar)
-
-Desde 0.5.0 la Coordinacion regional se registra como `DIRECCION` de su sede (D7). Al primer arranque con 0.5.0, una rutina auditada (`sistema:actualizacion`, marcador `COORDINACION_REGIONAL_050`) convierte cada `JEFATURA` vigente o programada en una sede. Si la sede ya tiene una `DIRECCION` superpuesta, esa `JEFATURA` no se convierte y Administracion muestra el aviso `JEFATURA_EN_SEDE`. Para saber de antemano que hara la rutina, y si hay cuentas que no podrian ingresar, ejecuta en la instancia 0.4.0 (esquema V10) estas consultas de solo lectura con el cliente `mysql` de la VM, sobre el esquema `siger_a_*` de la instancia. No modifica nada.
-
-```sql
--- 1) JEFATURA vigentes o programadas en sedes regionales: se convertiran en DIRECCION con el mismo periodo.
---    superpuesta=1: hay una DIRECCION que se superpone en la misma sede; no se convertira (aviso JEFATURA_EN_SEDE).
-SELECT s.code AS sede, u.username, g.id AS concesion, FROM_UNIXTIME(g.valid_from/1000) AS desde,
-       IF(g.valid_until IS NULL,NULL,FROM_UNIXTIME(g.valid_until/1000)) AS hasta,
-       EXISTS(SELECT 1 FROM role_assignment d WHERE d.scope_id=g.scope_id AND d.role_code='DIRECCION' AND d.revoked_at IS NULL
-              AND d.valid_from<COALESCE(g.valid_until,9223372036854775807) AND (d.valid_until IS NULL OR d.valid_until>g.valid_from)) AS superpuesta
-FROM role_assignment g JOIN org_scope s ON s.id=g.scope_id JOIN staff u ON u.id=g.user_id
-WHERE g.role_code='JEFATURA' AND s.regional=TRUE AND g.revoked_at IS NULL
-  AND (g.valid_until IS NULL OR g.valid_until>UNIX_TIMESTAMP()*1000)
-ORDER BY s.code, g.id;
--- 2) Subrogancias vivas (no terminadas ni vencidas) sobre esas concesiones: pasaran a la nueva DIRECCION.
-SELECT s.code AS sede, x.id AS subrogancia, t.username AS titular, b.username AS subrogante,
-       FROM_UNIXTIME(x.from_ms/1000) AS desde, FROM_UNIXTIME(x.until_ms/1000) AS hasta
-FROM substitution_scope ss JOIN substitution x ON x.id=ss.substitution_id JOIN substitution_designation d ON d.id=x.designation_id
-JOIN role_assignment g ON g.id=ss.grant_id JOIN org_scope s ON s.id=g.scope_id
-JOIN staff t ON t.id=d.titular_id JOIN staff b ON b.id=d.substitute_id
-WHERE g.role_code='JEFATURA' AND s.regional=TRUE AND g.revoked_at IS NULL AND x.ended_ms IS NULL AND x.until_ms>UNIX_TIMESTAMP()*1000
-ORDER BY s.code, x.id;
--- 3) Sedes existentes: quedaran ACTIVA (o CERRADA si estan deshabilitadas) y sin region; TI la registra despues.
-SELECT code, name, site_code, enabled FROM org_scope WHERE regional=TRUE ORDER BY code;
--- 4) Cuentas con mayusculas en el usuario. Desde 0.5.0 el ingreso pasa el usuario a minusculas y exige coincidencia
---    exacta (en MySQL la comparacion no distingue mayusculas): estas cuentas no podrian ingresar. SIGER siempre las crea
---    en minusculas, asi que el resultado esperado es vacio; una fila solo puede venir de SQL manual.
-SELECT id, username, enabled, technical FROM staff
-WHERE CAST(username AS BINARY) <> CAST(LOWER(username) AS BINARY)
-ORDER BY id;
-```
-
-Si la consulta 4 devuelve filas, no actualizar: informarlo al responsable del proyecto (no hay comando para renombrar una cuenta).
-
-Despues de actualizar, TI registra la region de cada sede (panel Estructura, `SCOPE_UPDATE`) y resuelve en el perfil de cada cuenta las `JEFATURA` que hayan quedado sin convertir. La secuencia completa de la actualizacion (respaldo, ensayo de restauracion obligatorio, `Update.ps1` y tareas posteriores) esta en `docs/ACTUALIZACION_0_5_0.md`.

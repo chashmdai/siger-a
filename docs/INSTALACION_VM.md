@@ -1,10 +1,11 @@
 # Instalacion aislada en DDN-SIGER
 
-> Procedimiento abreviado (datos de TI, validacion, cierre del piloto, produccion y sustitucion de SMR): `docs/DESPLIEGUE_VM.md`.
+> Salida a produccion con 0.6.0 (datos de TI, cierre de la validacion 0.4.0, produccion nueva, acreditacion, eliminacion de la validacion y plan B): `docs/DESPLIEGUE_VM.md`; recorridos en `docs/PRUEBAS_MANUALES_0_6_0.md`.
 > Instancias institucionales: `Init-Server.ps1 -Mode Institucional -Proposito Validacion|Produccion` (la validacion solo recibe entregas con
-> `"validacionPullAutorizada": true`, ver `DESPLIEGUE_VM.md`; `-MismoReleaseQue` exige el mismo JAR validado; `-AccesoRed` escucha en todas las interfaces). Secretos entre equipos:
-> `Export-SecretPackage.ps1` (equipo de SMR) e `Import-SecretPackage.ps1` (VM, reprotege con DPAPI). Sonda sin reclamar:
-> `Invoke-FormularioPull.ps1 -SoloComprobar`. Activacion: `Set-Integration.ps1`. Cierre del piloto: `Close-Validation.ps1`.
+> `"validacionPullAutorizada": true`, ver `DESPLIEGUE_VM.md`; `-MismoReleaseQue` exige el mismo JAR validado y no se usa en 0.6.0, porque la validacion sigue en 0.4.0; `-AccesoRed` escucha en todas las interfaces).
+> Credenciales en 0.6.0: la configuracion del Formulario se copia de la validacion a produccion (misma cuenta de servicio, DPAPI) y Graph se instala con `Import-GraphCredential.ps1`;
+> `Export-SecretPackage.ps1` lee SMR y no se usa (D15). Sonda sin reclamar: `Invoke-FormularioPull.ps1 -SoloComprobar`. Activacion: `Set-Integration.ps1`.
+> Cierre de la validacion: `Close-Validation.ps1 -RecepcionesDeclaradas` (D11). Eliminacion con constancia: `Remove-Validation.ps1` (D12). Modo de emergencia D17: `Set-OriginRelease.ps1`.
 
 ## Condicion de entrada
 
@@ -181,7 +182,7 @@ Para actualizar, despues de compilar una nueva version y hacer respaldo:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Update.ps1' -Root 'D:\SIGER-A' -Release 'D:\Entregas\SIGER-NUEVA' -BackupDirectory 'D:\Respaldos-SIGER-A\PRUEBA-001'
 ```
 
-La version anterior se conserva. Si una migracion falla, no arrancar un JAR anterior a ciegas. Reversion de datos/esquema y ensayo de restauracion quedan pendientes de calificacion manual. No se incluyen comandos destructivos automatizados.
+La version anterior se conserva. Si una migracion falla, no arrancar un JAR anterior a ciegas. Reversion de datos/esquema y ensayo de restauracion quedan pendientes de calificacion manual. Ningun script borra datos de una instancia, salvo `Remove-Validation.ps1`, que solo elimina una validacion cerrada, con constancia (D12; excepcion registrada en la Precision 0.6.0 de `docs/DECISIONES_FUNCIONALES.md`).
 
 ## Complemento operativo 0.3.1
 
@@ -219,7 +220,7 @@ Los scripts siguen sin ejecutarse aqui sobre Windows/MySQL. Su primera validacio
 
 ### Actualizar a 0.5.0
 
-La secuencia completa (consultas previas, respaldo, ensayo de restauracion obligatorio con `Restore-Check.ps1`, `Update.ps1`, cifras a revisar y tareas de TI posteriores) esta en `docs/ACTUALIZACION_0_5_0.md`. Las consultas previas de solo lectura estan en `docs/DESPLIEGUE_VM.md`. Desde 0.5.0 el ingreso pasa el usuario a minusculas, el CSV de las bandejas exige la funcion `EXPORTACION` y las descargas llevan un nombre neutro (`<FOLIO>-documento-<id>.<ext>`).
+**Referencia; no se ejecuta**: la validacion de la VM no se actualiza (se cierra en 0.4.0) y produccion se instala con 0.6.0 (D14 de `docs/PLAN_0_6_0.md`). La secuencia completa (consultas previas, respaldo, ensayo de restauracion obligatorio con `Restore-Check.ps1`, `Update.ps1`, cifras a revisar y tareas de TI posteriores) esta en `docs/ACTUALIZACION_0_5_0.md`, con las consultas previas de solo lectura en su anexo. Desde 0.5.0 el ingreso pasa el usuario a minusculas, el CSV de las bandejas exige la funcion `EXPORTACION` y las descargas llevan un nombre neutro (`<FOLIO>-documento-<id>.<ext>`).
 
 ### Supresion de AUTORIDAD al actualizar a 0.5.0
 
@@ -379,7 +380,7 @@ Todo original (ingreso manual, documento de gestion u original descargado del Fo
 2. TI, en Auditoria y operacion, pulsa **Analizar**: se verifica el SHA-256 custodiado, que el motor este operativo y con firmas de menos de 72 horas, se analiza el archivo con orden fija y tiempo maximo, y se vuelve a verificar el SHA-256. La evidencia queda en `document_scan` y en la auditoria. Analizar no libera.
 3. **Liberar** solo procede si el ultimo analisis es LIMPIO, de los mismos bytes, del motor vigente y de la ultima hora, nunca hubo una deteccion y el archivo vuelve a coincidir con su SHA-256. Cualquier duda (error, firmas antiguas, motor inactivo, archivo alterado o retirado por el antivirus) deja el original en cuarentena. Solo una deteccion acreditada es definitiva: en ClamAV, una firma informada para ese archivo distinta de `Heuristics.Limits.Exceeded.*`; un limite excedido (`LIMITES_EXCEDIDOS`) o una salida sin resultado legible (`ANALISIS_INCOMPLETO`) quedan como ERROR y pueden volver a analizarse. La carpeta temporal de cada analisis se elimina siempre al terminar.
 4. Sin motor configurado no hay liberacion de originales reales. La revision manual sin motor existe solo en instancias de pruebas.
-5. **Modo de emergencia D17 (0.6.0, H04c): liberacion por analisis en origen.** Mientras la instancia no tenga un motor admitido, `scripts\Set-OriginRelease.ps1 -Root ... -Hasta aaaa-mm-dd -Motivo ...` (como la cuenta de servicio, con confirmacion; termino obligatorio de a lo mas 90 dias) deja `config\liberacion-origen.json`, que solo reciben el servicio y el ciclo manual del Formulario. SIGER lo valida al arrancar (lista cerrada de campos; ilegible, vencido, con otro termino o con `antivirus.json` falla cerrado y TI ve el aviso) y audita cada cambio de estado (recurso SISTEMA 17). Con el modo vigente, cada original **del Formulario** se libera en la transaccion de recepcion despues de verificar su SHA-256 firmado (si no coincide, la entrega no se registra), con la auditoria `DOCUMENTO_LIBERADO_EN_ORIGEN` y el motivo "analisis en origen del Formulario"; no se escribe `document_scan`, asi que nunca figura como un analisis LIMPIO de un motor de la VM, y la ficha lo muestra como "Disponible · analisis en origen". Al arrancar con el modo vigente se liberan tambien, uno por transaccion, los originales del Formulario que quedaron en cuarentena mientras no regia (mismo SHA-256 y ningun analisis INFECTADO previo). Los adjuntos subidos en SIGER nunca se liberan por este modo. `-Desactivar` lo retira (renombra el archivo); ver `docs/DESPLIEGUE_VM.md` seccion 4.
+5. **Modo de emergencia D17 (0.6.0, H04c): liberacion por analisis en origen.** Mientras la instancia no tenga un motor admitido, `scripts\Set-OriginRelease.ps1 -Root ... -Motivo ...` (como la cuenta de servicio, con confirmacion; sin fecha de termino desde H05: rige hasta que se configure un motor antivirus admitido o se desactive de forma expresa, y la revision periodica queda a cargo del responsable, segun el acta institucional) deja `config\liberacion-origen.json`, que solo reciben el servicio y el ciclo manual del Formulario. SIGER lo valida al arrancar (lista cerrada de campos de la version 2; ilegible, con otros campos, con un termino `until` o con `antivirus.json` falla cerrado y TI ve el aviso; con el modo vigente TI ve un aviso permanente) y audita cada cambio de estado (recurso SISTEMA 17). Con el modo vigente, cada original **del Formulario** se libera en la transaccion de recepcion despues de verificar su SHA-256 firmado (si no coincide, la entrega no se registra), con la auditoria `DOCUMENTO_LIBERADO_EN_ORIGEN` y el motivo "analisis en origen del Formulario"; no se escribe `document_scan`, asi que nunca figura como un analisis LIMPIO de un motor de la VM, y la ficha lo muestra como "Disponible · analisis en origen". Al arrancar con el modo vigente se liberan tambien, uno por transaccion, los originales del Formulario que quedaron en cuarentena mientras no regia (mismo SHA-256 y ningun analisis INFECTADO previo). Los adjuntos subidos en SIGER nunca se liberan por este modo. `-Desactivar` lo retira (renombra el archivo); ver `docs/DESPLIEGUE_VM.md` seccion 4.
 
 La descarga posterior sigue autorizada por la ficha y se entrega como adjunto con `Content-Security-Policy: sandbox`; el antivirus no sustituye el criterio de quien abre el archivo.
 
@@ -391,7 +392,7 @@ Despues de registrar los servicios, en una ventana sin usuarios y **como la cuen
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-A\scripts\Test-Service.ps1' -Root 'D:\SIGER-A' -VentanaAutorizada -IncluirMySql
 ```
 
-Comprueba arranque y salud (version y esquema del manifiesto; 0.5.0 y 14 en esta version), parada ordenada (registro de parada, menos de 180 s, sin proceso residual y lease del Formulario libre), recuperacion automatica tras terminar Java a la fuerza (nuevo proceso sano y evento de caida) y, con `-IncluirMySql`, la detencion y recuperacion junto al motor propio. Deja el resultado en `logs\prueba-servicio-<fecha>.json` y termina con error si algun paso falla. El reinicio del equipo se prueba aparte (reiniciar en ventana autorizada y luego `Estado.ps1`). El host del servicio tambien tiene un modo de prueba en consola (`service\SigerService.exe --probar <raiz> <segundos> [plazo_ms]`) que no requiere registrar servicios.
+Comprueba arranque y salud (version y esquema del manifiesto; 0.6.0 y 14 en esta version), parada ordenada (registro de parada, menos de 180 s, sin proceso residual y lease del Formulario libre), recuperacion automatica tras terminar Java a la fuerza (nuevo proceso sano y evento de caida) y, con `-IncluirMySql`, la detencion y recuperacion junto al motor propio. Deja el resultado en `logs\prueba-servicio-<fecha>.json` y termina con error si algun paso falla. El reinicio del equipo se prueba aparte (reiniciar en ventana autorizada y luego `Estado.ps1`). El host del servicio tambien tiene un modo de prueba en consola (`service\SigerService.exe --probar <raiz> <segundos> [plazo_ms]`) que no requiere registrar servicios.
 
 ### Procedimiento de sustitucion del consumidor de SMR
 

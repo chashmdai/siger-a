@@ -46,7 +46,7 @@ class FormularioReception {
                 throw new Problem(503,"Original ciudadano no custodiado; no se registra la entrega.");
             // D17: con el modo vigente, la custodia se verifica completa (SHA-256 firmado) antes de liberar; si no coincide,
             // no se registra la entrega (sin COMMIT), como cuando falta un original.
-            boolean release=!o.attachments().isEmpty()&&origin.active(origin.now());
+            boolean release=!o.attachments().isEmpty()&&origin.active();
             if(release)for(var a:o.attachments()){
                 boolean intact;
                 try{intact=documents.externalIntact(Documents.externalKey(o.externalId(),a.id()),a.size(),a.sha256());}catch(java.io.IOException|RuntimeException e){intact=false;}
