@@ -13,6 +13,7 @@ param(
 . (Join-Path $PSScriptRoot 'Common.ps1')
 if(-not $VentanaAutorizada){throw 'Confirma con -VentanaAutorizada que no hay usuarios operando: la prueba detiene y reinicia SIGER.'}
 $s=Read-Settings $Root
+Assert-InstanceOwner $s 'Test-Service.ps1'
 $services=Get-SigerServices $s
 if(-not $services){throw 'No hay servicios registrados para esta instancia (Install-Service.ps1).'}
 $secret=Import-Clixml (Join-Path $Root 'config\secrets.clixml')
@@ -45,15 +46,20 @@ Step 'parada ordenada' (((Get-Service $app).Status -eq 'Stopped') -and $orderly 
 Step 'sin proceso residual' (-not (App-Running $s)) "app.pid=$(AppPid)"
 Step 'lease del Formulario libre' ((Lock-Holder) -eq '') 'formulario_consumer_lock sin titular'
 
-# 3. Caida de Java: Windows reinicia el servicio (30 s) y vuelve a estar sano.
+# 3. Caida de Java: Windows reinicia el servicio (30 s) y vuelve a estar sano. La caida se simula con el control de
+# servicio 200 (SigerService.exe termina su Job: PowerShell y Java), porque la cuenta de servicio no puede terminar el
+# proceso Java del servicio con Stop-Process (acceso denegado): no hay otra forma de provocarla sin privilegios.
 Start-Service -Name $app;$t=Wait-Healthy $WaitSeconds;Step 'nuevo arranque' ($t -ge 0) "salud en $t s"
 $old=AppPid
-Stop-Process -Id $old -Force
+$since=Get-Date
+$sent=$true;try{(Get-Service -Name $app).ExecuteCommand(200)}catch{$sent=$false}
+Step 'caida simulada (control 200)' $sent $(if($sent){"proceso $old"}else{'el servicio no acepto el control 200 (host anterior a 0.6.0 o sin el derecho de enviar controles): reinstala el servicio con Install-Service.ps1'})
 $t=[Diagnostics.Stopwatch]::StartNew();Start-Sleep 5
 $back=Wait-Healthy ($WaitSeconds+60);$new=AppPid
-Step 'recuperacion tras caida' (($back -ge 0) -and $new -and $new -ne $old) "proceso $old terminado; nuevo $new sano en $([int]$t.Elapsed.TotalSeconds) s"
-$events=@(Get-EventLog -LogName Application -Source SIGER -Newest 5 -ErrorAction SilentlyContinue|Where-Object {$_.Message -like '*termino inesperadamente*'})
-Step 'evento de caida registrado' ($events.Count -gt 0) "eventos=$($events.Count)"
+Step 'recuperacion tras caida' ($sent -and ($back -ge 0) -and $new -and $new -ne $old) "proceso $old terminado; nuevo $new sano en $([int]$t.Elapsed.TotalSeconds) s"
+$events=@(Get-EventLog -LogName Application -Source SIGER -After $since.AddSeconds(-1) -ErrorAction SilentlyContinue)
+$asked=@($events|Where-Object {$_.Message -like '*caida simulada solicitada*'}).Count;$crash=@($events|Where-Object {$_.Message -like '*termino inesperadamente*'}).Count
+Step 'evento de caida registrado' (($asked -gt 0) -and ($crash -gt 0)) "caida simulada=$asked; termino inesperadamente=$crash"
 
 # 4. Motor propio (opcional): detenerlo detiene SIGER; al iniciar SIGER vuelve con su dependencia.
 if($IncluirMySql){

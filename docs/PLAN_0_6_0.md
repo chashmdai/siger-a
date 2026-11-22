@@ -79,7 +79,7 @@ Salto directo (D14): la validacion `D:\SIGER-VALIDACION` sigue en 0.4.0 y no se 
 | V6 | Eliminacion de la validacion con constancia (H03, desde la carpeta del paquete) | svc-siger y administrador | despues de V5 |
 | B | Plan B (D13): si al 12/12 la validacion no se ha pausado ni cerrado (V1-V2), pausa del consumidor (TI), Manual con el `Set-Integration.ps1` de la instancia 0.4.0 y retiro de `validacionPullAutorizada` de su `instance.json`; si ya esta cerrada y produccion no consume, nada en la validacion: las entregas esperan en la cola del Formulario hasta completar V4 | TI y svc-siger | 12/12 |
 
-Gates de codigo: H00-H04 hasta el 29/11, H05 hasta el 01/12, H06a y H06b hasta el 03/12; la VM empieza el 04/12, despues de H06b. Si la VM encuentra un defecto bloqueante en V2-V4, se abre un gate de correccion y se genera 0.6.1 (nuevo H06a/H06b), con el que se repite desde el paso afectado; el plan B sigue protegiendo el 15/12. Si el calendario aprieta, H01 puede postergarse (D16).
+Gates de codigo: H00-H04 hasta el 29/11, H05 hasta el 01/12, H06a a H06e hasta el 03/12; la VM empieza el 04/12, despues de H06e (H06c-H06e agregados el 2026-11-22 tras el bloqueo de H06b). Si la VM encuentra un defecto bloqueante en V2-V4, se abre un gate de correccion y se genera 0.6.1 (nuevo H06a/H06b), con el que se repite desde el paso afectado; el plan B sigue protegiendo el 15/12. Si el calendario aprieta, H01 puede postergarse (D16).
 
 ## 4. Documentacion que se actualiza
 

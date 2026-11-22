@@ -129,7 +129,7 @@ function Get-DeletionPlan {
         }
     }
     # Elementos, en el orden en que se borran: ensayos, respaldos incompletos declarados, respaldos y la raiz.
-    $elements=New-Object System.Collections.Generic.List[object]
+    $elements=[System.Collections.Generic.List[object]]::new()
     foreach($path in $ensayosList){
         $full=Full $path 'Cada ensayo';$blockers=@();$evidence=''
         if(-not [IO.Directory]::Exists($full)){$blockers+='NO_EXISTE'}else{

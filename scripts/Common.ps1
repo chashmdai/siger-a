@@ -1,6 +1,13 @@
 ﻿. (Join-Path $PSScriptRoot 'Hash.ps1')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+# CimCmdlets se importa aqui sin -WhatIf: al cargarse solo (primer Get-CimInstance) define sus alias con Set-Alias, y con
+# -WhatIf del script que llama Windows PowerShell 5.1 imprime una linea "Establecer alias" por cada uno (H06b). Solo
+# cambia la preferencia durante la importacion; el script conserva su -WhatIf. Sin el modulo (Linux) no se importa.
+if(-not (Get-Module CimCmdlets) -and (Get-Module -ListAvailable CimCmdlets)){
+    $cimWhatIf=$WhatIfPreference;$WhatIfPreference=$false
+    try{Import-Module CimCmdlets}finally{$WhatIfPreference=$cimWhatIf;Remove-Variable cimWhatIf}
+}
 function Read-Settings([string]$Root) {
     $file=Join-Path $Root 'config\instance.json'
     if(-not(Test-Path $file)){throw 'Instancia no inicializada.'}
@@ -85,6 +92,17 @@ function Get-ServiceProcessBlockers($Facts){
     }elseif(-not $p -or [int]$p.ParentProcessId -ne [int]$svc.ProcessId){$codes+='CADENA'}
     return $codes
 }
+# Windows registra una cuenta local como StartName '.\cuenta', y NTAccount no traduce ese prefijo (H06b: bloqueo CUENTA en
+# App-Running y Require-OwnMySql con los servicios de una cuenta local). '.\' se reemplaza por el nombre del equipo, nunca
+# por la cuenta sola: en un equipo unido a un dominio el nombre solo podria resolver a otra cuenta. Lo demas no cambia.
+# Regla pura (casos en Check-Scripts.ps1).
+function ConvertTo-ServiceAccountName([string]$StartName,[string]$ComputerName){
+    if($StartName -match '^\.\\(.+)$'){
+        if([string]::IsNullOrWhiteSpace($ComputerName)){throw 'No se conoce el nombre del equipo para la cuenta local del servicio.'}
+        return ($ComputerName+'\'+$Matches[1])
+    }
+    return $StartName
+}
 function Get-ServiceProcessFacts($Settings,$Process,[string]$Kind){
     $facts=[PSCustomObject]@{Kind=$Kind;Process=$Process;Host=$null;Service=$null;ServiceSid='';ExpectedSid='';ExpectedPath=''}
     $services=Get-SigerServices $Settings
@@ -92,7 +110,7 @@ function Get-ServiceProcessFacts($Settings,$Process,[string]$Kind){
     $info=$services.Info
     $name=if($Kind -ceq 'APP'){[string]$info.serviceName}else{[string]$info.mysqlServiceName}
     $facts.Service=Get-CimInstance Win32_Service -Filter "Name='$($name.Replace("'","''"))'" -ErrorAction SilentlyContinue
-    if($facts.Service){try{$facts.ServiceSid=(New-Object Security.Principal.NTAccount([string]$facts.Service.StartName)).Translate([Security.Principal.SecurityIdentifier]).Value}catch{}}
+    if($facts.Service){try{$facts.ServiceSid=(New-Object Security.Principal.NTAccount((ConvertTo-ServiceAccountName ([string]$facts.Service.StartName) $env:COMPUTERNAME))).Translate([Security.Principal.SecurityIdentifier]).Value}catch{}}
     $facts.ExpectedSid=[string]$info.accountSid
     $facts.ExpectedPath=if($Kind -ceq 'APP'){"$(Join-Path $Settings.root 'service\SigerService.exe') $($Settings.root)"}else{"$(Join-Path $Settings.mysqlHome 'bin\mysqld.exe') --defaults-file=$(Join-Path $Settings.root 'mysql\my.ini') $name"}
     if($Kind -ceq 'APP' -and $Process){$facts.Host=Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$Process.ParentProcessId)" -ErrorAction SilentlyContinue}
@@ -202,4 +220,73 @@ function Get-SigerServices($Settings) {
         if(-not $cim -or $cim.PathName.IndexOf([string]$pair[1],[StringComparison]::OrdinalIgnoreCase) -lt 0){throw "El servicio $($pair[0]) registrado no corresponde a esta instancia. No se interviene."}
     }
     return [PSCustomObject]@{App=$app;MySql=$db;Info=$info}
+}
+
+# Cuenta duena de la instancia (ownerSid de instance.json, la que protege sus credenciales con DPAPI). Con otra cuenta
+# los scripts que descifran fallaban con un error tecnico de DPAPI (H06b): se rechaza antes, con un mensaje claro.
+# Regla pura (casos en Check-Scripts.ps1): sin ownerSid tambien rechaza.
+function Test-InstanceOwner($Settings,[string]$Sid){
+    $owner=if($Settings -and $Settings.PSObject.Properties['ownerSid']){[string]$Settings.ownerSid}else{''}
+    return ([bool]$owner -and [bool]$Sid -and $owner -ceq $Sid)
+}
+function Assert-InstanceOwner($Settings,[string]$Script){
+    if(-not (Test-InstanceOwner $Settings ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value))){throw "Ejecuta $Script como la cuenta de servicio de la instancia (ownerSid de instance.json): sus credenciales estan protegidas con DPAPI de esa cuenta. No se cambio nada."}
+}
+
+# SID de una cuenta escrita por nombre (p. ej. en la directiva que exporta secedit), o '' si no se resuelve. Un nombre
+# sin dominio se busca primero como cuenta local del equipo y luego tal como esta (como lo resuelve Windows).
+function Resolve-AccountSid([string]$Name,[string]$ComputerName){
+    $candidates=if($Name.Contains('\')){@(ConvertTo-ServiceAccountName $Name $ComputerName)}else{@("$ComputerName\$Name",$Name)}
+    foreach($c in $candidates){try{return (New-Object Security.Principal.NTAccount($c)).Translate([Security.Principal.SecurityIdentifier]).Value}catch{}}
+    return ''
+}
+# Derecho "Iniciar sesion como servicio" en la linea SeServiceLogonRight de secedit. secedit escribe una cuenta local por
+# su nombre ('siger-ensayo,*S-1-5-80-0'), no como *SID (H06b): cada entrada se compara por SID, resolviendo los nombres
+# con $Resolve (nombre -> SID o ''). Regla pura (casos en Check-Scripts.ps1).
+function Test-LogonRightEntry([string]$Line,[string]$Sid,[scriptblock]$Resolve){
+    if(-not $Sid -or $Line -notmatch '^\s*SeServiceLogonRight\s*=(.*)$'){return $false}
+    foreach($entry in $Matches[1].Split(',')){
+        $e=$entry.Trim()
+        if(-not $e){continue}
+        if($e.StartsWith('*')){if($e.Substring(1) -ceq $Sid){return $true};continue}
+        if([string](& $Resolve $e) -ceq $Sid){return $true}
+    }
+    return $false
+}
+
+# Descriptor de seguridad de un servicio (SDDL de sc.exe sdshow). La cuenta de servicio recibe consultar, iniciar,
+# detener y el control definido por el usuario (CR: Test-Service.ps1 simula una caida con el control 200 de
+# SigerService.exe). Windows da CR por defecto a usuarios interactivos (IU) y a cuentas de servicio (SU): se les quita
+# (y a toda otra entrada que lo tenga), y solo SYSTEM, Administradores y la cuenta lo conservan. Falla cerrado ante un
+# descriptor que no reconoce o derechos en hexadecimal. Reglas puras (casos en Check-Scripts.ps1).
+$script:ServiceControlAllowed=@('SY','BA','S-1-5-18','S-1-5-32-544')
+function Get-SddlParts([string]$Sddl){
+    $m=[regex]::Match($Sddl,'^D:([A-Z]*)((?:\([^()]*\))*)(S:.*)?$')
+    if(-not $m.Success){throw 'Descriptor de seguridad del servicio no reconocido. No se cambio.'}
+    $aces=@(foreach($a in [regex]::Matches($m.Groups[2].Value,'\(([^()]*)\)')){
+        $f=$a.Groups[1].Value.Split(';')
+        if($f.Count -ne 6 -or $f[2] -cnotmatch '^([A-Z]{2})*$'){throw 'Entrada del descriptor de seguridad del servicio no reconocida. No se cambio.'}
+        [PSCustomObject]@{Type=$f[0];Flags=$f[1];Rights=@([regex]::Matches($f[2],'[A-Z]{2}')|ForEach-Object {$_.Value});Object=$f[3];Inherited=$f[4];Sid=$f[5]}
+    })
+    return [PSCustomObject]@{Flags=$m.Groups[1].Value;Aces=$aces;Sacl=$m.Groups[3].Value}
+}
+function Get-ServiceControlHolders([string]$Sddl){
+    return @((Get-SddlParts $Sddl).Aces|Where-Object {$_.Type -ceq 'A' -and $_.Rights -ccontains 'CR'}|ForEach-Object {$_.Sid})
+}
+function ConvertTo-ServiceControlDescriptor([string]$Sddl,[string]$Sid){
+    if($Sid -cnotmatch '^S-1-5-21-\d+-\d+-\d+-\d+$'){throw 'SID de la cuenta de servicio no valido.'}
+    $parts=Get-SddlParts $Sddl
+    $aces=foreach($a in $parts.Aces){
+        if($a.Sid -ceq $Sid){continue}
+        $rights=$a.Rights
+        if($a.Type -ceq 'A' -and $script:ServiceControlAllowed -cnotcontains $a.Sid){$rights=@($rights|Where-Object {$_ -cne 'CR'})}
+        if($rights.Count -eq 0){continue}
+        '('+(@($a.Type,$a.Flags,($rights -join ''),$a.Object,$a.Inherited,$a.Sid) -join ';')+')'
+    }
+    return ('D:'+$parts.Flags+(@($aces) -join '')+"(A;;CCLCSWRPWPDTLOCRRC;;;$Sid)"+$parts.Sacl)
+}
+# Comprobacion del descriptor aplicado: CR solo en SYSTEM, Administradores y la cuenta, que debe tenerlo.
+function Test-ServiceControlDescriptor([string]$Sddl,[string]$Sid){
+    $holders=@(Get-ServiceControlHolders $Sddl)
+    return ($holders -ccontains $Sid -and @($holders|Where-Object {$_ -cne $Sid -and $script:ServiceControlAllowed -cnotcontains $_}).Count -eq 0)
 }

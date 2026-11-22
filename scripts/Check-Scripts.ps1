@@ -362,6 +362,136 @@ foreach($case in $appCases){
     $got='ERROR';try{$got=if(Test-AppProcess $case.p $case.x $case.m $case.s){'TRUE'}else{'FALSE'}}catch{if($_.Exception.Message -like 'no debia*'){throw 'Test-AppProcess consulto el servicio con ruta y argumentos visibles.'}}
     if($got -cne $case.e){throw ('Proceso propio (App-Running): caso '+[array]::IndexOf($appCases,$case)+' esperaba '+$case.e+' y obtuvo '+$got+'. Ante una duda debe lanzar el error, nunca responder que no corre.')}
 }
+# --- Correcciones para Windows (H06c, hallazgos del ensayo de H06b) ---------------------------------------------------
+# Defecto 1: el StartName '.\cuenta' de una cuenta local se traduce con el nombre del equipo, nunca como la cuenta sola.
+$accountCases=@(
+    @{n='.\siger-ensayo';c='EQUIPO';e='EQUIPO\siger-ensayo'},@{n='.\svc-siger';c='DDN-SIGER';e='DDN-SIGER\svc-siger'},
+    @{n='DEFENSORIANINEZ\svc-siger';c='EQUIPO';e='DEFENSORIANINEZ\svc-siger'},@{n='DDN-SIGER\svc-siger';c='EQUIPO';e='DDN-SIGER\svc-siger'},
+    @{n='LocalSystem';c='EQUIPO';e='LocalSystem'},@{n='NT AUTHORITY\LocalService';c='EQUIPO';e='NT AUTHORITY\LocalService'},
+    @{n='svc@defensorianinez.cl';c='EQUIPO';e='svc@defensorianinez.cl'},@{n='.\x';c='';e='ERROR'},@{n='.\x';c=' ';e='ERROR'})
+foreach($case in $accountCases){
+    $got='ERROR';try{$got=ConvertTo-ServiceAccountName $case.n $case.c}catch{$got='ERROR'}
+    if($got -cne $case.e){throw ('Cuenta del servicio: '+$case.n+' esperaba "'+$case.e+'" y obtuvo "'+$got+'" (una cuenta local se traduce como EQUIPO\cuenta, nunca sola).')}
+}
+$commonAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Common.ps1'),[ref]$null,[ref]$null)
+$factsFn=@($commonAst.FindAll({param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -ceq 'Get-ServiceProcessFacts'},$true))
+if($factsFn.Count -ne 1 -or @($factsFn[0].FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'ConvertTo-ServiceAccountName'},$true)).Count -ne 1){throw 'Get-ServiceProcessFacts debe traducir el StartName con ConvertTo-ServiceAccountName.'}
+$h06cCount=$accountCases.Count+1
+if($onWindows){
+    # Traduccion real de una cuenta local del equipo escrita como la registra Windows ('.\cuenta').
+    $local=@(Get-CimInstance Win32_UserAccount -Filter 'LocalAccount=True' -ErrorAction Stop|Where-Object {$_.SID -like 'S-1-5-21-*'})|Select-Object -First 1
+    if(-not $local){throw 'Cuenta del servicio: no hay una cuenta local para la prueba real de traduccion.'}
+    $asService=ConvertTo-ServiceAccountName ('.\'+$local.Name) $env:COMPUTERNAME
+    if((New-Object Security.Principal.NTAccount($asService)).Translate([Security.Principal.SecurityIdentifier]).Value -cne $local.SID){throw 'Cuenta del servicio: .\cuenta local no se tradujo al SID de la cuenta.'}
+    if((Resolve-AccountSid $local.Name $env:COMPUTERNAME) -cne $local.SID -or (Resolve-AccountSid "$env:COMPUTERNAME\$($local.Name)" $env:COMPUTERNAME) -cne $local.SID -or (Resolve-AccountSid ('.\'+$local.Name) $env:COMPUTERNAME) -cne $local.SID){throw 'Resolve-AccountSid: no resolvio la cuenta local por nombre.'}
+    if((Resolve-AccountSid ('no-existe-'+[Guid]::NewGuid().ToString('N').Substring(0,8)) $env:COMPUTERNAME) -ne ''){throw 'Resolve-AccountSid: resolvio una cuenta inexistente.'}
+    $h06cCount+=5
+}
+# Hallazgo (e): la cuenta duena (ownerSid) se exige antes de descifrar.
+$ownerCases=@(
+    @{s=[PSCustomObject]@{ownerSid='S-1-5-21-1-2-3-1005'};u='S-1-5-21-1-2-3-1005';e=$true},
+    @{s=[PSCustomObject]@{ownerSid='S-1-5-21-1-2-3-1005'};u='S-1-5-21-1-2-3-1006';e=$false},
+    @{s=[PSCustomObject]@{ownerSid='S-1-5-21-1-2-3-1005'};u='';e=$false},
+    @{s=[PSCustomObject]@{ownerSid=''};u='';e=$false},
+    @{s=[PSCustomObject]@{root='D:\SIGER'};u='S-1-5-21-1-2-3-1005';e=$false},@{s=$null;u='S-1-5-21-1-2-3-1005';e=$false})
+foreach($case in $ownerCases){if((Test-InstanceOwner $case.s $case.u) -ne $case.e){throw ('Cuenta duena: caso '+[array]::IndexOf($ownerCases,$case)+' esperaba '+$case.e+'.')}}
+foreach($scriptName in @('Close-Validation.ps1','Test-Service.ps1')){
+    $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $scriptName),[ref]$null,[ref]$null)
+    $calls=@($ast.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst]},$true))
+    $assert=@($calls|Where-Object {$_.GetCommandName() -ceq 'Assert-InstanceOwner'})
+    $clixml=@($calls|Where-Object {$_.GetCommandName() -ceq 'Import-Clixml'})
+    if($assert.Count -ne 1 -or $clixml.Count -eq 0 -or @($clixml|Where-Object {$_.Extent.StartOffset -lt $assert[0].Extent.StartOffset}).Count -gt 0){throw "$scriptName debe llamar a Assert-InstanceOwner antes de descifrar (Import-Clixml)."}
+}
+$h06cCount+=$ownerCases.Count+2
+# Hallazgo (a): el derecho de inicio como servicio por SID, tambien cuando secedit escribe la cuenta por su nombre.
+$rightMap=@{'siger-ensayo'='S-1-5-21-1-2-3-1005';'otra'='S-1-5-21-1-2-3-1006'}
+$rightResolve={param($n) if($rightMap.ContainsKey($n)){$rightMap[$n]}else{''}}
+$rightCases=@(
+    @{l='SeServiceLogonRight = siger-ensayo,*S-1-5-80-0,*S-1-5-83-0';s='S-1-5-21-1-2-3-1005';e=$true},
+    @{l='SeServiceLogonRight = siger-ensayo,*S-1-5-80-0,*S-1-5-83-0';s='S-1-5-21-1-2-3-1006';e=$false},
+    @{l='SeServiceLogonRight = *S-1-5-80-0,otra';s='S-1-5-21-1-2-3-1006';e=$true},
+    @{l='SeServiceLogonRight = *S-1-5-80-0,*S-1-5-21-1-2-3-1005';s='S-1-5-21-1-2-3-1005';e=$true},
+    @{l='SeServiceLogonRight = *S-1-5-21-1-2-3-10050,*S-1-5-80-0';s='S-1-5-21-1-2-3-1005';e=$false},
+    @{l='SeServiceLogonRight = desconocida';s='S-1-5-21-1-2-3-1005';e=$false},
+    @{l='SeServiceLogonRight = ';s='S-1-5-21-1-2-3-1005';e=$false},
+    @{l='SeNetworkLogonRight = *S-1-5-21-1-2-3-1005';s='S-1-5-21-1-2-3-1005';e=$false},
+    @{l='';s='S-1-5-21-1-2-3-1005';e=$false},@{l='SeServiceLogonRight = *';s='';e=$false})
+foreach($case in $rightCases){if((Test-LogonRightEntry $case.l $case.s $rightResolve) -ne $case.e){throw ('Derecho de inicio como servicio: "'+$case.l+'" con '+$case.s+' esperaba '+$case.e+'.')}}
+$isAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Install-Service.ps1'),[ref]$null,[ref]$null)
+if(@($isAst.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'Test-LogonRightEntry'},$true)).Count -ne 2 -or $isAst.Extent.Text.Contains("'*'+`$sid")){throw 'Install-Service.ps1 debe comprobar el derecho de inicio como servicio con Test-LogonRightEntry (por SID), antes y despues de concederlo.'}
+$h06cCount+=$rightCases.Count+1
+# Condicion del responsable (control 200): CR solo para SYSTEM, Administradores y la cuenta de servicio.
+$acct='S-1-5-21-109785577-53871645-4221270051-1005'
+$defaultSd='D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)S:(AU;FA;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)'
+$expectedSd="D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLORC;;;IU)(A;;CCLCSWLORC;;;SU)(A;;CCLCSWRPWPDTLOCRRC;;;$acct)S:(AU;FA;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"
+$sdCases=@(
+    @{i=$defaultSd;e=$expectedSd},
+    @{i='D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)';e="D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLORC;;;IU)(A;;CCLCSWLORC;;;SU)(A;;CCLCSWRPWPDTLOCRRC;;;$acct)"},
+    @{i="D:(A;;CCLCSWLOCRRC;;;AU)(A;;CR;;;WD)(A;;RPCR;;;BU)(D;;CR;;;IU)(A;;LC;;;$acct)";e="D:(A;;CCLCSWLORC;;;AU)(A;;RP;;;BU)(D;;CR;;;IU)(A;;CCLCSWRPWPDTLOCRRC;;;$acct)"},
+    @{i='D:P(A;;CCLCSWRPWPDTLOCRRC;;;S-1-5-18)(A;;CCLCCR;;;S-1-5-21-9-9-9-500)';e="D:P(A;;CCLCSWRPWPDTLOCRRC;;;S-1-5-18)(A;;CCLC;;;S-1-5-21-9-9-9-500)(A;;CCLCSWRPWPDTLOCRRC;;;$acct)"},
+    @{i='D:(A;;0x100;;;IU)';e='ERROR'},@{i='O:BAD:(A;;CR;;;IU)';e='ERROR'},@{i='D:(A;;CR;;IU)';e='ERROR'},@{i='';e='ERROR'})
+foreach($case in $sdCases){
+    $got='ERROR';try{$got=ConvertTo-ServiceControlDescriptor $case.i $acct}catch{$got='ERROR'}
+    if($got -cne $case.e){throw ('Descriptor del servicio: caso '+[array]::IndexOf($sdCases,$case)+' esperaba "'+$case.e+'" y obtuvo "'+$got+'".')}
+    if($got -cne 'ERROR' -and -not (Test-ServiceControlDescriptor $got $acct)){throw ('Descriptor del servicio: el caso '+[array]::IndexOf($sdCases,$case)+' no pasa su propia comprobacion.')}
+}
+$badSdCase=$false;try{$null=ConvertTo-ServiceControlDescriptor $defaultSd 'IU'}catch{$badSdCase=$true}
+if(-not $badSdCase){throw 'Descriptor del servicio: acepto un SID de cuenta no valido.'}
+# Lo que dejaba Install-Service.ps1 hasta H06b (IU y SU con CR) y un descriptor sin la cuenta no pasan la comprobacion.
+$oldSd=$defaultSd.Insert($defaultSd.IndexOf('S:'),"(A;;CCLCSWRPWPDTLOCRRC;;;$acct)")
+if((Test-ServiceControlDescriptor $oldSd $acct) -or (Test-ServiceControlDescriptor ($expectedSd.Replace("(A;;CCLCSWRPWPDTLOCRRC;;;$acct)",'')) $acct) -or (Test-ServiceControlDescriptor $expectedSd 'S-1-5-21-1-2-3-4')){throw 'Descriptor del servicio: la comprobacion acepto CR en IU/SU o un descriptor sin la cuenta.'}
+if(@($isAst.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and @('ConvertTo-ServiceControlDescriptor','Test-ServiceControlDescriptor') -ccontains $a.GetCommandName()},$true)).Count -ne 2){throw 'Install-Service.ps1 debe aplicar y comprobar el descriptor con ConvertTo-ServiceControlDescriptor y Test-ServiceControlDescriptor.'}
+$h06cCount+=$sdCases.Count+3
+# Defecto 3: la caida de Test-Service.ps1 es el control 200 de SigerService.exe, no Stop-Process.
+$tsAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Test-Service.ps1'),[ref]$null,[ref]$null)
+if(@($tsAst.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and @('Stop-Process','kill','spps','taskkill','taskkill.exe') -contains $a.GetCommandName()},$true)).Count -gt 0){throw 'Test-Service.ps1 no debe terminar procesos: la cuenta de servicio no puede (acceso denegado). La caida se simula con el control 200.'}
+$exec=@($tsAst.FindAll({param($a) $a -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and $a.Member.Extent.Text -ceq 'ExecuteCommand'},$true))
+$hostSource=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'SigerService.cs'))
+$hostCode=[regex]::Match($hostSource,'public const int SimulatedFailureCommand = (\d+);')
+if(-not $hostCode.Success -or $exec.Count -ne 1 -or @($exec[0].Arguments).Count -ne 1 -or [string]$exec[0].Arguments[0].Extent.Text -cne $hostCode.Groups[1].Value -or $hostSource -notmatch 'protected override void OnCustomCommand\(int command\)'){throw 'Test-Service.ps1 debe enviar con ExecuteCommand el mismo control (SimulatedFailureCommand) que atiende SigerService.cs en OnCustomCommand.'}
+$h06cCount+=2
+if($onWindows -and $PSVersionTable.PSEdition -eq 'Desktop'){
+    # SigerService.cs compila con el compilador de .NET Framework (C# 5, como Install-Service.ps1) y atiende el control.
+    $hostDir=Join-Path ([IO.Path]::GetTempPath()) ('siger-host-'+[Guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($hostDir)
+    try{
+        $dll=Join-Path $hostDir 'SigerServiceCheck.dll'
+        Add-Type -TypeDefinition $hostSource -ReferencedAssemblies System.ServiceProcess -OutputAssembly $dll -OutputType Library
+        $type=[Reflection.Assembly]::Load([IO.File]::ReadAllBytes($dll)).GetType('SigerService')
+        $method=$type.GetMethod('OnCustomCommand',[Reflection.BindingFlags]'NonPublic,Instance,DeclaredOnly')
+        $const=$type.GetField('SimulatedFailureCommand')
+        if(-not $method -or -not $const -or [int]$const.GetValue($null) -ne [int]$hostCode.Groups[1].Value){throw 'SigerService.cs: falta OnCustomCommand o SimulatedFailureCommand.'}
+    }finally{[IO.Directory]::Delete($hostDir,$true)}
+    $h06cCount++
+    # Hallazgo (b): con -WhatIf, Common.ps1 no deja las lineas "Establecer alias" de CimCmdlets (control: sin Common.ps1 si salen).
+    $whatIfDir=Join-Path ([IO.Path]::GetTempPath()) ('siger-whatif-'+[Guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($whatIfDir)
+    try{
+        $common=(Join-Path $PSScriptRoot 'Common.ps1').Replace("'","''")
+        foreach($pair in @(@('con-common.ps1',". '$common'"),@('sin-common.ps1','$ErrorActionPreference=''Stop'''))){
+            [IO.File]::WriteAllLines((Join-Path $whatIfDir $pair[0]),@('[CmdletBinding(SupportsShouldProcess=$true)]','param()',$pair[1],'$null=Get-CimInstance Win32_OperatingSystem','if($PSCmdlet.ShouldProcess(''prueba'',''accion'')){''ACTUO''}else{''NO_ACTUO''}'),(New-Object Text.UTF8Encoding($true)))
+        }
+        $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+        try{
+            $hostExe=(Get-Process -Id $PID).Path
+            $with=@(& $hostExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $whatIfDir 'con-common.ps1') -WhatIf 2>&1|ForEach-Object {[string]$_})
+            $without=@(& $hostExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $whatIfDir 'sin-common.ps1') -WhatIf 2>&1|ForEach-Object {[string]$_})
+        }finally{$ErrorActionPreference=$old}
+        if(@($with|Where-Object {$_ -match 'gcim'}).Count -gt 0 -or ($with -join "`n") -notmatch 'NO_ACTUO' -or ($with -join "`n") -match '(?m)^ACTUO$'){throw 'Common.ps1 con -WhatIf: quedan las lineas de alias de CimCmdlets o -WhatIf dejo de regir.'}
+        if(@($without|Where-Object {$_ -match 'gcim'}).Count -eq 0){throw 'Control de -WhatIf: sin Common.ps1 no aparecieron las lineas de alias; la prueba no distingue.'}
+    }finally{[IO.Directory]::Delete($whatIfDir,$true)}
+    $h06cCount+=2
+}
+# Defecto 2: la constancia de eliminacion acepta la List[object] de Get-DeletionPlan, creada como alli o con New-Object.
+$listSettings=[PSCustomObject]@{root='D:\SIGER-VALIDACION';database='siger_a_inst';jarSha256='ab'*32}
+$listClosure=[PSCustomObject]@{file='cierre-validacion-20261204T120000Z.json';sha256='cd'*32;closedUtc='2026-12-04T12:00:00Z';communications=30;confirmed=9}
+$wrapped=New-Object System.Collections.Generic.List[object];$plain=[System.Collections.Generic.List[object]]::new()
+foreach($l in @($wrapped,$plain)){foreach($t in @('ENSAYO','RESPALDO','RAIZ')){$l.Add([PSCustomObject]@{Type=$t;Path="D:\x\$t";Files=1;Bytes=2;Evidence='e'})}}
+foreach($l in @($wrapped,$plain,@($plain.ToArray()))){
+    $r=New-ValidationDeletionRecord $listSettings $listClosure 'D:\SIGER' $null $l 0 'Prueba' 'EQUIPO\svc-siger'
+    if(@($r.elements).Count -ne 3 -or ((@($r.elements|ForEach-Object {$_.type})) -join ',') -cne 'ENSAYO,RESPALDO,RAIZ'){throw 'Constancia de eliminacion: no recorrio la lista de elementos.'}
+}
+$rvAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Remove-Validation.ps1'),[ref]$null,[ref]$null)
+if($rvAst.Extent.Text -match 'New-Object\s+''?System\.Collections\.Generic\.List'){throw 'Remove-Validation.ps1: la lista de elementos se crea con ::new(), no con New-Object (envuelta en PSObject, @() falla).'}
+$h06cCount+=4
 # --- Prueba de envio exigida para activar el correo (Set-Integration.ps1 -Correo Graph, H04a) ------------------------
 $probeNow=[datetime]::new(2026,12,8,12,0,0,[DateTimeKind]::Utc)
 function New-GraphProbe($Change){$p=[PSCustomObject]@{modo='ENVIO';estado='ACEPTADO';fase='ENVIO';http=202;requestId=$null;utc='2026-12-08T10:00:00.0000000Z';jarSha256='ABCDEF'};if($Change){& $Change $p};return $p}
@@ -634,4 +764,4 @@ try{
     $controlCount=$controls.Count+3
 }finally{if([IO.Directory]::Exists($stubDir)){[IO.Directory]::Delete($stubDir,$true)}}
 $invocationSummary="liberacion por analisis en origen ($($originCases.Count) casos y entrega solo al servicio y al ciclo manual); proceso propio por el servicio ($($serviceCases.Count+$appCases.Count) casos); prueba de Graph para activar el correo ($($probeCases.Count) casos); invocacion con -File ($($orders.Count) ordenes documentadas en $invoked procesos, $($pathListCases.Count+$domainListCases.Count) casos de listas y $controlCount controles; sin `$PSScriptRoot en param)"
-Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf, sin Remove-Item); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento); '+$invocationSummary+'. No se modifico la configuracion del equipo.')
+Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf, sin Remove-Item); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento); '+$invocationSummary+'; correcciones para Windows de H06c ('+$h06cCount+' casos: cuenta local, cuenta duena, derecho de inicio, descriptor del servicio, control 200, -WhatIf y lista de elementos). No se modifico la configuracion del equipo.')

@@ -53,8 +53,13 @@ Cada paso se anota con sus cifras (recepciones, fechas, resultados), sin datos p
 
 ### Preparacion
 
-Como administrador:
+Como administrador, comprobar el SHA-256 del ZIP **antes de descomprimirlo**: debe ser igual al del registro de H06d en
+`docs/BITACORA_0_6_0.md` del repositorio (la bitacora que trae el paquete se genero antes de ese registro y no lo
+tiene). Si no coincide, no se descomprime ni se instala: se informa al responsable.
 
+```powershell
+certutil -hashfile 'D:\Entregas\SIGER-FECHA.zip' SHA256
+```
 ```powershell
 Expand-Archive -LiteralPath 'D:\Entregas\SIGER-FECHA.zip' -DestinationPath 'D:\Entregas'
 ```
@@ -118,7 +123,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA
 ### V4. Produccion
 
 Como la cuenta de servicio, inicializar produccion con el paquete 0.6.0, sin `-MismoReleaseQue` (la validacion sigue en
-0.4.0; esa garantia la reemplaza el ensayo de H06b) y con los mismos puertos (libres desde V2). La estructura real se
+0.4.0; esa garantia la reemplaza el ensayo de H06e) y con los mismos puertos (libres desde V2). La estructura real se
 copia antes a `D:\Entregas\estructura-inicial-produccion.json`. Con acceso de funcionarios por red (firewall de TI):
 
 ```powershell
@@ -139,8 +144,11 @@ Copiar la configuracion del Formulario de la validacion (Bearer e identidad ACK 
 en la misma VM, claves de custodia, CA y `formulario-pull.json`) y **dejarla en Manual antes de iniciar**: la copia trae
 el modo `AUTOMATICO` de la validacion, y sin la orden siguiente produccion consumiria desde su primer arranque, sin sonda:
 
+La copia deja fuera las copias de seguridad `*.bak-atomic-*` que quedan en la validacion cada vez que un script
+reescribio `formulario-pull.json`:
+
 ```powershell
-Copy-Item -Path 'D:\SIGER-VALIDACION\config\formulario-*' -Destination 'D:\SIGER\config'
+Copy-Item -Path 'D:\SIGER-VALIDACION\config\formulario-*' -Exclude '*.bak-atomic-*' -Destination 'D:\SIGER\config'
 ```
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-Integration.ps1' -Root 'D:\SIGER' -Formulario Manual
@@ -176,8 +184,10 @@ Detener el motor propio:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Stop.ps1' -Root 'D:\SIGER' -AlsoMySql
 ```
 
-Como administrador (registra `SIGER` y `SIGERMySQL` con la cuenta de servicio y recuperacion automatica; pide solo la
-contrasena; no los inicia):
+Como administrador, en una consola interactiva (RDP): registra `SIGER` y `SIGERMySQL` con la cuenta de servicio y
+recuperacion automatica, sin iniciarlos. Windows PowerShell 5.1 abre el **cuadro de credenciales de Windows** con la
+cuenta ya escrita y pide solo la contrasena (no la lee de la consola). El control de los servicios (iniciar, detener y
+el control de la prueba de caida) queda solo para SYSTEM, Administradores y la cuenta de servicio:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Install-Service.ps1' -Root 'D:\SIGER' -ServiceCredential 'DDN-SIGER\svc-siger' -ConcederInicioComoServicio
@@ -196,9 +206,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Estado
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Test-Service.ps1' -Root 'D:\SIGER' -VentanaAutorizada -IncluirMySql
 ```
 
-`Estado.ps1` debe mostrar `AppRunning` verdadero, `Health` UP, version 0.6.0 y el Formulario en `MANUAL`. Si informa que el
-PID no coincide (lo corrigio H04a y se acredita en H06b), se anota y se informa al responsable; la sonda HTTPS de
-`Start.ps1` sigue siendo la prueba de salud.
+`Estado.ps1` debe mostrar `AppRunning` verdadero, `Health` UP, version 0.6.0 y el Formulario en `DESACTIVADO`: en Manual
+el servicio no tiene consumidor (`MANUAL` solo lo informa el ciclo de `Invoke-FormularioPull.ps1`). Si informa que el
+PID no coincide (corregido en H04a y, para la cuenta local `.\svc-siger`, en H06c; se acredita en H06e), se anota y se
+informa al responsable; la sonda HTTPS de `Start.ps1` sigue siendo la prueba de salud. `Test-Service.ps1` simula la
+caida de Java con el control de servicio 200 (la cuenta de servicio no puede terminar el proceso del servicio) y
+comprueba que Windows lo reinicia; deja `logs\prueba-servicio-<fecha>.json`.
 
 Sonda del Formulario (configuracion, DNS, TLS con la CA y Bearer, sin reclamar ni confirmar nada) y activacion del
 consumidor permanente. `Set-Integration.ps1` exige produccion, una sonda acreditada de menos de 24 horas con el JAR
@@ -365,7 +378,8 @@ salida de red para actualizar sus firmas), como la cuenta de servicio:
 0. Desactivar el modo D17 con la orden de arriba. Con un motor configurado SIGER no aplica el modo (aviso
    `LIBERACION_ORIGEN_CON_MOTOR`) y rige el analisis local; `Set-OriginRelease.ps1` no lo activa si existe
    `antivirus.json`.
-1. Crear `D:\SIGER\config\antivirus.json` con
+1. Solo con ClamAV ya instalado y sus firmas descargadas en `D:\Herramientas\clamav` (con un `executable` que no existe
+   SIGER no arranca, por diseno), crear `D:\SIGER\config\antivirus.json` con
    `{"engine":"CLAMAV","executable":"D:\\Herramientas\\clamav\\clamscan.exe","database":"D:\\Herramientas\\clamav\\db"}`.
 2. Mantener las firmas de la carpeta `database` actualizadas (freshclam): SIGER rechaza firmas de mas de 72 horas.
 3. Reiniciar (`Stop.ps1` y `Start.ps1`). TI comprueba en Auditoria y operacion que **Analizar** da LIMPIO en un original

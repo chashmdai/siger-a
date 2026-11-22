@@ -10,7 +10,8 @@ param(
 )
 # Registro ELEVADO y unico de los servicios SIGERMySQL y SIGER. Lo ejecuta un administrador; los servicios corren con la
 # cuenta de servicio, que no necesita ni recibe privilegios administrativos: solo el derecho de iniciar sesion como
-# servicio y permiso para iniciar, detener y consultar estos dos servicios. NO inicia ningun servicio y no toca MySQL80,
+# servicio y permiso para iniciar, detener y consultar estos dos servicios y enviarles el control de la prueba de caida
+# (Test-Service.ps1); ese control queda solo en SYSTEM, Administradores y la cuenta. NO inicia ningun servicio y no toca MySQL80,
 # Tomcat, SQL Server, SMR, firewall, PATH ni JAVA_HOME. La contrasena de la cuenta pasa al sistema como objeto, nunca
 # como argumento de proceso.
 . (Join-Path $PSScriptRoot 'Common.ps1')
@@ -50,11 +51,13 @@ function Get-LogonRight([string]$Policy){
     $null=Invoke-Native {& secedit.exe /export /areas USER_RIGHTS /cfg $Policy} -Quiet
     return @(Get-Content -LiteralPath $Policy -ErrorAction SilentlyContinue | Where-Object {$_ -like 'SeServiceLogonRight*'})
 }
+# secedit escribe una cuenta local por su nombre y no como *SID: cada entrada se compara por SID (Test-LogonRightEntry).
+$resolve={param($name) Resolve-AccountSid $name $env:COMPUTERNAME}
 $policy=Join-Path $Root ('tmp\derechos-'+[Guid]::NewGuid().ToString('N')+'.inf');$database=[IO.Path]::ChangeExtension($policy,'.sdb')
 $right=$false
 try{
     $line=@(Get-LogonRight $policy)
-    $right=$line.Count -gt 0 -and $line[0] -match [regex]::Escape('*'+$sid)
+    $right=$line.Count -gt 0 -and (Test-LogonRightEntry $line[0] $sid $resolve)
 }finally{foreach($f in @($policy,$database)){Remove-SecretFile $f}}
 
 $serviceDir=Join-Path $Root 'service';$exe=Join-Path $serviceDir 'SigerService.exe'
@@ -67,7 +70,8 @@ if(-not $right -and $ConcederInicioComoServicio){
         $entry=if($line.Count -gt 0){$line[0].TrimEnd()+",*$sid"}else{"SeServiceLogonRight = *$sid"}
         @('[Unicode]','Unicode=yes','[Version]','signature="$CHICAGO$"','Revision=1','[Privilege Rights]',$entry)|Set-Content -LiteralPath $policy -Encoding Unicode
         if((Invoke-Native {& secedit.exe /configure /db $database /cfg $policy /areas USER_RIGHTS} -Quiet) -ne 0){throw 'secedit no aplico el derecho.'}
-        $right=(Get-LogonRight $policy)[0] -match [regex]::Escape('*'+$sid)
+        $after=@(Get-LogonRight $policy)
+        $right=$after.Count -gt 0 -and (Test-LogonRightEntry $after[0] $sid $resolve)
     }finally{foreach($f in @($policy,$database)){Remove-SecretFile $f}}
 }
 
@@ -90,14 +94,17 @@ New-Service -Name $app -BinaryPathName "`"$exe`" `"$Root`"" -Credential $Service
 & sc.exe failure $app reset= 86400 actions= restart/30000/restart/60000/restart/300000 | Out-Null
 & sc.exe failureflag $app 1 | Out-Null
 
-# La cuenta de servicio opera sus dos servicios (iniciar, detener, consultar) sin ser administradora.
+# La cuenta de servicio opera sus dos servicios (iniciar, detener, consultar y el control 200 de la prueba de caida) sin
+# ser administradora. El control definido por el usuario (CR) queda solo en SYSTEM, Administradores y la cuenta: Windows
+# lo da por defecto a usuarios interactivos y a cuentas de servicio (ConvertTo-ServiceControlDescriptor).
 foreach($name in @($db,$app)){
     $sd=((& sc.exe sdshow $name)|Where-Object {$_.Trim()}) -join ''
     if($sd -notmatch '^D:'){throw "No se pudo leer el descriptor de seguridad de $name."}
-    $ace="(A;;CCLCSWRPWPDTLOCRRC;;;$sid)"
-    $new=if($sd.Contains('S:')){$sd.Insert($sd.IndexOf('S:'),$ace)}else{$sd+$ace}
+    $new=ConvertTo-ServiceControlDescriptor $sd $sid
     & sc.exe sdset $name $new | Out-Null
     if($LASTEXITCODE -ne 0){throw "No se concedio a la cuenta de servicio el control de $name."}
+    $applied=((& sc.exe sdshow $name)|Where-Object {$_.Trim()}) -join ''
+    if(-not (Test-ServiceControlDescriptor $applied $sid)){throw "El descriptor de seguridad de $name no quedo como se esperaba (control definido por el usuario solo para SYSTEM, Administradores y la cuenta de servicio). Revisalo con sc.exe sdshow $name."}
 }
 if(-not [Diagnostics.EventLog]::SourceExists($app)){New-EventLog -LogName Application -Source $app}
 

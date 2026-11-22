@@ -30,6 +30,7 @@ param(
 $s=Read-Settings $Root
 $purpose=Get-InstancePurpose $s
 if($purpose -ne 'VALIDACION'){throw 'Solo se cierra una instancia de VALIDACION. La produccion nunca se cierra con este script.'}
+Assert-InstanceOwner $s 'Close-Validation.ps1'
 $marker=Join-Path $Root 'config\piloto-cerrado.json'
 if(Test-Path -LiteralPath $marker){throw 'La validacion ya esta cerrada.'}
 if([string]::IsNullOrWhiteSpace($Motivo) -or $Motivo.Length -gt 500 -or $Motivo -match '[\x00-\x1F\x7F]'){throw 'El motivo es obligatorio, de hasta 500 caracteres y en una sola linea.'}

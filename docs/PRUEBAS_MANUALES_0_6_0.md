@@ -2,7 +2,7 @@
 
 Recorridos de la salida a produccion (`docs/PLAN_0_6_0.md`, decisiones D10-D17). Las ordenes y su contexto estan en
 `docs/DESPLIEGUE_VM.md` (Preparacion, V1-V6 y B); aqui se indica que comprobar y que anotar en cada paso. Sirven para el
-ensayo en Windows (H06b, con una instancia propia y recepciones simuladas) y para la VM (pasos V1-V6). Cada orden se
+ensayo en Windows (H06e, con una instancia propia y recepciones simuladas) y para la VM (pasos V1-V6). Cada orden se
 ejecuta **tal como en la guia**, con `powershell.exe` y `-File` desde una consola de PowerShell y con los mismos
 argumentos (no con `&` ni dentro de la sesion). En la VM, "como la cuenta de servicio" es una
 consola abierta con `runas /user:DDN-SIGER\svc-siger powershell.exe`.
@@ -16,7 +16,9 @@ capturas). En la VM no hay entregas de prueba (D13 y D14).
 1. El pie de la barra lateral dice "Version 0.6.0". Como TI, Inicio > Estado del sistema dice lo mismo.
 2. `/api/health` responde `version` 0.6.0 y `schema` 14; `Start.ps1` solo informa exito con esa version y ese esquema
    del `manifest.json` del paquete.
-3. `manifest.json` del paquete: version 0.6.0, esquema 14 y `automatedTestsExecuted` verdadero (H06a).
+3. `manifest.json` del paquete: version 0.6.0, esquema 14 y `automatedTestsExecuted` verdadero (H06d).
+4. `certutil -hashfile` del ZIP (Preparacion de `docs/DESPLIEGUE_VM.md`) da el SHA-256 del registro de H06d, antes de
+   descomprimirlo.
 
 ## 1. Antes de V1: cifras del cierre sin detener nada
 
@@ -44,7 +46,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA
 3. `Start.ps1` de la validacion se niega a iniciarla (marcador de cierre).
 4. V3 (administrador, desde la carpeta del paquete): `Uninstall-Service.ps1` retira `SIGER` y `SIGERMySQL`; la raiz,
    la base, `config\` y `logs\` siguen en su lugar.
-5. Solo en el ensayo (H06b), un rechazo por condicion antes del caso valido: cantidad distinta
+5. Solo en el ensayo (H06e), un rechazo por condicion antes del caso valido: cantidad distinta
    (`-RecepcionesDeclaradas 8`), sin pausa, una recepcion `REGISTRADA` o con ACK pendiente, una recepcion posterior a
    la pausa, una instancia de proposito distinto de VALIDACION, la confirmacion negada (no detiene nada) y `-WhatIf`.
    Cada rechazo nombra su bloqueo y no deja marcador.
@@ -54,12 +56,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA
 1. `Init-Server.ps1` sin `-MismoReleaseQue` y con los mismos puertos (libres desde V2): termina con el MySQL propio
    activo y SIGER sin iniciar. Anotar la fecha (vencimiento del autofirmado, 365 dias) y si se uso `-AccesoRed`.
 2. Las claves de `D:\SIGER\data\bootstrap-usuarios.csv` se entregan por un canal seguro y el archivo se retira.
-3. Tras la copia de `config\formulario-*`, `Set-Integration.ps1 -Formulario Manual` deja `formulario-pull.json` en
-   MANUAL antes del primer inicio (si no, produccion consumiria sin sonda).
+3. La copia de `config\formulario-*` no trae archivos `*.bak-atomic-*`, y `Set-Integration.ps1 -Formulario Manual`
+   deja `formulario-pull.json` en MANUAL antes del primer inicio (si no, produccion consumiria sin sonda).
 4. `New-AuditSearchKey.ps1` crea `config\audit-search-key.clixml` y no imprime la clave; repetirla no la sobrescribe.
 5. Modo D17 activado antes del primer inicio (seccion 4 de este documento).
-6. `Install-Service.ps1` (administrador) pide solo la contrasena de `DDN-SIGER\svc-siger` y registra los dos servicios
-   sin iniciarlos.
+6. `Install-Service.ps1` (administrador, consola interactiva) abre el cuadro de credenciales de Windows con
+   `DDN-SIGER\svc-siger`, pide solo la contrasena y registra los dos servicios sin iniciarlos; si la cuenta ya tiene el
+   derecho "Iniciar sesion como servicio", no avisa que le falta. `sc.exe sdshow SIGER` muestra el derecho CR (control
+   definido por el usuario) solo en SY, BA y el SID de la cuenta (IU y SU sin CR).
 7. **`Estado.ps1` como `svc-siger`** (despues de `Start.ps1`):
 
    ```powershell
@@ -67,10 +71,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA
    ```
 
    Anotar el resultado tal cual: `AppRunning`, `JarSha256Matches`, `Health`, `Version`, `Migration` y `Formulario`
-   (MANUAL), o el mensaje exacto si informa que el PID no coincide. La correccion de H04a (proceso propio acreditado por
-   el servicio cuando WMI oculta ruta y argumentos) se acredita en H06b; si en la VM falla igual, se informa al
-   responsable y la sonda HTTPS de `Start.ps1` sigue siendo la prueba de salud.
-8. `Test-Service.ps1 -VentanaAutorizada -IncluirMySql` termina sin error y deja `logs\prueba-servicio-<fecha>.json`.
+   (DESACTIVADO: en Manual el servicio no tiene consumidor), o el mensaje exacto si informa que el PID no coincide.
+   Las correcciones de H04a (proceso propio acreditado por el servicio cuando WMI oculta ruta y argumentos) y de H06c
+   (cuenta local `.\svc-siger`) se acreditan en H06e; si en la VM falla igual, se informa al responsable y la sonda
+   HTTPS de `Start.ps1` sigue siendo la prueba de salud.
+8. `Test-Service.ps1 -VentanaAutorizada -IncluirMySql`, como `svc-siger`, termina sin error y deja
+   `logs\prueba-servicio-<fecha>.json`. La caida simulada (control 200) deja en el registro de eventos Application
+   (origen SIGER) "caida simulada solicitada" y "termino inesperadamente", y Windows reinicia el servicio. Con otra
+   cuenta se niega antes de descifrar.
 9. `Invoke-FormularioPull.ps1 -SoloComprobar` acredita la sonda sin reclamar ni confirmar nada (ninguna COM nueva).
 10. `Set-Integration.ps1 -Formulario Automatico -SmrDetenidoConfirmado`, reinicio y `Estado.ps1`: Formulario en
     `ESPERANDO_ENTREGAS`.
@@ -91,7 +99,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-Or
 3. Tras el inicio, Administracion (TI) muestra el aviso permanente "Rige el modo de emergencia D17" con la fecha de
    activacion, y el panel Cuarentena documental lo repite. No hay avisos de vencimiento. Auditoria: un evento
    `LIBERACION_ORIGEN_ACTIVADA` (recurso SISTEMA 17) con la cuenta y el motivo; reiniciar no agrega otro.
-4. Solo en el ensayo (H06b):
+4. Solo en el ensayo (H06e):
    - con otra cuenta de Windows la orden se niega; con `config\antivirus.json` presente, tambien;
    - `-WhatIf` y la confirmacion negada no escriben el archivo; repetir la orden pide confirmar el reemplazo;
    - un archivo con un campo `until` (registro de la version 1) deja el modo sin efecto: aviso "Liberacion por analisis
@@ -136,7 +144,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-Or
    elemento. La constancia no tiene nombres de archivos de expedientes, contenido ni secretos.
 3. Despues: `D:\SIGER-VALIDACION` y los respaldos declarados ya no existen; `D:\SIGER`, `D:\Herramientas\mysql-8.4`,
    `D:\SIGER-CONSTANCIAS` y la carpeta del paquete siguen intactos y produccion sigue en `ESPERANDO_ENTREGAS`.
-4. Solo en el ensayo (H06b), rechazos: sin marcador de cierre, con servicios registrados, raiz de produccion o fuera de
+4. Solo en el ensayo (H06e), rechazos: sin marcador de cierre, con servicios registrados, raiz de produccion o fuera de
    `D:`, respaldo de otra instancia, ruta dentro del `mysqlHome`, otra cuenta y una ruta escrita distinta.
 
 ## 8. Plan B (solo si aplica, 12/12)

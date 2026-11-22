@@ -477,7 +477,9 @@ function Test-FileInUse([string]$Path){
 $script:DeletionRecordFields=@('kind','result','startedUtc','completedUtc','executedBy','reason','validation','closure','production','previous','elements','restoreSchemas','outOfScope','note')
 $script:DeletionElementFields=@('type','path','files','bytes','evidence','result','remainingFiles')
 function New-ValidationDeletionRecord($Validation,$Closure,[string]$ProductionRoot,$Previous,$Elements,[int]$RestoreSchemas,[string]$Reason,[string]$Account){
-    $items=@(foreach($e in @($Elements)){[ordered]@{type=[string]$e.Type;path=[string]$e.Path;files=[long]$e.Files;bytes=[long]$e.Bytes;evidence=[string]$e.Evidence;result='PENDIENTE';remainingFiles=$null}})
+    # Sin @($Elements): con la List[object] de Get-DeletionPlan creada con New-Object (envuelta en PSObject), @() lanza
+    # "Los tipos de argumentos no coinciden" (H06b). foreach recorre arreglos y listas, y nada con $null.
+    $items=@(foreach($e in $Elements){[ordered]@{type=[string]$e.Type;path=[string]$e.Path;files=[long]$e.Files;bytes=[long]$e.Bytes;evidence=[string]$e.Evidence;result='PENDIENTE';remainingFiles=$null}})
     return [ordered]@{
         kind='ELIMINACION_VALIDACION';result='EN_CURSO';startedUtc=(Get-Date).ToUniversalTime().ToString('o');completedUtc=$null
         executedBy=$Account;reason=$Reason

@@ -6,6 +6,9 @@
 //   Si no termina en el plazo, se termina el Job.
 // - Caida inesperada del proceso hijo: el host termina con error para que el administrador de servicios aplique la
 //   politica de recuperacion (reinicio con espera) configurada por Install-Service.ps1.
+// - Caida simulada (Test-Service.ps1): el control de servicio 200 termina el Job (PowerShell y Java), como una caida
+//   real; la cuenta de servicio no puede terminar el proceso Java del servicio con Stop-Process (acceso denegado, H06b).
+//   Solo SYSTEM, Administradores y la cuenta de servicio tienen el derecho de enviar controles (Install-Service.ps1).
 // Compatible con C# 5 (Windows PowerShell 5.1).
 using System;
 using System.Diagnostics;
@@ -105,6 +108,15 @@ public sealed class SigerService : ServiceBase {
         try { EventLog.WriteEntry("SIGER termino inesperadamente (codigo " + code + "). Revisa logs\\ de la instancia.", EventLogEntryType.Error); } catch (Exception) { }
         // Salida con error sin informar SERVICE_STOPPED: el administrador de servicios aplica la recuperacion.
         Environment.Exit(1);
+    }
+
+    /** Control de servicio de la prueba de recuperacion de Test-Service.ps1 (sc.exe control SIGER 200). */
+    public const int SimulatedFailureCommand = 200;
+
+    protected override void OnCustomCommand(int command) {
+        if (command != SimulatedFailureCommand || stopping || job == IntPtr.Zero) return;
+        try { EventLog.WriteEntry("SIGER: caida simulada solicitada (control " + SimulatedFailureCommand + ", Test-Service.ps1). Se terminan sus procesos para probar la recuperacion.", EventLogEntryType.Warning); } catch (Exception) { }
+        Native.TerminateJobObject(job, 1);
     }
 
     protected override void OnStop() { StopChild(); }
