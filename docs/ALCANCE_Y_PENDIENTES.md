@@ -122,5 +122,5 @@ Otros pendientes:
   despues de abrir Caso; guardado offline entre sesiones.
 - Renombrar una cuenta (no hay comando; el usuario se fija al crearla).
 
-No usar datos personales reales antes de la calificacion institucional y de los pendientes de seguridad y documentos.
+Produccion (D:\SIGER) opera con datos personales reales desde V4, con visto bueno institucional. La validacion 0.4.0 contiene solo entregas de prueba autorizadas del responsable y se elimina en V6. Los pendientes de seguridad de esta lista (motor antivirus local, certificado HTTPS institucional, respaldos fuera del anfitrion) siguen abiertos.
 La ficha conceptual no es un formulario aprobado.
