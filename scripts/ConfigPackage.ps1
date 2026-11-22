@@ -2,7 +2,8 @@
 # docs/PLAN_0_6_0.md). Lo cargan Export-InstanceConfig.ps1 (cuenta duena) y Test-InstanceConfig.ps1 (otra cuenta).
 # Contenido: todo config\ (salvo las carpetas rotacion-<UTC>\ que deja la importacion) y mysql\my.ini. Cada *.clixml se
 # descifra con la DPAPI de la cuenta duena solo en memoria y se guarda en el paquete como sus valores; los .p12 y el
-# resto de archivos van tal cual, con su SHA-256. Todo el contenido va cifrado con una frase de paso: PBKDF2-SHA256 de al
+# resto de archivos van tal cual, con su SHA-256 (un .p12 de nombre conocido debe abrir con su clave de secrets.clixml;
+# uno sin clave conocida viaja sin abrirse y la verificacion lo informa como SIN_CLAVE_CONOCIDA; H06r2). Todo el contenido va cifrado con una frase de paso: PBKDF2-SHA256 de al
 # menos 300.000 iteraciones (96 bytes: clave AES, clave HMAC y clave de huellas), AES-256-CBC y HMAC-SHA256 sobre
 # formato, iteraciones, sal, IV y cifrado (las primitivas de Import-SecretPackage.ps1). Cada valor de un clixml lleva
 # su huella (HMAC-SHA256 con la clave de huellas). Ninguna funcion imprime secretos. Reglas puras con casos y
@@ -61,11 +62,20 @@ function Get-ConfigItemKind([string]$Rel){
     return 'ARCHIVO'
 }
 # Clave de cada almacen, por una regla cerrada sobre el nombre (Init-Server.ps1 e Import-Integrations.ps1 -HttpsPfx,
-# que conserva la clave Tls en el anterior). Otro almacen no tiene clave conocida: la exportacion no sigue.
+# que conserva la clave Tls en el anterior). Solo estos almacenes los usa la instancia (rutas fijas en Environment.ps1).
 function Get-P12PasswordName([string]$Rel){
     if($Rel -ceq 'config\https.p12' -or $Rel -cmatch '^config\\https-anterior-[0-9]{8}-[0-9]{6}\.p12$'){return 'Tls'}
     if($Rel -ceq 'config\mysql-trust.p12'){return 'Trust'}
     return ''
+}
+# Estado del nombre de un almacen (H06r2): CONOCIDO (tiene clave por la regla de arriba y debe abrir con ella), MAYUSCULAS
+# (coincide con un nombre conocido salvo mayusculas: es un problema y bloquea la exportacion, nunca se trata como
+# desconocido) o SIN_CLAVE (ningun nombre conocido: ninguna configuracion lo usa y viaja tal cual, con su SHA-256, sin
+# abrirlo ni necesitar su contrasena; por ejemplo config\https-red-candidato.p12 de la validacion de la VM).
+function Get-P12NameState([string]$Rel){
+    if(Get-P12PasswordName $Rel){return 'CONOCIDO'}
+    if(Get-P12PasswordName $Rel.ToLowerInvariant()){return 'MAYUSCULAS'}
+    return 'SIN_CLAVE'
 }
 # Destino del paquete: archivo nuevo .sigerpkg en una carpeta existente, fuera de la raiz de la instancia.
 function Get-ExportDestinationBlockers([string]$Destination,[string]$Root,[bool]$Exists,[bool]$ParentExists){
@@ -111,7 +121,7 @@ function Get-InstanceConfigInventory([string]$Root){
         $total+=$i.Size
         if(-not (Test-ConfigItemPath $i.Rel)){$problems+="NOMBRE_NO_ADMITIDO:$($i.Rel)"}
         if($i.Size -gt $script:ConfigMaxFileBytes){$problems+="DEMASIADO_GRANDE:$($i.Rel)"}
-        if($i.Kind -ceq 'P12' -and -not (Get-P12PasswordName $i.Rel)){$problems+="P12_SIN_CLAVE_CONOCIDA:$($i.Rel)"}
+        if($i.Kind -ceq 'P12' -and (Get-P12NameState $i.Rel) -ceq 'MAYUSCULAS'){$problems+="P12_MAYUSCULAS:$($i.Rel)"}
     }
     if($total -gt $script:ConfigMaxTotalBytes){$problems+='TOTAL_DEMASIADO_GRANDE'}
     if(-not @($sorted|Where-Object {$_.Rel -ceq 'config\secrets.clixml'})){$problems+='SIN_SECRETS_CLIXML'}
@@ -219,7 +229,7 @@ function Read-ConfigPassphrase([switch]$Twice){
 
 # --- Contenido -----------------------------------------------------------------------------------------------------------
 # Construye el contenido (en claro, solo en memoria) como la cuenta duena. secrets.clixml se lee primero: da las claves
-# de los .p12, y cada .p12 debe abrir con la suya antes de seguir.
+# de los .p12, y cada .p12 de nombre conocido debe abrir con la suya antes de seguir.
 function New-InstanceConfigPayload($Settings,$Inventory,[byte[]]$FpKey){
     $models=@{}
     foreach($i in @($Inventory.Items|Where-Object {$_.Kind -ceq 'CLIXML'})){
@@ -236,7 +246,8 @@ function New-InstanceConfigPayload($Settings,$Inventory,[byte[]]$FpKey){
             $item.properties=@(foreach($p in $m.Properties){[ordered]@{name=$p.Name;type=$p.Type;value=(ConvertTo-Utf8Base64 $p.Value);fingerprint=(Get-SecretFingerprint $FpKey $i.Rel $p.Name $p.Type $p.Value)}})
         }else{
             $item.content=[Convert]::ToBase64String($bytes)
-            if($i.Kind -ceq 'P12'){
+            # Un almacen SIN_CLAVE va solo con sus bytes y su SHA-256: sin password ni certificates, y no se abre.
+            if($i.Kind -ceq 'P12' -and (Get-P12NameState $i.Rel) -cne 'SIN_CLAVE'){
                 $name=Get-P12PasswordName $i.Rel
                 $secret=@($secrets.Properties|Where-Object {$_.Name -ceq $name -and $_.Type -ceq 'SECRETO'})
                 if(-not $name -or $secret.Count -ne 1){throw "No hay clave conocida para $($i.Rel). No se exporta nada."}
@@ -270,7 +281,8 @@ function Get-PackageSettings($Payload){
 }
 
 # Revision del contenido descifrado (regla pura salvo abrir los .p12 en memoria): estructura, rutas, SHA-256 de cada
-# archivo, huella de cada valor de clixml, cada .p12 abre con su clave del paquete y da los certificados registrados.
+# archivo, huella de cada valor de clixml, cada .p12 de nombre conocido abre con su clave del paquete y da los
+# certificados registrados (uno sin clave conocida no trae clave ni certificados; uno con mayusculas cambiadas es hallazgo).
 # Devuelve los hallazgos (vacio = correcto) y las cifras.
 function Test-ConfigPayload($Payload,[byte[]]$FpKey){
     $f=@();$files=0;$secrets=0;$p12=@()
@@ -305,9 +317,14 @@ function Test-ConfigPayload($Payload,[byte[]]$FpKey){
         if([long]$bytes.Length -ne [long](Get-PackageField $i 'size')){$f+="TAMANO:$rel"}
         if((Get-Sha256Hex $bytes) -cne [string](Get-PackageField $i 'sha256')){$f+="SHA256:$rel"}
         if($kind -ceq 'P12'){
-            $name=Get-P12PasswordName $rel
-            $result=[PSCustomObject]@{Path=$rel;Opens=$false;Count=0;NotAfter='';Matches=$false}
-            if(-not $name -or [string](Get-PackageField $i 'password') -cne $name){$f+="P12_CLAVE:$rel"}
+            $name=Get-P12PasswordName $rel;$nameState=Get-P12NameState $rel
+            $result=[PSCustomObject]@{Path=$rel;NameState=$nameState;Opens=$false;Count=0;NotAfter='';Matches=$false}
+            if($nameState -ceq 'SIN_CLAVE'){
+                # Sin clave conocida: solo tamano y SHA-256 (arriba). No puede traer clave ni certificados.
+                if($null -ne $i.PSObject.Properties['password'] -or $null -ne $i.PSObject.Properties['certificates']){$f+="P12_CLAVE:$rel"}
+            }
+            elseif($nameState -ceq 'MAYUSCULAS'){$f+="P12_MAYUSCULAS:$rel"}
+            elseif([string](Get-PackageField $i 'password') -cne $name){$f+="P12_CLAVE:$rel"}
             else{
                 $pass=Get-PackageSecret $Payload 'config\secrets.clixml' $name
                 if($null -eq $pass){$f+="P12_SIN_SECRETO:$rel"}
@@ -347,12 +364,17 @@ function Compare-ConfigWithDisk($Payload,[string]$Root){
             continue
         }
         try{$bytes=[IO.File]::ReadAllBytes($full)}catch{$res.Unreadable+=$rel;continue}
-        if((Get-Sha256Hex $bytes) -ceq [string](Get-PackageField $i 'sha256')){$res.Equal+=$rel}else{$res.Different+=$rel}
+        $equal=((Get-Sha256Hex $bytes) -ceq [string](Get-PackageField $i 'sha256'))
+        if($equal){$res.Equal+=$rel}else{$res.Different+=$rel}
         if([string](Get-PackageField $i 'kind') -ceq 'P12'){
-            $pass=Get-PackageSecret $Payload 'config\secrets.clixml' ([string](Get-PackageField $i 'password'))
-            $state='NO_ABRE';try{if($null -ne $pass){$disk=@(Get-P12Certificates $bytes $pass);$state=if((Get-CertificateListKey $disk) -ceq (Get-CertificateListKey @(@(Get-PackageField $i 'certificates')|Sort-Object thumbprint))){'IGUALES'}else{'DISTINTOS'}}}catch{$state='NO_ABRE'}
-            $pass=$null
-            $res.P12+=[PSCustomObject]@{Path=$rel;State=$state}
+            # Un almacen sin clave conocida no se abre: se compara solo por SHA-256 (IGUAL o DISTINTO, arriba).
+            if((Get-P12NameState $rel) -ceq 'SIN_CLAVE'){$state='SIN_CLAVE_CONOCIDA'}
+            else{
+                $pass=Get-PackageSecret $Payload 'config\secrets.clixml' ([string](Get-PackageField $i 'password'))
+                $state='NO_ABRE';try{if($null -ne $pass){$disk=@(Get-P12Certificates $bytes $pass);$state=if((Get-CertificateListKey $disk) -ceq (Get-CertificateListKey @(@(Get-PackageField $i 'certificates')|Sort-Object thumbprint))){'IGUALES'}else{'DISTINTOS'}}}catch{$state='NO_ABRE'}
+                $pass=$null
+            }
+            $res.P12+=[PSCustomObject]@{Path=$rel;State=$state;Equal=$equal}
         }
         Clear-Bytes $bytes
     }
@@ -448,7 +470,7 @@ function Invoke-ConfigVerification($Payload,[byte[]]$FpKey,[string]$Root,[string
     foreach($x in $r.Disk.Unreadable){$r.Problems+="DISCO_NO_LEGIBLE:$x"}
     foreach($x in $r.Disk.Extra){$r.Problems+="DISCO_EXTRA:$x"}
     if($r.Disk.ListUnreadable){$r.Problems+='DISCO_NO_LEGIBLE:config\'}
-    foreach($x in @($r.Disk.P12|Where-Object {$_.State -cne 'IGUALES'})){$r.Problems+="DISCO_P12_$($x.State):$($x.Path)"}
+    foreach($x in @($r.Disk.P12|Where-Object {$_.State -cne 'IGUALES' -and $_.State -cne 'SIN_CLAVE_CONOCIDA'})){$r.Problems+="DISCO_P12_$($x.State):$($x.Path)"}
     $settings=Get-PackageSettings $Payload
     $ack=Get-PackageAck $Payload
     if($ack){
@@ -486,9 +508,15 @@ function Format-ConfigVerification($Payload,$Result){
     $lines=@()
     $lines+="Paquete $($script:ConfigFormat) integro (HMAC correcto): creado $([string]$Payload.createdUtc) en $([string]$Payload.computer) por $([string]$Payload.account), raiz $([string]$Payload.root)."
     $lines+="Contenido: $($c.Files) archivos con SHA-256 y forma correctos, $($c.Secrets) secretos con su huella$(if(@($Payload.omitted).Count){'; carpetas omitidas: '+(@($Payload.omitted) -join ', ')})."
-    foreach($p in @($c.P12)){$lines+="Almacen $($p.Path): $(if($p.Opens){"abre con su clave del paquete, $($p.Count) certificado(s), primer vencimiento $($p.NotAfter.Substring(0,4))-$($p.NotAfter.Substring(4,2))-$($p.NotAfter.Substring(6,2)), $(if($p.Matches){'iguales a los registrados'}else{'DISTINTOS a los registrados'})"}else{'NO abre con su clave del paquete'})."}
+    foreach($p in @($c.P12)){
+        if($p.NameState -ceq 'SIN_CLAVE'){$lines+="Almacen $($p.Path): sin clave conocida, se conserva tal cual (tamano y SHA-256 verificados; no se abre ni se comparan certificados).";continue}
+        if($p.NameState -ceq 'MAYUSCULAS'){$lines+="Almacen $($p.Path): nombre de un almacen conocido con otras mayusculas (P12_MAYUSCULAS).";continue}
+        $lines+="Almacen $($p.Path): $(if($p.Opens){"abre con su clave del paquete, $($p.Count) certificado(s), primer vencimiento $($p.NotAfter.Substring(0,4))-$($p.NotAfter.Substring(4,2))-$($p.NotAfter.Substring(6,2)), $(if($p.Matches){'iguales a los registrados'}else{'DISTINTOS a los registrados'})"}else{'NO abre con su clave del paquete'})."}
     $lines+="Contra el disco: $(@($d.Equal).Count) iguales, $(@($d.Different).Count) distintos, $(@($d.Missing).Count) faltan, $(@($d.Unreadable).Count) no legibles, $(@($d.Extra).Count) en disco y no en el paquete$(if($d.ListUnreadable){'; no se pudo listar config\'})."
-    foreach($x in @($d.P12)){$lines+="Almacen del disco $($x.Path) con la clave del paquete: $($x.State)."}
+    foreach($x in @($d.P12)){
+        if($x.State -ceq 'SIN_CLAVE_CONOCIDA'){$lines+="Almacen del disco $($x.Path): SIN_CLAVE_CONOCIDA (comparado solo por SHA-256: $(if($x.Equal){'IGUAL'}else{'DISTINTO'}))."}
+        else{$lines+="Almacen del disco $($x.Path) con la clave del paquete: $($x.State)."}
+    }
     if($Result.Ack -cne 'NO_APLICA'){$lines+="Identidad ACK keyId=$($Result.AckKeyId): privada y publica $($Result.Ack)$(if(@($Result.AckFindings).Count){' ('+(@($Result.AckFindings) -join ', ')+')'}else{'; keyId valido y coherente con formulario-pull.json'})."}else{$lines+='Identidad ACK: no hay en el paquete.'}
     $lines+="MySQL propio (SELECT 1): $(@($Result.MySql|Where-Object {$_.State -ceq 'AUTENTICADA'}).Count) de $(@($Result.MySql).Count) cuentas autenticadas$(if(@($Result.MySql).Count){' ('+((@($Result.MySql)|ForEach-Object {"$($_.User) $($_.State)"}) -join ', ')+')'})$(if($Result.MySqlNote){'; '+$Result.MySqlNote})."
     $lines+=if(@($Result.Problems).Count -eq 0){'Resultado: CORRECTO.'}else{'Resultado: CON OBSERVACIONES: '+(@($Result.Problems) -join ', ')+'.'}

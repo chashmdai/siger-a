@@ -56,7 +56,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA
 1. `Init-Server.ps1` sin `-MismoReleaseQue` y con los mismos puertos (libres desde V2): termina con el MySQL propio
    activo y SIGER sin iniciar. Anotar la fecha (vencimiento del autofirmado, 365 dias) y si se uso `-AccesoRed`.
 2. Las claves de `D:\SIGER\data\bootstrap-usuarios.csv` se entregan por un canal seguro y el archivo se retira.
-3. La copia de `config\formulario-*` no trae archivos `*.bak-atomic-*`, y `Set-Integration.ps1 -Formulario Manual`
+3. La copia de la configuracion del Formulario trae exactamente sus cinco archivos (ningun `*.bak-*`), y `Set-Integration.ps1 -Formulario Manual`
    deja `formulario-pull.json` en MANUAL antes del primer inicio (si no, produccion consumiria sin sonda).
 4. `New-AuditSearchKey.ps1` crea `config\audit-search-key.clixml` y no imprime la clave; repetirla no la sobrescribe.
 5. Modo D17 activado antes del primer inicio (seccion 4 de este documento).

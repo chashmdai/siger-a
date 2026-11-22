@@ -10,7 +10,9 @@ param(
 # lo protegido con su DPAPI. Ejecutar COMO la cuenta duena (ownerSid de instance.json), por ejemplo desde una PowerShell
 # ya abierta con esa cuenta; no necesita privilegios administrativos ni detener la instancia, y no cambia nada en ella.
 # Incluye todo config\ (salvo las carpetas rotacion-<UTC>\) y mysql\my.ini: cada *.clixml se descifra solo en memoria
-# y se cifra con la frase de paso; los .p12 deben abrir con su clave de secrets.clixml; cada archivo lleva su SHA-256 y
+# y se cifra con la frase de paso; los .p12 de nombre conocido (https.p12, https-anterior-*, mysql-trust.p12) deben abrir
+# con su clave de secrets.clixml; otro .p12 (sin clave conocida, que ninguna configuracion usa) se conserva tal cual, sin
+# abrirlo, y uno con el nombre de un conocido salvo mayusculas impide exportar (H06r2); cada archivo lleva su SHA-256 y
 # cada valor de clixml su huella (formato SIGER-CONFIG-1, ConfigPackage.ps1). La frase se escribe dos veces a mano. El
 # paquete queda solo para la cuenta, SYSTEM y Administradores, y se verifica leyendolo de nuevo antes de terminar. Nunca
 # imprime secretos. -WhatIf muestra el inventario sin pedir la frase ni escribir. Funciona sobre una instancia 0.4.0 con
@@ -29,7 +31,14 @@ $inv=Get-InstanceConfigInventory $rootFull
 $byKind=@($inv.Items|Group-Object Kind|ForEach-Object {"$($_.Count) $($_.Name)"}) -join ', '
 Write-Host "Instancia $rootFull ($([string](Get-PackageField $s 'mode')) $([string](Get-PackageField $s 'purpose'))), cuenta $([Security.Principal.WindowsIdentity]::GetCurrent().Name)."
 Write-Host "Inventario: $(@($inv.Items).Count) archivos ($byKind), $($inv.Total) bytes$(if(@($inv.Omitted).Count){'; se omiten '+(@($inv.Omitted) -join ', ')})."
-foreach($i in $inv.Items){Write-Host "  $($i.Kind.PadRight(7)) $($i.Rel) ($($i.Size) bytes)"}
+foreach($i in $inv.Items){
+    $note=''
+    if($i.Kind -ceq 'P12'){
+        $state=Get-P12NameState $i.Rel
+        $note=if($state -ceq 'CONOCIDO'){", clave $(Get-P12PasswordName $i.Rel)"}elseif($state -ceq 'SIN_CLAVE'){', sin clave conocida: se conserva tal cual, sin abrirlo'}else{', nombre conocido con otras mayusculas: no se exporta'}
+    }
+    Write-Host "  $($i.Kind.PadRight(7)) $($i.Rel) ($($i.Size) bytes$note)"
+}
 if(@($inv.Problems).Count -gt 0){throw ('La configuracion no se puede exportar ('+(@($inv.Problems) -join ', ')+'). No se escribio nada.')}
 if(-not $PSCmdlet.ShouldProcess($dest,'Crear el paquete portable de la configuracion (SIGER-CONFIG-1)')){return}
 
@@ -58,6 +67,7 @@ try{
     $sha=Get-Sha256Hex ([IO.File]::ReadAllBytes($dest))
 }finally{Clear-ConfigCrypto $crypto;$pass=$null}
 Write-Host "Paquete escrito y leido de nuevo: $dest"
-Write-Host "Contenido: $($check.Files) archivos con SHA-256, $($check.Secrets) secretos con su huella, $(@($check.P12).Count) almacen(es) .p12 que abren con su clave."
+$opaque=@($check.P12|Where-Object {$_.NameState -ceq 'SIN_CLAVE'}|ForEach-Object {$_.Path})
+Write-Host "Contenido: $($check.Files) archivos con SHA-256, $($check.Secrets) secretos con su huella, $(@($check.P12|Where-Object {$_.NameState -ceq 'CONOCIDO' -and $_.Opens}).Count) almacen(es) .p12 que abren con su clave y $($opaque.Count) sin clave conocida conservado(s) tal cual$(if($opaque.Count){' ('+($opaque -join ', ')+')'})."
 Write-Host "SHA-256 del paquete (anotalo para comparar despues): $sha"
 Write-Host 'No se mostraron secretos ni se cambio la instancia. Siguiente paso: Test-InstanceConfig.ps1 como OTRA cuenta (administrador), con la frase de paso.'

@@ -781,6 +781,12 @@ foreach($c in @(@('config\https.p12','Tls'),@('config\https-anterior-20261122-10
     @('config\sub\https.p12',''),@('config\https-anterior-2026.p12',''),@('config\otro.p12',''),@('config\mysql-trust.p12.bak','') )){
     Assert-H06r ((Get-P12PasswordName $c[0]) -ceq $c[1]) "clave de '$($c[0])' esperaba '$($c[1])'."
 }
+# H06r2: estado del nombre de un almacen. Un nombre conocido salvo mayusculas es MAYUSCULAS (bloquea), nunca SIN_CLAVE.
+foreach($c in @(@('config\https.p12','CONOCIDO'),@('config\https-anterior-20261122-101010.p12','CONOCIDO'),@('config\mysql-trust.p12','CONOCIDO'),
+    @('config\HTTPS.p12','MAYUSCULAS'),@('config\https.P12','MAYUSCULAS'),@('config\https-ANTERIOR-20261122-101010.p12','MAYUSCULAS'),@('config\Https-anterior-20261122-101010.P12','MAYUSCULAS'),@('config\MySQL-Trust.p12','MAYUSCULAS'),
+    @('config\https-red-candidato.p12','SIN_CLAVE'),@('config\otro.pfx','SIN_CLAVE'),@('config\https.pfx','SIN_CLAVE'),@('config\HTTPS.pfx','SIN_CLAVE'),@('config\sub\https.p12','SIN_CLAVE'),@('config\https-anterior-2026.p12','SIN_CLAVE'),@('config\mysql-trust.p12.p12','SIN_CLAVE'))){
+    Assert-H06r ((Get-P12NameState $c[0]) -ceq $c[1]) "estado del nombre '$($c[0])' esperaba '$($c[1])'."
+}
 foreach($c in @(@('D:\R\a.sigerpkg',$false,$true,''),@('D:\R\a.SIGERPKG',$false,$true,''),@('D:\R\a.zip',$false,$true,'EXTENSION'),@('D:\R\a.sigerpkg',$true,$true,'EXISTE'),
     @('D:\R\a.sigerpkg',$false,$false,'SIN_CARPETA'),@('D:\SIGER-VALIDACION\config\a.sigerpkg',$false,$true,'DENTRO_DE_LA_RAIZ'),@('D:\SIGER-VALIDACION2\a.sigerpkg',$false,$true,''))){
     Assert-H06r ((@(Get-ExportDestinationBlockers $c[0] 'D:\SIGER-VALIDACION' $c[1] $c[2]) -join ',') -ceq $c[3]) "destino '$($c[0])' esperaba '$($c[3])'."
@@ -863,6 +869,27 @@ foreach($m in $h6Mutations){
 }
 Assert-H06r (@((Test-ConfigPayload (New-H06rPayload) $h6Crypto.Mac).Findings|Where-Object {$_ -like 'HUELLA:*'}).Count -eq 7) 'con otra clave todas las huellas deben fallar.'
 Assert-H06r ((Get-PackageSecret (New-H06rPayload) 'config\secrets.clixml' 'Tls') -ceq "$h6Secret-Tls" -and $null -eq (Get-PackageSecret (New-H06rPayload) 'config\secrets.clixml' 'Nada')) 'lectura de un secreto del paquete.'
+# H06r2: almacen sin clave conocida en el paquete sintetico (sus bytes no son un .p12: si se intentara abrir, fallaria).
+function Add-H06rOpaqueP12($Payload,[string]$Path,[hashtable]$Extra){
+    $b=[Text.Encoding]::UTF8.GetBytes('almacen sin clave conocida de H06r2')
+    $o=[ordered]@{path=$Path;kind='P12';size=$b.Length;sha256=(Get-Sha256Hex $b);content=[Convert]::ToBase64String($b)}
+    if($Extra){foreach($k in $Extra.Keys){$o[$k]=$Extra[$k]}}
+    $Payload.items=@($Payload.items)+@((($o|ConvertTo-Json -Depth 5 -Compress)|ConvertFrom-Json))
+    return $Payload
+}
+$h6Opaque=Test-ConfigPayload (Add-H06rOpaqueP12 (New-H06rPayload) 'config\https-red-candidato.p12' $null) $h6Crypto.Fp
+Assert-H06r (@($h6Opaque.Findings).Count -eq 0 -and $h6Opaque.Files -eq 4 -and @($h6Opaque.P12).Count -eq 1 -and $h6Opaque.P12[0].NameState -ceq 'SIN_CLAVE' -and -not $h6Opaque.P12[0].Opens) "un almacen sin clave conocida debe aceptarse sin abrirlo ($(@($h6Opaque.Findings) -join ','))."
+foreach($m in @(
+    @{n='sin clave conocida con password';p='config\https-red-candidato.p12';x=@{password='Tls'};e='P12_CLAVE:config\https-red-candidato.p12'},
+    @{n='sin clave conocida con certificates';p='config\https-red-candidato.p12';x=@{certificates=@()};e='P12_CLAVE:config\https-red-candidato.p12'},
+    @{n='nombre conocido con otras mayusculas';p='config\HTTPS.p12';x=$null;e='P12_MAYUSCULAS:config\HTTPS.p12'},
+    @{n='anterior con otras mayusculas y su clave';p='config\https-ANTERIOR-20261122-101010.p12';x=@{password='Tls'};e='P12_MAYUSCULAS:config\https-ANTERIOR-20261122-101010.p12'},
+    @{n='conocido sin password';p='config\https.p12';x=$null;e='P12_CLAVE:config\https.p12'},
+    @{n='conocido que no abre';p='config\https-anterior-20261122-101010.p12';x=@{password='Tls';certificates=@()};e='P12_NO_ABRE:config\https-anterior-20261122-101010.p12'})){
+    Assert-H06r (@((Test-ConfigPayload (Add-H06rOpaqueP12 (New-H06rPayload) $m.p $m.x) $h6Crypto.Fp).Findings) -ccontains $m.e) "con un almacen $($m.n) se esperaba el hallazgo $($m.e)."
+}
+$h6OpaqueReport=Format-ConfigVerification (Add-H06rOpaqueP12 (New-H06rPayload) 'config\https-red-candidato.p12' $null) ([PSCustomObject]@{Content=$h6Opaque;Disk=[PSCustomObject]@{Equal=@('config\https-red-candidato.p12');Different=@();Missing=@();Unreadable=@();Extra=@();ListUnreadable=$false;P12=@([PSCustomObject]@{Path='config\https-red-candidato.p12';State='SIN_CLAVE_CONOCIDA';Equal=$true})};Ack='NO_APLICA';AckKeyId='';AckFindings=@();MySql=@();MySqlNote='';Problems=@()})
+Assert-H06r ($h6OpaqueReport -ccontains 'Almacen config\https-red-candidato.p12: sin clave conocida, se conserva tal cual (tamano y SHA-256 verificados; no se abre ni se comparan certificados).' -and $h6OpaqueReport -ccontains 'Almacen del disco config\https-red-candidato.p12: SIN_CLAVE_CONOCIDA (comparado solo por SHA-256: IGUAL).' -and $h6OpaqueReport[-1] -ceq 'Resultado: CORRECTO.') "el informe debe mostrar el almacen sin clave conocida y seguir CORRECTO ($($h6OpaqueReport -join ' | '))."
 # MySQL: la contrasena solo en MYSQL_PWD del proceso hijo, nunca en argumentos; --no-defaults primero; TLS VERIFY_CA.
 $h6Psi=New-MySqlProbeStartInfo 'C:\no\existe\mysql.exe' 'siger_a_app' 13326 'D:\SIGER-VALIDACION\mysql\data\ca.pem'
 Assert-H06r ($h6Psi.Arguments.StartsWith('--no-defaults ') -and $h6Psi.Arguments.Contains('--ssl-mode=VERIFY_CA') -and $h6Psi.Arguments.Contains('--host=127.0.0.1') -and $h6Psi.Arguments.Contains('--port=13326') -and $h6Psi.Arguments -notmatch '(?i)password|(^|\s)-p' -and -not $h6Psi.EnvironmentVariables.ContainsKey('MYSQL_PWD')) 'argumentos de la prueba de MySQL.'
@@ -990,12 +1017,16 @@ try{
             Assert-H06r ((Get-H06rError {ConvertTo-ClixmlModel (Import-Clixml -LiteralPath $f) 'config\forma.clixml'}) -like 'Forma no admitida*') "un clixml con $($c[0]) debe rechazarse."
             [IO.File]::Delete($f)
         }
-        [IO.File]::Copy((Join-Path $root 'config\https.p12'),(Join-Path $root 'config\otro.p12'))
-        Assert-H06r (@((Get-InstanceConfigInventory $root).Problems) -ccontains 'P12_SIN_CLAVE_CONOCIDA:config\otro.p12') 'un almacen sin clave conocida debe impedir la exportacion.'
+        # H06r2: un almacen con el nombre de uno conocido salvo mayusculas sigue impidiendo la exportacion (en Windows
+        # https.p12 y HTTPS.p12 no conviven: se usa el anterior).
+        $caseP12=Join-Path $root 'config\https-ANTERIOR-20261122-101010.p12'
+        [IO.File]::Copy((Join-Path $root 'config\https.p12'),$caseP12)
+        Assert-H06r ((@((Get-InstanceConfigInventory $root).Problems) -join ',') -ceq 'P12_MAYUSCULAS:config\https-ANTERIOR-20261122-101010.p12') 'un almacen conocido con otras mayusculas debe impedir la exportacion.'
+        Assert-H06r ((Get-H06rError {New-InstanceConfigPayload $s (Get-InstanceConfigInventory $root) $crypto.Fp}) -like 'No hay clave conocida para config\https-ANTERIOR-*') 'el contenido no debe armarse con un almacen conocido con otras mayusculas.'
         $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
         try{$badInv=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Export-InstanceConfig.ps1') -Root $root -Destination (Join-Path $h6Dir 'inv.sigerpkg') -WhatIf 2>&1|ForEach-Object {[string]$_});$badInvCode=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
-        Assert-H06r ($badInvCode -ne 0 -and ($badInv -join ' ') -match 'no se puede exportar' -and ($badInv -join ' ') -match 'P12_SIN_CLAVE_CONOCIDA' -and ($badInv -join ' ') -notmatch 'Whatif: .*Crear el paquete') 'Export-InstanceConfig.ps1 debe negarse con un inventario con problemas, antes de -WhatIf.'
-        [IO.File]::Delete((Join-Path $root 'config\otro.p12'))
+        Assert-H06r ($badInvCode -ne 0 -and ($badInv -join ' ') -match 'no se puede exportar' -and ($badInv -join ' ') -match 'P12_MAYUSCULAS:config\\https-ANTERIOR-20261122-101010\.p12' -and ($badInv -join ' ') -match 'nombre conocido con otras mayusculas: no se exporta' -and ($badInv -join ' ') -notmatch 'Whatif: .*Crear el paquete' -and -not [IO.File]::Exists((Join-Path $h6Dir 'inv.sigerpkg'))) 'Export-InstanceConfig.ps1 debe negarse con un inventario con problemas, antes de -WhatIf.'
+        [IO.File]::Delete($caseP12)
         $junction=Join-Path $root 'config\enlace'
         $null=& cmd.exe /c mklink /J "$junction" "$h6Dir" 2>&1
         if([IO.Directory]::Exists($junction)){
@@ -1039,11 +1070,76 @@ try{
             Assert-H06r ($vc -ne 0 -and ($vo -join ' ') -match $c[1] -and ($vo -join ' ') -notmatch 'Resultado:') "Test-InstanceConfig.ps1 con la cuenta duena o una frase incorrecta debe negarse ($($c[1]))."
             foreach($v in $vals.Values){Assert-H06r (-not ($vo -join ' ').Contains($v)) 'un secreto aparecio en la salida de la verificacion.'}
         }
+        # H06r2: instancia temporal con los 26 nombres y tipos del inventario de la VM (2026-11-22; contenido sintetico) y
+        # un almacen sin clave conocida creado con una contrasena aleatoria que se descarta.
+        $vm=Join-Path $h6Dir 'vm';foreach($d in @('config','mysql','tmp')){[void][IO.Directory]::CreateDirectory((Join-Path $vm $d))}
+        foreach($n in @('secrets.clixml','formulario-pull-token.clixml','formulario-ack-identity.clixml','https.p12','mysql-trust.p12')){[IO.File]::Copy((Join-Path $root "config\$n"),(Join-Path $vm "config\$n"))}
+        [IO.File]::Copy((Join-Path $root 'tmp\ca.pem'),(Join-Path $vm 'config\formulario-ca.pem'))
+        foreach($n in @('https.p12.bak-lan-20261109','https.p12.bak-red-final-20261109')){[IO.File]::Copy((Join-Path $vm 'config\https.p12'),(Join-Path $vm "config\$n"))}
+        [PSCustomObject]@{namespace='SIGER-A-2026';root=$vm;mysqlHome=(Join-Path $h6Dir 'sin-mysql');mysqlPort=13399;javaHome=(Split-Path $h6JavaBin -Parent);database='siger_a_inst';mode='INSTITUCIONAL';purpose='VALIDACION';ownerSid=$me}|ConvertTo-Json|Set-Content -Encoding UTF8 (Join-Path $vm 'config\instance.json')
+        foreach($n in @('02af7615a5904068a2a4c1fdeb21c34f','23d819e48ab242778a9eaa0d13bf8508','25e1a37dbd6e4b2987109cc7b0af81c6','88ab7849c4fe4972bb5c62f7d8c2b9bd')){[IO.File]::WriteAllText((Join-Path $vm "config\instance.json.bak-atomic-$n"),'{"copia":"sintetica"}')}
+        foreach($n in @('auto','bind','lan','red-final')){[IO.File]::WriteAllText((Join-Path $vm "config\instance.json.bak-$n-20261109"),'{"copia":"sintetica"}')}
+        [IO.File]::WriteAllText((Join-Path $vm 'config\formulario-pull.json'),'{"origin":"https://formulario.invalid","scope":"UPR-REQ","ackKeyId":"siger-ack-1","caFile":"formulario-ca.pem","mode":"AUTOMATICO","consumidorUnicoConfirmado":true}')
+        foreach($n in @('formulario-pull.json.bak-atomic-5fb59f7986e9478aa906282d48573273','formulario-pull.json.bak-auto-20261109')){[IO.File]::WriteAllText((Join-Path $vm "config\$n"),'{"copia":"sintetica"}')}
+        foreach($n in @('estructura-inicial.json','formulario-trusted-keys.json','service.json')){[IO.File]::WriteAllText((Join-Path $vm "config\$n"),'{}')}
+        [IO.File]::WriteAllText((Join-Path $vm 'config\initialized.marker'),'2026-11-09T00:00:00Z')
+        [IO.File]::WriteAllText((Join-Path $vm 'mysql\my.ini'),"[mysqld]`r`nport=13399`r`n")
+        $pf=Join-Path $vm 'tmp\k.txt'
+        try{
+            [IO.File]::WriteAllText($pf,[Guid]::NewGuid().ToString('N'))
+            $null=Invoke-Native {& $keytool -genkeypair -alias candidato -keyalg RSA -keysize 2048 -validity 30 -dname 'CN=candidato,OU=SIGER' -storetype PKCS12 -keystore (Join-Path $vm 'config\https-red-candidato.p12') '-storepass:file' $pf -noprompt} -Quiet
+        }finally{Remove-SecretFile $pf}
+        $h6VmItems=@('ARCHIVO config\estructura-inicial.json','CLIXML config\formulario-ack-identity.clixml','ARCHIVO config\formulario-ca.pem','ARCHIVO config\formulario-pull.json',
+            'ARCHIVO config\formulario-pull.json.bak-atomic-5fb59f7986e9478aa906282d48573273','ARCHIVO config\formulario-pull.json.bak-auto-20261109','CLIXML config\formulario-pull-token.clixml',
+            'ARCHIVO config\formulario-trusted-keys.json','P12 config\https.p12','ARCHIVO config\https.p12.bak-lan-20261109','ARCHIVO config\https.p12.bak-red-final-20261109',
+            'P12 config\https-red-candidato.p12','ARCHIVO config\initialized.marker','ARCHIVO config\instance.json','ARCHIVO config\instance.json.bak-atomic-02af7615a5904068a2a4c1fdeb21c34f',
+            'ARCHIVO config\instance.json.bak-atomic-23d819e48ab242778a9eaa0d13bf8508','ARCHIVO config\instance.json.bak-atomic-25e1a37dbd6e4b2987109cc7b0af81c6',
+            'ARCHIVO config\instance.json.bak-atomic-88ab7849c4fe4972bb5c62f7d8c2b9bd','ARCHIVO config\instance.json.bak-auto-20261109','ARCHIVO config\instance.json.bak-bind-20261109',
+            'ARCHIVO config\instance.json.bak-lan-20261109','ARCHIVO config\instance.json.bak-red-final-20261109','P12 config\mysql-trust.p12','CLIXML config\secrets.clixml',
+            'ARCHIVO config\service.json','ARCHIVO mysql\my.ini')
+        $vmInv=Get-InstanceConfigInventory $vm
+        $vmGot=[string[]]@($vmInv.Items|ForEach-Object {"$($_.Kind) $($_.Rel)"});$vmWant=[string[]]$h6VmItems.Clone();[Array]::Sort($vmGot,[StringComparer]::Ordinal);[Array]::Sort($vmWant,[StringComparer]::Ordinal)
+        Assert-H06r ($h6VmItems.Count -eq 26 -and ($vmGot -join '|') -ceq ($vmWant -join '|') -and @($vmInv.Problems).Count -eq 0) "inventario con los nombres de la VM ($(@($vmInv.Problems) -join ','))."
+        $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+        try{$vmWhat=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ex -Root $vm -Destination (Join-Path $h6Dir 'vm.sigerpkg') -WhatIf 2>&1|ForEach-Object {[string]$_});$vmWhatCode=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
+        $vmWhatText=$vmWhat -join "`n"
+        Assert-H06r ($vmWhatCode -eq 0 -and -not [IO.File]::Exists((Join-Path $h6Dir 'vm.sigerpkg')) -and $vmWhatText -match 'Inventario: 26 archivos \(20 ARCHIVO, 3 CLIXML, 3 P12\), [0-9]+ bytes\.' -and $vmWhatText -match '(?m)^  P12     config\\https-red-candidato\.p12 \([0-9]+ bytes, sin clave conocida: se conserva tal cual, sin abrirlo\)$' -and $vmWhatText -match '(?m)^  P12     config\\https\.p12 \([0-9]+ bytes, clave Tls\)$' -and $vmWhatText -match '(?m)^  P12     config\\mysql-trust\.p12 \([0-9]+ bytes, clave Trust\)$' -and $vmWhatText -notmatch 'no se puede exportar') "Export-InstanceConfig.ps1 -WhatIf con los nombres de la VM ($vmWhatText)."
+        $vmPayload=((New-InstanceConfigPayload (Read-Settings $vm) $vmInv $crypto.Fp)|ConvertTo-Json -Depth 10 -Compress)|ConvertFrom-Json
+        $vmCand=@($vmPayload.items|Where-Object {$_.path -ceq 'config\https-red-candidato.p12'})
+        Assert-H06r ($vmCand.Count -eq 1 -and $null -eq $vmCand[0].PSObject.Properties['password'] -and $null -eq $vmCand[0].PSObject.Properties['certificates'] -and $vmCand[0].sha256 -ceq (Get-Sha256Hex ([IO.File]::ReadAllBytes((Join-Path $vm 'config\https-red-candidato.p12'))))) 'el almacen sin clave conocida debe viajar con sus bytes, sin clave ni certificados.'
+        $vmCheck=Test-ConfigPayload $vmPayload $crypto.Fp
+        Assert-H06r (@($vmCheck.Findings).Count -eq 0 -and $vmCheck.Files -eq 26 -and @($vmCheck.P12|Where-Object {$_.NameState -ceq 'CONOCIDO' -and $_.Opens -and $_.Matches}).Count -eq 2 -and (@($vmCheck.P12|Where-Object {$_.NameState -ceq 'SIN_CLAVE'}|ForEach-Object {$_.Path}) -join ',') -ceq 'config\https-red-candidato.p12') "contenido con los nombres de la VM ($(@($vmCheck.Findings) -join ','))."
+        $vmResult=Invoke-ConfigVerification $vmPayload $crypto.Fp $vm (Join-Path $PSScriptRoot 'AckKeyCheck.java')
+        $vmLines=Format-ConfigVerification $vmPayload $vmResult
+        Assert-H06r (@($vmResult.Problems|Where-Object {$_ -notlike 'MYSQL_*'}).Count -eq 0 -and @($vmResult.Disk.Equal).Count -eq 26 -and $vmLines -ccontains 'Almacen config\https-red-candidato.p12: sin clave conocida, se conserva tal cual (tamano y SHA-256 verificados; no se abre ni se comparan certificados).' -and $vmLines -ccontains 'Almacen del disco config\https-red-candidato.p12: SIN_CLAVE_CONOCIDA (comparado solo por SHA-256: IGUAL).') "verificacion con los nombres de la VM ($(@($vmResult.Problems) -join ','))."
+        # Un cambio del almacen sin clave conocida en el disco se informa como DISTINTO (sin DISCO_P12_*).
+        $candFile=Join-Path $vm 'config\https-red-candidato.p12';$candBytes=[IO.File]::ReadAllBytes($candFile)
+        [IO.File]::WriteAllBytes($candFile,[byte[]]($candBytes+[byte]0))
+        $vmDiff=@((Invoke-ConfigVerification $vmPayload $crypto.Fp $vm (Join-Path $PSScriptRoot 'AckKeyCheck.java')).Problems|Where-Object {$_ -notlike 'MYSQL_*'})
+        Assert-H06r (($vmDiff -join ',') -ceq 'DISCO_DISTINTO:config\https-red-candidato.p12') "un almacen sin clave conocida cambiado en el disco debe dar solo DISCO_DISTINTO ($($vmDiff -join ','))."
+        [IO.File]::WriteAllBytes($candFile,$candBytes)
+        # Las reglas de los conocidos no se aflojan: un https.p12 que no abre con su clave impide armar el contenido.
+        $httpsFile=Join-Path $vm 'config\https.p12';$httpsBytes=[IO.File]::ReadAllBytes($httpsFile)
+        [IO.File]::WriteAllBytes($httpsFile,$candBytes)
+        Assert-H06r ((Get-H06rError {New-InstanceConfigPayload (Read-Settings $vm) (Get-InstanceConfigInventory $vm) $crypto.Fp}) -like 'config\https.p12 no abre con su clave*') 'un https.p12 que no abre con su clave debe impedir la exportacion.'
+        [IO.File]::WriteAllBytes($httpsFile,$httpsBytes)
+        # Copia de V4 (DESPLIEGUE_VM.md): la orden documentada, sobre los nombres de la VM, copia exactamente los cinco
+        # archivos del Formulario; control: la orden anterior (con -Exclude '*.bak-atomic-*') arrastra el .bak-auto.
+        $guideCopy=@([IO.File]::ReadAllLines((Join-Path $project 'docs\DESPLIEGUE_VM.md'))|Where-Object {$_ -like 'Copy-Item *' -and $_ -like "*'D:\SIGER-VALIDACION\config\formulario*"})
+        Assert-H06r ($guideCopy.Count -eq 1) "DESPLIEGUE_VM.md debe tener una sola copia de la configuracion del Formulario ($($guideCopy.Count))."
+        function Invoke-H06rGuideCopy([string]$Line,[string]$Name){
+            $dst=Join-Path $h6Dir $Name;[void][IO.Directory]::CreateDirectory($dst)
+            $null=& ([scriptblock]::Create($Line.Replace("'D:\SIGER-VALIDACION\config\","'$vm\config\").Replace("'D:\SIGER\config'","'$dst'")))
+            $got=[string[]]@([IO.Directory]::GetFileSystemEntries($dst)|ForEach-Object {[IO.Path]::GetFileName($_)});[Array]::Sort($got,[StringComparer]::Ordinal)
+            return ($got -join ',')
+        }
+        Assert-H06r ((Invoke-H06rGuideCopy $guideCopy[0] 'copia-v4') -ceq 'formulario-ack-identity.clixml,formulario-ca.pem,formulario-pull-token.clixml,formulario-pull.json,formulario-trusted-keys.json') 'la copia de V4 debe traer exactamente los cinco archivos del Formulario.'
+        Assert-H06r ((Invoke-H06rGuideCopy "Copy-Item -Path 'D:\SIGER-VALIDACION\config\formulario-*' -Exclude '*.bak-atomic-*' -Destination 'D:\SIGER\config'" 'copia-anterior') -like '*formulario-pull.json.bak-auto-20261109*') 'control: la orden anterior de V4 debe copiar el .bak-auto (si no, la prueba no detecta nada).'
         Clear-ConfigCrypto $crypto;Clear-ConfigCrypto $opened.Crypto
-        $h6Ack+='; ida completa con DPAPI, keytool y los scripts con -File'
+        $h6Ack+='; ida completa con DPAPI, keytool y los scripts con -File; inventario de la VM con almacen sin clave conocida y copia de V4'
     }
 }finally{if([IO.Directory]::Exists($h6Dir)){[IO.Directory]::Delete($h6Dir,$true)};Clear-ConfigCrypto $h6Crypto;Clear-ConfigCrypto $h6Open.Crypto}
-$h06rSummary="paquete de configuracion de H06r ($h06rCount casos: rutas, tipos, claves de .p12, destino, cuenta verificadora, keyId, cifrado y envoltura, revision del contenido, MySQL sin contrasena en argumentos, verificacion sin escrituras, orden de los scripts; $h6Ack)"
+$h06rSummary="paquete de configuracion de H06r ($h06rCount casos: rutas, tipos, claves de .p12, destino, cuenta verificadora, keyId, cifrado y envoltura, revision del contenido, almacenes sin clave conocida y con otras mayusculas (H06r2), MySQL sin contrasena en argumentos, verificacion sin escrituras, orden de los scripts; $h6Ack)"
 # --- fin H06r ---
 $invocationSummary="liberacion por analisis en origen ($($originCases.Count) casos y entrega solo al servicio y al ciclo manual); proceso propio por el servicio ($($serviceCases.Count+$appCases.Count) casos); prueba de Graph para activar el correo ($($probeCases.Count) casos); invocacion con -File ($($orders.Count) ordenes documentadas en $invoked procesos, $($pathListCases.Count+$domainListCases.Count) casos de listas y $controlCount controles; sin `$PSScriptRoot en param)"
 Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf, sin Remove-Item); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento); '+$invocationSummary+'; correcciones para Windows de H06c ('+$h06cCount+' casos: cuenta local, cuenta duena, derecho de inicio, descriptor del servicio, control 200, -WhatIf y lista de elementos); '+$h06rSummary+'. No se modifico la configuracion del equipo.')

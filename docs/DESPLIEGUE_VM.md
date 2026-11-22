@@ -60,25 +60,40 @@ Bearer y la identidad ACK del Formulario. P0 deja antes un paquete portable de t
 frase de paso y verificado por otra cuenta. **No cambia nada en la validacion**: no la detiene ni toca sus servicios,
 y la PowerShell ya abierta como `svc-siger` se mantiene abierta hasta terminar el punto 4.
 
-Se usan seis archivos del commit `gate H06r` del repositorio (sirven para la validacion 0.4.0; no se espera el paquete
+Se usan seis archivos del commit `gate H06r2` del repositorio (sirven para la validacion 0.4.0; no se espera el paquete
 0.6.0): `Export-InstanceConfig.ps1`, `Test-InstanceConfig.ps1`, `ConfigPackage.ps1`, `AckKeyCheck.java`, `Common.ps1` y
-`Hash.ps1`. Su SHA-256 esta en el registro de H06r de `docs/BITACORA_0_6_0.md` del repositorio.
+`Hash.ps1`. Su SHA-256 esta en el registro de H06r2 de `docs/BITACORA_0_6_0.md` del repositorio. Los de H06r (carpeta
+`D:\Rotacion-SIGER\scripts` de la VM, primer intento del 2026-11-22) **ya no se usan y no se borran**: su exportacion se
+niega por `config\https-red-candidato.p12` (`P12_SIN_CLAVE_CONOCIDA`). En la VM no se borra, mueve, renombra ni cambia
+permisos de ningun archivo, ni se parchan scripts a mano.
 
-1. Como administrador, crear la carpeta del paquete con control total para la cuenta de servicio (queda fuera de la
-   validacion, de sus respaldos y de produccion; V6 no la toca):
+1. Como administrador, preparar la carpeta de los scripts (queda fuera de la validacion, de sus respaldos y de
+   produccion; V6 no la toca).
+
+   En la VM, donde `D:\Rotacion-SIGER` ya existe con el permiso de `svc-siger` (primer intento), solo se crea la
+   carpeta nueva, que hereda ese permiso, y se comprueba sin cambiarlo (debe mostrar `DDN-SIGER\svc-siger:(I)(OI)(CI)(F)`):
 
 ```powershell
-New-Item -ItemType Directory -Path 'D:\Rotacion-SIGER','D:\Rotacion-SIGER\scripts'
+New-Item -ItemType Directory -Path 'D:\Rotacion-SIGER\scripts-H06r2'
+```
+```powershell
+icacls 'D:\Rotacion-SIGER\scripts-H06r2'
+```
+
+   En un equipo donde `D:\Rotacion-SIGER` no existe, se crea con control total para la cuenta de servicio:
+
+```powershell
+New-Item -ItemType Directory -Path 'D:\Rotacion-SIGER','D:\Rotacion-SIGER\scripts-H06r2'
 ```
 ```powershell
 icacls 'D:\Rotacion-SIGER' /grant 'DDN-SIGER\svc-siger:(OI)(CI)F'
 ```
 
-2. Copiar los seis archivos a `D:\Rotacion-SIGER\scripts` y comprobar cada SHA-256 contra el registro de H06r, uno por
-   uno (si alguno no coincide, no se ejecuta nada y se informa al responsable):
+2. Copiar los seis archivos del commit `gate H06r2` a `D:\Rotacion-SIGER\scripts-H06r2` y comprobar cada SHA-256 contra
+   el registro de H06r2, uno por uno (si alguno no coincide, no se ejecuta nada y se informa al responsable):
 
 ```powershell
-certutil -hashfile 'D:\Rotacion-SIGER\scripts\Export-InstanceConfig.ps1' SHA256
+certutil -hashfile 'D:\Rotacion-SIGER\scripts-H06r2\Export-InstanceConfig.ps1' SHA256
 ```
 
    (lo mismo con `Test-InstanceConfig.ps1`, `ConfigPackage.ps1`, `AckKeyCheck.java`, `Common.ps1` y `Hash.ps1`).
@@ -88,30 +103,49 @@ certutil -hashfile 'D:\Rotacion-SIGER\scripts\Export-InstanceConfig.ps1' SHA256
    inventario sin escribir nada:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Rotacion-SIGER\scripts\Export-InstanceConfig.ps1' -Root 'D:\SIGER-VALIDACION' -Destination 'D:\Rotacion-SIGER\validacion-config.sigerpkg' -WhatIf
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Rotacion-SIGER\scripts-H06r2\Export-InstanceConfig.ps1' -Root 'D:\SIGER-VALIDACION' -Destination 'D:\Rotacion-SIGER\validacion-config.sigerpkg' -WhatIf
 ```
 
-   Debe listar `config\` completo (entre otros `secrets.clixml`, `formulario-pull-token.clixml`,
-   `formulario-ack-identity.clixml`, `https.p12`, `mysql-trust.p12`, `instance.json` y `service.json`) y
-   `mysql\my.ini`. Luego exportar: pide la frase de paso dos veces, escrita a mano (minimo 20 caracteres; no se pega ni
-   se guarda junto al archivo). Cada secreto se descifra solo en memoria; el archivo es nuevo (nunca sobrescribe), queda
-   solo para la cuenta, SYSTEM y Administradores, y se verifica leyendolo de nuevo. Anotar el SHA-256 que informa:
+   Criterio: la linea `Inventario: 26 archivos (20 ARCHIVO, 3 CLIXML, 3 P12), ... bytes.` (el 22/11 fueron 39514 bytes:
+   solo referencia), los mismos 26 nombres del inventario del 22/11 ("Datos de la VM: cuenta de servicio" de la
+   bitacora) y, para el almacen que ninguna configuracion usa, la linea
+
+   `  P12     config\https-red-candidato.p12 (3538 bytes, sin clave conocida: se conserva tal cual, sin abrirlo)`
+
+   (los conocidos dicen `(3478 bytes, clave Tls)` para `https.p12` y `(1174 bytes, clave Trust)` para
+   `mysql-trust.p12`; los `https.p12.bak-*` son `ARCHIVO`). Sin "No se puede exportar". **Si los conteos o los nombres
+   cambiaron desde el 22/11, no se exporta y se informa al responsable.** Luego exportar: pide la frase de paso dos
+   veces, escrita a mano (minimo 20 caracteres; no se pega ni se guarda junto al archivo). Cada secreto se descifra solo
+   en memoria; `https-red-candidato.p12` viaja tal cual, sin abrirlo ni necesitar su contrasena; el archivo es nuevo
+   (nunca sobrescribe), queda solo para la cuenta, SYSTEM y Administradores, y se verifica leyendolo de nuevo:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Rotacion-SIGER\scripts\Export-InstanceConfig.ps1' -Root 'D:\SIGER-VALIDACION' -Destination 'D:\Rotacion-SIGER\validacion-config.sigerpkg'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Rotacion-SIGER\scripts-H06r2\Export-InstanceConfig.ps1' -Root 'D:\SIGER-VALIDACION' -Destination 'D:\Rotacion-SIGER\validacion-config.sigerpkg'
 ```
+
+   Debe decir `Contenido: 26 archivos con SHA-256, ... secretos con su huella, 2 almacen(es) .p12 que abren con su clave
+   y 1 sin clave conocida conservado(s) tal cual (config\https-red-candidato.p12).` Anotar el SHA-256 que informa.
 
 4. Como administrador, en una consola elevada (otra cuenta: el script rechaza a `svc-siger`), verificar con la frase de
    paso. No escribe nada ni cambia permisos; comprueba integridad, huellas y SHA-256, cada archivo contra el disco, los
-   `.p12` con su clave del paquete (certificados y vencimiento), que la clave privada ACK corresponde a su publica y a
-   su keyId, y un `SELECT 1` con cada contrasena de MySQL contra el motor de la validacion (que sigue activo):
+   `.p12` de nombre conocido con su clave del paquete (certificados y vencimiento), que la clave privada ACK corresponde
+   a su publica y a su keyId, y un `SELECT 1` con cada contrasena de MySQL contra el motor de la validacion (que sigue
+   activo):
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Rotacion-SIGER\scripts\Test-InstanceConfig.ps1' -Package 'D:\Rotacion-SIGER\validacion-config.sigerpkg' -Root 'D:\SIGER-VALIDACION'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Rotacion-SIGER\scripts-H06r2\Test-InstanceConfig.ps1' -Package 'D:\Rotacion-SIGER\validacion-config.sigerpkg' -Root 'D:\SIGER-VALIDACION'
 ```
 
-   Debe terminar en `Resultado: CORRECTO.`, con el mismo SHA-256 del punto 3, 4 de 4 cuentas de MySQL autenticadas, la
-   identidad ACK `COINCIDE` y los almacenes `IGUALES`. Si informa archivos `NO_LEGIBLE` (la ACL de `config\` no deja
+   Debe terminar en `Resultado: CORRECTO.`, con el mismo SHA-256 del punto 3, `Contra el disco: 26 iguales, 0 distintos,
+   0 faltan, 0 no legibles, 0 en disco y no en el paquete.`, 4 de 4 cuentas de MySQL autenticadas, la identidad ACK
+   `COINCIDE`, `https.p12` y `mysql-trust.p12` `IGUALES` y, para el almacen sin clave conocida, estas dos lineas (no son
+   una observacion; con ellas el resultado sigue siendo CORRECTO):
+
+   `Almacen config\https-red-candidato.p12: sin clave conocida, se conserva tal cual (tamano y SHA-256 verificados; no se abre ni se comparan certificados).`
+
+   `Almacen del disco config\https-red-candidato.p12: SIN_CLAVE_CONOCIDA (comparado solo por SHA-256: IGUAL).`
+
+   Si informa archivos `NO_LEGIBLE` (la ACL de `config\` no deja
    leer al administrador), no se cambian permisos (ni `takeown` ni `icacls` sobre `config\`): se anota lo que no pudo
    comparar y se informa al responsable. Con cualquier otra observacion, no se sigue: se informa al responsable.
 
@@ -215,14 +249,23 @@ luego retirar el archivo. Los folios parten en `SIGER-000001`.
 
 Copiar la configuracion del Formulario de la validacion (Bearer e identidad ACK protegidos con DPAPI de la misma cuenta
 en la misma VM, claves de custodia, CA y `formulario-pull.json`) y **dejarla en Manual antes de iniciar**: la copia trae
-el modo `AUTOMATICO` de la validacion, y sin la orden siguiente produccion consumiria desde su primer arranque, sin sonda:
+el modo `AUTOMATICO` de la validacion, y sin `Set-Integration.ps1 -Formulario Manual` (despues de la copia) produccion
+consumiria desde su primer arranque, sin sonda.
 
-La copia deja fuera las copias de seguridad `*.bak-atomic-*` que quedan en la validacion cada vez que un script
-reescribio `formulario-pull.json`:
+La copia nombra uno por uno los cinco archivos que usa la configuracion del Formulario y deja fuera las copias de
+seguridad de `formulario-pull.json` que quedan en la validacion (en la VM, `*.bak-atomic-*` y `*.bak-auto-20261109`;
+hallazgo de H06r2). Si se detiene con un error (falta alguno), no se sigue y se informa al responsable:
 
 ```powershell
-Copy-Item -Path 'D:\SIGER-VALIDACION\config\formulario-*' -Exclude '*.bak-atomic-*' -Destination 'D:\SIGER\config'
+Copy-Item -LiteralPath 'D:\SIGER-VALIDACION\config\formulario-pull.json','D:\SIGER-VALIDACION\config\formulario-pull-token.clixml','D:\SIGER-VALIDACION\config\formulario-ack-identity.clixml','D:\SIGER-VALIDACION\config\formulario-trusted-keys.json','D:\SIGER-VALIDACION\config\formulario-ca.pem' -Destination 'D:\SIGER\config' -ErrorAction Stop
 ```
+```powershell
+Get-ChildItem -LiteralPath 'D:\SIGER\config' -Filter 'formulario-*' | Select-Object Name,Length
+```
+
+Debe listar exactamente `formulario-ack-identity.clixml`, `formulario-ca.pem`, `formulario-pull.json`,
+`formulario-pull-token.clixml` y `formulario-trusted-keys.json`, ningun `*.bak-*`. Luego, dejarla en Manual:
+
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-Integration.ps1' -Root 'D:\SIGER' -Formulario Manual
 ```

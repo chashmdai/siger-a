@@ -12,8 +12,9 @@ param(
 # informa como no comparado. Comprueba:
 #   - integridad (HMAC) y formato del paquete; huella de cada secreto y SHA-256 de cada archivo;
 #   - cada archivo contra el disco (IGUAL, DISTINTO, FALTA o NO_LEGIBLE) y lo que esta en config\ y no en el paquete;
-#   - cada .p12 abre con su clave del paquete y sus certificados (huella digital y vencimiento) son los registrados y
-#     los del archivo del disco;
+#   - cada .p12 de nombre conocido abre con su clave del paquete y sus certificados (huella digital y vencimiento) son
+#     los registrados y los del archivo del disco; uno sin clave conocida no se abre: se compara solo por SHA-256 y se
+#     informa como SIN_CLAVE_CONOCIDA (H06r2), sin que sea una observacion;
 #   - la clave privada ACK corresponde a su clave publica (AckKeyCheck.java, Java de la instancia, por la entrada
 #     estandar) y su keyId es valido e igual al de formulario-pull.json;
 #   - SELECT 1 con cada contrasena de MySQL del paquete contra el motor propio (127.0.0.1, su puerto, TLS con la CA de
