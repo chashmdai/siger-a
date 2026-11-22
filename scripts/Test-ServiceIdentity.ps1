@@ -10,6 +10,14 @@ $groups=(& "$env:SystemRoot\System32\whoami.exe" /groups /fo csv /nh) -join "`n"
 $admin=$groups -match 'S-1-5-32-544' -or $me.Groups.Value -contains 'S-1-5-32-544'
 $dpapi=$false
 try{$null=Import-Clixml -LiteralPath (Join-Path $Root 'config\secrets.clixml');$dpapi=$true}catch{}
+# Todos los clixml de config\ (sin las carpetas rotacion-<UTC>\ de la importacion, H06s): Set-ServicePassword.ps1 exige
+# que esta cuenta los descifre todos en este inicio de sesion nuevo. Solo cuenta; no muestra valores.
+$clixmlTotal=0;$clixmlDecrypted=0
+$clixmlFiles=@();try{$clixmlFiles=@([IO.Directory]::GetFiles((Join-Path $Root 'config'),'*.clixml'))}catch{}
+foreach($f in $clixmlFiles){
+    $clixmlTotal++
+    try{$null=Import-Clixml -LiteralPath $f;$clixmlDecrypted++}catch{}
+}
 $owner=$null
 try{$owner=(Get-Content -LiteralPath (Join-Path $Root 'config\instance.json') -Raw|ConvertFrom-Json).ownerSid}catch{}
 # Defender con ESTA cuenta (si config\antivirus.json lo usa): estado legible y activo, y analisis de un archivo limpio
@@ -32,6 +40,6 @@ if(Test-Path -LiteralPath $avFile){
         }
     }else{$defender='NO_APLICA'}
 }
-$result=[ordered]@{sid=$me.User.Value;account=$me.Name;administrator=[bool]$admin;dpapi=$dpapi;instanceOwner=([string]$owner -eq $me.User.Value);defender=$defender}
+$result=[ordered]@{sid=$me.User.Value;account=$me.Name;administrator=[bool]$admin;dpapi=$dpapi;instanceOwner=([string]$owner -eq $me.User.Value);defender=$defender;clixmlTotal=$clixmlTotal;clixmlDecrypted=$clixmlDecrypted}
 ($result|ConvertTo-Json -Compress)
 if($admin -or -not $dpapi -or -not $result.instanceOwner){exit 3}

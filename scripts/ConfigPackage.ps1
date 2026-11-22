@@ -1,5 +1,7 @@
 # Paquete portable de la configuracion de una instancia (formato SIGER-CONFIG-1; gates H06r y H06s de
-# docs/PLAN_0_6_0.md). Lo cargan Export-InstanceConfig.ps1 (cuenta duena) y Test-InstanceConfig.ps1 (otra cuenta).
+# docs/PLAN_0_6_0.md). Lo cargan Export-InstanceConfig.ps1 (cuenta duena), Test-InstanceConfig.ps1 (otra cuenta) e
+# Import-InstanceConfig.ps1 (cuenta duena, despues de restablecer su contrasena; H06s). H06s no cambia el formato: la
+# importacion acepta los paquetes de los scripts de d792507 (gate H06r2) y Check-Scripts.ps1 fija sus campos.
 # Contenido: todo config\ (salvo las carpetas rotacion-<UTC>\ que deja la importacion) y mysql\my.ini. Cada *.clixml se
 # descifra con la DPAPI de la cuenta duena solo en memoria y se guarda en el paquete como sus valores; los .p12 y el
 # resto de archivos van tal cual, con su SHA-256 (un .p12 de nombre conocido debe abrir con su clave de secrets.clixml;
@@ -522,3 +524,243 @@ function Format-ConfigVerification($Payload,$Result){
     $lines+=if(@($Result.Problems).Count -eq 0){'Resultado: CORRECTO.'}else{'Resultado: CON OBSERVACIONES: '+(@($Result.Problems) -join ', ')+'.'}
     return $lines
 }
+
+# --- Importacion (Import-InstanceConfig.ps1, H06s) -----------------------------------------------------------------
+# Despues de restablecer la contrasena de la cuenta duena, su DPAPI anterior ya no descifra los clixml. La importacion
+# vuelve a proteger cada secreto con la DPAPI de la sesion actual y restaura los archivos que falten o difieran; lo
+# anterior se conserva, sin borrarlo, en config\rotacion-<UTC>\anterior\ (que el inventario omite). Reglas puras con
+# casos y mutaciones en Check-Scripts.ps1.
+
+# Accion por archivo: RESTAURAR (no esta en el disco), REEMPLAZAR (esta y difiere; el anterior se conserva) o
+# SIN_CAMBIO (mismo SHA-256). Un clixml se reprotege siempre (nunca SIN_CAMBIO; decision del responsable en H06s): el
+# resultado no depende de que esta sesion descifre o no el archivo del disco. Un .p12
+# (tambien uno SIN_CLAVE) y el resto se comparan solo por SHA-256: nunca se abren.
+function Get-ImportItemAction([string]$Kind,[bool]$Exists,[string]$DiskSha,[string]$PackageSha){
+    if(-not $Exists){return 'RESTAURAR'}
+    if($Kind -ceq 'CLIXML'){return 'REEMPLAZAR'}
+    if($DiskSha -and $DiskSha -cmatch '^[0-9a-f]{64}$' -and $DiskSha -ceq $PackageSha){return 'SIN_CAMBIO'}
+    return 'REEMPLAZAR'
+}
+# Instancia detenida: servicios registrados detenidos (o ninguno), sin proceso vivo en run\app.pid ni en el pid del motor.
+# $Facts: Services NINGUNO|DETENIDOS|ACTIVOS|INCONSISTENTE, App y Motor (bool).
+function Get-ImportRunBlockers($Facts){
+    $codes=@()
+    if([string]$Facts.Services -ceq 'ACTIVOS'){$codes+='SERVICIO_ACTIVO'}
+    elseif([string]$Facts.Services -ceq 'INCONSISTENTE'){$codes+='SERVICIOS_INCONSISTENTES'}
+    elseif(@('NINGUNO','DETENIDOS') -cnotcontains [string]$Facts.Services){$codes+='SERVICIOS_DESCONOCIDOS'}
+    if($Facts.App -ne $false){$codes+='APLICACION_ACTIVA'}
+    if($Facts.Motor -ne $false){$codes+='MOTOR_ACTIVO'}
+    return $codes
+}
+# Paquete de esta instancia y de esta cuenta: contenido sin hallazgos, la cuenta que exporto y la duena registrada son la
+# actual, y la raiz y el instance.json del paquete corresponden a esta instancia.
+function Get-ImportPackageBlockers($Payload,$Settings,[string]$CurrentSid,[string]$Root,$Findings){
+    $codes=@()
+    if(@($Findings).Count -gt 0){$codes+='CONTENIDO'}
+    $owner=[string](Get-PackageField $Settings 'ownerSid')
+    if(-not $CurrentSid -or [string](Get-PackageField $Payload 'ownerSid') -cne $CurrentSid -or [string](Get-PackageField $Payload 'accountSid') -cne $CurrentSid -or $owner -cne $CurrentSid){$codes+='CUENTA_DEL_PAQUETE'}
+    if(([string](Get-PackageField $Payload 'root')).TrimEnd('\') -ine $Root.TrimEnd('\')){$codes+='RAIZ_DISTINTA'}
+    $ps=Get-PackageSettings $Payload
+    if(-not $ps -or [string](Get-PackageField $ps 'ownerSid') -cne $CurrentSid -or ([string](Get-PackageField $ps 'root')).TrimEnd('\') -ine $Root.TrimEnd('\') -or [string](Get-PackageField $ps 'namespace') -cne 'SIGER-A-2026'){$codes+='DESCRIPTOR_DEL_PAQUETE'}
+    return $codes
+}
+function Test-PidFileAlive([string]$Path){
+    if(-not [IO.File]::Exists($Path)){return $false}
+    $id=0
+    try{$t=[IO.File]::ReadAllText($Path).Trim()}catch{return $true}
+    if(-not [int]::TryParse($t,[ref]$id) -or $id -le 0){return $true}
+    return [bool](Get-Process -Id $id -ErrorAction SilentlyContinue)
+}
+function Get-InstanceRunFacts($Settings){
+    $state='NINGUNO'
+    try{$svc=Get-SigerServices $Settings;if($svc){$state=if([string]$svc.App.Status -eq 'Stopped' -and [string]$svc.MySql.Status -eq 'Stopped'){'DETENIDOS'}else{'ACTIVOS'}}}catch{$state='INCONSISTENTE'}
+    return [PSCustomObject]@{Services=$state;App=(Test-PidFileAlive (Join-Path $Settings.root 'run\app.pid'));Motor=(Test-PidFileAlive (Join-Path $Settings.root 'mysql\data\siger-a.pid'))}
+}
+# Valor de un clixml del paquete con la forma con que lo escribieron los scripts de SIGER (Export-Clixml): una
+# SecureString, o un PSCustomObject con sus propiedades en el mismo orden (SECRETO = SecureString, TEXTO = texto).
+function ConvertTo-ImportSecure([string]$Text){
+    if($Text.Length -eq 0){return (New-Object Security.SecureString)}
+    return (ConvertTo-SecureString -String $Text -AsPlainText -Force)
+}
+function ConvertFrom-PackageClixml($Item){
+    $props=@(Get-PackageField $Item 'properties')
+    if([string](Get-PackageField $Item 'shape') -ceq 'SECRETO'){return (ConvertTo-ImportSecure (ConvertFrom-Utf8Base64 ([string]$props[0].value)))}
+    $o=[ordered]@{}
+    foreach($p in $props){
+        $v=ConvertFrom-Utf8Base64 ([string]$p.value)
+        $o[[string]$p.name]=if([string]$p.type -ceq 'SECRETO'){ConvertTo-ImportSecure $v}else{$v}
+        $v=$null
+    }
+    return [PSCustomObject]$o
+}
+# Plan de la importacion contra el disco (solo lectura): accion por archivo, archivos del disco que no estan en el
+# paquete (se conservan sin tocarlos) y si esta sesion ya descifra el secrets.clixml del disco (solo informativo).
+function Get-ImportPlan($Payload,[string]$Root){
+    $Root=$Root.TrimEnd('\')
+    $mysqlDir=Join-Path $Root 'mysql'
+    if([IO.Directory]::Exists($mysqlDir) -and (([IO.DirectoryInfo]$mysqlDir).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'mysql\ es un enlace. No se importo nada.'}
+    $all=[System.Collections.Generic.List[object]]::new();$om=[System.Collections.Generic.List[string]]::new()
+    Add-ConfigTreeFiles (Join-Path $Root 'config') 'config\' $true $all $om
+    $items=@(foreach($i in @($Payload.items)){
+        $rel=[string](Get-PackageField $i 'path');$kind=[string](Get-PackageField $i 'kind')
+        if(-not (Test-ConfigItemPath $rel)){throw "Ruta no admitida en el paquete ($rel). No se importo nada."}
+        $full=Join-Path $Root $rel
+        if([IO.Directory]::Exists($full)){throw "$rel es una carpeta en el disco. No se importo nada."}
+        $exists=[IO.File]::Exists($full);$sha=''
+        if($exists){
+            if(([IO.FileInfo]$full).Attributes -band [IO.FileAttributes]::ReparsePoint){throw "$rel es un enlace. No se importo nada."}
+            if($kind -cne 'CLIXML'){try{$sha=Get-Sha256Hex ([IO.File]::ReadAllBytes($full))}catch{throw "No se pudo leer $rel. No se importo nada."}}
+        }
+        [PSCustomObject]@{Path=$rel;Kind=$kind;Full=$full;Exists=$exists;DiskSha=$sha;Action=(Get-ImportItemAction $kind $exists $sha ([string](Get-PackageField $i 'sha256')));Opaque=($kind -ceq 'P12' -and (Get-P12NameState $rel) -ceq 'SIN_CLAVE');Item=$i}
+    })
+    $known=@{};foreach($i in $items){$known[$i.Path.ToLowerInvariant()]=$true}
+    $extra=@(foreach($a in $all){if(-not $known.ContainsKey($a.Rel.ToLowerInvariant())){$a.Rel}})
+    $old=$false
+    $secrets=Join-Path $Root 'config\secrets.clixml'
+    if([IO.File]::Exists($secrets)){try{$null=Import-Clixml -LiteralPath $secrets;$old=$true}catch{$old=$false}}
+    return [PSCustomObject]@{Items=$items;Extra=$extra;OldSecretsDecrypt=$old}
+}
+# ACL privada de un secreto: solo la cuenta, SYSTEM y Administradores, sin herencia (como el paquete).
+function Set-PrivateFileAcl([string]$Path){
+    $acl=New-Object Security.AccessControl.FileSecurity;$acl.SetAccessRuleProtection($true,$false)
+    foreach($sid in @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value,'S-1-5-18','S-1-5-32-544')){$acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($sid)),'FullControl','Allow')))}
+    Set-Acl -LiteralPath $Path -AclObject $acl -WhatIf:$false -Confirm:$false
+}
+function Write-NewTextFile([string]$Path,[string]$Text){
+    $stream=New-Object IO.FileStream($Path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+    try{$b=(New-Object Text.UTF8Encoding($false)).GetBytes($Text);$stream.Write($b,0,$b.Length)}finally{$stream.Dispose()}
+}
+# Aplica el plan. Primero prepara todo en config\rotacion-<UTC>\nuevo\ (nada cambia aun en config\); despues, por
+# archivo, mueve el anterior a ...\anterior\<ruta> y el nuevo a su lugar. Deja importacion.json (sin secretos: rutas,
+# acciones y SHA-256) tambien si falla, con lo que alcanzo a cambiar; repetir la importacion completa lo pendiente.
+function Invoke-ConfigImport($Plan,[string]$Root,[string]$Stamp,$PackageInfo){
+    $Root=$Root.TrimEnd('\')
+    $rot=Join-Path $Root "config\rotacion-$Stamp"
+    if([IO.Directory]::Exists($rot) -or [IO.File]::Exists($rot)){throw "Ya existe config\rotacion-$Stamp. No se importo nada."}
+    $new=Join-Path $rot 'nuevo';$old=Join-Path $rot 'anterior'
+    [void][IO.Directory]::CreateDirectory($new)
+    $me=[Security.Principal.WindowsIdentity]::GetCurrent()
+    $record=[ordered]@{kind='IMPORTACION_CONFIGURACION';version=1;estado='EN_CURSO';utc=(ConvertTo-PackageStamp (Get-Date));computer=$env:COMPUTERNAME;account=$me.Name;accountSid=$me.User.Value;root=$Root;package=$PackageInfo;items=@();extra=@($Plan.Extra);error=''}
+    $results=[System.Collections.Generic.List[object]]::new()
+    try{
+        $todo=@($Plan.Items|Where-Object {$_.Action -cne 'SIN_CAMBIO'})
+        foreach($i in $todo){
+            $staged=Join-Path $new $i.Path;[void][IO.Directory]::CreateDirectory((Split-Path $staged -Parent))
+            if($i.Kind -ceq 'CLIXML'){
+                $value=ConvertFrom-PackageClixml $i.Item
+                $value|Export-Clixml -LiteralPath $staged -WhatIf:$false -Confirm:$false
+                $value=$null
+            }else{
+                $bytes=Get-PackageFileBytes $i.Item
+                if((Get-Sha256Hex $bytes) -cne [string](Get-PackageField $i.Item 'sha256')){throw "El contenido de $($i.Path) no coincide con su SHA-256. No se cambio nada en config\."}
+                [IO.File]::WriteAllBytes($staged,$bytes);Clear-Bytes $bytes
+            }
+        }
+        foreach($i in @($Plan.Items)){
+            $r=[ordered]@{path=$i.Path;kind=$i.Kind;action=$i.Action;estado='PENDIENTE';anteriorSha256=$i.DiskSha;nuevoSha256=''}
+            $results.Add($r)
+            if($i.Action -ceq 'SIN_CAMBIO'){$r.estado='SIN_CAMBIO';$r.nuevoSha256=$i.DiskSha;continue}
+            $staged=Join-Path $new $i.Path
+            if($i.Exists){
+                $dest=Join-Path $old $i.Path;[void][IO.Directory]::CreateDirectory((Split-Path $dest -Parent))
+                if($i.Kind -ceq 'CLIXML'){$r.anteriorSha256=Get-Sha256Hex ([IO.File]::ReadAllBytes($i.Full))}
+                [IO.File]::Move($i.Full,$dest);$r.estado='ANTERIOR_CONSERVADO'
+            }else{[void][IO.Directory]::CreateDirectory((Split-Path $i.Full -Parent))}
+            [IO.File]::Move($staged,$i.Full)
+            if($i.Kind -ceq 'CLIXML'){Set-PrivateFileAcl $i.Full;Require-PrivateFile $i.Full}
+            $r.nuevoSha256=Get-Sha256Hex ([IO.File]::ReadAllBytes($i.Full));$r.estado='APLICADO'
+        }
+        if(@([IO.Directory]::GetFiles($new,'*',[IO.SearchOption]::AllDirectories)).Count -eq 0){[IO.Directory]::Delete($new,$true)}
+        $record.estado='COMPLETA'
+    }catch{
+        $record.estado='FALLIDA';$record.error=[string]$_.Exception.Message
+        throw
+    }finally{
+        $record.items=@($results)
+        try{Write-NewTextFile (Join-Path $rot 'importacion.json') (([PSCustomObject]$record)|ConvertTo-Json -Depth 6)}catch{}
+    }
+    return [PSCustomObject]$record
+}
+# Comparacion pura del paquete con el contenido leido del disco despues de importar (New-InstanceConfigPayload con la
+# misma clave de huellas): cada clixml con la misma forma, nombres, tipos y huellas; cada archivo con el mismo SHA-256;
+# cada .p12 de nombre conocido con los mismos certificados; uno SIN_CLAVE solo por SHA-256. Lo del disco que no esta en
+# el paquete se informa aparte (se conservo sin tocarlo).
+function Compare-ConfigPayloadItems($Package,$Disk){
+    $r=[PSCustomObject]@{Findings=@();Files=0;Secrets=0;Opaque=@();Extra=@()}
+    $d=@{};foreach($x in @($Disk.items)){$d[([string]$x.path).ToLowerInvariant()]=$x}
+    $known=@{}
+    foreach($p in @($Package.items)){
+        $rel=[string](Get-PackageField $p 'path');$known[$rel.ToLowerInvariant()]=$true
+        $x=$d[$rel.ToLowerInvariant()]
+        if(-not $x){$r.Findings+="FALTA:$rel";continue}
+        if([string]$x.kind -cne [string]$p.kind -or [string]$x.path -cne $rel){$r.Findings+="TIPO:$rel";continue}
+        $r.Files++
+        if([string]$p.kind -ceq 'CLIXML'){
+            $pp=@(Get-PackageField $p 'properties');$xp=@(Get-PackageField $x 'properties')
+            $same=([string]$p.shape -ceq [string]$x.shape -and $pp.Count -eq $xp.Count)
+            for($k=0;$same -and $k -lt $pp.Count;$k++){$same=([string]$pp[$k].name -ceq [string]$xp[$k].name -and [string]$pp[$k].type -ceq [string]$xp[$k].type -and [string]$pp[$k].fingerprint -ceq [string]$xp[$k].fingerprint)}
+            if(-not $same){$r.Findings+="CLIXML_DISTINTO:$rel"}
+            $r.Secrets+=@($pp|Where-Object {[string]$_.type -ceq 'SECRETO'}).Count
+            continue
+        }
+        if([string]$x.sha256 -cne [string]$p.sha256){$r.Findings+="DISTINTO:$rel"}
+        if([string]$p.kind -ceq 'P12'){
+            if((Get-P12NameState $rel) -ceq 'SIN_CLAVE'){$r.Opaque+=$rel}
+            elseif((Get-CertificateListKey @(@(Get-PackageField $x 'certificates')|Sort-Object thumbprint)) -cne (Get-CertificateListKey @(@(Get-PackageField $p 'certificates')|Sort-Object thumbprint))){$r.Findings+="P12_CERTIFICADOS:$rel"}
+        }
+    }
+    foreach($x in @($Disk.items)){if(-not $known.ContainsKey(([string]$x.path).ToLowerInvariant())){$r.Extra+=[string]$x.path}}
+    return $r
+}
+# Verificacion despues de importar, como la cuenta duena y sin escribir: se lee de nuevo todo el disco (cada clixml con
+# la DPAPI de esta sesion, cada .p12 conocido con las claves recien restauradas), se compara con el paquete, se exige la
+# ACL privada de cada clixml y se comprueba la identidad ACK. MySQL no se prueba (el motor esta detenido): lo acreditan
+# Start.ps1 y Backup.ps1 en el paso V0.
+function Test-ImportedConfig($Payload,[byte[]]$FpKey,[string]$Root,[string]$AckSource){
+    $r=[PSCustomObject]@{Findings=@();Files=0;Secrets=0;Opaque=@();Extra=@();Ack='NO_APLICA'}
+    try{
+        $s=Read-Settings $Root
+        $inv=Get-InstanceConfigInventory $Root
+        $r.Findings+=@($inv.Problems)
+        $disk=((New-InstanceConfigPayload $s $inv $FpKey)|ConvertTo-Json -Depth 10 -Compress)|ConvertFrom-Json
+    }catch{$r.Findings+="DISCO:$($_.Exception.Message)";return $r}
+    $c=Compare-ConfigPayloadItems $Payload $disk
+    $r.Findings+=@($c.Findings);$r.Files=$c.Files;$r.Secrets=$c.Secrets;$r.Opaque=@($c.Opaque);$r.Extra=@($c.Extra)
+    foreach($i in @($Payload.items|Where-Object {[string]$_.kind -ceq 'CLIXML'})){try{Require-PrivateFile (Join-Path $Root ([string]$i.path))}catch{$r.Findings+="ACL:$($i.path)"}}
+    $pa=Get-PackageAck $Payload
+    if($pa){
+        $da=Get-PackageAck $disk
+        $java=if(Get-PackageField $s 'javaHome'){Join-Path ([string]$s.javaHome) 'bin\java.exe'}else{''}
+        $r.Ack=if(-not $da){'NO_COMPROBADA'}else{Invoke-AckKeyCheck $java $AckSource ([string]$da.PrivatePem) ([string]$da.PublicPem)}
+        if($r.Ack -cne 'COINCIDE'){$r.Findings+="ACK_$($r.Ack)"}
+        if($da -and [string]$da.KeyId -cne [string]$pa.KeyId){$r.Findings+='ACK_KEYID_DISTINTO'}
+        $pa=$null;$da=$null
+    }
+    return $r
+}
+# Plan e informe: solo rutas, tipos, acciones, cifras y resultados; nunca valores.
+function Format-ImportPlan($Plan){
+    $lines=@()
+    $by=@($Plan.Items|Group-Object Action|Sort-Object Name|ForEach-Object {"$($_.Count) $($_.Name)"}) -join ', '
+    $lines+="Plan: $(@($Plan.Items).Count) archivos del paquete ($by); $(@($Plan.Extra).Count) archivo(s) del disco que no estan en el paquete se conservan sin tocarlos."
+    foreach($i in $Plan.Items){
+        $note=if($i.Kind -ceq 'CLIXML'){', se vuelve a proteger con la DPAPI de esta sesion'}elseif($i.Opaque){', sin clave conocida: solo bytes y SHA-256, sin abrirlo'}else{''}
+        $lines+="  $($i.Action.PadRight(11)) $($i.Kind.PadRight(7)) $($i.Path)$note"
+    }
+    foreach($x in $Plan.Extra){$lines+="  SE_CONSERVA ARCHIVO $x (no esta en el paquete)"}
+    return $lines
+}
+function Format-ImportedConfig($Result){
+    $lines=@()
+    $lines+="Verificacion despues de importar (como esta cuenta, sin escribir): $($Result.Files) archivos iguales al paquete, $($Result.Secrets) secretos descifrados con esta sesion y con su huella$(if(@($Result.Extra).Count){'; en disco y no en el paquete (conservados): '+(@($Result.Extra) -join ', ')})."
+    foreach($o in @($Result.Opaque)){$lines+="Almacen $($o): SIN_CLAVE_CONOCIDA (restaurado como bytes y comparado solo por SHA-256)."}
+    $lines+=if($Result.Ack -ceq 'NO_APLICA'){'Identidad ACK: no hay en el paquete.'}else{"Identidad ACK: privada y publica $($Result.Ack)."}
+    $lines+='MySQL: no se comprueba aqui (motor detenido); lo acreditan Start.ps1 y Backup.ps1.'
+    $lines+=if(@($Result.Findings).Count -eq 0){'Resultado: CORRECTO.'}else{'Resultado: CON OBSERVACIONES: '+(@($Result.Findings) -join ', ')+'.'}
+    return $lines
+}
+# Nota informativa (no es un error ni pide nada): el secrets.clixml del disco ya se descifra en esta sesion, por ejemplo
+# al repetir una importacion. El ensayo de H06s mostro que, tras restablecer la contrasena de una cuenta local, ni una
+# sesion abierta antes del restablecimiento descifra los secretos anteriores, y que lo que protege una sesion asi lo lee
+# un inicio de sesion nuevo. La comprobacion que cuenta es la de Set-ServicePassword.ps1 ("descifra N de N").
+$script:ImportCurrentSecretsNote='Esta sesion ya descifra los clixml del disco (por ejemplo, al repetir la importacion): se vuelven a proteger igual con la DPAPI de esta sesion.'

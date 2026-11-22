@@ -41,7 +41,8 @@ de la validacion y produccion en automatico no se hacen entregas de prueba, y en
 | Paso | Que | Quien | Fecha |
 |---|---|---|---|
 | P0 | Exportacion portable de la configuracion de la validacion y su verificacion (H06r) | svc-siger (sesion ya abierta) y administrador | cuanto antes, sin esperar el paquete |
-| Preparacion | ZIP, carpetas y permisos; cifras del cierre con `-WhatIf` | administrador y svc-siger | antes de V1 |
+| Preparacion | ZIP, carpetas y permisos | administrador | antes de V0 |
+| V0 | Rotacion de la contrasena de svc-siger: importacion de la configuracion y contrasena de los servicios (H06s); cifras del cierre con `-WhatIf` | administrador y svc-siger | despues de la Preparacion, antes de V1 |
 | V1 | Pausa definitiva del consumidor de la validacion | TI | desde 04/12 |
 | V2 | Cierre de la validacion con 9 recepciones declaradas | svc-siger | desde 04/12 |
 | V3 | Retiro de los servicios de la validacion | administrador | desde 04/12 |
@@ -190,13 +191,149 @@ servicio):
 icacls 'D:\Respaldos-SIGER-VALIDACION' /grant 'DDN-SIGER\svc-siger:(OI)(CI)F'
 ```
 
-Como la cuenta de servicio (una consola abierta con `runas /user:DDN-SIGER\svc-siger powershell.exe`), ver las cifras
-del cierre sin detener nada. Con la validacion aun sin pausar, el unico bloqueo esperado es `SIN_PAUSA`; cualquier otro
-(por ejemplo `COM_EXTERNA_SIN_RECEPCION`) se informa al responsable antes de V1:
+Las cifras del cierre (`Close-Validation.ps1 -WhatIf`) se ven al final de V0, como la cuenta de servicio: hasta V0 su
+contrasena es desconocida y no se puede abrir una sesion nueva con ella.
+
+### V0. Rotacion de la contrasena de la cuenta de servicio
+
+V3 y V4 exigen la contrasena de `DDN-SIGER\svc-siger`, que es desconocida. V0 la restablece y recupera lo que su DPAPI
+protegia con el paquete de P0 (`D:\Rotacion-SIGER\validacion-config.sigerpkg`, SHA-256
+`b33b167f4e1b988dce0a050eae5c5ef26413fc22ae058a007cb5dad466486ecd`) y su frase de paso. Se usan los scripts de la
+carpeta del paquete 0.6.0 sobre la validacion 0.4.0 (los de la instancia 0.4.0 fallan como la cuenta de servicio). No se
+reinstalan servicios ni se cambia nada mas de la validacion; V1-V6 no cambian. **El punto de no retorno es el punto 4**
+(restablecer la contrasena): antes de el, todo se revierte arrancando de nuevo la validacion.
+
+1. Como administrador, revisar en solo lectura que nada mas use la cuenta (consultas filtradas por la cuenta; no se leen
+   archivos de C: ni configuraciones de otros sistemas, D15). Deben aparecer solo `SIGER` y `SIGERMySQL`, ninguna tarea
+   programada y, como procesos, la PowerShell abierta de P0 y los de los servicios (`SigerService`, `powershell`, `java`
+   y `mysqld`). Si aparece otra cosa, no se sigue y se informa al responsable:
+
+```powershell
+Get-CimInstance Win32_Service | Where-Object {$_.StartName -like '*svc-siger'} | Select-Object Name,State,StartName
+```
+```powershell
+Get-ScheduledTask | Where-Object {$_.Principal.UserId -like '*svc-siger'} | Select-Object TaskPath,TaskName,State
+```
+```powershell
+Get-Process -IncludeUserName | Where-Object {$_.UserName -eq 'DDN-SIGER\svc-siger'} | Select-Object Id,ProcessName
+```
+
+2. Como administrador, con la validacion todavia activa, verificar el paquete contra el disco justo antes de restablecer
+   (pide la frase de paso; no escribe nada):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Test-InstanceConfig.ps1' -Package 'D:\Rotacion-SIGER\validacion-config.sigerpkg' -Root 'D:\SIGER-VALIDACION'
+```
+
+   Debe informar el SHA-256 `b33b167f4e1b988dce0a050eae5c5ef26413fc22ae058a007cb5dad466486ecd` y terminar como en el
+   punto 4 de P0: `Resultado: CORRECTO.`, 26 iguales, 4 de 4 cuentas de MySQL y ACK `COINCIDE`. Si el SHA-256 es otro o
+   hay cualquier observacion, no se sigue y se informa al responsable.
+
+3. Detener la validacion. En la PowerShell de `svc-siger` abierta desde P0:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Stop.ps1' -Root 'D:\SIGER-VALIDACION' -AlsoMySql
+```
+
+   Si esa sesion ya no existe, la misma orden en una consola elevada (administrador): con servicios registrados solo
+   detiene `SIGER` y despues `SIGERMySQL`, sin descifrar nada. En ambos casos, comprobar que los dos quedaron `Stopped`:
+
+```powershell
+Get-Service -Name 'SIGER','SIGERMySQL'
+```
+
+4. Como administrador, restablecer la contrasena (la nueva la define TI o el responsable, se escribe dos veces sin
+   mostrarse y se custodia; nunca se anota en la bitacora) y dejar "Contrasena requerida" en Si. **Desde aqui no hay
+   vuelta a la contrasena anterior**:
+
+```powershell
+net user svc-siger *
+```
+```powershell
+net user svc-siger /passwordreq:yes
+```
+```powershell
+net user svc-siger
+```
+
+   La ultima debe mostrar "Contrasena requerida Si" y la fecha de hoy en "Ultimo cambio de contrasena".
+
+5. Cerrar la PowerShell de `svc-siger` de P0 (`exit`): ya no se necesita (tras el restablecimiento tampoco descifra
+   los secretos anteriores; ensayo de H06s). Abrir una
+   sesion nueva con la contrasena nueva (`runas /user:DDN-SIGER\svc-siger powershell.exe`), comprobar con `whoami` que
+   dice `ddn-siger\svc-siger` e importar primero sin escribir (pide la frase de paso):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Import-InstanceConfig.ps1' -Root 'D:\SIGER-VALIDACION' -Package 'D:\Rotacion-SIGER\validacion-config.sigerpkg' -WhatIf
+```
+
+   Criterio: el SHA-256 informado es `b33b167f4e1b988dce0a050eae5c5ef26413fc22ae058a007cb5dad466486ecd`, `Plan: 26
+   archivos del paquete (3 REEMPLAZAR, 23 SIN_CAMBIO); 0 archivo(s) del disco que no estan en el paquete...` (solo los
+   tres clixml se vuelven a proteger; `https-red-candidato.p12` queda `SIN_CAMBIO`, comparado solo por SHA-256). La
+   primera vez no aparece la linea "Esta sesion ya descifra los clixml del disco..."; al repetir la importacion si, y es
+   solo informativa. Si el plan es otro, no se importa y se informa al responsable. Luego la importacion (pide la frase
+   y la confirmacion de PowerShell; los anteriores quedan en `config\rotacion-<UTC>\anterior\` y nada se borra):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Import-InstanceConfig.ps1' -Root 'D:\SIGER-VALIDACION' -Package 'D:\Rotacion-SIGER\validacion-config.sigerpkg'
+```
+
+   Debe informar de nuevo ese SHA-256 y decir `Importacion COMPLETA: 3 archivos aplicados, 23 sin cambio`, `Almacen
+   config\https-red-candidato.p12: SIN_CLAVE_CONOCIDA (...)`, `Identidad ACK: privada y publica COINCIDE.` y
+   `Resultado: CORRECTO.` Si falla a mitad, se repite la misma orden: vuelve a proteger los clixml y restaura lo que
+   falte.
+
+6. Como administrador, en una consola elevada interactiva (Windows PowerShell 5.1 pide la contrasena nueva en el cuadro
+   de credenciales), actualizar la contrasena guardada de los servicios, sin reinstalarlos ni iniciarlos:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Set-ServicePassword.ps1' -Root 'D:\SIGER-VALIDACION' -ServiceCredential 'DDN-SIGER\svc-siger'
+```
+
+   Antes de cambiar nada comprueba, como la cuenta y en un inicio de sesion nuevo, que la contrasena es valida y que
+   descifra los 3 clixml: debe decir "descifra 3 de 3". **No pide confirmacion**: con las comprobaciones correctas
+   actualiza `SIGERMySQL` y `SIGER` de inmediato. Si se niega por la contrasena, se repite con la correcta. Si se niega
+   con `DPAPI` ("descifra 0 de 3"), falta la importacion del punto 5: se hace y se repite esta orden. Si informa que un
+   servicio quedo actualizado y el otro no, se repite la misma orden (vuelve a comprobar todo y fija la misma contrasena
+   en ambos) y no se inician los servicios hasta que termine bien.
+
+7. Cerrar la sesion de `svc-siger` del punto 5 y abrir **otra sesion nueva** (`runas`), que prueba que la cuenta
+   descifra con un inicio de sesion nuevo. En ella, arrancar y comprobar la validacion (UP, version 0.4.0, Formulario
+   `ESPERANDO_ENTREGAS` en Auditoria y operacion):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Start.ps1' -Root 'D:\SIGER-VALIDACION'
+```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Estado.ps1' -Root 'D:\SIGER-VALIDACION'
+```
+
+   Un respaldo nuevo, que acredita las contrasenas de MySQL y contiene las 9 recepciones (V6 lo elimina con los demas):
+   se detiene solo SIGER (el motor sigue activo), se respalda y se vuelve a arrancar:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Stop.ps1' -Root 'D:\SIGER-VALIDACION'
+```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Backup.ps1' -Root 'D:\SIGER-VALIDACION' -Destination 'D:\Respaldos-SIGER-VALIDACION\posterior-v0'
+```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Start.ps1' -Root 'D:\SIGER-VALIDACION'
+```
+
+8. En esa misma sesion, las cifras del cierre sin detener nada. Con la validacion aun sin pausar, el unico bloqueo
+   esperado es `SIN_PAUSA`; cualquier otro (por ejemplo `COM_EXTERNA_SIN_RECEPCION`) se informa al responsable antes de
+   V1:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Close-Validation.ps1' -Root 'D:\SIGER-VALIDACION' -RecepcionesDeclaradas 9 -Motivo 'Fin de la validacion: salida a produccion' -WhatIf
 ```
+
+Reversion: hasta el punto 3, nada cambio. Entre el 3 y el 4, se vuelve a arrancar (`Start.ps1` en la sesion de P0 o
+`Start-Service -Name 'SIGER'` como administrador). Desde el punto 4 la contrasena anterior no vuelve: la recuperacion es
+repetir la importacion (punto 5) con el paquete y su frase (la copia de la VM o, si faltara, la copia externa de P0) y
+repetir `Set-ServicePassword.ps1`; lo anterior queda en `config\rotacion-<UTC>\anterior\`. Si asi no se logra, se
+detiene y se reevalua con el responsable. El paquete y su frase se conservan hasta despues de V5 (ver P0).
 
 ### V1. Pausa definitiva de la validacion
 

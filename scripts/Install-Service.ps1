@@ -30,14 +30,9 @@ $owner=if($s.PSObject.Properties['ownerSid']){[string]$s.ownerSid}else{(New-Obje
 if($owner -ne $sid){throw 'La instancia no fue inicializada por la cuenta de servicio indicada: su custodia DPAPI pertenece a otra identidad. Inicializa con Init-Server.ps1 ejecutado como la cuenta de servicio.'}
 
 # Comprobacion COMO la cuenta de servicio (perfil cargado para DPAPI): sin privilegios administrativos y descifra la custodia.
+# La misma de Set-ServicePassword.ps1 (Invoke-ServiceIdentityCheck, Common.ps1).
 $net=$ServiceCredential.GetNetworkCredential()
-$info=New-Object Diagnostics.ProcessStartInfo
-$info.FileName=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$info.Arguments="-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'Test-ServiceIdentity.ps1')`" -Root `"$Root`""
-$info.UserName=$net.UserName;$info.Domain=if($net.Domain){$net.Domain}else{'.'};$info.Password=$ServiceCredential.Password
-$info.LoadUserProfile=$true;$info.UseShellExecute=$false;$info.RedirectStandardOutput=$true;$info.CreateNoWindow=$true;$info.WorkingDirectory=$Root
-try{$probe=[Diagnostics.Process]::Start($info);$line=$probe.StandardOutput.ReadToEnd();$probe.WaitForExit()}catch{throw 'No se pudo ejecutar la comprobacion con la cuenta de servicio (clave incorrecta o cuenta sin inicio de sesion local).'}
-try{$check=$line.Trim()|ConvertFrom-Json}catch{throw 'La comprobacion de la cuenta de servicio no respondio.'}
+$check=Invoke-ServiceIdentityCheck $Root $ServiceCredential
 if($check.administrator){throw 'La cuenta de servicio pertenece a Administradores. SIGER debe ejecutarse con una cuenta sin privilegios administrativos.'}
 if(-not $check.dpapi){throw 'La cuenta de servicio no descifra config\secrets.clixml. Inicializa la instancia con esa cuenta.'}
 if(-not $check.instanceOwner -or $check.sid -ne $sid){throw 'La comprobacion no corresponde a la cuenta de servicio indicada.'}

@@ -233,6 +233,60 @@ function Assert-InstanceOwner($Settings,[string]$Script){
     if(-not (Test-InstanceOwner $Settings ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value))){throw "Ejecuta $Script como la cuenta de servicio de la instancia (ownerSid de instance.json): sus credenciales estan protegidas con DPAPI de esa cuenta. No se cambio nada."}
 }
 
+# Comprobacion COMO la cuenta de servicio (Install-Service.ps1 y Set-ServicePassword.ps1): lanza Test-ServiceIdentity.ps1
+# con la credencial, con su perfil cargado, en un inicio de sesion NUEVO de la cuenta (no hereda la sesion de quien lo
+# ejecuta: acredita la DPAPI con la contrasena indicada). La contrasena pasa al sistema como objeto, nunca como argumento.
+# Devuelve la linea JSON leida, o lanza si no se pudo ejecutar o no respondio.
+function Invoke-ServiceIdentityCheck([string]$Root,[pscredential]$Credential){
+    $net=$Credential.GetNetworkCredential()
+    $info=New-Object Diagnostics.ProcessStartInfo
+    $info.FileName=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $info.Arguments="-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'Test-ServiceIdentity.ps1')`" -Root `"$Root`""
+    $info.UserName=$net.UserName;$info.Domain=if($net.Domain){$net.Domain}else{'.'};$info.Password=$Credential.Password
+    $info.LoadUserProfile=$true;$info.UseShellExecute=$false;$info.RedirectStandardOutput=$true;$info.CreateNoWindow=$true;$info.WorkingDirectory=$Root
+    $net=$null
+    try{$probe=[Diagnostics.Process]::Start($info);$line=$probe.StandardOutput.ReadToEnd();$probe.WaitForExit()}catch{throw 'No se pudo ejecutar la comprobacion con la cuenta de servicio (clave incorrecta o cuenta sin inicio de sesion local).'}
+    try{return ($line.Trim()|ConvertFrom-Json)}catch{throw 'La comprobacion de la cuenta de servicio no respondio.'}
+}
+# Resultado de Test-ServiceIdentity.ps1 apto para actualizar la contrasena de los servicios (Set-ServicePassword.ps1):
+# la cuenta indicada, sin privilegios administrativos, duena de la instancia y que descifra TODOS los clixml de config\
+# en ese inicio de sesion nuevo (si no, la importacion falta o se hizo en una sesion anterior al restablecimiento).
+# Regla pura (casos en Check-Scripts.ps1).
+function Get-ServiceIdentityBlockers($Check,[string]$Sid){
+    $codes=@()
+    if(-not $Check){return @('SIN_RESPUESTA')}
+    if([string](Get-ObjectField $Check 'sid') -cne $Sid -or -not $Sid){$codes+='OTRA_CUENTA'}
+    if((Get-ObjectField $Check 'administrator') -ne $false){$codes+='ADMINISTRADOR'}
+    if((Get-ObjectField $Check 'instanceOwner') -ne $true){$codes+='NO_ES_DUENA'}
+    $total=Get-ObjectField $Check 'clixmlTotal';$ok=Get-ObjectField $Check 'clixmlDecrypted'
+    if((Get-ObjectField $Check 'dpapi') -ne $true -or -not ($total -is [int] -or $total -is [long]) -or -not ($ok -is [int] -or $ok -is [long]) -or $total -lt 1 -or $ok -ne $total){$codes+='DPAPI'}
+    return $codes
+}
+# Servicios de la instancia antes de actualizar su contrasena guardada (Set-ServicePassword.ps1). $Facts: Sid (de la
+# credencial), AdminSid (quien ejecuta), OwnerSid (instance.json), RecordSid (service.json accountSid) y Services: lista
+# de {Name, State, StartSid} de SIGERMySQL y SIGER. Regla pura (casos en Check-Scripts.ps1).
+function Get-ServicePasswordBlockers($Facts){
+    $codes=@()
+    $sid=[string]$Facts.Sid
+    if(-not $sid){return @('CUENTA_NO_RESUELTA')}
+    if($sid -ceq [string]$Facts.AdminSid){$codes+='MISMA_CUENTA_ADMINISTRATIVA'}
+    if($sid -cne [string]$Facts.OwnerSid){$codes+='NO_ES_DUENA'}
+    if($sid -cne [string]$Facts.RecordSid){$codes+='OTRA_CUENTA_REGISTRADA'}
+    $services=@($Facts.Services)
+    if($services.Count -ne 2){$codes+='SERVICIOS'}
+    foreach($x in $services){
+        if([string]$x.State -cne 'Stopped'){$codes+="SERVICIO_ACTIVO:$($x.Name)"}
+        if([string]$x.StartSid -cne $sid){$codes+="SERVICIO_OTRA_CUENTA:$($x.Name)"}
+    }
+    return $codes
+}
+function Get-ObjectField($Object,[string]$Name){
+    if($null -eq $Object){return $null}
+    $p=$Object.PSObject.Properties[$Name]
+    if($p){return $p.Value}
+    return $null
+}
+
 # SID de una cuenta escrita por nombre (p. ej. en la directiva que exporta secedit), o '' si no se resuelve. Un nombre
 # sin dominio se busca primero como cuenta local del equipo y luego tal como esta (como lo resuelve Windows).
 function Resolve-AccountSid([string]$Name,[string]$ComputerName){

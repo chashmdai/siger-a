@@ -934,6 +934,157 @@ Assert-H06r ($tiEnvelope -ge 0 -and $tiPass -gt $tiEnvelope -and $tiVerifier -gt
 # El informe nunca lleva valores.
 $h6Report=Format-ConfigVerification (New-H06rPayload) ([PSCustomObject]@{Content=$h6Base;Disk=[PSCustomObject]@{Equal=@('config\instance.json');Different=@();Missing=@();Unreadable=@();Extra=@();ListUnreadable=$false;P12=@()};Ack='COINCIDE';AckKeyId='siger-ack-1';AckFindings=@();MySql=@([PSCustomObject]@{User='siger_a_app';State='AUTENTICADA'});MySqlNote='';Problems=@()})
 Assert-H06r (($h6Report -join "`n") -notmatch [regex]::Escape($h6Secret) -and ($h6Report[-1]) -ceq 'Resultado: CORRECTO.') 'el informe no debe llevar valores y debe terminar en el resultado.'
+# --- H06s: importacion (Import-InstanceConfig.ps1) y contrasena de los servicios (Set-ServicePassword.ps1) ---
+$h06sCount=0
+function Assert-H06s([bool]$Condition,[string]$Message){if(-not $Condition){throw "Importacion y contrasena de los servicios (H06s): $Message"};$script:h06sCount++}
+# Formato fijo: H06s no cambia SIGER-CONFIG-1. Paquete generado con Protect-ConfigPayload de ConfigPackage.ps1 de d792507
+# (gate H06r2), con valores sinteticos; la frase es la de abajo. Si cambia el cifrado, la envoltura o el contenido, falla.
+$h7FixturePass='frase de paso del paquete fijo SIGER-CONFIG-1'
+$h7Fixture='{"format":"SIGER-CONFIG-1","iterations":300000,"salt":"8DV+wXPBqZ1n/NHFPiikDjtpa/aJD583KdFvIYXQMMA=","iv":"rM3WUslMVeR19W3ZQMcQRg==","data":"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","mac":"6jSS4W7203I2WJoL+UqhcpYsO2ty1vpJQFPqWoGO7Z8="}'
+Assert-H06s ($script:ConfigFormat -ceq 'SIGER-CONFIG-1' -and $script:ConfigMinIterations -eq 300000) 'formato e iteraciones de SIGER-CONFIG-1.'
+$h7Shapes=@{envoltura='data,format,iterations,iv,mac,salt';cabecera='account,accountSid,computer,createdUtc,database,format,items,namespace,omitted,ownerSid,root';ARCHIVO='content,kind,path,sha256,size';CLIXML='kind,path,properties,sha256,shape,size';propiedad='fingerprint,name,type,value';P12_SIN_CLAVE='content,kind,path,sha256,size';P12_CONOCIDO='certificates,content,kind,password,path,sha256,size';certificado='notAfter,notBefore,privateKey,thumbprint'}
+function Get-H06sFields($Object){return ((@($Object.PSObject.Properties|ForEach-Object {$_.Name})|Sort-Object) -join ',')}
+# Formas (tipo=campos) de un contenido descifrado; un tipo con dos formas distintas aparece dos veces.
+function Get-H06sShapes($Payload){
+    $out=@("cabecera=$(Get-H06sFields $Payload)")
+    foreach($i in @($Payload.items)){
+        $t=[string]$i.kind;if($t -ceq 'P12'){$t=if((Get-P12NameState ([string]$i.path)) -ceq 'SIN_CLAVE'){'P12_SIN_CLAVE'}else{'P12_CONOCIDO'}}
+        $out+="$t=$(Get-H06sFields $i)"
+        if($i.PSObject.Properties['properties']){foreach($p in @($i.properties)){$out+="propiedad=$(Get-H06sFields $p)"}}
+        if($i.PSObject.Properties['certificates']){foreach($c in @($i.certificates)){$out+="certificado=$(Get-H06sFields $c)"}}
+    }
+    return @($out|Sort-Object -Unique)
+}
+function Test-H06sShapes($Payload,[string[]]$Required){
+    foreach($s in (Get-H06sShapes $Payload)){$k,$v=$s.Split('=',2);if(-not $h7Shapes.ContainsKey($k) -or $h7Shapes[$k] -cne $v){return "forma no fijada: $s"}}
+    $got=@((Get-H06sShapes $Payload)|ForEach-Object {$_.Split('=',2)[0]})
+    foreach($r in $Required){if($got -cnotcontains $r){return "falta el tipo $r"}}
+    return ''
+}
+$h7Env=Read-ConfigEnvelope $h7Fixture
+Assert-H06s ((Get-H06sFields ($h7Fixture|ConvertFrom-Json)) -ceq $h7Shapes.envoltura -and $h7Env.Iterations -eq 300000) 'envoltura del paquete fijo.'
+Assert-H06s ((Get-H06rError {Open-ConfigPackage $h7Fixture 'otra frase'}) -ceq 'INTEGRIDAD') 'el paquete fijo con otra frase debe fallar por integridad.'
+$h7Open=Open-ConfigPackage $h7Fixture $h7FixturePass
+$h7Payload=$h7Open.Json|ConvertFrom-Json
+$h7Check=Test-ConfigPayload $h7Payload $h7Open.Crypto.Fp
+Assert-H06s (@($h7Check.Findings).Count -eq 0 -and $h7Check.Files -eq 6 -and $h7Check.Secrets -eq 8 -and @($h7Check.P12|Where-Object {$_.NameState -ceq 'SIN_CLAVE'}).Count -eq 1) "el paquete fijo de d792507 debe abrir y revisarse sin hallazgos ($(@($h7Check.Findings) -join ','))."
+$h7ShapeError=Test-H06sShapes $h7Payload @('cabecera','ARCHIVO','CLIXML','propiedad','P12_SIN_CLAVE')
+Assert-H06s ($h7ShapeError -ceq '') "campos del paquete fijo ($h7ShapeError)."
+Assert-H06s ((Get-PackageSecret $h7Payload 'config\secrets.clixml' 'Migrator') -ceq 'fijo-Migrator-0123456789' -and (Get-PackageSecret $h7Payload 'config\formulario-pull-token.clixml' '') -ceq 'token-fijo-0123456789' -and (Get-PackageSecret $h7Payload 'config\formulario-ack-identity.clixml' 'KeyId') -ceq 'siger-ack-fijo') 'valores del paquete fijo.'
+# Control: un campo de mas en el contenido o en un elemento rompe la forma fijada.
+$h7Bad=$h7Open.Json|ConvertFrom-Json;$h7Bad|Add-Member -NotePropertyName extra -NotePropertyValue 'x'
+$h7Bad2=$h7Open.Json|ConvertFrom-Json;$h7Bad2.items[0]|Add-Member -NotePropertyName extra -NotePropertyValue 'x'
+Assert-H06s ((Test-H06sShapes $h7Bad @()) -like 'forma no fijada: cabecera=*' -and (Test-H06sShapes $h7Bad2 @()) -like 'forma no fijada: ARCHIVO=*') 'control: un campo nuevo debe romper la forma fijada.'
+# Valor de cada clixml con la forma de Export-Clixml: SecureString sola, u objeto con propiedades en orden.
+$h7Tok=ConvertFrom-PackageClixml @($h7Payload.items|Where-Object {$_.path -ceq 'config\formulario-pull-token.clixml'})[0]
+$h7Ack=ConvertFrom-PackageClixml @($h7Payload.items|Where-Object {$_.path -ceq 'config\formulario-ack-identity.clixml'})[0]
+Assert-H06s ($h7Tok -is [Security.SecureString] -and (Secret-Text $h7Tok) -ceq 'token-fijo-0123456789') 'un clixml SECRETO vuelve como SecureString.'
+Assert-H06s ((@($h7Ack.PSObject.Properties|ForEach-Object {$_.Name}) -join ',') -ceq 'KeyId,PrivatePem,PublicPem,Source,ImportedUtc' -and $h7Ack.KeyId -is [string] -and $h7Ack.PrivatePem -is [Security.SecureString] -and (Secret-Text $h7Ack.PrivatePem) -ceq 'privada-fija' -and $h7Ack.ImportedUtc -ceq '2026-11-22T00:00:00.0000000Z') 'un clixml OBJETO vuelve con sus propiedades en orden y sus tipos.'
+Assert-H06s ((ConvertTo-ImportSecure '').Length -eq 0) 'un secreto vacio vuelve como SecureString vacia.'
+# Accion por archivo: un clixml se reprotege siempre; el resto por SHA-256.
+$h7Sha=('ab'*32)
+foreach($c in @(@('CLIXML',$true,$h7Sha,$h7Sha,'REEMPLAZAR'),@('CLIXML',$false,'',$h7Sha,'RESTAURAR'),@('ARCHIVO',$true,$h7Sha,$h7Sha,'SIN_CAMBIO'),@('ARCHIVO',$true,('cd'*32),$h7Sha,'REEMPLAZAR'),
+    @('ARCHIVO',$false,'',$h7Sha,'RESTAURAR'),@('ARCHIVO',$true,'',$h7Sha,'REEMPLAZAR'),@('ARCHIVO',$true,'',' ','REEMPLAZAR'),@('P12',$true,$h7Sha,$h7Sha,'SIN_CAMBIO'),@('P12',$true,('cd'*32),$h7Sha,'REEMPLAZAR'),@('P12',$false,'',$h7Sha,'RESTAURAR'))){
+    Assert-H06s ((Get-ImportItemAction $c[0] $c[1] $c[2] $c[3]) -ceq $c[4]) "accion de $($c[0]) (existe $($c[1])) esperaba $($c[4])."
+}
+# Instancia detenida.
+foreach($c in @(@('NINGUNO',$false,$false,''),@('DETENIDOS',$false,$false,''),@('ACTIVOS',$false,$false,'SERVICIO_ACTIVO'),@('INCONSISTENTE',$false,$false,'SERVICIOS_INCONSISTENTES'),@('OTRO',$false,$false,'SERVICIOS_DESCONOCIDOS'),
+    @('NINGUNO',$true,$false,'APLICACION_ACTIVA'),@('NINGUNO',$false,$true,'MOTOR_ACTIVO'),@('ACTIVOS',$true,$true,'SERVICIO_ACTIVO,APLICACION_ACTIVA,MOTOR_ACTIVO'),@('NINGUNO',$null,$null,'APLICACION_ACTIVA,MOTOR_ACTIVO'))){
+    Assert-H06s ((@(Get-ImportRunBlockers ([PSCustomObject]@{Services=$c[0];App=$c[1];Motor=$c[2]})) -join ',') -ceq $c[3]) "instancia $($c[0])/$($c[1])/$($c[2]) esperaba '$($c[3])'."
+}
+# Paquete de esta instancia y de esta cuenta (paquete fijo: raiz D:\SIGER-FIXTURE, cuenta ...-1001).
+$h7Sid='S-1-5-21-1000-2000-3000-1001';$h7Set=[PSCustomObject]@{ownerSid=$h7Sid}
+foreach($c in @(
+    @{n='correcto';p={$h7Open.Json|ConvertFrom-Json};s=$h7Set;u=$h7Sid;r='D:\SIGER-FIXTURE';f=@();e=''},
+    @{n='raiz con barra final';p={$h7Open.Json|ConvertFrom-Json};s=$h7Set;u=$h7Sid;r='D:\SIGER-FIXTURE\';f=@();e=''},
+    @{n='con hallazgos';p={$h7Open.Json|ConvertFrom-Json};s=$h7Set;u=$h7Sid;r='D:\SIGER-FIXTURE';f=@('P12_MAYUSCULAS:config\HTTPS.p12');e='CONTENIDO'},
+    @{n='otra cuenta';p={$h7Open.Json|ConvertFrom-Json};s=[PSCustomObject]@{ownerSid='S-1-5-21-9-9-9-9'};u='S-1-5-21-9-9-9-9';r='D:\SIGER-FIXTURE';f=@();e='CUENTA_DEL_PAQUETE,DESCRIPTOR_DEL_PAQUETE'},
+    @{n='exportado por otra cuenta';p={$x=$h7Open.Json|ConvertFrom-Json;$x.accountSid='S-1-5-21-9-9-9-9';$x};s=$h7Set;u=$h7Sid;r='D:\SIGER-FIXTURE';f=@();e='CUENTA_DEL_PAQUETE'},
+    @{n='duena del disco distinta';p={$h7Open.Json|ConvertFrom-Json};s=[PSCustomObject]@{ownerSid='S-1-5-21-9-9-9-9'};u=$h7Sid;r='D:\SIGER-FIXTURE';f=@();e='CUENTA_DEL_PAQUETE'},
+    @{n='sin cuenta actual';p={$h7Open.Json|ConvertFrom-Json};s=$h7Set;u='';r='D:\SIGER-FIXTURE';f=@();e='CUENTA_DEL_PAQUETE,DESCRIPTOR_DEL_PAQUETE'},
+    @{n='otra raiz';p={$h7Open.Json|ConvertFrom-Json};s=$h7Set;u=$h7Sid;r='D:\SIGER';f=@();e='RAIZ_DISTINTA,DESCRIPTOR_DEL_PAQUETE'},
+    @{n='sin instance.json';p={$x=$h7Open.Json|ConvertFrom-Json;$x.items=@($x.items|Where-Object {$_.path -cne 'config\instance.json'});$x};s=$h7Set;u=$h7Sid;r='D:\SIGER-FIXTURE';f=@();e='DESCRIPTOR_DEL_PAQUETE'})){
+    Assert-H06s ((@(Get-ImportPackageBlockers (& $c.p) $c.s $c.u $c.r $c.f) -join ',') -ceq $c.e) "paquete $($c.n) esperaba '$($c.e)'."
+}
+# Comparacion despues de importar: el paquete consigo mismo es igual; cada diferencia se informa; lo extra va aparte.
+$h7Cmp=Compare-ConfigPayloadItems $h7Payload ($h7Open.Json|ConvertFrom-Json)
+Assert-H06s (@($h7Cmp.Findings).Count -eq 0 -and $h7Cmp.Files -eq 6 -and $h7Cmp.Secrets -eq 8 -and (@($h7Cmp.Opaque) -join ',') -ceq 'config\https-red-candidato.p12' -and @($h7Cmp.Extra).Count -eq 0) 'comparacion de un contenido igual.'
+foreach($m in @(
+    @{n='huella';f={param($d) @($d.items|Where-Object {$_.path -ceq 'config\secrets.clixml'})[0].properties[1].fingerprint=('00'*32)};e='CLIXML_DISTINTO:config\secrets.clixml'},
+    @{n='nombre de propiedad';f={param($d) @($d.items|Where-Object {$_.path -ceq 'config\formulario-ack-identity.clixml'})[0].properties[0].name='Otro'};e='CLIXML_DISTINTO:config\formulario-ack-identity.clixml'},
+    @{n='tipo de propiedad';f={param($d) @($d.items|Where-Object {$_.path -ceq 'config\formulario-ack-identity.clixml'})[0].properties[2].type='SECRETO'};e='CLIXML_DISTINTO:config\formulario-ack-identity.clixml'},
+    @{n='propiedad de menos';f={param($d) $i=@($d.items|Where-Object {$_.path -ceq 'config\secrets.clixml'})[0];$i.properties=@($i.properties|Select-Object -First 5)};e='CLIXML_DISTINTO:config\secrets.clixml'},
+    @{n='forma';f={param($d) @($d.items|Where-Object {$_.path -ceq 'config\formulario-pull-token.clixml'})[0].shape='OBJETO'};e='CLIXML_DISTINTO:config\formulario-pull-token.clixml'},
+    @{n='SHA-256';f={param($d) @($d.items|Where-Object {$_.path -ceq 'mysql\my.ini'})[0].sha256=('00'*32)};e='DISTINTO:mysql\my.ini'},
+    @{n='almacen sin clave cambiado';f={param($d) @($d.items|Where-Object {$_.path -ceq 'config\https-red-candidato.p12'})[0].sha256=('00'*32)};e='DISTINTO:config\https-red-candidato.p12'},
+    @{n='falta';f={param($d) $d.items=@($d.items|Where-Object {$_.path -cne 'mysql\my.ini'})};e='FALTA:mysql\my.ini'},
+    @{n='tipo';f={param($d) @($d.items|Where-Object {$_.path -ceq 'mysql\my.ini'})[0].kind='P12'};e='TIPO:mysql\my.ini'})){
+    $d=$h7Open.Json|ConvertFrom-Json;& $m.f $d
+    Assert-H06s (@((Compare-ConfigPayloadItems $h7Payload $d).Findings) -ccontains $m.e) "comparacion con $($m.n) esperaba $($m.e)."
+}
+$d=$h7Open.Json|ConvertFrom-Json;$d.items=@($d.items)+@([PSCustomObject]@{path='config\nuevo.json';kind='ARCHIVO';sha256=('00'*32)})
+$h7Cmp=Compare-ConfigPayloadItems $h7Payload $d
+Assert-H06s (@($h7Cmp.Findings).Count -eq 0 -and (@($h7Cmp.Extra) -join ',') -ceq 'config\nuevo.json') 'un archivo del disco que no esta en el paquete se informa aparte, sin observacion.'
+$h7CertA=@([PSCustomObject]@{thumbprint='AA';notBefore='20261101T000000Z';notAfter='20271101T000000Z';privateKey=$true})
+$h7P12=[PSCustomObject]@{items=@([PSCustomObject]@{path='config\https.p12';kind='P12';sha256=$h7Sha;password='Tls';certificates=$h7CertA})}
+$h7P12b=[PSCustomObject]@{items=@([PSCustomObject]@{path='config\https.p12';kind='P12';sha256=$h7Sha;password='Tls';certificates=@([PSCustomObject]@{thumbprint='BB';notBefore='20261101T000000Z';notAfter='20271101T000000Z';privateKey=$true})})}
+Assert-H06s (@((Compare-ConfigPayloadItems $h7P12 $h7P12).Findings).Count -eq 0 -and (@((Compare-ConfigPayloadItems $h7P12 $h7P12b).Findings) -join ',') -ceq 'P12_CERTIFICADOS:config\https.p12') 'un almacen conocido se compara por sus certificados.'
+# Plan e informe sin valores.
+$h7PlanText=(Format-ImportPlan ([PSCustomObject]@{Items=@(foreach($i in $h7Payload.items){[PSCustomObject]@{Path=$i.path;Kind=$i.kind;Action=(Get-ImportItemAction $i.kind $true '' $i.sha256);Opaque=($i.kind -ceq 'P12')}});Extra=@('config\nuevo.json')})) -join "`n"
+Assert-H06s ($h7PlanText -match 'REEMPLAZAR  CLIXML  config\\secrets\.clixml, se vuelve a proteger con la DPAPI de esta sesion' -and $h7PlanText -match 'config\\https-red-candidato\.p12, sin clave conocida: solo bytes y SHA-256, sin abrirlo' -and $h7PlanText -match 'SE_CONSERVA ARCHIVO config\\nuevo\.json' -and $h7PlanText -notmatch 'fijo-|token-fijo|privada-fija') "plan de la importacion ($h7PlanText)."
+$h7Report=(Format-ImportedConfig ([PSCustomObject]@{Findings=@();Files=6;Secrets=8;Opaque=@('config\https-red-candidato.p12');Extra=@();Ack='COINCIDE'})) -join "`n"
+Assert-H06s ($h7Report -match 'Almacen config\\https-red-candidato\.p12: SIN_CLAVE_CONOCIDA' -and $h7Report -match '(?m)^Resultado: CORRECTO\.$' -and (Format-ImportedConfig ([PSCustomObject]@{Findings=@('ACL:config\secrets.clixml');Files=1;Secrets=1;Opaque=@();Extra=@();Ack='NO_APLICA'}))[-1] -ceq 'Resultado: CON OBSERVACIONES: ACL:config\secrets.clixml.') 'informe despues de importar.'
+Assert-H06s ($script:ImportCurrentSecretsNote -match 'se vuelven a proteger igual' -and $script:ImportCurrentSecretsNote -notmatch '(?i)cierra|runas|vuelve a importar') 'la nota de una sesion que ya descifra es informativa: no pide cerrar la sesion ni reimportar.'
+# Comprobacion como la cuenta (Set-ServicePassword.ps1): debe descifrar TODOS los clixml en un inicio de sesion nuevo.
+$h7Ok=@{sid=$h7Sid;administrator=$false;dpapi=$true;instanceOwner=$true;clixmlTotal=3;clixmlDecrypted=3}
+foreach($c in @(@{n='apta';x=@{};e=''},@{n='otra cuenta';x=@{sid='S-1-5-21-9-9-9-9'};e='OTRA_CUENTA'},@{n='administradora';x=@{administrator=$true};e='ADMINISTRADOR'},@{n='no duena';x=@{instanceOwner=$false};e='NO_ES_DUENA'},
+    @{n='sin secrets';x=@{dpapi=$false};e='DPAPI'},@{n='un clixml sin descifrar';x=@{clixmlDecrypted=2};e='DPAPI'},@{n='ningun clixml';x=@{clixmlTotal=0;clixmlDecrypted=0};e='DPAPI'},@{n='sin conteo';x=@{clixmlTotal=$null};e='DPAPI'},
+    @{n='conteo como texto';x=@{clixmlTotal='3'};e='DPAPI'},@{n='administrador ausente';x=@{administrator=$null};e='ADMINISTRADOR'})){
+    $o=@{};foreach($k in $h7Ok.Keys){$o[$k]=$h7Ok[$k]};foreach($k in $c.x.Keys){$o[$k]=$c.x[$k]}
+    Assert-H06s ((@(Get-ServiceIdentityBlockers ([PSCustomObject]$o) $h7Sid) -join ',') -ceq $c.e) "comprobacion $($c.n) esperaba '$($c.e)'."
+}
+Assert-H06s ((@(Get-ServiceIdentityBlockers $null $h7Sid) -join ',') -ceq 'SIN_RESPUESTA' -and (@(Get-ServiceIdentityBlockers ([PSCustomObject]$h7Ok) '') -join ',') -ceq 'OTRA_CUENTA') 'comprobacion sin respuesta o sin cuenta.'
+# Servicios antes de actualizar la contrasena.
+function New-H06sServiceFacts([hashtable]$Change){
+    $f=@{Sid=$h7Sid;AdminSid='S-1-5-21-1000-2000-3000-500';OwnerSid=$h7Sid;RecordSid=$h7Sid;Services=@([PSCustomObject]@{Name='SIGERMySQL';State='Stopped';StartSid=$h7Sid},[PSCustomObject]@{Name='SIGER';State='Stopped';StartSid=$h7Sid})}
+    foreach($k in $Change.Keys){$f[$k]=$Change[$k]};return [PSCustomObject]$f
+}
+foreach($c in @(@{n='correcto';x=@{};e=''},@{n='sin cuenta';x=@{Sid=''};e='CUENTA_NO_RESUELTA'},@{n='cuenta del administrador';x=@{AdminSid=$h7Sid};e='MISMA_CUENTA_ADMINISTRATIVA'},@{n='no duena';x=@{OwnerSid='S-1-5-21-9-9-9-9'};e='NO_ES_DUENA'},
+    @{n='otra registrada';x=@{RecordSid='S-1-5-21-9-9-9-9'};e='OTRA_CUENTA_REGISTRADA'},
+    @{n='motor activo';x=@{Services=@([PSCustomObject]@{Name='SIGERMySQL';State='Running';StartSid=$h7Sid},[PSCustomObject]@{Name='SIGER';State='Stopped';StartSid=$h7Sid})};e='SERVICIO_ACTIVO:SIGERMySQL'},
+    @{n='SIGER deteniendose';x=@{Services=@([PSCustomObject]@{Name='SIGERMySQL';State='Stopped';StartSid=$h7Sid},[PSCustomObject]@{Name='SIGER';State='Stop Pending';StartSid=$h7Sid})};e='SERVICIO_ACTIVO:SIGER'},
+    @{n='servicio de otra cuenta';x=@{Services=@([PSCustomObject]@{Name='SIGERMySQL';State='Stopped';StartSid=''},[PSCustomObject]@{Name='SIGER';State='Stopped';StartSid=$h7Sid})};e='SERVICIO_OTRA_CUENTA:SIGERMySQL'},
+    @{n='un solo servicio';x=@{Services=@([PSCustomObject]@{Name='SIGER';State='Stopped';StartSid=$h7Sid})};e='SERVICIOS'})){
+    Assert-H06s ((@(Get-ServicePasswordBlockers (New-H06sServiceFacts $c.x)) -join ',') -ceq $c.e) "servicios $($c.n) esperaba '$($c.e)'."
+}
+# Orden de los scripts (AST): cuenta duena e instancia detenida antes de la frase; confirmacion antes de escribir; la
+# instancia se vuelve a comprobar despues de confirmar. Set-ServicePassword.ps1: reglas, comprobacion como la cuenta y
+# confirmacion antes de cambiar; la contrasena nunca en una linea de sc.exe.
+$imAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Import-InstanceConfig.ps1'),[ref]$null,[ref]$null)
+$imCalls=@($imAst.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst]},$true))
+$imMember=@($imAst.FindAll({param($a) $a -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and $a.Member.Value -ceq 'ShouldProcess'},$true))
+function Get-H06sOffsets($Calls,[string]$Name){return @($Calls|Where-Object {$_.GetCommandName() -ceq $Name}|ForEach-Object {$_.Extent.StartOffset})}
+$imOwner=@(Get-H06sOffsets $imCalls 'Assert-InstanceOwner');$imStop=@(Get-H06sOffsets $imCalls 'Assert-InstanceStopped');$imPass=@(Get-H06sOffsets $imCalls 'Read-ConfigPassphrase');$imApply=@(Get-H06sOffsets $imCalls 'Invoke-ConfigImport');$imVerify=@(Get-H06sOffsets $imCalls 'Test-ImportedConfig');$imBlock=@(Get-H06sOffsets $imCalls 'Get-ImportPackageBlockers')
+Assert-H06s ($imOwner.Count -eq 1 -and $imPass.Count -eq 1 -and $imStop.Count -eq 2 -and $imApply.Count -eq 1 -and $imMember.Count -eq 1 -and $imOwner[0] -lt $imStop[0] -and $imStop[0] -lt $imPass[0] -and $imPass[0] -lt $imBlock[0] -and $imBlock[0] -lt $imMember[0].Extent.StartOffset -and $imMember[0].Extent.StartOffset -lt $imStop[1] -and $imStop[1] -lt $imApply[0] -and $imApply[0] -lt $imVerify[0]) 'Import-InstanceConfig.ps1: cuenta, instancia detenida, frase, reglas del paquete, confirmacion, nueva comprobacion, importacion y verificacion en ese orden.'
+$imText=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Import-InstanceConfig.ps1'))
+Assert-H06s ($imText -match "ConfirmImpact='High'" -and $imText -notmatch 'Read-ConfigPassphrase -Twice' -and $imText -notmatch '(?i)Remove-Item') 'Import-InstanceConfig.ps1: confirmacion High, frase una vez y sin Remove-Item.'
+$h7Fn=@{};foreach($f in $cpAst.FindAll({param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]},$true)){$h7Fn[$f.Name]=$f}
+$h7Import=$h7Fn['Invoke-ConfigImport'].Extent.Text
+Assert-H06s ($h7Import -notmatch '(?i)Remove-Item|::Delete\(\$i\.|::Delete\(\$old' -and $h7Import -match '\[IO\.File\]::Move\(\$i\.Full,\$dest\)' -and $h7Import -match 'Export-Clixml -LiteralPath \$staged -WhatIf:\$false -Confirm:\$false' -and $h7Import -match 'Set-PrivateFileAcl \$i\.Full;Require-PrivateFile \$i\.Full') 'Invoke-ConfigImport: conserva lo anterior (mueve, no borra), protege cada clixml y exige su ACL privada.'
+Assert-H06s (@($h7Fn['Test-ImportedConfig'].FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and @('Set-Content','Set-Acl','Export-Clixml','Out-File','Remove-Item','Move-Item','Copy-Item') -ccontains $a.GetCommandName()},$true)).Count -eq 0 -and @(Get-H06rWrites $h7Fn['Test-ImportedConfig'].Body).Count -eq 0 -and @(foreach($n in (Get-H06rReachable $h7Fn['Test-ImportedConfig'].Body)){Get-H06rWrites $cpFunctions[$n].Body}).Count -eq 0) 'Test-ImportedConfig no escribe (ni las funciones que alcanza).'
+$spAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Set-ServicePassword.ps1'),[ref]$null,[ref]$null)
+$spCalls=@($spAst.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst]},$true))
+$spShould=@($spAst.FindAll({param($a) $a -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and $a.Member.Value -ceq 'ShouldProcess'},$true))
+$spRules=@(Get-H06sOffsets $spCalls 'Get-ServicePasswordBlockers');$spCheck=@(Get-H06sOffsets $spCalls 'Invoke-ServiceIdentityCheck');$spIdRules=@(Get-H06sOffsets $spCalls 'Get-ServiceIdentityBlockers');$spChange=@(Get-H06sOffsets $spCalls 'Invoke-CimMethod')
+Assert-H06s ($spRules.Count -eq 1 -and $spCheck.Count -eq 1 -and $spIdRules.Count -eq 1 -and $spChange.Count -eq 1 -and $spShould.Count -eq 1 -and $spRules[0] -lt $spCheck[0] -and $spCheck[0] -lt $spIdRules[0] -and $spIdRules[0] -lt $spShould[0].Extent.StartOffset -and $spShould[0].Extent.StartOffset -lt $spChange[0]) 'Set-ServicePassword.ps1: reglas, comprobacion como la cuenta y confirmacion antes de cambiar la contrasena.'
+$spText=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Set-ServicePassword.ps1'))
+Assert-H06s ($spText -match "MethodName Change -Arguments @\{StartName=\`$b\.StartName;StartPassword=\`$net\.Password\}" -and $spText -notmatch '(?i)sc\.exe[^\r\n]*password=' -and $spText -notmatch '(?i)sc\.exe\s+config' -and $spText -notmatch '(?i)New-Service|Remove-Service|sc\.exe\s+(delete|create)' -and $spText -notmatch '(?i)Start-Service') 'Set-ServicePassword.ps1: solo cambia la contrasena con Win32_Service.Change, sin sc.exe config, sin reinstalar ni iniciar.'
+$isText=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Install-Service.ps1'))
+Assert-H06s (@($isAst.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'Invoke-ServiceIdentityCheck'},$true)).Count -eq 1 -and $isText -notmatch 'ProcessStartInfo') 'Install-Service.ps1 usa la comprobacion compartida (Invoke-ServiceIdentityCheck) y no la repite.'
+$tsText=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Test-ServiceIdentity.ps1'))
+Assert-H06s ($tsText -match 'clixmlTotal=\$clixmlTotal;clixmlDecrypted=\$clixmlDecrypted' -and $tsText -match "GetFiles\(\(Join-Path \`$Root 'config'\),'\*\.clixml'\)") 'Test-ServiceIdentity.ps1 informa cuantos clixml de config\ descifra.'
+Clear-ConfigCrypto $h7Open.Crypto
+# --- fin H06s (la ida y vuelta con DPAPI real esta en el bloque de Windows de H06r) ---
 # Identidad ACK (AckKeyCheck.java con un Java disponible): par correcto, cruzado y basura.
 $h6JavaBin=@((Join-Path $project '.tools\java25\bin'),$(if($env:JAVA_HOME){Join-Path $env:JAVA_HOME 'bin'}))|Where-Object {$_ -and (Test-Path -LiteralPath (Join-Path $_ $(if($onWindows){'java.exe'}else{'java'})))}|Select-Object -First 1
 $h6Ack='sin Java: AckKeyCheck.java no se ejercito'
@@ -1135,11 +1286,115 @@ try{
         }
         Assert-H06r ((Invoke-H06rGuideCopy $guideCopy[0] 'copia-v4') -ceq 'formulario-ack-identity.clixml,formulario-ca.pem,formulario-pull-token.clixml,formulario-pull.json,formulario-trusted-keys.json') 'la copia de V4 debe traer exactamente los cinco archivos del Formulario.'
         Assert-H06r ((Invoke-H06rGuideCopy "Copy-Item -Path 'D:\SIGER-VALIDACION\config\formulario-*' -Exclude '*.bak-atomic-*' -Destination 'D:\SIGER\config'" 'copia-anterior') -like '*formulario-pull.json.bak-auto-20261109*') 'control: la orden anterior de V4 debe copiar el .bak-auto (si no, la prueba no detecta nada).'
+        # H06s: ida y vuelta real con DPAPI sobre la instancia con los nombres de la VM (sin servicios registrados).
+        # Exportacion con la DPAPI de esta cuenta; el restablecimiento se simula con clixml que nadie descifra; la
+        # importacion se ejecuta con -File y la frase la responde un Read-Host de prueba.
+        [IO.File]::Delete((Join-Path $vm 'config\service.json'))
+        $h7Crypto=New-ConfigCrypto $h6Pass $null 300000
+        $h7Json=(New-InstanceConfigPayload (Read-Settings $vm) (Get-InstanceConfigInventory $vm) $h7Crypto.Fp)|ConvertTo-Json -Depth 10 -Compress
+        $h7Exported=$h7Json|ConvertFrom-Json
+        $h7ShapeError=Test-H06sShapes $h7Exported @('cabecera','ARCHIVO','CLIXML','propiedad','P12_SIN_CLAVE','P12_CONOCIDO','certificado')
+        Assert-H06s ($h7ShapeError -ceq '') "campos del paquete exportado con DPAPI real ($h7ShapeError)."
+        $h7Pkg=Join-Path $h6Dir 'h06s.sigerpkg';[IO.File]::WriteAllText($h7Pkg,(Protect-ConfigPayload $h7Crypto $h7Json))
+        $imp=Join-Path $PSScriptRoot 'Import-InstanceConfig.ps1'
+        function Invoke-H06sImport([string]$Pass,[string]$Pkg,[string]$Extra){
+            $w=Join-Path $h6Dir 'importar.ps1'
+            [IO.File]::WriteAllLines($w,@('$ErrorActionPreference=''Stop''',"function global:Read-Host{param(`$Prompt,[switch]`$AsSecureString) ConvertTo-SecureString '$Pass' -AsPlainText -Force}",'$global:LASTEXITCODE=0',"& '$($imp.Replace("'","''"))' -Root '$($vm.Replace("'","''"))' -Package '$($Pkg.Replace("'","''"))' $Extra",'exit $LASTEXITCODE'))
+            $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+            try{$o=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $w 2>&1|ForEach-Object {[string]$_});$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
+            $t=$o -join "`n"
+            foreach($v in @($vals.Values)+@($h6Keys.a[0])){Assert-H06s (-not $t.Contains($v)) 'un secreto aparecio en la salida de la importacion.'}
+            return [PSCustomObject]@{Code=$code;Text=$t}
+        }
+        function Get-H06sRotations{return @([IO.Directory]::GetDirectories((Join-Path $vm 'config'),'rotacion-*'))}
+        $h7RotBase=@(Get-H06sRotations).Count
+        # 1. -WhatIf en una sesion que ya descifra los secretos: plan, nota informativa y nada escrito.
+        $r=Invoke-H06sImport $h6Pass $h7Pkg '-WhatIf'
+        Assert-H06s ($r.Code -eq 0 -and $r.Text -match 'Plan: 25 archivos del paquete \(3 REEMPLAZAR, 22 SIN_CAMBIO\)' -and $r.Text -match 'ya descifra los clixml del disco' -and $r.Text -notmatch '(?i)ADVERTENCIA|WARNING' -and $r.Text -match [regex]::Escape((Get-Sha256Hex ([IO.File]::ReadAllBytes($h7Pkg)))) -and @(Get-H06sRotations).Count -eq $h7RotBase) "-WhatIf de la importacion ($($r.Text))."
+        # 2. Restablecimiento simulado y cambios en el disco.
+        $h7Garbage='<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><SS>01000000d08c9ddf0115d1118c7a00c04fc297eb01000000ffffffffffffffffffffffffffffffff0000000002000000000003660000c000000010000000</SS></Objs>'
+        foreach($n in @('secrets.clixml','formulario-pull-token.clixml','formulario-ack-identity.clixml')){[IO.File]::WriteAllText((Join-Path $vm "config\$n"),$h7Garbage,[Text.Encoding]::Unicode)}
+        Assert-H06s ((Get-H06rError {Import-Clixml -LiteralPath (Join-Path $vm 'config\secrets.clixml')}) -cne 'SIN_ERROR') 'control: el clixml del restablecimiento simulado no debe descifrarse.'
+        [IO.File]::Delete((Join-Path $vm 'config\formulario-ca.pem'))
+        [IO.File]::WriteAllText((Join-Path $vm 'config\formulario-pull.json'),'{"cambiado":"despues de exportar"}')
+        [IO.File]::WriteAllText((Join-Path $vm 'mysql\my.ini'),"[mysqld]`r`nport=13400`r`n")
+        $candOld=[byte[]]($candBytes+[byte]7);[IO.File]::WriteAllBytes($candFile,$candOld)
+        [IO.File]::WriteAllText((Join-Path $vm 'config\extra-h06s.json'),'{"solo":"en el disco"}')
+        # 3. Rechazos: nada cambia.
+        $h7Bad=$h7Exported|ConvertTo-Json -Depth 10|ConvertFrom-Json;foreach($i in $h7Bad.items){if($i.path -ceq 'config\mysql-trust.p12'){$i.path='config\MYSQL-TRUST.p12'}}
+        $h7BadPkg=Join-Path $h6Dir 'h06s-mayusculas.sigerpkg';[IO.File]::WriteAllText($h7BadPkg,(Protect-ConfigPayload $h7Crypto ($h7Bad|ConvertTo-Json -Depth 10 -Compress)))
+        $h7OtherPkg=Join-Path $h6Dir 'h06s-otra-raiz.sigerpkg';[IO.File]::WriteAllText($h7OtherPkg,(Protect-ConfigPayload $h7Crypto ((New-InstanceConfigPayload (Read-Settings $root) (Get-InstanceConfigInventory $root) $h7Crypto.Fp)|ConvertTo-Json -Depth 10 -Compress)))
+        $h7Inside=Join-Path $vm 'tmp\dentro.sigerpkg';[IO.File]::Copy($h7Pkg,$h7Inside)
+        $h7NotPkg=Join-Path $h6Dir 'no-paquete-h06s.sigerpkg';[IO.File]::WriteAllText($h7NotPkg,'{"format":"SIGER-SECRETOS-1"}')
+        $h7Snapshot={(@([IO.Directory]::GetFiles((Join-Path $vm 'config'),'*',[IO.SearchOption]::AllDirectories)+@(Join-Path $vm 'mysql\my.ini'))|Sort-Object|ForEach-Object {"$_|$(Get-Sha256Hex ([IO.File]::ReadAllBytes($_)))"}) -join "`n"}
+        $h7Before=& $h7Snapshot
+        $instFile=Join-Path $vm 'config\instance.json';$instText=[IO.File]::ReadAllText($instFile);$instBytes=[IO.File]::ReadAllBytes($instFile)
+        [void][IO.Directory]::CreateDirectory((Join-Path $vm 'run'));[void][IO.Directory]::CreateDirectory((Join-Path $vm 'mysql\data'))
+        foreach($c in @(
+            @{n='frase incorrecta';p='otra frase de paso de prueba';k=$h7Pkg;pre={};post={};e='INTEGRIDAD'},
+            @{n='SIGER activo';p=$h6Pass;k=$h7Pkg;pre={[IO.File]::WriteAllText((Join-Path $vm 'run\app.pid'),[string]$PID)};post={[IO.File]::Delete((Join-Path $vm 'run\app.pid'))};e='APLICACION_ACTIVA'},
+            @{n='motor activo';p=$h6Pass;k=$h7Pkg;pre={[IO.File]::WriteAllText((Join-Path $vm 'mysql\data\siger-a.pid'),[string]$PID)};post={[IO.File]::Delete((Join-Path $vm 'mysql\data\siger-a.pid'))};e='MOTOR_ACTIVO'},
+            @{n='pid ilegible';p=$h6Pass;k=$h7Pkg;pre={[IO.File]::WriteAllText((Join-Path $vm 'run\app.pid'),'x')};post={[IO.File]::Delete((Join-Path $vm 'run\app.pid'))};e='APLICACION_ACTIVA'},
+            @{n='otra cuenta';p=$h6Pass;k=$h7Pkg;pre={[IO.File]::WriteAllText($instFile,$instText.Replace($me,'S-1-5-21-1-2-3-4'))};post={[IO.File]::WriteAllBytes($instFile,$instBytes)};e='como la cuenta de servicio de la instancia'},
+            @{n='almacen con otras mayusculas';p=$h6Pass;k=$h7BadPkg;pre={};post={};e='CONTENIDO: P12_MAYUSCULAS:config\\MYSQL-TRUST\.p12'},
+            @{n='otra raiz';p=$h6Pass;k=$h7OtherPkg;pre={};post={};e='RAIZ_DISTINTA'},
+            @{n='paquete dentro de la raiz';p=$h6Pass;k=$h7Inside;pre={};post={};e='dentro de la raiz'},
+            @{n='archivo ajeno';p=$h6Pass;k=$h7NotPkg;pre={};post={};e='FORMATO'})){
+            & $c.pre
+            try{$r=Invoke-H06sImport $c.p $c.k '-Confirm:$false'}finally{& $c.post}
+            Assert-H06s ($r.Code -ne 0 -and $r.Text -match $c.e -and $r.Text -notmatch 'Importacion COMPLETA' -and @(Get-H06sRotations).Count -eq $h7RotBase) "la importacion con $($c.n) debe negarse ($($c.e)): $($r.Text)"
+        }
+        [IO.File]::Delete($h7Inside)
+        Assert-H06s ((& $h7Snapshot) -ceq $h7Before) 'un rechazo de la importacion cambio el disco.'
+        # 4. Importacion real.
+        $r=Invoke-H06sImport $h6Pass $h7Pkg '-Confirm:$false'
+        Assert-H06s ($r.Code -eq 0 -and $r.Text -match 'Plan: 25 archivos del paquete \(6 REEMPLAZAR, 1 RESTAURAR, 18 SIN_CAMBIO\); 1 archivo\(s\) del disco' -and $r.Text -match 'Importacion COMPLETA: 7 archivos aplicados, 18 sin cambio' -and $r.Text -match 'Almacen config\\https-red-candidato\.p12: SIN_CLAVE_CONOCIDA' -and $r.Text -match 'Identidad ACK: privada y publica COINCIDE' -and $r.Text -match '(?m)^Resultado: CORRECTO\.$' -and $r.Text -notmatch 'ya descifra los clixml') "importacion real ($($r.Text))."
+        $h7Sec=Import-Clixml -LiteralPath (Join-Path $vm 'config\secrets.clixml')
+        foreach($n in @('Owner','App','Migrator','Backup','Tls','Trust')){Assert-H06s ((Secret-Text $h7Sec.$n) -ceq $vals[$n]) "el secreto $n debe volver intacto con la DPAPI de esta sesion."}
+        Assert-H06s ((@($h7Sec.PSObject.Properties|ForEach-Object {$_.Name}) -join ',') -ceq 'Owner,App,Migrator,Backup,Tls,Trust') 'secrets.clixml conserva el orden de sus propiedades.'
+        $h7Id=Import-Clixml -LiteralPath (Join-Path $vm 'config\formulario-ack-identity.clixml')
+        Assert-H06s ((Secret-Text (Import-Clixml -LiteralPath (Join-Path $vm 'config\formulario-pull-token.clixml'))) -ceq $vals.Token -and (Secret-Text $h7Id.PrivatePem) -ceq $h6Keys.a[0] -and $h7Id.KeyId -ceq 'siger-ack-1' -and $h7Id.PublicPem -ceq $h6Keys.a[1]) 'Bearer e identidad ACK intactos.'
+        foreach($n in @('secrets.clixml','formulario-pull-token.clixml','formulario-ack-identity.clixml')){
+            $f=Join-Path $vm "config\$n";$acl=Get-Acl -LiteralPath $f
+            $sids=@($acl.Access|ForEach-Object {$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value}|Sort-Object -Unique)
+            Assert-H06s ($acl.AreAccessRulesProtected -and (($sids|Sort-Object) -join ',') -ceq ((@($me,'S-1-5-18','S-1-5-32-544')|Sort-Object) -join ',') -and (Get-H06rError {Require-PrivateFile $f}) -ceq 'SIN_ERROR') "ACL privada de $n."
+        }
+        foreach($i in @($h7Exported.items|Where-Object {$_.kind -cne 'CLIXML'})){Assert-H06s ((Get-Sha256Hex ([IO.File]::ReadAllBytes((Join-Path $vm $i.path)))) -ceq $i.sha256) "$($i.path) debe quedar igual al paquete."}
+        Assert-H06s ([IO.File]::ReadAllText((Join-Path $vm 'config\extra-h06s.json')) -ceq '{"solo":"en el disco"}') 'un archivo que no esta en el paquete no se toca.'
+        $h7Rot=@(Get-H06sRotations|Sort-Object);Assert-H06s ($h7Rot.Count -eq $h7RotBase+1 -and [IO.Path]::GetFileName($h7Rot[-1]) -cmatch '^rotacion-[0-9]{8}T[0-9]{6}Z$') 'una carpeta rotacion-<UTC> nueva.'
+        $h7Old=Join-Path $h7Rot[-1] 'anterior'
+        $h7Kept=[string[]]@([IO.Directory]::GetFiles($h7Old,'*',[IO.SearchOption]::AllDirectories)|ForEach-Object {$_.Substring($h7Old.Length+1)});[Array]::Sort($h7Kept,[StringComparer]::Ordinal)
+        Assert-H06s (($h7Kept -join ',') -ceq 'config\formulario-ack-identity.clixml,config\formulario-pull-token.clixml,config\formulario-pull.json,config\https-red-candidato.p12,config\secrets.clixml,mysql\my.ini') "anteriores conservados ($($h7Kept -join ','))."
+        Assert-H06s ([IO.File]::ReadAllText((Join-Path $h7Old 'config\secrets.clixml'),[Text.Encoding]::Unicode) -ceq $h7Garbage -and (Get-Sha256Hex ([IO.File]::ReadAllBytes((Join-Path $h7Old 'config\https-red-candidato.p12')))) -ceq (Get-Sha256Hex $candOld) -and -not [IO.Directory]::Exists((Join-Path $h7Rot[-1] 'nuevo'))) 'los anteriores se conservan tal cual y no queda la carpeta de preparacion.'
+        $h7RecText=[IO.File]::ReadAllText((Join-Path $h7Rot[-1] 'importacion.json'));$h7Rec=$h7RecText|ConvertFrom-Json
+        Assert-H06s ($h7Rec.kind -ceq 'IMPORTACION_CONFIGURACION' -and $h7Rec.estado -ceq 'COMPLETA' -and @($h7Rec.items).Count -eq 25 -and @($h7Rec.items|Where-Object {$_.estado -ceq 'APLICADO'}).Count -eq 7 -and (@($h7Rec.extra) -join ',') -ceq 'config\extra-h06s.json' -and $h7Rec.package.sha256 -ceq (Get-Sha256Hex ([IO.File]::ReadAllBytes($h7Pkg)))) 'registro importacion.json.'
+        foreach($v in @($vals.Values)+@($h6Keys.a[0])){Assert-H06s (-not $h7RecText.Contains($v)) 'un secreto aparecio en importacion.json.'}
+        # La verificacion de otra cuenta (Test-InstanceConfig.ps1) informa como distintos solo los clixml reprotegidos.
+        $h7Diff=@((Invoke-ConfigVerification $h7Exported $h7Crypto.Fp $vm (Join-Path $PSScriptRoot 'AckKeyCheck.java')).Problems|Where-Object {$_ -notlike 'MYSQL_*'})
+        Assert-H06s ((($h7Diff|Sort-Object) -join ',') -ceq 'DISCO_DISTINTO:config\formulario-ack-identity.clixml,DISCO_DISTINTO:config\formulario-pull-token.clixml,DISCO_DISTINTO:config\secrets.clixml,DISCO_EXTRA:config\extra-h06s.json') "despues de importar, solo los clixml difieren del paquete por SHA-256 ($($h7Diff -join ','))."
+        # 5. Repetir es seguro: los clixml se vuelven a proteger y el resto queda SIN_CAMBIO; esta sesion descifra: nota.
+        Start-Sleep -Milliseconds 1100
+        $r=Invoke-H06sImport $h6Pass $h7Pkg '-Confirm:$false'
+        Assert-H06s ($r.Code -eq 0 -and $r.Text -match 'Plan: 25 archivos del paquete \(3 REEMPLAZAR, 22 SIN_CAMBIO\)' -and $r.Text -match '(?m)^Resultado: CORRECTO\.$' -and $r.Text -match 'ya descifra los clixml' -and @(Get-H06sRotations).Count -eq $h7RotBase+2) "repetir la importacion ($($r.Text))."
+        # La verificacion posterior exige la ACL privada de cada clixml: con lectura para Todos, la informa (ACL).
+        $h7AclFile=Join-Path $vm 'config\formulario-pull-token.clixml'
+        Assert-H06s (@((Test-ImportedConfig $h7Exported $h7Crypto.Fp $vm (Join-Path $PSScriptRoot 'AckKeyCheck.java')).Findings).Count -eq 0) 'control: la verificacion posterior sin cambios debe ser correcta.'
+        $h7Acl=Get-Acl -LiteralPath $h7AclFile;$h7Acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier('S-1-1-0')),'Read','Allow')));Set-Acl -LiteralPath $h7AclFile -AclObject $h7Acl
+        try{Assert-H06s (@((Test-ImportedConfig $h7Exported $h7Crypto.Fp $vm (Join-Path $PSScriptRoot 'AckKeyCheck.java')).Findings) -ccontains 'ACL:config\formulario-pull-token.clixml') 'la verificacion posterior debe informar un clixml con permisos amplios.'}finally{Set-PrivateFileAcl $h7AclFile}
+        # 6. Test-ServiceIdentity.ps1 (comprobacion de Set-ServicePassword.ps1) cuenta los clixml que descifra.
+        function Invoke-H06sIdentity{$old=$ErrorActionPreference;$ErrorActionPreference='Continue';try{$o=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-ServiceIdentity.ps1') -Root $vm 2>&1|ForEach-Object {[string]$_})}finally{$ErrorActionPreference=$old};return (($o|Where-Object {$_.StartsWith('{')}|Select-Object -Last 1)|ConvertFrom-Json)}
+        $h7IdCheck=Invoke-H06sIdentity
+        Assert-H06s ($h7IdCheck.clixmlTotal -eq 3 -and $h7IdCheck.clixmlDecrypted -eq 3 -and $h7IdCheck.dpapi -and $h7IdCheck.instanceOwner -and -not (@(Get-ServiceIdentityBlockers $h7IdCheck $me) -ccontains 'DPAPI')) "Test-ServiceIdentity.ps1 despues de importar ($($h7IdCheck|ConvertTo-Json -Compress))."
+        [IO.File]::WriteAllText((Join-Path $vm 'config\formulario-pull-token.clixml'),$h7Garbage,[Text.Encoding]::Unicode)
+        $h7IdCheck=Invoke-H06sIdentity
+        Assert-H06s ($h7IdCheck.clixmlTotal -eq 3 -and $h7IdCheck.clixmlDecrypted -eq 2 -and $h7IdCheck.dpapi -and (@(Get-ServiceIdentityBlockers $h7IdCheck $me) -ccontains 'DPAPI')) 'Test-ServiceIdentity.ps1 con un clixml que no descifra: DPAPI.'
+        Clear-ConfigCrypto $h7Crypto
+        $h6Ack+='; ida y vuelta de la importacion con DPAPI real, restablecimiento simulado, rechazos y repeticion (H06s)'
         Clear-ConfigCrypto $crypto;Clear-ConfigCrypto $opened.Crypto
         $h6Ack+='; ida completa con DPAPI, keytool y los scripts con -File; inventario de la VM con almacen sin clave conocida y copia de V4'
     }
 }finally{if([IO.Directory]::Exists($h6Dir)){[IO.Directory]::Delete($h6Dir,$true)};Clear-ConfigCrypto $h6Crypto;Clear-ConfigCrypto $h6Open.Crypto}
-$h06rSummary="paquete de configuracion de H06r ($h06rCount casos: rutas, tipos, claves de .p12, destino, cuenta verificadora, keyId, cifrado y envoltura, revision del contenido, almacenes sin clave conocida y con otras mayusculas (H06r2), MySQL sin contrasena en argumentos, verificacion sin escrituras, orden de los scripts; $h6Ack)"
+$h06rSummary="paquete de configuracion de H06r ($h06rCount casos: rutas, tipos, claves de .p12, destino, cuenta verificadora, keyId, cifrado y envoltura, revision del contenido, almacenes sin clave conocida y con otras mayusculas (H06r2), MySQL sin contrasena en argumentos, verificacion sin escrituras, orden de los scripts; $h6Ack); importacion y contrasena de los servicios de H06s ($h06sCount casos: formato fijo con el paquete de d792507, accion por archivo, instancia detenida, paquete de la instancia, comparacion despues de importar, comprobacion como la cuenta, servicios y orden de los scripts)"
 # --- fin H06r ---
 $invocationSummary="liberacion por analisis en origen ($($originCases.Count) casos y entrega solo al servicio y al ciclo manual); proceso propio por el servicio ($($serviceCases.Count+$appCases.Count) casos); prueba de Graph para activar el correo ($($probeCases.Count) casos); invocacion con -File ($($orders.Count) ordenes documentadas en $invoked procesos, $($pathListCases.Count+$domainListCases.Count) casos de listas y $controlCount controles; sin `$PSScriptRoot en param)"
 Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf, sin Remove-Item); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento); '+$invocationSummary+'; correcciones para Windows de H06c ('+$h06cCount+' casos: cuenta local, cuenta duena, derecho de inicio, descriptor del servicio, control 200, -WhatIf y lista de elementos); '+$h06rSummary+'. No se modifico la configuracion del equipo.')
