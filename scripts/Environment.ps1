@@ -139,7 +139,7 @@ function Get-ValidationClosureBlockers([string]$Purpose,$Figures,$Declared){
     return $out.ToArray()
 }
 function Clear-SigerEnvironment {
-    foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO','SIGER_FORMULARIO_TRUSTED_KEYS','SIGER_FOLIO_PREFIX','SIGER_SCHEDULING','SIGER_FORMULARIO_PULL_ENABLED','SIGER_FORMULARIO_PULL_RUN_ONCE','SIGER_FORMULARIO_PULL_ORIGIN','SIGER_FORMULARIO_PULL_TOKEN','SIGER_FORMULARIO_PULL_TOKEN_FILE','SIGER_FORMULARIO_PULL_CA_FILE','SIGER_FORMULARIO_PULL_SCOPE','SIGER_FORMULARIO_ACK_KEY_ID','SIGER_FORMULARIO_ACK_PRIVATE_KEY_FILE','SIGER_FORMULARIO_ACK_PUBLIC_KEY_FILE','SIGER_FORMULARIO_PULL_AUTOMATIC','SIGER_FORMULARIO_PULL_SINGLE_CONSUMER','SIGER_FORMULARIO_ACK_PRIVATE_KEY','SIGER_FORMULARIO_ACK_PUBLIC_KEY','SIGER_MAIL_MODE','SIGER_GRAPH_TENANT','SIGER_GRAPH_CLIENT','SIGER_GRAPH_SENDER','SIGER_GRAPH_CLIENT_SECRET','SIGER_MAIL_ALLOWED_DOMAINS','SIGER_MAIL_LINK','SIGER_STOP_FILE','SIGER_LOG_FILE','SIGER_ENVIRONMENT_LABEL','SIGER_DOCUMENTS_SYNTHETIC_RELEASE','SIGER_AV_ENGINE','SIGER_AV_EXECUTABLE','SIGER_AV_DATABASE','SIGER_BOOTSTRAP_FILE','SIGER_FORMULARIO_PULL_PROBE','SIGER_AUDIT_SEARCH_KEY','SIGER_MAIL_CHECK_MODE','SIGER_MAIL_CHECK_TO')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
+    foreach($key in @('SPRING_PROFILES_ACTIVE','SIGER_DB_URL','SIGER_DB_USER','SIGER_DB_PASSWORD','SIGER_DB_TRUSTSTORE','SIGER_DB_TRUST_PASSWORD','SIGER_DATA','SIGER_TEMP','SIGER_BIND','SIGER_PORT','SIGER_HTTPS','SIGER_KEYSTORE','SIGER_TLS_PASSWORD','SIGER_MIGRATE','SIGER_SEED_DEMO','SIGER_FORMULARIO_TRUSTED_KEYS','SIGER_FOLIO_PREFIX','SIGER_SCHEDULING','SIGER_FORMULARIO_PULL_ENABLED','SIGER_FORMULARIO_PULL_RUN_ONCE','SIGER_FORMULARIO_PULL_ORIGIN','SIGER_FORMULARIO_PULL_TOKEN','SIGER_FORMULARIO_PULL_TOKEN_FILE','SIGER_FORMULARIO_PULL_CA_FILE','SIGER_FORMULARIO_PULL_SCOPE','SIGER_FORMULARIO_ACK_KEY_ID','SIGER_FORMULARIO_ACK_PRIVATE_KEY_FILE','SIGER_FORMULARIO_ACK_PUBLIC_KEY_FILE','SIGER_FORMULARIO_PULL_AUTOMATIC','SIGER_FORMULARIO_PULL_SINGLE_CONSUMER','SIGER_FORMULARIO_ACK_PRIVATE_KEY','SIGER_FORMULARIO_ACK_PUBLIC_KEY','SIGER_MAIL_MODE','SIGER_GRAPH_TENANT','SIGER_GRAPH_CLIENT','SIGER_GRAPH_SENDER','SIGER_GRAPH_CLIENT_SECRET','SIGER_MAIL_ALLOWED_DOMAINS','SIGER_MAIL_LINK','SIGER_STOP_FILE','SIGER_LOG_FILE','SIGER_ENVIRONMENT_LABEL','SIGER_DOCUMENTS_SYNTHETIC_RELEASE','SIGER_AV_ENGINE','SIGER_AV_EXECUTABLE','SIGER_AV_DATABASE','SIGER_BOOTSTRAP_FILE','SIGER_FORMULARIO_PULL_PROBE','SIGER_AUDIT_SEARCH_KEY','SIGER_MAIL_CHECK_MODE','SIGER_MAIL_CHECK_TO','SIGER_ORIGIN_RELEASE_FILE')){[Environment]::SetEnvironmentVariable($key,$null,'Process')}
 }
 
 # --- Integraciones (configuracion en config\, secretos DPAPI de la cuenta del servicio) -----------------------
@@ -298,6 +298,41 @@ function Set-SigerServiceEnvironment($Settings,$Secrets) {
     # Clave HMAC del buscador (New-AuditSearchKey.ps1, DPAPI). Sin archivo, la auditoria de busquedas no guarda huella.
     $searchKey=Join-Path $Settings.root 'config\audit-search-key.clixml'
     if(Test-Path -LiteralPath $searchKey -PathType Leaf){Require-PrivateFile $searchKey;$env:SIGER_AUDIT_SEARCH_KEY=Secret-Text (Import-Clixml -LiteralPath $searchKey)}
+    Set-OriginReleaseEnvironment $Settings
+}
+
+# --- Liberacion por analisis en origen (D17 de docs/PLAN_0_6_0.md, H04c; modo de emergencia) -----------------------
+# config\liberacion-origen.json lo escribe Set-OriginRelease.ps1; SIGER lo lee y lo valida al arrancar (OriginRelease.java,
+# que falla cerrado). La ruta solo la reciben los procesos que registran entregas: el servicio (Set-SigerServiceEnvironment)
+# y el ciclo manual (Invoke-FormularioPull.ps1 sin -SoloComprobar). Nunca Migrate.ps1, Recover-Ti.ps1, Test-GraphMail.ps1
+# ni la sonda, que usan solo Set-SigerEnvironment.
+function Set-OriginReleaseEnvironment($Settings){
+    $file=Join-Path $Settings.root 'config\liberacion-origen.json'
+    $env:SIGER_ORIGIN_RELEASE_FILE=if(Test-Path -LiteralPath $file -PathType Leaf){$file}else{$null}
+}
+# Zona de Chile continental: id de Windows y, si no existe (PowerShell en Linux), el de IANA.
+function Get-ChileTimeZone {
+    foreach($id in @('Pacific SA Standard Time','America/Santiago')){try{return [TimeZoneInfo]::FindSystemTimeZoneById($id)}catch{}}
+    throw 'No se encontro la zona horaria de Chile en este equipo.'
+}
+# Registro del modo: -Hasta es el ultimo dia (aaaa-mm-dd, Chile) en que rige, entre hoy y 90 dias despues de hoy; el
+# termino ("until") es las 00:00 de Chile del dia siguiente, en UTC. Motivo de 1 a 500 caracteres en una sola linea.
+# Las mismas reglas las aplica OriginRelease.java al arrancar (lista cerrada de campos).
+function New-OriginReleaseRecord([string]$Hasta,[string]$Motivo,[string]$Account,[datetime]$NowUtc){
+    if(([string]$Hasta) -notmatch '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'){throw 'Indica -Hasta como aaaa-mm-dd (ultimo dia en que rige el modo, hora de Chile).'}
+    $last=[datetime]::MinValue
+    if(-not [datetime]::TryParseExact($Hasta,'yyyy-MM-dd',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$last)){throw "Fecha -Hasta invalida ('$Hasta')."}
+    $zone=Get-ChileTimeZone
+    $now=[datetime]::SpecifyKind($NowUtc,[DateTimeKind]::Utc)
+    $today=[TimeZoneInfo]::ConvertTimeFromUtc($now,$zone).Date
+    if($last -lt $today){throw 'La fecha -Hasta ya paso: el modo debe regir al menos hasta el fin de hoy.'}
+    if($last -gt $today.AddDays(90)){throw 'El modo de emergencia rige a lo mas 90 dias: indica una fecha -Hasta dentro de los 90 dias siguientes a hoy.'}
+    $reason=([string]$Motivo).Trim()
+    if($reason.Length -lt 1 -or $reason.Length -gt 500 -or $reason -match '[\x00-\x1F\x7F]'){throw 'Indica -Motivo (1 a 500 caracteres, una sola linea): decision del responsable y su constancia.'}
+    $account=([string]$Account).Trim()
+    if($account.Length -lt 1 -or $account.Length -gt 200 -or $account -match '[\x00-\x1F\x7F]'){throw 'Cuenta de Windows no valida.'}
+    $until=[TimeZoneInfo]::ConvertTimeToUtc([datetime]::SpecifyKind($last.AddDays(1),[DateTimeKind]::Unspecified),$zone)
+    return [PSCustomObject][ordered]@{kind='LIBERACION_ORIGEN';version=1;id=[guid]::NewGuid().ToString();activatedUtc=$now.ToString('o');until=$until.ToString('o');account=$account;reason=$reason}
 }
 
 # --- Eliminacion de la validacion cerrada (Remove-Validation.ps1, D12 de docs/PLAN_0_6_0.md) ------------------------

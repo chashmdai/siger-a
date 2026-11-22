@@ -20,12 +20,12 @@ import static cl.nexbyte.sigera.Db.*;
 public class Bootstrap implements ApplicationRunner {
     private static final Logger LOG=LoggerFactory.getLogger(Bootstrap.class);
     final Db db;final PasswordEncoder passwords;final TransactionTemplate tx;final ConfigurableApplicationContext ctx;
-    final Path data;final boolean seed,migrate;final String institutional;final PersonIndex persons;final Milestones milestones;
+    final Path data;final boolean seed,migrate;final String institutional;final PersonIndex persons;final Milestones milestones;final OriginRelease origin;
     public Bootstrap(Db db,PasswordEncoder passwords,PlatformTransactionManager manager,ConfigurableApplicationContext ctx,
                      @Value("${siger.data}")String data,@Value("${siger.seed-demo:false}")boolean seed,@Value("${siger.migrate-only:false}")boolean migrate,
-                     @Value("${siger.bootstrap-file:}")String institutional,PersonIndex persons,Milestones milestones){
+                     @Value("${siger.bootstrap-file:}")String institutional,PersonIndex persons,Milestones milestones,OriginRelease origin){
         this.db=db;this.passwords=passwords;this.tx=new TransactionTemplate(manager);this.ctx=ctx;this.data=Path.of(data).toAbsolutePath().normalize();this.seed=seed;this.migrate=migrate;
-        this.institutional=institutional.strip();this.persons=persons;this.milestones=milestones;
+        this.institutional=institutional.strip();this.persons=persons;this.milestones=milestones;this.origin=origin;
     }
     @Override public void run(ApplicationArguments args)throws Exception{
         requireDatabase();
@@ -43,6 +43,9 @@ public class Bootstrap implements ApplicationRunner {
         convertRegionalHeads();
         persons.rebuild(); // Carga inicial del indice de personas (V12), una sola vez.
         milestones.rebuild(); // Carga historica de hitos (V14), una sola vez; cuenta lo que no reconoce.
+        // D17: auditoria del modo de emergencia y liberacion de originales del Formulario pendientes (no en migrate-only,
+        // la prueba de Graph, la sonda ni la recuperacion de TI).
+        if(origin!=null)origin.startup();
         warnAdministration();
         if(migrate)ctx.close();
     }
@@ -363,7 +366,8 @@ public class Bootstrap implements ApplicationRunner {
     /** Aviso en el log del servicio (solo codigos y cantidades, sin datos de personas); Administracion muestra lo mismo. */
     void warnAdministration(){
         if(db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE")==0)return;
-        for(var w:Personnel.warnings(db))LOG.warn("Administracion: {} (cantidad {}). Revisar en Administracion.",s(w,"code"),w.get("count"));
+        var all=new ArrayList<>(Personnel.warnings(db));if(origin!=null)all.addAll(origin.warnings());
+        for(var w:all)LOG.warn("Administracion: {} (cantidad {}). Revisar en Administracion.",s(w,"code"),w.get("count"));
     }
     /**
      * Identidad tecnica sistema:actualizacion: cuenta deshabilitada, sin clave utilizable, sin funciones y marcada

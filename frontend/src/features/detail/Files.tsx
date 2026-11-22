@@ -10,6 +10,7 @@ import {Table} from '../../components/Table';
 import type {Column} from '../../components/Table';
 import {Icon} from '../../components/Icon';
 import {Busy, ErrorMessage, Panel} from '../../components/Primitives';
+import {fileStatus} from './files.ts';
 
 const TITLES: Record<string, string> = {COM: 'Documentos del ingreso', CAS: 'Documentos de la gestión profesional'};
 
@@ -25,7 +26,7 @@ function DocumentTable({documents, includeSource, empty}: {documents: Row[]; inc
       {text(d, 'description') && <small>{text(d, 'description')}</small>}
     </>},
     {name: 'Tamaño', render: d => <span className="tabular nowrap">{(number(d, 'size_bytes') / 1024).toLocaleString('es-CL', {maximumFractionDigits: 1})} KiB</span>},
-    {name: 'Estado', render: d => <span className={'chip' + (bool(d, 'quarantined') ? ' chip-warn' : '')}>{bool(d, 'quarantined') ? 'En cuarentena' : bool(d, 'reserved') ? 'Reservado' : 'Disponible'}</span>},
+    {name: 'Estado', render: d => {const st = fileStatus(d); return <span className={'chip' + (st.tone ? ' chip-' + st.tone : '')}>{st.label}</span>;}},
     {name: 'Original', render: d => !bool(d, 'quarantined') ? <a className="button sm" href={`/api/documents/${number(d, 'id')}/download`}><Icon name="download" size={16}/>Descargar</a> : <span className="muted">Descarga bloqueada</span>},
   ]}/>;
 }

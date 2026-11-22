@@ -20,7 +20,8 @@ no se inspecciona ni modifica SMR ni otros volumenes (D15).
 4. **`estructura-inicial.json` real de produccion** (decision abierta antes de V4): ambitos, la persona TI y los funcionarios con sus funciones (plantilla y reglas en `config-ejemplo\`). Toda sede regional lleva `"region"` (codigo del Formulario) o `Init-Server.ps1` la rechaza: el `D:\Entregas\estructura-inicial.json` de la validacion es de 0.4.0, no la trae y solo sirve de base. Debe contener el ambito que recibe las Comunicaciones del Formulario (el `scope` de `config\formulario-pull.json` de la validacion, por ejemplo `UPR-REQ`).
 5. **Graph (opcional, D16)**: Tenant ID, Client ID y valor vigente del secreto de SIGER-Notificaciones (permiso `Mail.Send` limitado a `siger@defensorianinez.cl`), entregados de forma privada para escribirlos en la consola de `Import-GraphCredential.ps1`; el destinatario fijo de la prueba de envio (decision abierta); salida desde la VM a `login.microsoftonline.com:443` y `graph.microsoft.com:443` (no verificada en la VM).
 6. **Acceso de funcionarios** (decision abierta antes de V4): solo RDP a la VM, o regla de firewall entrante al puerto 18543 limitada a sus direcciones (decide `-AccesoRed`) y, de preferencia, certificado HTTPS institucional (PFX) para el nombre de la VM.
-7. **Motor antivirus** (decision abierta): produccion parte sin motor (ver V4 y la seccion 4).
+7. **Motor antivirus** (decision abierta): produccion parte sin motor; mientras tanto los originales del Formulario se
+   liberan por el modo de emergencia D17 (ver V4 y la seccion 4).
 
 ## Antecedente: la validacion
 
@@ -152,12 +153,21 @@ dia (no se imprime ni se sobrescribe):
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\New-AuditSearchKey.ps1' -Root 'D:\SIGER'
 ```
 
-Antivirus: produccion parte **sin motor**; no se crea `config\antivirus.json`. Sin motor, todo original (tambien los del
-Formulario) queda en cuarentena y no se descarga ni se libera. La forma de agregar despues un motor admitido esta en la
-seccion 4.
+Antivirus: produccion parte **sin motor**; no se crea `config\antivirus.json`. Sin motor, los adjuntos subidos en SIGER
+quedan en cuarentena y no se descargan. Para los originales del Formulario rige el modo de emergencia D17 (liberacion por
+analisis en origen), que se activa aqui, antes del primer inicio, con su fecha de termino (`-Hasta`: ultimo dia en que
+rige, hora de Chile, a lo mas 90 dias despues de hoy) y su fundamento. La orden pide confirmacion y escribe
+`config\liberacion-origen.json`; SIGER lo valida y lo audita al arrancar (Auditoria y operacion), y desde entonces cada
+original del Formulario se libera al registrarse, despues de verificar su SHA-256 firmado, con la auditoria "analisis en
+origen del Formulario" (la ficha lo muestra como "Disponible · analisis en origen"). Sin este paso, o si el modo vence
+o el archivo no es valido, los originales quedan en cuarentena y TI ve el aviso. Renovar, desactivar y agregar un motor
+admitido: seccion 4.
 
-> **Pendiente H04c** (liberacion por analisis en origen de los originales del Formulario): el gate H04c completa aqui su
-> activacion.
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-OriginRelease.ps1' -Root 'D:\SIGER' -Hasta '2027-03-03' -Motivo 'Decision del responsable del 2026-11-21 (D17), con correo y constancia institucional'
+```
+
+Se anota la fecha de termino para renovarlo antes (el aviso "por vencer" aparece 7 dias antes).
 
 Detener el motor propio:
 
@@ -252,7 +262,8 @@ Tareas de TI tras el primer arranque:
 2. Calendario habil (`#calendario`): importar los feriados nacionales y regionales de 2026 y 2027 con fundamento. Sin
    ellos, los dias habiles se calculan sin esos feriados y los reportes avisan los anios faltantes.
 3. Estructura: revisar la region de cada sede (viene del archivo) y activar las sedes PROYECTADA cuando abran.
-4. Auditoria y operacion: sin motor antivirus, los originales siguen en cuarentena (seccion 4).
+4. Auditoria y operacion: comprobar el aviso "Liberacion por analisis en origen vigente" con su fecha de termino (D17).
+   Los adjuntos subidos en SIGER siguen en cuarentena (seccion 4).
 
 ### V6. Eliminacion de la validacion
 
@@ -328,10 +339,28 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Import
 ### Motor antivirus
 
 Produccion parte sin motor: Microsoft Defender esta inactivo en la VM y el antivirus institucional (Kaspersky Endpoint
-Security) no es un motor admitido por SIGER. Mientras tanto los originales siguen en cuarentena. Para agregar despues un
-motor admitido, ClamAV (con autorizacion de TI para instalarlo en `D:\Herramientas\clamav` y salida de red para
-actualizar sus firmas), como la cuenta de servicio:
+Security) no es un motor admitido por SIGER. Mientras tanto rige el modo de emergencia D17 para los originales del
+Formulario (V4) y los adjuntos subidos en SIGER siguen en cuarentena.
 
+**Renovar el modo D17** antes de su termino (al vencer vuelve la cuarentena, sin reiniciar): la orden de V4 con la nueva
+fecha (pide confirmar el reemplazo) y reiniciar con `Stop.ps1` y `Start.ps1`. Al arrancar con el modo vigente, SIGER
+libera tambien los originales del Formulario que quedaron en cuarentena mientras no regia, con la misma verificacion
+(SHA-256 completo de nuevo); nunca un adjunto subido en SIGER ni un original con una deteccion previa.
+
+**Desactivar el modo D17** (al configurar un motor admitido o al terminar la emergencia), como la cuenta de servicio.
+Renombra el archivo a `config\liberacion-origen.retirado-<UTC>.json` (no borra nada) y rige desde el reinicio; SIGER lo
+audita al arrancar:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-OriginRelease.ps1' -Root 'D:\SIGER' -Desactivar
+```
+
+Para agregar despues un motor admitido, ClamAV (con autorizacion de TI para instalarlo en `D:\Herramientas\clamav` y
+salida de red para actualizar sus firmas), como la cuenta de servicio:
+
+0. Desactivar el modo D17 con la orden de arriba. Con un motor configurado SIGER no aplica el modo (aviso
+   `LIBERACION_ORIGEN_CON_MOTOR`) y rige el analisis local; `Set-OriginRelease.ps1` no lo activa si existe
+   `antivirus.json`.
 1. Crear `D:\SIGER\config\antivirus.json` con
    `{"engine":"CLAMAV","executable":"D:\\Herramientas\\clamav\\clamscan.exe","database":"D:\\Herramientas\\clamav\\db"}`.
 2. Mantener las firmas de la carpeta `database` actualizadas (freshclam): SIGER rechaza firmas de mas de 72 horas.

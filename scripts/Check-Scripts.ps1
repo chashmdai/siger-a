@@ -381,6 +381,58 @@ $probeCases=@(
 foreach($case in $probeCases){if((Test-GraphProbeAccredited $case.p $case.j $probeNow) -ne $case.ok){throw ('Prueba de Graph para activar el correo: caso '+[array]::IndexOf($probeCases,$case)+' inesperado.')}}
 $setAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Set-Integration.ps1'),[ref]$null,[ref]$null)
 if(@($setAst.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'Test-GraphProbeAccredited'},$true)).Count -ne 1){throw 'Set-Integration.ps1 debe exigir Test-GraphProbeAccredited antes de activar el correo.'}
+# --- Liberacion por analisis en origen (Set-OriginRelease.ps1, D17, H04c) --------------------------------------------
+# Termino: fin del dia -Hasta en Chile (00:00 del dia siguiente, en UTC), entre hoy y 90 dias despues; motivo en una linea.
+$originNow=[datetime]::new(2026,12,4,12,0,0,[DateTimeKind]::Utc)
+$originCases=@(
+    @{h='2026-12-04';m='Decision del responsable';now=$originNow;until='2026-12-05T03:00:00.0000000Z'},
+    @{h='2027-03-04';m='Decision del responsable';now=$originNow;until='2027-03-05T03:00:00.0000000Z'},
+    @{h='2026-12-04';m='Decision del responsable';now=[datetime]::new(2026,12,5,2,30,0,[DateTimeKind]::Utc);until='2026-12-05T03:00:00.0000000Z'},
+    @{h='2027-04-05';m='Cambio de horario';now=[datetime]::new(2027,1,20,12,0,0,[DateTimeKind]::Utc);until='2027-04-06T04:00:00.0000000Z'},
+    @{h='2027-03-05';m='Decision del responsable';now=$originNow;until=$null},
+    @{h='2026-12-03';m='Decision del responsable';now=$originNow;until=$null},
+    @{h='2026-12-03';m='Decision del responsable';now=[datetime]::new(2026,12,4,2,30,0,[DateTimeKind]::Utc);until='2026-12-04T03:00:00.0000000Z'},
+    @{h='04-12-2026';m='Decision del responsable';now=$originNow;until=$null},
+    @{h='2027-02-30';m='Decision del responsable';now=$originNow;until=$null},
+    @{h='';m='Decision del responsable';now=$originNow;until=$null},
+    @{h='2026-12-10';m='';now=$originNow;until=$null},
+    @{h='2026-12-10';m='   ';now=$originNow;until=$null},
+    @{h='2026-12-10';m=('x'*501);now=$originNow;until=$null},
+    @{h='2026-12-10';m=('x'*500);now=$originNow;until='2026-12-11T03:00:00.0000000Z'},
+    @{h='2026-12-10';m=('linea'+[char]10+'otra');now=$originNow;until=$null})
+foreach($case in $originCases){
+    $got=$null;try{$got=New-OriginReleaseRecord $case.h $case.m 'DDN-SIGER\svc-siger' $case.now}catch{$got=$null}
+    $gotUntil=if($got){[string]$got.until}else{$null}
+    if($gotUntil -cne $case.until){throw ('Liberacion por analisis en origen: caso '+[array]::IndexOf($originCases,$case)+' dio '+$(if($gotUntil){$gotUntil}else{'rechazo'})+'.')}
+    if($got){
+        $names=@($got.PSObject.Properties|ForEach-Object{$_.Name})
+        if(($names -join ',') -cne 'kind,version,id,activatedUtc,until,account,reason' -or $got.kind -cne 'LIBERACION_ORIGEN' -or $got.version -ne 1 -or $got.account -cne 'DDN-SIGER\svc-siger' -or $got.activatedUtc -cne $case.now.ToString('o')){throw 'Liberacion por analisis en origen: registro con otros campos o valores.'}
+        $parsed=[guid]::Empty;if(-not [guid]::TryParse([string]$got.id,[ref]$parsed)){throw 'Liberacion por analisis en origen: identificador no es GUID.'}
+    }
+}
+# La ruta del archivo solo llega a los procesos que registran entregas (servicio y ciclo manual sin -SoloComprobar).
+$originDir=Join-Path ([IO.Path]::GetTempPath()) ('siger-origen-'+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path (Join-Path $originDir 'config')|Out-Null
+try{
+    Set-OriginReleaseEnvironment ([PSCustomObject]@{root=$originDir});if($env:SIGER_ORIGIN_RELEASE_FILE){throw 'Sin archivo de liberacion se definio SIGER_ORIGIN_RELEASE_FILE.'}
+    [IO.File]::WriteAllText((Join-Path $originDir 'config\liberacion-origen.json'),'{}')
+    Set-OriginReleaseEnvironment ([PSCustomObject]@{root=$originDir});if($env:SIGER_ORIGIN_RELEASE_FILE -cne (Join-Path $originDir 'config\liberacion-origen.json')){throw 'Con archivo de liberacion no se definio su ruta.'}
+    Clear-SigerEnvironment;if($env:SIGER_ORIGIN_RELEASE_FILE){throw 'Clear-SigerEnvironment no borro SIGER_ORIGIN_RELEASE_FILE.'}
+}finally{[IO.Directory]::Delete($originDir,$true)}
+function Get-CallsIn([string]$Script,[string]$Function,[string]$Command){
+    $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $Script),[ref]$null,[ref]$null)
+    $scope=if($Function){@($ast.FindAll({param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -ceq $Function},$true))[0]}else{$ast}
+    return @($scope.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq $Command},$true)).Count
+}
+if((Get-CallsIn 'Environment.ps1' 'Set-SigerEnvironment' 'Set-OriginReleaseEnvironment') -ne 0){throw 'Set-SigerEnvironment no debe entregar el modo de liberacion (lo usan Migrate, Recover-Ti, Test-GraphMail y la sonda).'}
+if((Get-CallsIn 'Environment.ps1' 'Set-SigerServiceEnvironment' 'Set-OriginReleaseEnvironment') -ne 1){throw 'Set-SigerServiceEnvironment debe entregar el modo de liberacion al servicio.'}
+if((Get-CallsIn 'Invoke-FormularioPull.ps1' $null 'Set-OriginReleaseEnvironment') -ne 1){throw 'Invoke-FormularioPull.ps1 debe entregar el modo de liberacion solo al ciclo que registra.'}
+$pullText=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Invoke-FormularioPull.ps1'))
+if($pullText -notmatch 'if\(-not \$SoloComprobar\)\{Set-OriginReleaseEnvironment \$s\}'){throw 'Invoke-FormularioPull.ps1: la sonda (-SoloComprobar) no debe recibir el modo de liberacion.'}
+foreach($other in @('Migrate.ps1','Recover-Ti.ps1','Test-GraphMail.ps1','Close-Validation.ps1','Remove-Validation.ps1','Update.ps1','Backup.ps1','Restore-Check.ps1')){
+    if((Get-CallsIn $other $null 'Set-OriginReleaseEnvironment')+(Get-CallsIn $other $null 'Set-SigerServiceEnvironment') -ne 0){throw "$other no debe entregar el modo de liberacion."}
+}
+if((Get-CallsIn 'Set-OriginRelease.ps1' $null 'New-OriginReleaseRecord') -ne 1){throw 'Set-OriginRelease.ps1 debe construir el registro con New-OriginReleaseRecord.'}
 # --- Invocacion con powershell.exe -File (hallazgo de la revision de H03; H04a) ----------------------------------------
 # Con -File cada argumento llega como texto: desde una consola de PowerShell -Ensayos @() se expande a nada, 'a','b'
 # llega como 'a,b' y (Get-Credential ...) como 'System.Management.Automation.PSCredential'; desde cmd, @() llega como el
@@ -565,5 +617,5 @@ try{
     if(($is.Credentials -join ',') -cne 'ServiceCredential'){throw 'Install-Service.ps1: no se reconocio el PSCredential que se pide por consola.'}
     $controlCount=$controls.Count+1
 }finally{if([IO.Directory]::Exists($stubDir)){[IO.Directory]::Delete($stubDir,$true)}}
-$invocationSummary="proceso propio por el servicio ($($serviceCases.Count+$appCases.Count) casos); prueba de Graph para activar el correo ($($probeCases.Count) casos); invocacion con -File ($($orders.Count) ordenes documentadas en $invoked procesos, $($pathListCases.Count+$domainListCases.Count) casos de listas y $controlCount controles)"
+$invocationSummary="liberacion por analisis en origen ($($originCases.Count) casos y entrega solo al servicio y al ciclo manual); proceso propio por el servicio ($($serviceCases.Count+$appCases.Count) casos); prueba de Graph para activar el correo ($($probeCases.Count) casos); invocacion con -File ($($orders.Count) ordenes documentadas en $invoked procesos, $($pathListCases.Count+$domainListCases.Count) casos de listas y $controlCount controles)"
 Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf, sin Remove-Item); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento); '+$invocationSummary+'. No se modifico la configuracion del equipo.')

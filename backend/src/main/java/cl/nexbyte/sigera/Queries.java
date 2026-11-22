@@ -10,8 +10,8 @@ import static cl.nexbyte.sigera.Db.*;
 public class Queries {
     final Db db;final Access access;final Attention attention;
     private final Integrations integrations;
-    private final Documents documents;
-    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents){this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;}
+    private final Documents documents;private final OriginRelease origin;
+    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin){this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;}
     public Map<String,Object> workspace(Actor a){
         // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales:
         // TI administra todas las subrogancias (D1); titular y subrogante ven las propias.
@@ -137,7 +137,7 @@ public class Queries {
                 }).filter(Objects::nonNull).toList());
                 // Constancias del REQ: completas para quien lo gestiona; la consulta institucional no ve las reservadas (D4).
                 out.put("notes",access.reqRecords(a,r)?db.rows("SELECT n.*,u.name AS author FROM management_note n JOIN staff u ON u.id=n.author_id WHERE n.requirement_id=? AND n.case_id IS NULL ORDER BY n.id",id).stream().filter(n->!b(n,"reserved")||access.reqMain(a,r)).toList():List.of());
-                out.put("documents",documents(a,"REQ",id));out.put("citizen_documents",access.comRead(a,com)?db.rows("SELECT d.id,d.name,d.size_bytes,d.quarantined,d.document_type,d.created_ms,cm.folio AS source_folio FROM document_item d JOIN communication cm ON cm.id=d.communication_id WHERE cm.id=? ORDER BY d.id",n(r,"communication_id")):List.of());out.put("closures",access.reqRecords(a,r)?db.rows("SELECT * FROM closure_record WHERE requirement_id=? AND case_id IS NULL ORDER BY id",id):List.of());
+                out.put("documents",documents(a,"REQ",id));out.put("citizen_documents",access.comRead(a,com)?db.rows("SELECT d.id,d.name,d.size_bytes,d.quarantined,d.document_type,d.created_ms,cm.folio AS source_folio,"+OriginRelease.BASIS_SQL+" FROM document_item d JOIN communication cm ON cm.id=d.communication_id WHERE cm.id=? ORDER BY d.id",n(r,"communication_id")):List.of());out.put("closures",access.reqRecords(a,r)?db.rows("SELECT * FROM closure_record WHERE requirement_id=? AND case_id IS NULL ORDER BY id",id):List.of());
                 boolean wide=access.reqWideRead(a,r);
                 out.put("links",db.rows("SELECT l.*,c.folio AS com_folio FROM communication_link l JOIN communication c ON c.id=l.communication_id WHERE l.requirement_id=? ORDER BY l.id",id).stream().filter(l->wide||a.head(scope)||s(l,"state").equals("ADMITIDA")&&(l.get("target_case_id")==null?access.reqMain(a,r):access.caseRead(a,db.one("SELECT * FROM case_record WHERE id=?",n(l,"target_case_id"))))).toList());
                 out.put("flows",db.rows("SELECT * FROM flow_request WHERE requirement_id=? ORDER BY id",id).stream().filter(f->flowVisible(a,f)).toList());
@@ -200,12 +200,14 @@ public class Queries {
 
     /** Original de COM y COM hijas admitidas expresamente para este Caso; sin copiar archivos. */
     private List<Map<String,Object>> incomingDocuments(long caseId){
-        return db.rows("SELECT d.id,d.name,d.size_bytes,d.sha256,d.created_ms,d.uploaded_by,d.reserved,d.quarantined,cm.folio AS source_folio FROM document_item d JOIN communication cm ON cm.id=d.communication_id WHERE d.communication_id=(SELECT r.communication_id FROM requirement r JOIN case_record c ON c.requirement_id=r.id WHERE c.id=?) OR d.communication_id IN (SELECT l.communication_id FROM communication_link l WHERE l.target_case_id=? AND l.state='ADMITIDA' AND l.returned_ms IS NULL) ORDER BY d.id",caseId,caseId);
+        return db.rows("SELECT d.id,d.name,d.size_bytes,d.sha256,d.created_ms,d.uploaded_by,d.reserved,d.quarantined,cm.folio AS source_folio,"+OriginRelease.BASIS_SQL+" FROM document_item d JOIN communication cm ON cm.id=d.communication_id WHERE d.communication_id=(SELECT r.communication_id FROM requirement r JOIN case_record c ON c.requirement_id=r.id WHERE c.id=?) OR d.communication_id IN (SELECT l.communication_id FROM communication_link l WHERE l.target_case_id=? AND l.state='ADMITIDA' AND l.returned_ms IS NULL) ORDER BY d.id",caseId,caseId);
     }
     public List<Map<String,Object>> documents(Actor a,String kind,long id){
         String column=switch(kind){case "COM"->"communication_id";case "REQ"->"requirement_id";case "CAS"->"case_id";default->throw new Problem(400,"Contexto documental invalido.");};
         if(kind.equals("REQ")&&!access.reqRecords(a,db.one("SELECT * FROM requirement WHERE id=?",id)))return List.of();
-        return db.rows("SELECT id,name,size_bytes,sha256,created_ms,uploaded_by,reserved,quarantined,note_id,document_type,description,previous_document_id FROM document_item WHERE "+column+"=? ORDER BY id",id).stream().filter(d->!b(d,"reserved")||kind.equals("CAS")&&access.reserved(a,db.one("SELECT * FROM case_record WHERE id=?",id))||kind.equals("REQ")&&a.head(n(db.one("SELECT principal_scope FROM requirement WHERE id=?",id),"principal_scope"))).toList();
+        // release_basis ORIGEN: liberado por analisis en origen del Formulario (D17), no por un analisis local.
+        return db.rows("SELECT d.id,d.name,d.size_bytes,d.sha256,d.created_ms,d.uploaded_by,d.reserved,d.quarantined,d.note_id,d.document_type,d.description,d.previous_document_id,"+OriginRelease.BASIS_SQL
+            +" FROM document_item d WHERE d."+column+"=? ORDER BY d.id",id).stream().filter(d->!b(d,"reserved")||kind.equals("CAS")&&access.reserved(a,db.one("SELECT * FROM case_record WHERE id=?",id))||kind.equals("REQ")&&a.head(n(db.one("SELECT principal_scope FROM requirement WHERE id=?",id),"principal_scope"))).toList();
     }
     public Map<String,Object> administration(Actor a){
         boolean ti=a.role(Roles.TI),auditor=a.role("AUDITORIA");if(!ti&&!auditor)Problem.denied();
@@ -215,7 +217,8 @@ public class Queries {
         result.put("grants",ti?db.rows("SELECT g.id,g.user_id,g.role_code,g.scope_id,g.valid_from,g.valid_until,g.revoked_at,g.granted_by,g.basis FROM role_assignment g JOIN staff u ON u.id=g.user_id WHERE u.technical=FALSE ORDER BY g.id"):List.of());
         result.put("designations",ti?db.rows("SELECT * FROM substitution_designation ORDER BY id DESC"):List.of());
         // Avisos de la instancia (sin datos de personas) e incompatibilidades por resolver (D2; heredadas de 0.4.0).
-        result.put("warnings",Personnel.warnings(db));
+        var warnings=new ArrayList<>(Personnel.warnings(db));warnings.addAll(origin.warnings());
+        result.put("warnings",warnings);
         result.put("incompatibilities",ti?Personnel.tiConflicts(db):List.of());
         result.put("structure",ti?structure():List.of());
         result.put("substitutions",ti?db.rows("SELECT x.*,d.scope_id,d.titular_id,d.substitute_id FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id ORDER BY x.id DESC"):List.of());
@@ -225,7 +228,8 @@ public class Queries {
         result.put("quarantine",ti?db.rows("SELECT d.id,d.size_bytes,d.sha256,d.created_ms,d.quarantined,s.verdict AS scan_verdict,s.detail AS scan_detail,s.engine AS scan_engine,s.finished_ms AS scan_ms,"
             +"(SELECT COUNT(*) FROM document_scan x WHERE x.document_id=d.id AND x.verdict='INFECTADO') AS detections FROM document_item d "
             +"LEFT JOIN document_scan s ON s.id=(SELECT MAX(y.id) FROM document_scan y WHERE y.document_id=d.id) WHERE d.quarantined=TRUE ORDER BY d.id"):List.of());
-        result.put("document_policy",ti?documents.releasePolicy():Map.of());
+        if(ti){var policy=new LinkedHashMap<String,Object>(documents.releasePolicy());policy.put("origin_release",origin.policy());result.put("document_policy",policy);}
+        else result.put("document_policy",Map.of());
         // Auditoria: eventos de su alcance mas toda la administracion de cuentas, ambitos, subrogancias y calendario habil. TI: administracion y sistema.
         String administrative=(auditor?"'USUARIO','AMBITO','SUBROGANCIA','CALENDARIO'":"")+(auditor&&ti?",":"")+(ti?"'USUARIO','SISTEMA','AMBITO','SUBROGANCIA','CALENDARIO'":"");
         result.put("audit",db.rows("SELECT e.*,u.name AS actor FROM audit_event e JOIN staff u ON u.id=e.actor_id WHERE e.scope_id IN ("+BoardQueries.ids(BoardQueries.grants(a,"AUDITORIA"))+") OR e.resource_type IN ("+administrative+") ORDER BY e.id DESC LIMIT 300"));

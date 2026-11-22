@@ -99,6 +99,52 @@ class FormularioRunOnceTest {
             }finally{service.close();}
         }
     }
+    /**
+     * D17 (H04c): la sonda no recibe el modo de liberacion por analisis en origen (Invoke-FormularioPull.ps1 -SoloComprobar)
+     * y, aunque la propiedad llegue, no audita el modo ni libera el original del Formulario que quedo en cuarentena: la
+     * base no cambia. Control: el ciclo manual con el mismo archivo si lo libera al arrancar.
+     */
+    @Test void sondaConLiberacionVigenteNoCambiaLaBase()throws Exception{
+        String db="jdbc:h2:mem:sigera_probe_origin;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
+        var k=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        Path dir=Files.createDirectories(Path.of("target","probe-origin-"+UUID.randomUUID()));
+        Path priv=dir.resolve("ack-private.pem"),pub=dir.resolve("ack-public.pem"),token=dir.resolve("token.txt");
+        Files.writeString(priv,"-----BEGIN PRIVATE KEY-----\n"+Base64.getMimeEncoder().encodeToString(k.getPrivate().getEncoded())+"\n-----END PRIVATE KEY-----\n");
+        Files.writeString(pub,"-----BEGIN PUBLIC KEY-----\n"+Base64.getMimeEncoder().encodeToString(k.getPublic().getEncoded())+"\n-----END PUBLIC KEY-----\n");
+        Files.writeString(token,FormularioConsumerTest.TOKEN);
+        try(var producer=new FormularioConsumerTest.Producer(k.getPublic())){
+            var service=run(app(),List.of("spring.datasource.url="+db,"siger.data="+dir.resolve("data"),"siger.seed-demo=true"));
+            try{
+                var base=service.getBean(Db.class);
+                var common=new ArrayList<>(List.of("spring.datasource.url="+db,"siger.data="+dir.resolve("data"),
+                    "siger.scheduling=false","siger.formulario.pull.enabled=true",
+                    "siger.folio-prefix=COMA","siger.formulario-trusted-keys="+FormularioDocs.trustFile(),
+                    "siger.formulario.pull.origin="+producer.origin(),"siger.formulario.pull.loopback-http=true","siger.formulario.pull.token-file="+token,
+                    "siger.formulario.pull.scope=UPR-REQ","siger.formulario.ack.key-id=SIGER_A_PRUEBA",
+                    "siger.formulario.ack.private-key-file="+priv,"siger.formulario.ack.public-key-file="+pub));
+                // Un original del Formulario registrado sin el modo: queda en cuarentena.
+                byte[] content="Original de la sonda en cuarentena.\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                String document=FormularioConsumerTest.adultWithFile(content);
+                producer.offer(document,Map.of(FormularioConsumerTest.attachment(document),content));
+                var once=new ArrayList<>(common);once.add("siger.formulario.pull.run-once=true");
+                assertFalse(run(app(),once).isActive());
+                long doc=Db.n(base.one("SELECT d.id FROM document_item d JOIN external_document x ON x.document_id=d.id JOIN formulario_reception f ON f.communication_id=x.communication_id WHERE f.operation_id=?",FormularioConsumerTest.operation(document)),"id");
+                assertTrue(Db.b(base.one("SELECT quarantined FROM document_item WHERE id=?",doc),"quarantined"));
+                Path file=OriginReleaseTest.activeFile(dir);
+                var before=GraphCheckTest.snapshot(base);int requests=producer.requests.get();
+                var probe=new ArrayList<>(common);probe.add("siger.formulario.pull.probe=true");probe.add("siger.documents.origin-release.file="+file);
+                assertFalse(run(app(),probe).isActive());
+                assertTrue(producer.requests.get()>requests,"la sonda contacto el origen");
+                assertEquals(before,GraphCheckTest.snapshot(base),"ninguna tabla cambia con el modo vigente");
+                // Control: el ciclo manual con el mismo archivo audita el modo y libera el pendiente al arrancar.
+                once.add("siger.documents.origin-release.file="+file);
+                assertFalse(run(app(),once).isActive());
+                assertFalse(Db.b(base.one("SELECT quarantined FROM document_item WHERE id=?",doc),"quarantined"));
+                assertEquals(1,base.count("SELECT COUNT(*) FROM audit_event WHERE action=? AND resource_id=?",OriginRelease.RELEASED,doc));
+                assertEquals(1,base.count("SELECT COUNT(*) FROM audit_event WHERE action='LIBERACION_ORIGEN_ACTIVADA'"));
+            }finally{service.close();}
+        }
+    }
     private static SpringApplicationBuilder app(){
         return new SpringApplicationBuilder(SigerApplication.class).web(WebApplicationType.NONE).profiles("test");
     }

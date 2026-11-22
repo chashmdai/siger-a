@@ -10,8 +10,9 @@ import static cl.nexbyte.sigera.Db.*;
 
 /**
  * Estado durable del consumidor del Formulario (formulario_reception), sin red: cada metodo es una transaccion corta.
- * register() crea en un solo COMMIT la COM (IntakeCommands.conserveExternal), sus originales en cuarentena, el
- * comprobante institucional firmado y la reserva con el ACK pendiente; un reintento o una reentrega devuelve el mismo
+ * register() crea en un solo COMMIT la COM (IntakeCommands.conserveExternal), sus originales en cuarentena (o liberados
+ * por analisis en origen si rige el modo de emergencia D17, OriginRelease), el comprobante institucional firmado y la
+ * reserva con el ACK pendiente; un reintento o una reentrega devuelve el mismo
  * comprobante (mismo UUID institucional y folio) y solo actualiza la reserva. No crea SOL, REQ ni Caso.
  * Se registra con la identidad tecnica interna, que no inicia sesion ni recibe funciones.
  */
@@ -20,9 +21,10 @@ class FormularioReception {
     static final String TECHNICAL="sistema:formulario-publico";
     static final String TECHNICAL_NAME="Recepción técnica Formulario Público";
     private final Db db;private final Access access;private final IntakeCommands intake;private final Documents documents;private final TransactionTemplate tx;
+    private final OriginRelease origin;
 
-    FormularioReception(Db db,Access access,IntakeCommands intake,Documents documents,PlatformTransactionManager manager){
-        this.db=db;this.access=access;this.intake=intake;this.documents=documents;this.tx=new TransactionTemplate(manager);
+    FormularioReception(Db db,Access access,IntakeCommands intake,Documents documents,PlatformTransactionManager manager,OriginRelease origin){
+        this.db=db;this.access=access;this.intake=intake;this.documents=documents;this.tx=new TransactionTemplate(manager);this.origin=origin;
     }
 
     record Registered(long communication,String receipt,String folio,boolean created) { }
@@ -42,6 +44,14 @@ class FormularioReception {
                 "La entrega ya fue conservada sin el consumidor del Formulario; requiere revision antes de confirmar.");
             for(var a:o.attachments())if(!documents.externalPresent(Documents.externalKey(o.externalId(),a.id()),a.size()))
                 throw new Problem(503,"Original ciudadano no custodiado; no se registra la entrega.");
+            // D17: con el modo vigente, la custodia se verifica completa (SHA-256 firmado) antes de liberar; si no coincide,
+            // no se registra la entrega (sin COMMIT), como cuando falta un original.
+            boolean release=!o.attachments().isEmpty()&&origin.active(origin.now());
+            if(release)for(var a:o.attachments()){
+                boolean intact;
+                try{intact=documents.externalIntact(Documents.externalKey(o.externalId(),a.id()),a.size(),a.sha256());}catch(java.io.IOException|RuntimeException e){intact=false;}
+                if(!intact)throw new Problem(503,"Original ciudadano no coincide con su SHA-256 firmado; no se registra la entrega.");
+            }
             Actor t=technical(scope);
             long com=intake.conserveExternal(t,scope,o).id();
             long now=System.currentTimeMillis();
@@ -50,8 +60,10 @@ class FormularioReception {
                 long doc=db.insert("INSERT INTO document_item(communication_id,name,storage_key,sha256,size_bytes,content_type,uploaded_by,created_ms,document_type) VALUES(?,?,?,?,?,'application/octet-stream',?,?,'INGRESO')",
                     com,a.name(),key,a.sha256(),a.size(),t.id(),now);
                 db.update("INSERT INTO external_document(document_id,communication_id,operation_id,attachment_id,media_type) VALUES(?,?,?,?,?)",doc,com,o.externalId(),a.id(),a.type());
+                if(release)origin.release(t.id(),doc,scope,false);
             }
-            if(!o.attachments().isEmpty())db.audit(t.id(),"COM_ORIGINALES_CUSTODIADOS","COM",com,scope,o.attachments().size()+" originales del Formulario en cuarentena");
+            if(!o.attachments().isEmpty())db.audit(t.id(),"COM_ORIGINALES_CUSTODIADOS","COM",com,scope,o.attachments().size()
+                +(release?" originales del Formulario liberados por "+OriginRelease.REASON+" (D17)":" originales del Formulario en cuarentena"));
             var c=db.one("SELECT folio,created_ms FROM communication WHERE id=?",com);
             var registro=new FormularioAck.Registro(FormularioAck.version(o.channel()),UUID.fromString(o.externalId()),UUID.randomUUID(),com,s(c,"folio"),
                 Instant.ofEpochMilli(n(c,"created_ms")),o.channel(),o.contentHash(),o.provenanceHash());

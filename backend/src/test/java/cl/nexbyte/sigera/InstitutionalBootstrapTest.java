@@ -95,7 +95,7 @@ class InstitutionalBootstrapTest {
         assertTrue(e.getMessage().startsWith("Existe un archivo de acceso anterior"),e.getMessage());
         assertEquals(before,db.count("SELECT COUNT(*) FROM org_scope"));
         // Datos de prueba e inicializacion institucional son excluyentes.
-        var both=new Bootstrap(db,null,null,null,DIR.resolve("data").toString(),true,false,DIR.resolve("estructura.json").toString(),null,null);
+        var both=new Bootstrap(db,null,null,null,DIR.resolve("data").toString(),true,false,DIR.resolve("estructura.json").toString(),null,null,null);
         assertThrows(IllegalStateException.class,()->both.run(null));
     }
 }

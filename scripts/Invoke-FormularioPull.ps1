@@ -34,6 +34,8 @@ try{
     # que despues envia el servicio.
     $env:SIGER_SCHEDULING='false'
     if($SoloComprobar){Set-FormularioPullEnvironment $pull -Probe}else{Set-FormularioPullEnvironment $pull -RunOnce}
+    # D17 (H04c): solo el ciclo que registra entregas recibe el modo de liberacion por analisis en origen; la sonda no.
+    if(-not $SoloComprobar){Set-OriginReleaseEnvironment $s}
     if($mail -and -not $SoloComprobar){Set-GraphMailEnvironment $mail -EnqueueOnly}
     $arguments=@('-Xms64m','-Xmx768m',"`"-Djava.io.tmpdir=$(Join-Path $Root 'tmp')`"",'-jar',"`"$($s.activeJar)`"",'--spring.main.web-application-type=none')
     $p=Start-Process -FilePath (Join-Path $s.javaHome 'bin\java.exe') -ArgumentList $arguments -WorkingDirectory $Root -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -Wait -WindowStyle Hidden

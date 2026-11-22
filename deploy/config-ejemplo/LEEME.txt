@@ -23,6 +23,12 @@ estructura-inicial.json
 antivirus.json
   Opcional. Sin este archivo los originales quedan en cuarentena (no se liberan). Copiar a config\ y reiniciar.
 
+liberacion-origen.json (0.6.0, D17)
+  No se copia: lo crea Set-OriginRelease.ps1 en la VM, como la cuenta de servicio, con fecha de termino (a lo mas 90
+  dias) y motivo. Mientras rige, los originales del Formulario se liberan al registrarse por el analisis en origen; los
+  adjuntos subidos en SIGER siguen en cuarentena. Incompatible con antivirus.json. Set-OriginRelease.ps1 -Desactivar
+  lo retira. Rige desde el siguiente inicio.
+
 Los archivos formulario-pull.json y los secretos del Formulario (*.clixml) los crea Import-SecretPackage.ps1 en la VM.
 La credencial de Graph (correo-graph.json en DESACTIVADO y graph-client-secret.clixml) la instala
 Import-GraphCredential.ps1, como la cuenta de servicio, y se acredita con Test-GraphMail.ps1 (0.6.0).

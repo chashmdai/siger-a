@@ -12,6 +12,7 @@ import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 import tools.jackson.databind.json.JsonMapper;
 import static org.junit.jupiter.api.Assertions.*;
+import static cl.nexbyte.sigera.Db.*;
 
 /**
  * Prueba controlada de Graph (H01) como la lanza scripts\Test-GraphMail.ps1: la aplicacion completa sin servidor web
@@ -177,8 +178,36 @@ class GraphCheckTest {
         assertEquals(before,snapshot());
     }
 
+    /**
+     * D17 (H04c): con un archivo de liberacion por analisis en origen vigente (aunque la propiedad llegue), la prueba de
+     * Graph no audita el modo ni libera el original del Formulario pendiente: la base no cambia. Control: un proceso
+     * comun con el mismo archivo si lo libera, asi que la igualdad no es casual.
+     */
+    @Test void liberacionVigenteNoCambiaLaBase(CapturedOutput out)throws Exception{
+        long scope=n(db.one("SELECT id FROM org_scope WHERE code='GCU-1'"),"id");
+        long pending=OriginReleaseTest.pendingFormularioOriginal(db,dir.resolve("data").resolve("documents"),scope);
+        Path file=OriginReleaseTest.activeFile(dir);
+        var before=snapshot();
+        var fake=token(new GraphMailTest.Fake(),"abcdef01-2345-4678-9abc-def012345678");
+        var ctx=run(app(fake),with(props("TOKEN",null),"siger.documents.origin-release.file",file.toString()));
+        assertFalse(ctx.isActive());
+        assertEquals(before,snapshot(),"ninguna tabla cambia con el modo vigente");
+        assertTrue(b(db.one("SELECT quarantined FROM document_item WHERE id=?",pending),"quarantined"));
+        noExpone(out);
+        var control=run(app(null),with(props(null,null),"siger.documents.origin-release.file",file.toString()));
+        try{
+            assertFalse(b(db.one("SELECT quarantined FROM document_item WHERE id=?",pending),"quarantined"),"control: un proceso comun si libera");
+            assertNotEquals(before,snapshot());
+        }finally{control.close();}
+    }
+
     /** Contenido completo de cada tabla del esquema (todas las filas y columnas, ordenadas), no solo los conteos. */
     static Map<String,List<String>> snapshot(){
+        var out=snapshot(db);
+        assertFalse(out.get("mail_outbox").isEmpty(),"la cola tiene la fila sembrada");
+        return out;
+    }
+    static Map<String,List<String>> snapshot(Db db){
         var out=new TreeMap<String,List<String>>();
         var tables=db.rows("SELECT LOWER(table_name) AS t FROM information_schema.tables WHERE LOWER(table_schema)=LOWER(SCHEMA()) AND table_type='BASE TABLE' ORDER BY 1");
         assertTrue(tables.size()>40,"tablas del esquema: "+tables.size());
@@ -191,7 +220,6 @@ class GraphCheckTest {
             }
             Collections.sort(rows);out.put(table,rows);
         }
-        assertFalse(out.get("mail_outbox").isEmpty(),"la cola tiene la fila sembrada");
         return out;
     }
 }

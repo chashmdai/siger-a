@@ -15,7 +15,10 @@ import {Structure} from './Structure';
 import {grantOf, grantState} from './profile';
 
 const INTEGRATIONS: [string, string][] = [['FORMULARIO_PULL', 'Consumidor del Formulario Público'], ['CORREO_GRAPH', 'Correo institucional (Microsoft Graph)']];
-const WARNING_TITLES: Record<string, string> = {SIN_TI_PERMANENTE: 'Sin cuenta TI permanente', TI_INCOMPATIBLE: 'Cuentas con TI incompatible', HITOS_OMITIDOS: 'Hitos reconstruidos con omisiones'};
+const WARNING_TITLES: Record<string, string> = {SIN_TI_PERMANENTE: 'Sin cuenta TI permanente', TI_INCOMPATIBLE: 'Cuentas con TI incompatible', HITOS_OMITIDOS: 'Hitos reconstruidos con omisiones',
+  LIBERACION_ORIGEN_ACTIVA: 'Liberación por análisis en origen vigente', LIBERACION_ORIGEN_POR_VENCER: 'Liberación por análisis en origen por vencer',
+  LIBERACION_ORIGEN_VENCIDA: 'Liberación por análisis en origen vencida', LIBERACION_ORIGEN_INVALIDA: 'Liberación por análisis en origen sin efecto',
+  LIBERACION_ORIGEN_CON_MOTOR: 'Liberación por análisis en origen con motor configurado'};
 const MODE_LABELS: Record<string, string> = {DESACTIVADO: 'Desactivado', MANUAL: 'Ciclo manual', AUTOMATICO: 'Automático', GRAPH: 'Graph'};
 const GRANT_STATES: Record<string, string> = {VIGENTE: 'Vigente', PROGRAMADA: 'Programada', VENCIDA: 'Vencida', REVOCADA: 'Revocada'};
 
@@ -65,6 +68,8 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
   // La revision manual sin motor existe unicamente en instancias de pruebas (politica del servidor).
   const policy = obj(data, 'document_policy');
   const synthetic = bool(policy, 'synthetic_release'), engine = text(policy, 'engine');
+  // D17 (H04c): con el modo de emergencia vigente, los originales del Formulario se liberan al registrarse.
+  const origin = obj(policy, 'origin_release'), originActive = text(origin, 'state') === 'ACTIVO';
   const [scanning, setScanning] = useState<number | null>(null);
   const scan = async (d: Row) => {
     setScanning(number(d, 'id'));
@@ -153,7 +158,8 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
     </Panel>}
     {auditOnly && ti && <Panel title='Cuarentena documental' icon='lock' count={list(data, 'quarantine').length} description={engine && engine !== 'NONE'
       ? 'TI ve identificador, tamaño, huella y análisis, no el contenido del expediente. Un original sale de cuarentena solo con un análisis limpio y reciente de ' + engine + '.'
-      : 'Sin motor antivirus configurado: los originales permanecen en cuarentena' + (synthetic ? ' (en esta instancia de pruebas se admite la revisión manual).' : '.')}>
+      : 'Sin motor antivirus configurado: los originales permanecen en cuarentena' + (synthetic ? ' (en esta instancia de pruebas se admite la revisión manual).' : '.')
+        + (originActive ? ' Modo de emergencia D17 vigente hasta el ' + text(origin, 'until_day') + ': los originales del Formulario se liberan al registrarse por el análisis en origen; los adjuntos subidos en SIGER siguen aquí.' : '')}>
       <Table rows={list(data, 'quarantine')} emptyIcon='checkCircle' empty='Sin archivos en cuarentena' columns={[
         {name: 'ID', render: d => text(d, 'id')},
         {name: 'Bytes', render: d => <span className='tabular'>{number(d, 'size_bytes').toLocaleString('es-CL')}</span>},
