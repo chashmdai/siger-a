@@ -1,33 +1,56 @@
 # Despliegue de SIGER en la VM institucional
 
-Guia corta para levantar la validacion, cerrar el piloto y habilitar produccion con el mismo release. Cada comando es
-una linea de PowerShell. `FECHA` es el sufijo del ZIP (`SIGER-FECHA.zip`). El detalle tecnico de cada script esta en
-`docs/INSTALACION_VM.md`.
+Guia corta de la salida a produccion con SIGER 0.6.0 (`docs/PLAN_0_6_0.md`, decisiones D10-D16 y pasos V1-V6 y B de
+su seccion 3): cerrar la validacion 0.4.0 sin actualizarla, instalar produccion nueva con el paquete 0.6.0, acreditarla
+en automatico y eliminar la validacion con constancia. Cada comando es una linea de PowerShell y se ejecuta tal cual,
+con `powershell.exe ... -File`, desde una consola de PowerShell. `FECHA` es el sufijo del ZIP (`SIGER-FECHA.zip`). El
+detalle tecnico de cada script esta en `docs/INSTALACION_VM.md` y en su encabezado.
+
+Valores de esta VM: validacion `D:\SIGER-VALIDACION` (0.4.0, esquema V10), produccion `D:\SIGER`, cuenta de servicio
+`DDN-SIGER\svc-siger` (la misma en ambas, duena de DPAPI), motor `D:\Herramientas\mysql-8.4` (compartido: nunca se
+borra), MySQL 13326 en loopback y HTTPS 18543 (los mismos en ambas: no conviven), respaldos de la validacion en
+`D:\Respaldos-SIGER-VALIDACION` y constancias en `D:\SIGER-CONSTANCIAS`. Solo se trabaja en NEW-SIGER dentro de `D:`;
+no se inspecciona ni modifica SMR ni otros volumenes (D15).
 
 ## Datos que debe entregar TI
 
-1. **Cuenta de servicio de Windows** para SIGER (por ejemplo `DOMINIO\svc-siger`), **sin privilegios administrativos**, con su contrasena, inicio de sesion local durante la instalacion (para `runas`) y el derecho "Iniciar sesion como servicio" (o autorizacion para que `Install-Service.ps1 -ConcederInicioComoServicio` lo agregue en la directiva local).
-2. **Carpetas vacias** `D:\SIGER-VALIDACION` y, despues, `D:\SIGER`, con control total para esa cuenta.
-3. **MySQL 8.4 Community ZIP (noinstall) para Windows x64**, extraido en `D:\Herramientas\mysql-8.4` (y el runtime Visual C++ si `mysqld --version` falla).
-4. **`estructura-inicial.json`** con los ambitos reales, la persona TI y los funcionarios con sus funciones (sin autoridad habilitante desde 0.5.0) (plantilla en `config-ejemplo\`).
-5. **Codigo del ambito** que recibe las Comunicaciones del Formulario (por ejemplo `UPR-REQ`; debe estar en la estructura).
-6. **Graph (SIGER-Notificaciones)**: Tenant ID, Client ID, valor vigente del secreto de cliente y permiso `Mail.Send` limitado al buzon `siger@defensorianinez.cl`.
-7. **Red de salida** desde la VM: `formulario.defensorianinez.gob.cl:443`, `login.microsoftonline.com:443` y `graph.microsoft.com:443`.
-8. **Acceso de funcionarios** (si no entraran por RDP a la VM): regla de firewall entrante al puerto 18543 limitada a sus direcciones y, de preferencia, certificado HTTPS institucional (PFX) para el nombre de la VM.
-9. **Ventana autorizada** con los responsables del Formulario y de SMR para detener el consumidor de SMR (sustitucion).
-10. Opcional: motor antivirus operativo (Defender activo o ClamAV) para liberar originales; sin el, los originales quedan en cuarentena.
+1. **Cuenta de servicio** `DDN-SIGER\svc-siger`, la misma de la validacion: sin privilegios administrativos, con su contrasena, inicio de sesion local para `runas` y el derecho "Iniciar sesion como servicio" (ya concedido para la validacion).
+2. **Carpetas** (las crea un administrador en la preparacion): `D:\SIGER` vacia y `D:\SIGER-CONSTANCIAS`, con control total para la cuenta de servicio, y ese mismo control sobre `D:\Respaldos-SIGER-VALIDACION`.
+3. **MySQL 8.4 Community ZIP** ya extraido en `D:\Herramientas\mysql-8.4` (lo usa la validacion y lo usara produccion).
+4. **`estructura-inicial.json` real de produccion** (decision abierta antes de V4): ambitos, la persona TI y los funcionarios con sus funciones (plantilla y reglas en `config-ejemplo\`). Toda sede regional lleva `"region"` (codigo del Formulario) o `Init-Server.ps1` la rechaza: el `D:\Entregas\estructura-inicial.json` de la validacion es de 0.4.0, no la trae y solo sirve de base. Debe contener el ambito que recibe las Comunicaciones del Formulario (el `scope` de `config\formulario-pull.json` de la validacion, por ejemplo `UPR-REQ`).
+5. **Graph (opcional, D16)**: Tenant ID, Client ID y valor vigente del secreto de SIGER-Notificaciones (permiso `Mail.Send` limitado a `siger@defensorianinez.cl`), entregados de forma privada para escribirlos en la consola de `Import-GraphCredential.ps1`; el destinatario fijo de la prueba de envio (decision abierta); salida desde la VM a `login.microsoftonline.com:443` y `graph.microsoft.com:443` (no verificada en la VM).
+6. **Acceso de funcionarios** (decision abierta antes de V4): solo RDP a la VM, o regla de firewall entrante al puerto 18543 limitada a sus direcciones (decide `-AccesoRed`) y, de preferencia, certificado HTTPS institucional (PFX) para el nombre de la VM.
+7. **Motor antivirus** (decision abierta): produccion parte sin motor (ver V4 y la seccion 4).
 
-## 1. Traslado de credenciales desde SMR (equipo de SMR, cuenta duena de SMR)
+## Antecedente: la validacion
 
-Copiar solo `scripts\Export-SecretPackage.ps1` del ZIP a ese equipo. Pide el Tenant ID, el Client ID y el secreto de Graph, y una frase de paso (al menos 20 caracteres) que se entrega por otro canal.
+La validacion `D:\SIGER-VALIDACION` se instalo con 0.4.0 (paquete de secretos desde SMR, servicios con la cuenta de
+servicio) y consume el Formulario en automatico con `"validacionPullAutorizada": true` en `config\instance.json`: recibe
+solo entregas de prueba autorizadas del responsable del proyecto, porque el Formulario esta tras un acceso temporal con
+contrasena hasta el **15/12/2026 00:00 (America/Santiago)**; despues queda abierto al publico. El consumidor de SMR ya
+esta detenido desde entonces: SIGER es el unico consumidor de la cola.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\Traslado\Export-SecretPackage.ps1' -SmrRoot 'C:\req\smr' -Destination 'C:\Traslado\siger-secretos.sigerpkg' -IncluirGraph
-```
+Con 0.6.0 la validacion **no se actualiza** (D14): sigue en 0.4.0 hasta su cierre, y su cierre y su eliminacion se
+ejecutan con los scripts de la carpeta del paquete 0.6.0. Su instalacion no se repite y `Export-SecretPackage.ps1` no se
+usa (D15): produccion reutiliza la configuracion del Formulario de la validacion (misma cuenta, misma VM). Entre la pausa
+de la validacion y produccion en automatico no se hacen entregas de prueba, y en produccion tampoco (D13 y D14).
 
-Llevar `siger-secretos.sigerpkg` a la VM por un medio controlado y comprobar ahi el SHA-256 que imprimio el script. El paquete va cifrado y no es el ZIP: el ZIP nunca contiene secretos.
+## 3. Secuencia de la salida a produccion
 
-## 2. Levantar la validacion institucional
+| Paso | Que | Quien | Fecha |
+|---|---|---|---|
+| Preparacion | ZIP, carpetas y permisos; cifras del cierre con `-WhatIf` | administrador y svc-siger | antes de V1 |
+| V1 | Pausa definitiva del consumidor de la validacion | TI | desde 04/12 |
+| V2 | Cierre de la validacion con 9 recepciones declaradas | svc-siger | desde 04/12 |
+| V3 | Retiro de los servicios de la validacion | administrador | desde 04/12 |
+| V4 | Produccion con el paquete 0.6.0, en automatico | svc-siger y administrador | a mas tardar el 10/12 |
+| V5 | Observacion (D13) y tareas de TI | TI | 10/12-14/12 |
+| V6 | Eliminacion de la validacion con constancia | svc-siger | despues de V5 |
+| B | Plan B, solo si la validacion sigue sin pausar ni cerrar | TI y svc-siger | 12/12 |
+
+Cada paso se anota con sus cifras (recepciones, fechas, resultados), sin datos personales ni secretos.
+
+### Preparacion
 
 Como administrador:
 
@@ -35,120 +58,292 @@ Como administrador:
 Expand-Archive -LiteralPath 'D:\Entregas\SIGER-FECHA.zip' -DestinationPath 'D:\Entregas'
 ```
 ```powershell
-icacls 'D:\SIGER-VALIDACION' /grant 'DOMINIO\svc-siger:(OI)(CI)F'
-```
-
-Como la cuenta de servicio (una consola abierta con `runas /user:DOMINIO\svc-siger powershell.exe`):
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Init-Server.ps1' -Mode Institucional -Proposito Validacion -EstructuraInicial 'D:\Entregas\estructura-inicial.json' -Root 'D:\SIGER-VALIDACION' -Release 'D:\Entregas\SIGER-FECHA' -MySqlHome 'D:\Herramientas\mysql-8.4' -MySqlPort 13326 -WebPort 18543 -AccesoRed
+New-Item -ItemType Directory -Path 'D:\SIGER','D:\SIGER-CONSTANCIAS'
 ```
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Import-SecretPackage.ps1' -Root 'D:\SIGER-VALIDACION' -Package 'D:\Traslado\siger-secretos.sigerpkg' -Ambito 'UPR-REQ' -EliminarPaquete
+icacls 'D:\SIGER' /grant 'DDN-SIGER\svc-siger:(OI)(CI)F'
 ```
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Stop.ps1' -Root 'D:\SIGER-VALIDACION' -AlsoMySql
-```
-
-Como administrador (registra los servicios con la cuenta de servicio y recuperacion automatica; no los inicia):
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Install-Service.ps1' -Root 'D:\SIGER-VALIDACION' -ServiceCredential 'DOMINIO\svc-siger' -ConcederInicioComoServicio
-```
-
-Como la cuenta de servicio:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Start.ps1' -Root 'D:\SIGER-VALIDACION'
+icacls 'D:\SIGER-CONSTANCIAS' /grant 'DDN-SIGER\svc-siger:(OI)(CI)F'
 ```
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Test-Service.ps1' -Root 'D:\SIGER-VALIDACION' -VentanaAutorizada -IncluirMySql
-```
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Invoke-FormularioPull.ps1' -Root 'D:\SIGER-VALIDACION' -SoloComprobar
+icacls 'D:\Respaldos-SIGER-VALIDACION'
 ```
 
-La ultima orden solo comprueba configuracion, DNS, TLS con la CA de SMR y el Bearer (tres `HEAD` sin reclamar ni confirmar nada). Fuera de produccion el ciclo y el modo automatico se rechazan, salvo en una validacion con `"validacionPullAutorizada": true` en `config\instance.json` (autorizacion expresa; la pantalla muestra "Validacion institucional - recepcion real controlada"). Asi opera la validacion actual de la VM: recibe solo entregas de prueba autorizadas del responsable del proyecto, porque el Formulario esta tras un acceso temporal con contrasena hasta el **15/12/2026 00:00 (America/Santiago)**; despues queda abierto al publico. **Antes de esa fecha** el consumidor de la validacion se pausa (TI: Auditoria y operacion > Integraciones permanentes > Pausar, con motivo; la pausa queda en la base y sobrevive a los reinicios) y se deja en manual (`Set-Integration.ps1 -Formulario Manual` y reinicio), o se reemplaza por produccion, para que ninguna entrega ciudadana real llegue a la validacion.
-
-Entregar a cada persona su clave temporal de `D:\SIGER-VALIDACION\data\bootstrap-usuarios.csv` por un canal seguro y luego retirar el archivo. La pantalla muestra "Validacion institucional · Datos ficticios" (o "recepcion real controlada" si la recepcion esta autorizada); los funcionarios prueban todos los flujos con datos ficticios en `https://<nombre-de-la-VM>:18543`. El correo queda desactivado.
-
-## 3. Cerrar el piloto
-
-Como la cuenta de servicio (comprueba que no haya ninguna entrega del Formulario, detiene y marca cerrada la instancia; no borra nada):
+Si la ultima orden no muestra `DDN-SIGER\svc-siger:(OI)(CI)(F)`, concederlo (V6 borra esos respaldos como la cuenta de
+servicio):
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Close-Validation.ps1' -Root 'D:\SIGER-VALIDACION' -Motivo 'Fin del piloto de validacion'
+icacls 'D:\Respaldos-SIGER-VALIDACION' /grant 'DDN-SIGER\svc-siger:(OI)(CI)F'
 ```
 
-Como administrador:
+Como la cuenta de servicio (una consola abierta con `runas /user:DDN-SIGER\svc-siger powershell.exe`), ver las cifras
+del cierre sin detener nada. Con la validacion aun sin pausar, el unico bloqueo esperado es `SIN_PAUSA`; cualquier otro
+(por ejemplo `COM_EXTERNA_SIN_RECEPCION`) se informa al responsable antes de V1:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Uninstall-Service.ps1' -Root 'D:\SIGER-VALIDACION'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Close-Validation.ps1' -Root 'D:\SIGER-VALIDACION' -RecepcionesDeclaradas 9 -Motivo 'Fin de la validacion: salida a produccion' -WhatIf
 ```
 
-`D:\SIGER-VALIDACION` se conserva como evidencia del piloto y no vuelve a iniciarse.
+### V1. Pausa definitiva de la validacion
 
-## 4. Habilitar produccion (instancia limpia, mismo release)
+TI, en la validacion: Auditoria y operacion > Integraciones permanentes > Pausar, con motivo. El responsable declara en
+ese momento la cantidad de recepciones confirmadas (9). La pausa queda en la base y sobrevive a los reinicios. Desde
+aqui no se ejecuta `Invoke-FormularioPull.ps1` en la validacion: el ciclo manual no consulta la pausa.
 
-Como administrador:
+### V2. Cierre de la validacion
+
+Como la cuenta de servicio, desde la carpeta del paquete. Muestra cifras y bloqueos, pide confirmacion, detiene SIGER,
+vuelve a contar, detiene el motor y deja el marcador `config\piloto-cerrado.json` y su copia
+`cierre-validacion-<fecha>.json` en `D:\SIGER-CONSTANCIAS`. No borra nada. Exige la pausa vigente, 9 recepciones
+`CONFIRMADA`, ninguna `REGISTRADA` ni ACK pendiente y ninguna recepcion posterior a la pausa (D11):
 
 ```powershell
-icacls 'D:\SIGER' /grant 'DOMINIO\svc-siger:(OI)(CI)F'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Close-Validation.ps1' -Root 'D:\SIGER-VALIDACION' -RecepcionesDeclaradas 9 -Motivo 'Fin de la validacion: salida a produccion'
 ```
 
-Como la cuenta de servicio:
+Si se niega, no se fuerza: se lee el bloqueo y se informa al responsable. Una validacion cerrada no vuelve a iniciarse
+(`Start.ps1` rechaza el marcador).
+
+### V3. Retiro de los servicios de la validacion
+
+Como administrador, desde la carpeta del paquete (el script no cambio desde 0.4.0). Retira solo el registro de `SIGER` y
+`SIGERMySQL`; datos, configuracion y logs se conservan hasta V6:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Init-Server.ps1' -Mode Institucional -Proposito Produccion -EstructuraInicial 'D:\Entregas\estructura-inicial.json' -Root 'D:\SIGER' -Release 'D:\Entregas\SIGER-FECHA' -MismoReleaseQue 'D:\SIGER-VALIDACION' -MySqlHome 'D:\Herramientas\mysql-8.4' -MySqlPort 13326 -WebPort 18543 -AccesoRed
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Uninstall-Service.ps1' -Root 'D:\SIGER-VALIDACION'
+```
+
+### V4. Produccion
+
+Como la cuenta de servicio, inicializar produccion con el paquete 0.6.0, sin `-MismoReleaseQue` (la validacion sigue en
+0.4.0; esa garantia la reemplaza el ensayo de H06b) y con los mismos puertos (libres desde V2). La estructura real se
+copia antes a `D:\Entregas\estructura-inicial-produccion.json`. Con acceso de funcionarios por red (firewall de TI):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Init-Server.ps1' -Mode Institucional -Proposito Produccion -EstructuraInicial 'D:\Entregas\estructura-inicial-produccion.json' -Root 'D:\SIGER' -Release 'D:\Entregas\SIGER-FECHA' -MySqlHome 'D:\Herramientas\mysql-8.4' -MySqlPort 13326 -WebPort 18543 -AccesoRed
+```
+
+Solo por RDP (escucha en 127.0.0.1; hoy no hay script para pasar despues a acceso por red):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Init-Server.ps1' -Mode Institucional -Proposito Produccion -EstructuraInicial 'D:\Entregas\estructura-inicial-produccion.json' -Root 'D:\SIGER' -Release 'D:\Entregas\SIGER-FECHA' -MySqlHome 'D:\Herramientas\mysql-8.4' -MySqlPort 13326 -WebPort 18543
+```
+
+El MySQL propio queda activo y SIGER sin iniciar. Anotar la fecha: el certificado HTTPS autofirmado vence a los 365 dias
+(seccion 4). Entregar a cada persona su clave temporal de `D:\SIGER\data\bootstrap-usuarios.csv` por un canal seguro y
+luego retirar el archivo. Los folios parten en `SIGER-000001`.
+
+Copiar la configuracion del Formulario de la validacion (Bearer e identidad ACK protegidos con DPAPI de la misma cuenta
+en la misma VM, claves de custodia, CA y `formulario-pull.json`) y **dejarla en Manual antes de iniciar**: la copia trae
+el modo `AUTOMATICO` de la validacion, y sin la orden siguiente produccion consumiria desde su primer arranque, sin sonda:
+
+```powershell
+Copy-Item -Path 'D:\SIGER-VALIDACION\config\formulario-*' -Destination 'D:\SIGER\config'
 ```
 ```powershell
-Copy-Item -Path 'D:\SIGER-VALIDACION\config\formulario-*','D:\SIGER-VALIDACION\config\graph-client-secret.clixml','D:\SIGER-VALIDACION\config\correo-graph.json' -Destination 'D:\SIGER\config'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-Integration.ps1' -Root 'D:\SIGER' -Formulario Manual
 ```
+
+Clave del buscador de personas y folios, antes del primer inicio para que toda busqueda tenga huella desde el primer
+dia (no se imprime ni se sobrescribe):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\New-AuditSearchKey.ps1' -Root 'D:\SIGER'
+```
+
+Antivirus: produccion parte **sin motor**; no se crea `config\antivirus.json`. Sin motor, todo original (tambien los del
+Formulario) queda en cuarentena y no se descarga ni se libera. La forma de agregar despues un motor admitido esta en la
+seccion 4.
+
+> **Pendiente H04c** (liberacion por analisis en origen de los originales del Formulario): el gate H04c completa aqui su
+> activacion.
+
+Detener el motor propio:
+
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Stop.ps1' -Root 'D:\SIGER' -AlsoMySql
 ```
 
-La copia reutiliza las credenciales ya protegidas con DPAPI de la misma cuenta en la misma VM. Si la cuenta cambio, repetir el paso 1 e importar con `Import-SecretPackage.ps1 -Root 'D:\SIGER'`. Los folios parten en `SIGER-000001`.
-
-Como administrador:
+Como administrador (registra `SIGER` y `SIGERMySQL` con la cuenta de servicio y recuperacion automatica; pide solo la
+contrasena; no los inicia):
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Install-Service.ps1' -Root 'D:\SIGER' -ServiceCredential 'DOMINIO\svc-siger' -ConcederInicioComoServicio
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Install-Service.ps1' -Root 'D:\SIGER' -ServiceCredential 'DDN-SIGER\svc-siger' -ConcederInicioComoServicio
 ```
 
-Como la cuenta de servicio:
+Como la cuenta de servicio: iniciar, ver el estado y probar arranque, parada y recuperacion en una ventana sin usuarios
+(el Formulario sigue en Manual):
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Start.ps1' -Root 'D:\SIGER'
 ```
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Invoke-FormularioPull.ps1' -Root 'D:\SIGER' -SoloComprobar
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Estado.ps1' -Root 'D:\SIGER'
+```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Test-Service.ps1' -Root 'D:\SIGER' -VentanaAutorizada -IncluirMySql
 ```
 
-### Sustitucion de SMR (ventana autorizada)
+`Estado.ps1` debe mostrar `AppRunning` verdadero, `Health` UP, version 0.6.0 y el Formulario en `MANUAL`. Si informa que el
+PID no coincide (lo corrigio H04a y se acredita en H06b), se anota y se informa al responsable; la sonda HTTPS de
+`Start.ps1` sigue siendo la prueba de salud.
 
-1. El responsable de SMR pausa su consumidor, espera a que no queden ACK pendientes en SMR y lo detiene (servicio detenido y deshabilitado si esta en esta VM).
-2. Activar SIGER (exige produccion, una sonda acreditada de menos de 24 horas y la declaracion de que SMR ya no consume):
+Sonda del Formulario (configuracion, DNS, TLS con la CA y Bearer, sin reclamar ni confirmar nada) y activacion del
+consumidor permanente. `Set-Integration.ps1` exige produccion, una sonda acreditada de menos de 24 horas con el JAR
+activo y la declaracion de que SMR no consume; si encuentra el servicio `SMRRecepcion` de este equipo activo o con
+inicio habilitado se niega, y no se toca SMR: se consulta al responsable.
 
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Invoke-FormularioPull.ps1' -Root 'D:\SIGER' -SoloComprobar
+```
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-Integration.ps1' -Root 'D:\SIGER' -Formulario Automatico -SmrDetenidoConfirmado
 ```
+
+El modo se aplica al reiniciar:
+
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Stop.ps1' -Root 'D:\SIGER'
 ```
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Start.ps1' -Root 'D:\SIGER'
 ```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Estado.ps1' -Root 'D:\SIGER'
+```
 
-`Estado.ps1` debe mostrar el Formulario en `ESPERANDO_ENTREGAS`. Toda entrega queda registrada, custodiada y confirmada por ACK; ninguna se descarta. Para volver atras: `Set-Integration.ps1 -Formulario Manual`, reiniciar SIGER y, solo con cero ACK pendientes en SIGER, reactivar SMR.
+`Estado.ps1` debe mostrar el Formulario en `ESPERANDO_ENTREGAS`. Toda entrega queda registrada, custodiada y confirmada
+por ACK; ninguna se descarta.
 
-### Correo (cuando se autorice)
+Graph (opcional, D16: produccion puede partir con el correo desactivado). Como la cuenta de servicio, instalar la
+credencial (pide Tenant ID, Client ID y el secreto por consola; deja el correo DESACTIVADO; no copia nada de la
+validacion, que no tiene Graph), pedir solo un token y enviar un correo de texto fijo al destinatario fijo (decision
+abierta; la orden pide confirmacion antes de enviar):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Import-GraphCredential.ps1' -Root 'D:\SIGER'
+```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Test-GraphMail.ps1' -Root 'D:\SIGER' -Modo Token
+```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Test-GraphMail.ps1' -Root 'D:\SIGER' -Modo Envio -Destinatario 'destinatario.fijo@defensorianinez.cl'
+```
+
+Con el Envio ACEPTADO (`run\graph-prueba.json`, menos de 24 horas, mismo JAR), activar el correo y reiniciar con
+`Stop.ps1` y `Start.ps1` como arriba:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Set-Integration.ps1' -Root 'D:\SIGER' -Correo Graph
 ```
 
-Reiniciar SIGER. Solo los avisos nuevos generan correo, desde `siger@defensorianinez.cl` y para destinatarios `@defensorianinez.cl`.
+Solo los avisos nuevos generan correo, desde `siger@defensorianinez.cl` y para los dominios permitidos.
+
+### V5. Observacion de produccion y tareas de TI
+
+Acreditacion (D13), a mas tardar el 10/12: TI, en Auditoria y operacion de produccion, verifica el Formulario en
+"Esperando entregas", ciclos corriendo y ultimo exito reciente. Un ciclo en pausa tambien registra exito: lo que cuenta
+es el estado. No hay entregas de prueba en produccion. Se anota la fecha y el estado.
+
+Tareas de TI tras el primer arranque:
+
+1. Ingresar con la clave temporal y cambiarla.
+2. Calendario habil (`#calendario`): importar los feriados nacionales y regionales de 2026 y 2027 con fundamento. Sin
+   ellos, los dias habiles se calculan sin esos feriados y los reportes avisan los anios faltantes.
+3. Estructura: revisar la region de cada sede (viene del archivo) y activar las sedes PROYECTADA cuando abran.
+4. Auditoria y operacion: sin motor antivirus, los originales siguen en cuarentena (seccion 4).
+
+### V6. Eliminacion de la validacion
+
+Despues de V5, como la cuenta de servicio y desde la carpeta del paquete. Exige el marcador de V2 y su copia en las
+constancias, servicios retirados (V3), motor detenido y produccion inicializada con la misma cuenta, el mismo origen e
+identidad ACK del Formulario y en AUTOMATICO: con el plan B vigente no se elimina. Primero solo el inventario y los
+bloqueos:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Remove-Validation.ps1' -Root 'D:\SIGER-VALIDACION' -Produccion 'D:\SIGER' -Respaldos 'D:\Respaldos-SIGER-VALIDACION' -RespaldosIncompletos 'D:\Respaldos-SIGER-VALIDACION\previo-pull-20261109' -Ensayos NINGUNO -Motivo 'Eliminacion de la validacion tras acreditar produccion' -WhatIf
+```
+
+Luego la eliminacion (pide la confirmacion de PowerShell y que se escriba la ruta de la raiz; escribe la constancia
+`eliminacion-validacion-<fecha>.json` en `D:\SIGER-CONSTANCIAS` antes de borrar y la completa por elemento):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Remove-Validation.ps1' -Root 'D:\SIGER-VALIDACION' -Produccion 'D:\SIGER' -Respaldos 'D:\Respaldos-SIGER-VALIDACION' -RespaldosIncompletos 'D:\Respaldos-SIGER-VALIDACION\previo-pull-20261109' -Ensayos NINGUNO -Motivo 'Eliminacion de la validacion tras acreditar produccion'
+```
+
+`-WhatIf` no comprueba el permiso para borrar las carpetas mismas. Si la eliminacion falla por permisos, la constancia
+queda con el elemento FALLIDO y el resto NO_INTENTADO: un administrador corrige el permiso y se reintenta con las rutas
+que la constancia no dejo ELIMINADO (sin las ya eliminadas; el reintento exige incluir todo lo pendiente y referencia la
+constancia anterior). Si el fallo ocurre al borrar los ultimos archivos de `config\` (los que el reintento necesita
+leer), el reintento no puede leer la instancia: se termina a mano con la constancia INCOMPLETA como registro y se
+informa al responsable. Los respaldos y snapshots de TI y la copia del Formulario quedan fuera de alcance, y la
+eliminacion es logica, no forense (D12).
+
+No restaurar un respaldo de la validacion sobre el motor de produccion (`Restore-Check.ps1 -Root 'D:\SIGER'`): esos
+datos quedarian en el MySQL de produccion, fuera del alcance de la eliminacion.
+
+### B. Plan B (12/12)
+
+Solo si al 12/12 la validacion todavia no se ha pausado ni cerrado (V1-V2): TI pausa su consumidor en Auditoria y
+operacion (como en V1) y, como la cuenta de servicio, con los scripts de la propia instancia 0.4.0 y en este orden:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Set-Integration.ps1' -Root 'D:\SIGER-VALIDACION' -Formulario Manual
+```
+
+Despues retirar la linea `"validacionPullAutorizada": true` de `D:\SIGER-VALIDACION\config\instance.json` (con el
+JSON valido) y reiniciar; en el orden inverso `Start.ps1` rechazaria el modo AUTOMATICO sin autorizacion:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Stop.ps1' -Root 'D:\SIGER-VALIDACION'
+```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER-VALIDACION\scripts\Start.ps1' -Root 'D:\SIGER-VALIDACION'
+```
+
+Si la validacion ya esta cerrada y produccion aun no consume, no hay nada que hacer en la validacion: las entregas
+esperan en la cola del Formulario hasta completar V4.
+
+## 4. Operacion de produccion
+
+### HTTPS
+
+- **Autofirmado** (por defecto): `Init-Server.ps1` crea un certificado `CN=localhost` (SAN localhost y 127.0.0.1) por
+  365 dias. Por RDP en `https://localhost:18543` el navegador advierte que no es de confianza; por red, en
+  `https://<nombre-de-la-VM>:18543`, advierte ademas que el nombre no coincide. Es aceptable solo de forma transitoria.
+- **PFX institucional** para el nombre de la VM (con clave privada, vigente y con mas de 30 dias por delante). Como la
+  cuenta de servicio; pide la clave del PFX, conserva el certificado anterior en `config\https-anterior-<fecha>.p12` y
+  rige al reiniciar (`Stop.ps1` y `Start.ps1`):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Import-Integrations.ps1' -Root 'D:\SIGER' -HttpsPfx 'D:\Entregas\siger-https.pfx'
+```
+
+- **Solo RDP**: produccion inicializada sin `-AccesoRed` escucha solo en 127.0.0.1.
+- **Renovacion**: con un certificado vencido la sonda local lo rechaza y `Start.ps1` no acredita la salud. Antes del
+  vencimiento (anotado en V4; el importador exige al menos 30 dias de vigencia) se importa un PFX nuevo con la orden de
+  arriba. Hoy no hay script para regenerar el autofirmado: sin PFX institucional, su renovacion no tiene procedimiento.
+
+### Motor antivirus
+
+Produccion parte sin motor: Microsoft Defender esta inactivo en la VM y el antivirus institucional (Kaspersky Endpoint
+Security) no es un motor admitido por SIGER. Mientras tanto los originales siguen en cuarentena. Para agregar despues un
+motor admitido, ClamAV (con autorizacion de TI para instalarlo en `D:\Herramientas\clamav` y salida de red para
+actualizar sus firmas), como la cuenta de servicio:
+
+1. Crear `D:\SIGER\config\antivirus.json` con
+   `{"engine":"CLAMAV","executable":"D:\\Herramientas\\clamav\\clamscan.exe","database":"D:\\Herramientas\\clamav\\db"}`.
+2. Mantener las firmas de la carpeta `database` actualizadas (freshclam): SIGER rechaza firmas de mas de 72 horas.
+3. Reiniciar (`Stop.ps1` y `Start.ps1`). TI comprueba en Auditoria y operacion que **Analizar** da LIMPIO en un original
+   y solo entonces libera (detalle en "Liberacion segura de originales" de `docs/INSTALACION_VM.md`).
+
+### Volver a Manual
+
+Pausar el consumidor (TI, Auditoria y operacion), esperar a que termine su ciclo y comprobar cero ACK pendientes; luego
+`Set-Integration.ps1 -Root 'D:\SIGER' -Formulario Manual` y reiniciar. Las entregas esperan en la cola del Formulario.
+SMR no se reactiva desde esta guia: se consulta al responsable. Nunca hay dos consumidores activos, y no se borran COM,
+originales, recepciones ni leases para revertir.
 
 ## Actualizacion a 0.5.0: consultas previas (antes de actualizar)
 

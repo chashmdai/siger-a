@@ -12,7 +12,8 @@ Estados: ABIERTO (por hacer), CERRADO (verificado, con commit y push), BLOQUEADO
 | H02 | Cierre de la validacion con recepciones de prueba autorizadas | CERRADO |
 | H03 | Eliminacion de la validacion cerrada con constancia | CERRADO |
 | H04a | Scripts de operacion e invocacion con -File | CERRADO |
-| H04b | Guia de salida a produccion | ABIERTO |
+| H04b | Guia de salida a produccion | CERRADO |
+| H04c | Liberacion por analisis en origen de los originales del Formulario | ABIERTO |
 | H05 | Cierre de version en Linux | ABIERTO |
 | H06a | Build de entrega en Windows | ABIERTO |
 | H06b | Ensayo en Windows y etiquetas | ABIERTO |
@@ -30,6 +31,7 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
 | Destinatario fijo y cuenta de Windows de la prueba de Graph | V4 | 2026-11-21 (H01): la cuenta de Windows queda resuelta por diseno: la de `ownerSid` en `instance.json` (`svc-siger`); `Import-GraphCredential.ps1` y `Test-GraphMail.ps1` rechazan otra. El destinatario fijo sigue pendiente hasta V4. |
 | Acceso de funcionarios por red (firewall, PFX institucional, `-AccesoRed`) | V4 | |
 | `estructura-inicial.json` real de produccion | V4 | |
+| Motor antivirus de produccion (solucion definitiva): ClamAV en `D:\Herramientas\clamav` (sin codigo nuevo; requiere que TI autorice instalarlo y la salida de red para actualizar firmas) o, si no se autoriza, Kaspersky (codigo nuevo, despues de 0.6.0) | | 2026-11-21 (H04b): produccion parte sin motor; los originales quedan en cuarentena. |
 | Lectura del estado de `SMRRecepcion` por `Set-Integration.ps1` frente a D15 | H04 | 2026-11-21 (H04a): compatible. Precision en D15 (plan y `DECISIONES_FUNCIONALES.md`): consultar el estado del servicio de Windows `SMRRecepcion` no es inspeccionar el sistema legado; no se leen archivos, configuracion ni base de SMR, y no se cambia nada. Si en la VM aparece activo, el script se niega y no se toca SMR: se consulta al responsable. |
 | Plan B (D13) con el salto directo (hallazgo de H02) | H04 | 2026-11-21: si al 12/12 la validacion todavia no se ha pausado ni cerrado (V1-V2), TI pausa su consumidor en Auditoria y operacion, se deja en Manual con el `Set-Integration.ps1` de la propia instancia 0.4.0 y se retira `validacionPullAutorizada` de su `instance.json`. Si ya esta cerrada y produccion no consume, no hay nada que hacer en la validacion: las entregas esperan en la cola del Formulario hasta completar V4. D13 y el paso B del plan actualizados (commit `plan 0.6.0: plan B con salto directo`). |
 
@@ -48,6 +50,7 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
 - Graph: desactivado; no existe `config\graph-client-secret.clixml`. La prueba minima se hizo en el equipo fisico TEST-SIGER, no en la VM: la salida de la VM hacia `login.microsoftonline.com` y `graph.microsoft.com` no esta verificada.
 - HTTPS: autofirmado `CN=localhost`, SAN localhost y 127.0.0.1, vence el 09/11/2027. Acceso local por RDP verificado; acceso por red y PFX institucional pendientes.
 - Dos originales en cuarentena sin analizar (adjuntos de prueba del responsable). No hay `config\antivirus.json`, aunque el antivirus de la VM esta operativo.
+- Antivirus (dato del responsable, 2026-11-21, H04b): Microsoft Defender esta inactivo (`AMRunningMode` "Not running", `AntivirusEnabled` y `RealTimeProtectionEnabled` en False). El antivirus institucional es Kaspersky Endpoint Security 14 (servicios `AVP.KES.14.0` y `avpsus.KES.14.0`), administrado por Kaspersky Security Center (`klnagent`). No hay ClamAV. `D:\Herramientas` contiene `mysql-8.4`, `PortableGit`, `SIGER-BASE-ORIGINAL` y `SIGER-DIFF`.
 - `Estado.ps1` falla como `svc-siger` en la comparacion del PID, aunque desde una cuenta administradora PID, Java, JAR y puerto coinciden, y la sonda HTTPS como `svc-siger` da UP.
 - No existe todavia una instancia de produccion en `D:`.
 - Restriccion (D15): solo NEW-SIGER dentro de `D:`; no inspeccionar ni modificar otros volumenes ni el sistema legado.
@@ -83,11 +86,14 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
 Fuera del alcance de 0.6.0. Agregados por el responsable el 2026-11-21 (commit de H02); cada uno toma un gate propio cuando se planifique.
 
 - Aviso a distribucion cuando llega una COM del Formulario: hoy no genera aviso ni correo; solo aparece en Inicio ("COM por distribuir") y en la bandeja.
+- Motor `KASPERSKY` en `DocumentScanner` (KES 14, analisis por linea de comandos con `avp.com`). Antes de programarlo, confirmar con TI que `svc-siger`, sin privilegios, puede ejecutar el analisis (proteccion por contrasena de KES), y cuales son los codigos de salida y el texto. Mismo criterio de falla cerrada que con Defender. Registrado en H04b por decision del responsable.
 - Correo de avisos, para despues de que produccion este estable (gate por definir):
   - folio del registro en el texto del aviso y del correo;
   - asunto segun el tipo de aviso (por ejemplo "Nueva comunicacion por clasificar" o "Se te distribuyo una SOL");
   - enlace directo a la ficha, solo con el id (hoy `siger.mail.link` no admite ruta).
 - `Update.ps1`: exigencia sobre la antiguedad del respaldo (hoy acepta cualquier respaldo integro de la misma raiz, base y JAR, aunque sea anterior a las ultimas recepciones). Con el salto directo no aplica a la VM; sirve al actualizar produccion a 0.7.x. Registrado en H04a por decision del responsable.
+- No hay script para pasar produccion de solo RDP (`bindAddress` 127.0.0.1, `Init-Server.ps1` sin `-AccesoRed`) a acceso por red. Registrado en H04b.
+- No hay script para regenerar el certificado autofirmado: sin un PFX institucional, su renovacion (vence a los 365 dias de V4) no tiene procedimiento. Registrado en H04b.
 - Contexto del pendiente de correo:
   - los avisos ya existen: `notifyDistributors` al registrar una COM manual (la del Formulario hoy no avisa: `IntakeCommands.conserveExternal` no lo llama) y `notifySolReceivers` al distribuir o redirigir una SOL;
   - el correo sigue sin antecedentes ni datos ciudadanos (diseno de `MailOutbox`);
@@ -163,3 +169,18 @@ Fuera del alcance de 0.6.0. Agregados por el responsable el 2026-11-21 (commit d
 - Hallazgos para gates siguientes: con `pwsh` en Linux la comprobacion acredita el enlace de PowerShell 7; dentro de `Build.ps1` (H06a) el hijo es `powershell.exe` 5.1 y ahi se acredita el comportamiento real (si `-Ensayos @()` llegara distinto, el control lo informa). La comprobacion agrega unos 10 s en Linux. La orden de `Install-Service.ps1` de la guia no podia funcionar tal como estaba: la instalacion de la validacion debio hacerse de otra forma.
 - Pendientes: guia (H04b, ver Antecedentes); agregar `docs/PRUEBAS_MANUALES_0_6_0.md` a las guias de la comprobacion y `CLAUDE.md` (listas por texto, comprobacion `-File`, `Remove-SecretFile` sin excepciones) -> H05; `Estado.ps1`, `Install-Service.ps1` (pide solo la contrasena), `Set-Integration.ps1 -Correo Graph` y cada orden tal como en la guia -> H06b; antiguedad del respaldo en `Update.ps1` -> posterior a 0.6.0.
 - Verificacion manual sugerida al usuario: `pwsh -NoProfile -File scripts/Check-Scripts.ps1`; leer `Test-AppProcess` en `scripts/Common.ps1` y `ConvertFrom-PathListArgument` en `scripts/Environment.ps1`.
+
+### H04b - Guia de salida a produccion   (CERRADO)
+- Fecha: 2026-11-21 (commit `gate H04b: guia de salida a produccion`). Plan aprobado por el responsable con las recomendaciones 1, 3 y 4 (secciones 1 y 2 reemplazadas por un antecedente, `Test-Service.ps1` en V4 con el Formulario en Manual, V6 solo como la cuenta de servicio) y cinco ajustes: produccion sin motor antivirus y marcador de H04c, pendiente Kaspersky, clave del buscador en V4, permiso sobre los respaldos y dos pendientes posteriores.
+- Hecho: `docs/DESPLIEGUE_VM.md` reescrito hasta la seccion 4 con los valores reales de la VM: datos de TI, antecedente de la validacion (0.4.0, no se actualiza; sin `Export-SecretPackage.ps1`, D15), tabla y pasos Preparacion, V1-V6 y B con cada orden, y seccion 4 de operacion (HTTPS: autofirmado, PFX con `-HttpsPfx`, solo RDP y renovacion; ClamAV como motor posterior; vuelta a Manual). La seccion "Actualizacion a 0.5.0" queda intacta (H05). Bitacora: datos del antivirus de la VM, decision abierta del motor, gate H04c ABIERTO y tres pendientes posteriores.
+- Orden de V4: `Init-Server.ps1` (con o sin `-AccesoRed`), claves, copia de `formulario-*` y `-Formulario Manual`, `New-AuditSearchKey.ps1`, sin `antivirus.json` (marcador H04c), `Stop.ps1 -AlsoMySql`, `Install-Service.ps1`, `Start.ps1`, `Estado.ps1`, `Test-Service.ps1`, `-SoloComprobar`, `-Formulario Automatico -SmrDetenidoConfirmado`, reinicio y Graph opcional (Token, Envio, `-Correo Graph`).
+- Archivos clave: `docs/DESPLIEGUE_VM.md`, `docs/BITACORA_0_6_0.md`.
+- Verificacion: JUnit H2 160 ok + 1 omitida (161; igual que H04a); MySQL, frontend y humo no aplican (solo documentacion); `Check-Scripts.ps1` con `pwsh` 7.7.0: 34 scripts y todos los casos anteriores sin cambio, 54 ordenes documentadas en 48 procesos (antes 46 en 43). Mutaciones en la guia detectadas: `-Formulario Manuel` (no enlaza) y `-ServiceCredential 'svc-siger'` (sin dominio).
+- Desvios del plan: H04c agregado a la tabla de estado por indicacion del responsable (liberacion por analisis en origen de los originales del Formulario); el plan (`PLAN_0_6_0.md` seccion 6) aun no lo describe y su alcance lo define el responsable.
+- Hallazgos para gates siguientes:
+  - La copia de `config\formulario-*` trae `formulario-pull.json` en AUTOMATICO con `consumidorUnicoConfirmado: true`: sin `Set-Integration.ps1 -Formulario Manual` antes del primer `Start.ps1`, produccion consumiria sin sonda. La guia lo exige; H06b lo ensaya.
+  - Desde 0.5.0 `Bootstrap.site` exige `region` en toda sede: el `estructura-inicial.json` de la validacion (0.4.0) no la trae. El `scope` de `formulario-pull.json` debe existir en la estructura de produccion.
+  - `Install-Service.ps1` solo comprueba Defender si `antivirus.json` existe; con produccion sin motor no aplica.
+  - Plan B: Manual antes de retirar `validacionPullAutorizada`; en el orden inverso `Start.ps1` rechaza el AUTOMATICO. El `Set-Integration.ps1` de 0.4.0 (`7e90ba7`) tiene los mismos parametros.
+- Pendientes: `README.md:38`, `CLAUDE.md:127` (despliegue con `-MismoReleaseQue` y `Export/Import-SecretPackage.ps1`), `INSTALACION_VM.md:3-6` y la seccion "Actualizacion a 0.5.0" de `DESPLIEGUE_VM.md` -> H05; recorrido de la guia en `PRUEBAS_MANUALES_0_6_0.md` -> H05; cada orden tal como en la guia (incluidos la copia y Manual, `Uninstall-Service.ps1` desde el paquete sobre 0.4.0 y el plan B) -> H06b; activacion de la liberacion en V4 -> H04c; Kaspersky, RDP a red y autofirmado -> posteriores a 0.6.0.
+- Verificacion manual sugerida al usuario: leer `docs/DESPLIEGUE_VM.md` secciones 3 y 4 contra la tabla de la seccion 3 del plan; `pwsh -NoProfile -File scripts/Check-Scripts.ps1`.
