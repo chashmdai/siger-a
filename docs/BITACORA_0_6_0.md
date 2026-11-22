@@ -18,7 +18,8 @@ Estados: ABIERTO (por hacer), CERRADO (verificado, con commit y push), BLOQUEADO
 | H06a | Build de entrega en Windows | CERRADO |
 | H06b | Ensayo en Windows y etiquetas | BLOQUEADO |
 | H06c | Correccion para Windows | CERRADO |
-| H06r | Rotacion de la cuenta de servicio con re-cifrado de secretos | ABIERTO |
+| H06r | Rotacion de la cuenta de servicio: exportacion y verificacion | ABIERTO |
+| H06s | Restauracion y rotacion de la contrasena | ABIERTO |
 | H06d | Build de entrega | ABIERTO |
 | H06e | Ensayo y etiquetas | ABIERTO |
 
@@ -61,7 +62,7 @@ Se responden aqui (fecha y respuesta) antes del gate o paso indicado.
 
 ## Datos de la VM: cuenta de servicio (responsable, 2026-11-22, solo lectura, sin cambios)
 
-Origen del gate H06r (agregado por decision del responsable el 2026-11-22, entre H06c y H06d).
+Origen de los gates H06r y H06s (agregados por decision del responsable el 2026-11-22, entre H06c y H06d; H06r se dividio el mismo dia: exportacion, verificacion y P0 en H06r, restauracion, rotacion de la contrasena y V0 en H06s).
 
 - La contrasena de `DDN-SIGER\svc-siger` es desconocida: `runas` da 1326. `net accounts`: umbral de bloqueo Nunca. `net user svc-siger`: activa, la cuenta y la contrasena no expiran, ultimo cambio de contrasena 09/11/2026 16:36, "Contrasena requerida: No". Servicios registrados el 09/11/2026 17:21.
 - Hay una PowerShell abierta como `svc-siger`, con su perfil cargado, que descifra `secrets.clixml` (seis secretos: Owner, App, Migrator, Backup, Tls y Trust), `formulario-pull-token.clixml` y `formulario-ack-identity.clixml` (AckId coincide, clave privada presente). La sesion se mantiene abierta y los servicios intactos hasta tener el respaldo verificado.
