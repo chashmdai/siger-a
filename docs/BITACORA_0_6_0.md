@@ -19,6 +19,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado, con commit y push), BLOQUEADO
 | H06b | Ensayo en Windows y etiquetas | BLOQUEADO |
 | H06c | Correccion para Windows | CERRADO |
 | H06r | Rotacion de la cuenta de servicio: exportacion y verificacion | CERRADO |
+| H06r2 | P0: almacenes .p12 sin clave conocida | ABIERTO |
 | H06s | Restauracion y rotacion de la contrasena | ABIERTO |
 | H06d | Build de entrega | ABIERTO |
 | H06e | Ensayo y etiquetas | ABIERTO |
@@ -74,6 +75,14 @@ Origen de los gates H06r y H06s (agregados por decision del responsable el 2026-
   3. si faltan, `New-FormularioAckKey.ps1` e `install-ack` en el Formulario (cierra recepcion y PULL; el mapa de confianza conserva la clave publica anterior; antes del 15/12).
 - `C:\req\smr` en DDN-TEST-SIGER no se toca, tampoco en la limpieza de H06e.
 - Si la sesion de `svc-siger` se pierde antes de P0, se detiene y se reevalua con el responsable (reinstalacion sin la validacion; se pierden las constancias de V2 y V6).
+- P0 en la VM (responsable, 2026-11-22, origen del gate H06r2; sin cambios):
+  - Los seis archivos de P0, copiados desde `D:\Ensayo-H06r\Rotacion-SIGER\scripts` de TEST-SIGER, coinciden con los SHA-256 del registro de H06r. `whoami`: `ddn-siger\svc-siger`, en la sesion ya abierta.
+  - `Export-InstanceConfig.ps1 -WhatIf` sobre `D:\SIGER-VALIDACION`: 26 archivos (20 ARCHIVO, 3 CLIXML, 3 P12), 39514 bytes, y un unico problema: `P12_SIN_CLAVE_CONOCIDA:config\https-red-candidato.p12`. "No se escribio nada".
+  - `config\https-red-candidato.p12`: 3538 bytes (`https.p12` tiene 3478), modificado el 2026-11-09 18:37:52. Ningun script de SIGER lo crea y `Select-String` no encontro "red-candidato" en `config\` ni en `mysql\my.ini`: ninguna configuracion lo usa. Se conserva tal cual.
+  - No se cambiaron contrasenas, servicios ni archivos; no se genero ningun paquete; la sesion de `svc-siger` sigue abierta.
+  - Inventario (tipo, nombre y bytes): ARCHIVO `config\estructura-inicial.json` (2383); CLIXML `config\formulario-ack-identity.clixml` (3016); ARCHIVO `config\formulario-ca.pem` (765); ARCHIVO `config\formulario-pull.json` (241); ARCHIVO `config\formulario-pull.json.bak-atomic-5fb59f7986e9478aa906282d48573273` (238); ARCHIVO `config\formulario-pull.json.bak-auto-20261109` (238); CLIXML `config\formulario-pull-token.clixml` (1638); ARCHIVO `config\formulario-trusted-keys.json` (159); P12 `config\https.p12` (3478); ARCHIVO `config\https.p12.bak-lan-20261109` (3478); ARCHIVO `config\https.p12.bak-red-final-20261109` (3478); P12 `config\https-red-candidato.p12` (3538); ARCHIVO `config\initialized.marker` (30); ARCHIVO `config\instance.json` (772); ARCHIVO `config\instance.json.bak-atomic-02af7615a5904068a2a4c1fdeb21c34f` (774); ARCHIVO `config\instance.json.bak-atomic-23d819e48ab242778a9eaa0d13bf8508` (774); ARCHIVO `config\instance.json.bak-atomic-25e1a37dbd6e4b2987109cc7b0af81c6` (774); ARCHIVO `config\instance.json.bak-atomic-88ab7849c4fe4972bb5c62f7d8c2b9bd` (739); ARCHIVO `config\instance.json.bak-auto-20261109` (739); ARCHIVO `config\instance.json.bak-bind-20261109` (774); ARCHIVO `config\instance.json.bak-lan-20261109` (774); ARCHIVO `config\instance.json.bak-red-final-20261109` (774); P12 `config\mysql-trust.p12` (1174); CLIXML `config\secrets.clixml` (7894); ARCHIVO `config\service.json` (370); ARCHIVO `mysql\my.ini` (502).
+  - Hallazgo para la guia del mismo inventario: en V4, `Copy-Item 'D:\SIGER-VALIDACION\config\formulario-*' -Exclude '*.bak-atomic-*'` tambien copiaria `config\formulario-pull.json.bak-auto-20261109` a produccion. Debe estar corregido antes de H06d.
+- Decision del responsable (2026-11-22): gate H06r2 entre H06r y H06s. En la VM no se borra, mueve, renombra ni cambia permisos de ningun archivo, ni se parchan scripts a mano; P0 se repite solo con los archivos del commit de H06r2, verificados por SHA-256, y no antes de que H06r2 este CERRADO con el ensayo CORRECTO.
 
 ## Antecedentes por gate (revision del codigo al planificar, sin ejecutar)
 
