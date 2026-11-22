@@ -2,7 +2,7 @@
 // node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {displayDay, holidaysOf, inYear, missingYears, onWeekend, scopeLabel, weekdayLabel, yearsOf, yearSummary} from '../src/features/admin/calendar.ts';
+import {displayDay, holidaysOf, inYear, missingYears, onWeekend, scopeLabel, weekdayLabel, yearsOf, yearSummary} from '../src/features/admin/calendarModel.ts';
 
 const REGIONS = [{code: '15', name: 'Arica y Parinacota'}, {code: '16', name: 'Ñuble'}];
 const rows = [

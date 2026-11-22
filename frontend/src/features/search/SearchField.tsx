@@ -1,7 +1,7 @@
 import {useId, useState} from 'react';
 import type {KeyboardEvent, RefObject} from 'react';
 import {Icon} from '../../components/Icon';
-import {MAX_LENGTH, SHORT_HINT, tooShort} from './search';
+import {MAX_LENGTH, SHORT_HINT, tooShort} from './searchModel';
 
 /**
  * Campo unico del buscador (Inicio y vista #buscar). Busca solo al presionar Enter o el boton: no hay busqueda mientras

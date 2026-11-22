@@ -2,7 +2,7 @@
 // funcionarios del ambito. node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {actionsFor, membersOf, missingRegion, scopeRow, structureGroups, volume} from '../src/features/admin/structure.ts';
+import {actionsFor, membersOf, missingRegion, scopeRow, structureGroups, volume} from '../src/features/admin/structureModel.ts';
 import {grantOf} from '../src/features/admin/profile.ts';
 
 // Orden del Formulario tal como lo publica catalog.regions (de norte a sur).

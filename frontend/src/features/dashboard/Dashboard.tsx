@@ -12,7 +12,7 @@ import {Icon} from '../../components/Icon';
 import {Callout, EmptyState, ErrorMessage, PageHeader, Panel} from '../../components/Primitives';
 import {ACTIONABLE, greeting, say, today} from './texts';
 import {SearchField} from '../search/SearchField';
-import {openSearch} from '../search/search';
+import {openSearch} from '../search/searchModel';
 
 /** Colas resumidas que se muestran en cada espacio de trabajo. */
 const QUEUES_BY_SECTION: Record<string, string[]> = {distribution: ['com'], management: ['sol', 'cas', 'atenciones'], personal: ['tareas', 'atenciones'], overview: [], intake: ['atenciones'], technical: [], audit: [], institutional: []};

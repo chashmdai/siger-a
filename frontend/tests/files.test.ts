@@ -2,7 +2,7 @@
 // node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {fileStatus} from '../src/features/detail/files.ts';
+import {fileStatus} from '../src/features/detail/filesModel.ts';
 
 test('cuarentena, reserva y disponible', () => {
   assert.deepEqual(fileStatus({quarantined: true, release_basis: 'ORIGEN'}), {label: 'En cuarentena', tone: 'warn'});

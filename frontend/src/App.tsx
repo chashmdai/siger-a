@@ -22,7 +22,7 @@ import Intake from './features/intake/Intake';
 import Attention from './features/attention/Attention';
 import Search from './features/search/Search';
 import Reports from './features/reports/Reports';
-import {clearSearch} from './features/search/search';
+import {clearSearch} from './features/search/searchModel';
 import {clearBoardSearch, legacyRoute} from './features/worklist/boardSearch';
 import {sessionStore} from './lib/tabStore';
 

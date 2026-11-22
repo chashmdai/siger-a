@@ -8,10 +8,10 @@ import type {Context} from '../../app/context';
 import {Icon} from '../../components/Icon';
 import {Table} from '../../components/Table';
 import {Busy, Callout, EmptyState, ErrorMessage, PageHeader, Panel} from '../../components/Primitives';
-import {displayDay} from '../admin/calendar';
-import type {Filters, ReportDef} from './reports';
+import {displayDay} from '../admin/calendarModel';
+import type {Filters, ReportDef} from './reportsModel';
 import {activeFilters, barWidth, chileToday, clearFilters, count, days, defaultSplit, EXITS, exportBody, filenameOf, groupParts, groupsFor, hours,
-  initialFilters, keepGroup, NOTE, REPORT_HELP, reportName, requestBody, tallyLabel} from './reports';
+  initialFilters, keepGroup, NOTE, REPORT_HELP, reportName, requestBody, tallyLabel} from './reportsModel';
 
 type Named = {code: string; name: string};
 const KIND_TITLES: Record<string, string> = {VOLUMEN: 'Volumen', TIEMPO: 'Tiempos', ANTIGUEDAD: 'Antigüedad'};

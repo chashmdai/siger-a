@@ -10,7 +10,7 @@ import {Table} from '../../components/Table';
 import type {Column} from '../../components/Table';
 import {Icon} from '../../components/Icon';
 import {Busy, ErrorMessage, Panel} from '../../components/Primitives';
-import {fileStatus} from './files.ts';
+import {fileStatus} from './filesModel.ts';
 
 const TITLES: Record<string, string> = {COM: 'Documentos del ingreso', CAS: 'Documentos de la gestión profesional'};
 

@@ -1,12 +1,12 @@
-// Buscador (features/search/search.ts, G08b): la ruta nunca lleva el termino, el estado vive en la pestana y se borra
+// Buscador (features/search/searchModel.ts, G08b): la ruta nunca lleva el termino, el estado vive en la pestana y se borra
 // al cerrar sesion, folio exacto, lecturas, motivos, filtros, periodo y paleta. node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {
   alternatives, apiBody, chileDay, clearSearch, emptyNotes, exactTarget, FOLIO_ONLY_NOTE, NO_PERSON_NOTE, FILTER_THRESHOLD, formatRun, interpretation, matchReason, nextIndex, paletteEntry,
   periodRange, primaryTarget, readSearch, saveSearch, scopeLabel, SEARCH_ROUTE, searchable, SHORT_HINT, showFilters, startSearch, summaryLines, tooShort,
-} from '../src/features/search/search.ts';
-import type {Store} from '../src/features/search/search.ts';
+} from '../src/features/search/searchModel.ts';
+import type {Store} from '../src/features/search/searchModel.ts';
 import {menuFor, menuItems} from '../src/app/menu.ts';
 import {parseRoute} from '../src/app/routes.ts';
 

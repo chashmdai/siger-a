@@ -8,7 +8,7 @@ export const BOARD_DETAIL: Record<string, string> = {com: 'COM', sol: 'SOL', req
 
 /**
  * "#req?filter=open" -> {view:'req', filter:'open'}; "#REQ/3" -> detalle. El texto de busqueda nunca va en la ruta (G08c):
- * vive en la pestana (features/worklist/boardSearch.ts, features/search/search.ts).
+ * vive en la pestana (features/worklist/boardSearch.ts, features/search/searchModel.ts).
  */
 export function parseRoute(route: string) {
   const [path, search] = route.split('?');

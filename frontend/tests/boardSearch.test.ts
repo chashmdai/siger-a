@@ -5,10 +5,11 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readdirSync, readFileSync, statSync} from 'node:fs';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {
   boardEntries, clearBoardSearch, legacyRoute, readBoardQuery, saveBoardQuery, SEARCHABLE, startBoardSearch,
 } from '../src/features/worklist/boardSearch.ts';
-import {clearSearch, paletteEntry, readSearch, startSearch} from '../src/features/search/search.ts';
+import {clearSearch, paletteEntry, readSearch, startSearch} from '../src/features/search/searchModel.ts';
 import type {Store} from '../src/lib/tabStore.ts';
 import {BOARDS, boardRoute, parseRoute} from '../src/app/routes.ts';
 
@@ -108,7 +109,7 @@ function sources(dir: string): [string, string][] {
 }
 
 test('el código no arma rutas ni consultas con el texto: buscador y bandejas por POST', () => {
-  const files = sources(new URL('../src', import.meta.url).pathname);
+  const files = sources(fileURLToPath(new URL('../src', import.meta.url)));
   assert.ok(files.length > 20);
   const forbidden: [RegExp, string][] = [
     [/[?&]q=/, 'parámetro q en una ruta o URL'],

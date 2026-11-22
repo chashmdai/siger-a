@@ -1,9 +1,9 @@
-// Pantalla de reportes (features/reports/reports.ts, G12): cuerpo de la consulta y de la exportacion, agrupaciones
+// Pantalla de reportes (features/reports/reportsModel.ts, G12): cuerpo de la consulta y de la exportacion, agrupaciones
 // ofrecidas, formato con coma decimal, barras, rotulos de grupos y nombre del archivo. node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {activeFilters, barWidth, chileToday, clearFilters, count, days, defaultPeriod, defaultSplit, exportBody, filenameOf, groupParts, groupsFor, hours,
-  initialFilters, keepGroup, requestBody, tallyLabel} from '../src/features/reports/reports.ts';
+  initialFilters, keepGroup, requestBody, tallyLabel} from '../src/features/reports/reportsModel.ts';
 
 const VOLUME = {code: 'VOLUMEN', kind: 'VOLUMEN' as const}, AGE = {code: 'ANTIGUEDAD', kind: 'ANTIGUEDAD' as const};
 const TENURE = {code: 'TENENCIA_SOL', kind: 'TIEMPO' as const}, TOTAL = {code: 'REQ_TOTAL', kind: 'TIEMPO' as const};

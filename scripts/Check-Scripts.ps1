@@ -461,11 +461,22 @@ function Get-FileUnsafeParameters($Ast){
 }
 $unsafeControl=[System.Management.Automation.Language.Parser]::ParseInput('param([string]$A,[string[]]$B,[hashtable]$C,[scriptblock]$D,[object[]]$E,[array]$F,[int]$G,[switch]$H,[pscredential]$I)',[ref]$null,[ref]$null)
 if((@(Get-FileUnsafeParameters $unsafeControl) -join ',') -cne 'B,C,D,E,F'){throw 'Control negativo: la regla de parametros no detecta los tipos que -File no puede pasar.'}
+# Windows PowerShell 5.1 deja $PSScriptRoot (y $PSCommandPath) vacio en los valores por defecto del param de un
+# script con [CmdletBinding()] (hallazgo de H06a en Get-Tools.ps1): ningun param, del script ni de sus funciones, los usa.
+function Get-ParamScriptRootUses($Ast){
+    return @(foreach($block in $Ast.FindAll({param($a) $a -is [System.Management.Automation.Language.ParamBlockAst]},$true)){
+        $block.FindAll({param($a) $a -is [System.Management.Automation.Language.VariableExpressionAst] -and @('PSScriptRoot','PSCommandPath') -contains $a.VariablePath.UserPath},$true)|ForEach-Object {$_.VariablePath.UserPath}
+    })
+}
+$rootControl=[System.Management.Automation.Language.Parser]::ParseInput('[CmdletBinding()] param([string]$A=(Split-Path $PSScriptRoot -Parent)) function F { param([string]$B=$PSCommandPath) } $C=$PSScriptRoot',[ref]$null,[ref]$null)
+if((@(Get-ParamScriptRootUses $rootControl) -join ',') -cne 'PSScriptRoot,PSCommandPath'){throw 'Control negativo: la regla de $PSScriptRoot en param no detecta sus usos.'}
 $listParams=@{'Remove-Validation.ps1'=@{Respaldos='ConvertFrom-PathListArgument';RespaldosIncompletos='ConvertFrom-PathListArgument';Ensayos='ConvertFrom-PathListArgument'};'Import-GraphCredential.ps1'=@{DominiosPermitidos='ConvertFrom-DomainListArgument'}}
 foreach($file in @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1' -File)){
     $ast=[System.Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$null,[ref]$null)
     $unsafe=@(Get-FileUnsafeParameters $ast)
     if($unsafe.Count -gt 0){throw ("$($file.Name): el parametro -"+($unsafe -join ', -')+' no llega con powershell.exe -File (arreglo, coleccion o scriptblock). Usa un texto: rutas separadas por | o NINGUNO (ConvertFrom-PathListArgument).')}
+    $rootUses=@(Get-ParamScriptRootUses $ast)
+    if($rootUses.Count -gt 0){throw ("$($file.Name): un param usa `$"+($rootUses -join ', $')+', que Windows PowerShell 5.1 deja vacio con [CmdletBinding()]. Calcula el valor por defecto en el cuerpo.')}
     if(-not $listParams.ContainsKey($file.Name)){continue}
     foreach($name in $listParams[$file.Name].Keys){
         $fn=$listParams[$file.Name][$name]
@@ -622,5 +633,5 @@ try{
     if(-not (Invoke-FileStub $or @('-Root','D:\SIGER','-Motivo','Prueba de enlace')) -or -not (Invoke-FileStub $or @('-Root','D:\SIGER','-Desactivar'))){throw "Invocacion con -File: Set-OriginRelease.ps1 no enlaza con -Motivo o -Desactivar ($script:lastFileError)."}
     $controlCount=$controls.Count+3
 }finally{if([IO.Directory]::Exists($stubDir)){[IO.Directory]::Delete($stubDir,$true)}}
-$invocationSummary="liberacion por analisis en origen ($($originCases.Count) casos y entrega solo al servicio y al ciclo manual); proceso propio por el servicio ($($serviceCases.Count+$appCases.Count) casos); prueba de Graph para activar el correo ($($probeCases.Count) casos); invocacion con -File ($($orders.Count) ordenes documentadas en $invoked procesos, $($pathListCases.Count+$domainListCases.Count) casos de listas y $controlCount controles)"
+$invocationSummary="liberacion por analisis en origen ($($originCases.Count) casos y entrega solo al servicio y al ciclo manual); proceso propio por el servicio ($($serviceCases.Count+$appCases.Count) casos); prueba de Graph para activar el correo ($($probeCases.Count) casos); invocacion con -File ($($orders.Count) ordenes documentadas en $invoked procesos, $($pathListCases.Count+$domainListCases.Count) casos de listas y $controlCount controles; sin `$PSScriptRoot en param)"
 Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf, sin Remove-Item); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento); '+$invocationSummary+'. No se modifico la configuracion del equipo.')

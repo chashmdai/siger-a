@@ -4,7 +4,7 @@ import {Icon} from '../components/Icon';
 import type {IconName} from '../components/Icon';
 import {useExit} from '../components/useExit';
 import type {MenuGroup} from './menu';
-import {openSearch, paletteEntry} from '../features/search/search';
+import {openSearch, paletteEntry} from '../features/search/searchModel';
 import {boardEntries, openBoardSearch} from '../features/worklist/boardSearch';
 
 type Entry = {id: string; section: string; label: string; hint?: string; icon: IconName; route: string; run?: () => void};

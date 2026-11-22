@@ -10,8 +10,8 @@ import {Panel} from '../../components/Primitives';
 import {useExit} from '../../components/useExit';
 import {humanize, ROLE_LABELS, SCOPE_STATE_LABELS, SITE_ROLE_LABELS} from '../../lib/labels';
 import {grantOf} from './profile';
-import type {ScopeRow} from './structure';
-import {actionsFor, membersOf, missingRegion, structureGroups, volume} from './structure';
+import type {ScopeRow} from './structureModel';
+import {actionsFor, membersOf, missingRegion, structureGroups, volume} from './structureModel';
 
 /**
  * Panel Estructura (R03b, TI): nivel central y sedes regionales con su cabeza vigente, subrogancia, dotacion y

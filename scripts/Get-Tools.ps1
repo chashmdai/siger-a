@@ -1,6 +1,9 @@
 ﻿[CmdletBinding()]
-param([string]$Destination = (Join-Path (Split-Path $PSScriptRoot -Parent) '.tools'), [switch]$OnlyJava)
+param([string]$Destination, [switch]$OnlyJava)
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 deja $PSScriptRoot vacio en los valores por defecto del param de un script con
+# [CmdletBinding()]: el destino por defecto se calcula aqui (Check-Scripts.ps1 lo exige en todos los scripts).
+if (-not $Destination) { $Destination = Join-Path (Split-Path $PSScriptRoot -Parent) '.tools' }
 . (Join-Path $PSScriptRoot 'Hash.ps1')
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 New-Item -ItemType Directory -Force -Path $Destination | Out-Null

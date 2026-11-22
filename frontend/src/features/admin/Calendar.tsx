@@ -8,8 +8,8 @@ import {Table} from '../../components/Table';
 import {Icon} from '../../components/Icon';
 import {ChipRadios} from '../../components/Choice';
 import {Callout, ErrorMessage, PageHeader, Panel, Skeleton} from '../../components/Primitives';
-import type {Holiday} from './calendar';
-import {displayDay, holidaysOf, inYear, missingYears, onWeekend, scopeLabel, weekdayLabel, yearOf, yearsOf, yearSummary} from './calendar';
+import type {Holiday} from './calendarModel';
+import {displayDay, holidaysOf, inYear, missingYears, onWeekend, scopeLabel, weekdayLabel, yearOf, yearsOf, yearSummary} from './calendarModel';
 
 /**
  * Calendario habil (G09, solo TI): feriados nacionales y regionales que descuentan los dias habiles de los reportes.

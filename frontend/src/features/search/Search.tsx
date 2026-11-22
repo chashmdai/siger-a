@@ -9,12 +9,12 @@ import {Kind, Status} from '../../components/Status';
 import {Icon} from '../../components/Icon';
 import {Callout, EmptyState, ErrorMessage, PageHeader, Skeleton} from '../../components/Primitives';
 import {SearchField} from './SearchField';
-import type {Period, SearchState} from './search';
+import type {Period, SearchState} from './searchModel';
 import {
   alternatives, apiBody, clearSearch, emptyNotes, exactTarget, filtered, formatRun, interpretation, MATCH_ROLE_LABELS, matchReason, nextIndex, primaryTarget,
   READING_LABELS, READING_TITLES, readSearch, saveSearch, scopeLabel, SEARCH_EVENT, SEARCH_ROUTE, searchable, sessionStore, showFilters, shownReadings,
   SOURCE_LABELS, startSearch, summaryLines, UNCERTAIN, withoutFilters,
-} from './search';
+} from './searchModel';
 
 const store = sessionStore();
 
