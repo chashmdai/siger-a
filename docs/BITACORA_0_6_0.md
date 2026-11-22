@@ -21,7 +21,7 @@ Estados: ABIERTO (por hacer), CERRADO (verificado, con commit y push), BLOQUEADO
 | H06r | Rotacion de la cuenta de servicio: exportacion y verificacion | CERRADO |
 | H06r2 | P0: almacenes .p12 sin clave conocida | CERRADO |
 | H06s | Restauracion y rotacion de la contrasena | CERRADO |
-| H06d | Build de entrega | ABIERTO |
+| H06d | Build de entrega | CERRADO |
 | H06e | Ensayo y etiquetas | ABIERTO |
 
 ## Decisiones abiertas del responsable
@@ -346,3 +346,25 @@ Fuera del alcance de 0.6.0. Agregados por el responsable el 2026-11-21 (commit d
 - Limpieza: servicios del ensayo retirados (`Stop.ps1 -AlsoMySql` y `Uninstall-Service.ps1` de `scripts-H06s`, como administrador; `config\service-retirado-20261122-192826.json`). Quedan para H06e: cuenta `siger-rotacion` (con la contrasena B, que no se anota) y su perfil, su derecho de inicio como servicio, `D:\Ensayo-H06r` (instancia, `scripts-H06s`, paquetes, `Respaldos\posterior-v0` y `posterior-reinicio`) y lo pendiente de H06b/H06c. No se tocaron `D:\Custodia-SIGER-P0`, `C:\req\smr` ni DDN-SIGER.
 - Pendientes: build desde este commit -> H06d; V0 con el paquete de H06d (y el reinicio) -> H06e; V0 real en la VM -> el responsable, despues de H06e.
 - Verificacion manual sugerida al usuario: `powershell.exe -NoProfile -File scripts\Check-Scripts.ps1` (ultima linea con "importacion y contrasena de los servicios de H06s (243 casos..."); leer el paso V0 de `docs/DESPLIEGUE_VM.md` y los encabezados de `scripts/Import-InstanceConfig.ps1` y `scripts/Set-ServicePassword.ps1`.
+
+### H06d - Build de entrega   (CERRADO)
+- Fecha: 2026-11-22 (commit `gate H06d: build de entrega`, solo esta bitacora). Plan aprobado con tres ajustes (nada ignorado en `scripts/`, `docs/` ni `config-ejemplo/`; tabla de P0 y V0; datos del ZIP en este registro). Precision: la fila del plan dice "desde el commit de H06c"; la base es **`b7f08aa` (`gate H06s`)**, que incluye H06c, H06r, H06r2 y H06s (decision del responsable).
+- Hecho: en `DDN-TEST-SIGER`, clon `C:\sigera` (el de H06a, arbol limpio, `git status --ignored` solo con `.tools/`, `backend/target/`, `frontend/dist/`, `frontend/node_modules/` y `release/`), `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -IncludeJava` sin `-SkipChecks`: JDK Temurin 25.0.5.1+2, Node v24.22.0 (`npm ci` acepto el lock sin cambiarlo), Maven 3.9.11. Sin cambios de codigo.
+- **Paquete: `release\SIGER-20261122-201515.zip`, 167.778.716 bytes, SHA-256 `08a526e22d13a597e08c36b7b7b5a3734954641e7e10e75baed37c91779cb787`** (fuera de git, en `C:\sigera\release`). JAR SHA-256 (`manifest.json`, recalculado igual) `be5ba90aeff928373600736868f2e882901dc798d5c04c1a8045245c19afff0c`. Es el ZIP que comprueba `certutil` en la Preparacion de `DESPLIEGUE_VM.md` y el que usa H06e. **`SIGER-20261121-234618.zip` sigue DESCARTADO** (intacto en `release\`, SHA-256 `c8d38ace...7de9c` sin cambio): no se instala.
+- Revision del paquete: `manifest.json` con `version` 0.6.0, `schema` 14, `automatedTestsExecuted` true, Java 25.0.5.1 y Node v24.22.0; `SHA256SUMS.txt` 510 lineas, todas verificadas e igual a la lista de archivos; `scripts` (44), `docs` (27) y `config-ejemplo` (3) identicos a la copia de trabajo de `b7f08aa`, sin faltantes ni extras; `build-info` (pom, lock, `java25-manifest.json`) y `runtime\java25` (431 archivos, con `javac.exe`) iguales al clon; JAR con `build.version=0.6.0`, V1-V14 y los mismos `index.html` y 6 assets de `frontend\dist`; sin `.clixml`, `.dpapi`, `.pem`, `.p12`, `.pfx`, `.sigerpkg`, `.key`, `.jks`, `.keystore`, `.env`, `.mv.db`, `.log`, `bootstrap-usuarios*`, `recuperacion-ti-*`, `var`, `node_modules` ni `target`.
+- Archivos de P0 y V0 en `scripts\` del paquete (SHA-256 completo, CRLF) contra el registro donde cambiaron por ultima vez; todos IGUALES:
+  | Archivo | Registro | SHA-256 en el paquete |
+  |---|---|---|
+  | `ConfigPackage.ps1` | H06s | 94a4137772e6236e1c29b6d372d411c50d12e90ff05033d5617186736626e6b1 |
+  | `Common.ps1` | H06s | 9787230abcab3f69455bc82bf18d04b3c8206d91a0fdcad40421de221cc8c26d |
+  | `Import-InstanceConfig.ps1` | H06s | cf65439668a1aa38e58f3bbfa38939d7210b393adf6fb4bf38a296c36523d7cb |
+  | `Set-ServicePassword.ps1` | H06s | 23ab2c9f50f5b36a4c3e6945858436ab9e5ddaa4d9c61b476adf1977e02f40e5 |
+  | `Export-InstanceConfig.ps1` | H06r2 | b264cb918e7dbd30282a529b2ab6067d173da5c826dd91763987dc3a31ab0b94 |
+  | `Test-InstanceConfig.ps1` | H06r2 | 0be6cb5d135f2b0675f4fb24d983f7620aafeb0872a49a289e59d243edc7909f |
+  | `AckKeyCheck.java` | H06r2 | 54c728523f1d78247f340e3e9b20768693a4e9a9b501eb7e019bb6330212a28f |
+  | `Hash.ps1` | H06r2 | 8adcfaaa597811ff1daba643b301fb8ffbac71af6e3cc96af551072457968131 |
+- Verificacion (Windows, dentro de `Build.ps1`): JUnit 170 ejecutadas, 170 ok, 0 omitidas (igual que H06a; `DocumentReleaseTest.defenderNoOperativoFallaCerrado` corre porque Defender esta inactivo; los `ERROR` del log son los rechazos esperados de las pruebas negativas), `BUILD SUCCESS`; frontend typecheck y build ok, 76 ok; `Check-Scripts.ps1` con Windows PowerShell 5.1: 40 scripts, 73 ordenes documentadas en 60 procesos y todos los casos (243 de H06s); MySQL y humo no aplican. Linux no se ejecuto.
+- Desvios del plan: ninguno salvo la precision de la base. El primer lanzamiento del build no corrio (la redireccion de la salida apuntaba a una carpeta temporal inexistente; `release\` sin cambios) y se relanzo igual.
+- Hallazgos para gates siguientes: el `docs/BITACORA_0_6_0.md` del paquete muestra H06d ABIERTO (el build precede a este cierre; la Preparacion ya lo advierte). `npm ci` regenero `frontend/node_modules` de `C:\sigera`, como en H06a.
+- Pendientes: ensayo completo con este ZIP (V0 con los scripts del paquete, pendiente obligatorio de H06c y lo de H06b), `SOURCE_SHA256.txt`, etiquetas `v0.5.0` y `v0.6.0`, limpieza fuera de D: y registro "Cierre del plan 0.6.0" -> H06e.
+- Verificacion manual sugerida al usuario: `certutil -hashfile C:\sigera\release\SIGER-20261122-201515.zip SHA256` contra el valor de arriba; abrir `manifest.json` del paquete; comparar los SHA-256 de la tabla con `certutil -hashfile` sobre `C:\sigera\release\SIGER-20261122-201515\scripts\<archivo>`.
