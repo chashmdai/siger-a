@@ -475,7 +475,7 @@ if($onWindows -and $PSVersionTable.PSEdition -eq 'Desktop'){
             $with=@(& $hostExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $whatIfDir 'con-common.ps1') -WhatIf 2>&1|ForEach-Object {[string]$_})
             $without=@(& $hostExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $whatIfDir 'sin-common.ps1') -WhatIf 2>&1|ForEach-Object {[string]$_})
         }finally{$ErrorActionPreference=$old}
-        if(@($with|Where-Object {$_ -match 'gcim'}).Count -gt 0 -or ($with -join "`n") -notmatch 'NO_ACTUO' -or ($with -join "`n") -match '(?m)^ACTUO$'){throw 'Common.ps1 con -WhatIf: quedan las lineas de alias de CimCmdlets o -WhatIf dejo de regir.'}
+        if(@($with|Where-Object {$_ -match 'gcim' -or $_ -match 'cimWhatIf'}).Count -gt 0 -or ($with -join "`n") -notmatch 'NO_ACTUO' -or ($with -join "`n") -match '(?m)^ACTUO$'){throw 'Common.ps1 con -WhatIf: quedan las lineas de alias de CimCmdlets (o la de su variable) o -WhatIf dejo de regir.'}
         if(@($without|Where-Object {$_ -match 'gcim'}).Count -eq 0){throw 'Control de -WhatIf: sin Common.ps1 no aparecieron las lineas de alias; la prueba no distingue.'}
     }finally{[IO.Directory]::Delete($whatIfDir,$true)}
     $h06cCount+=2
@@ -763,5 +763,287 @@ try{
     if(-not (Invoke-FileStub $or @('-Root','D:\SIGER','-Motivo','Prueba de enlace')) -or -not (Invoke-FileStub $or @('-Root','D:\SIGER','-Desactivar'))){throw "Invocacion con -File: Set-OriginRelease.ps1 no enlaza con -Motivo o -Desactivar ($script:lastFileError)."}
     $controlCount=$controls.Count+3
 }finally{if([IO.Directory]::Exists($stubDir)){[IO.Directory]::Delete($stubDir,$true)}}
+# --- H06r: paquete portable de la configuracion (ConfigPackage.ps1, Export-InstanceConfig.ps1, Test-InstanceConfig.ps1) ---
+. (Join-Path $PSScriptRoot 'ConfigPackage.ps1')
+$h06rCount=0
+function Assert-H06r([bool]$Condition,[string]$Message){if(-not $Condition){throw "Paquete de configuracion (H06r): $Message"};$script:h06rCount++}
+# Rutas admitidas: config\... o mysql\my.ini; nunca '..', unidad, mayusculas distintas ni dentro de rotacion-<UTC>\.
+foreach($c in @(@('config\instance.json',$true),@('config\sub\a.json',$true),@('mysql\my.ini',$true),@('config\rotacion-nota.txt',$true),
+    @('',$false),@('config\',$false),@('config\..\instance.json',$false),@('config\.\a',$false),@('C:\config\a',$false),@('\config\a',$false),
+    @('Config\a',$false),@('config/a',$false),@('config\a:b',$false),@('config\a ',$false),@('config\a.',$false),@('mysql\my.ini.bak',$false),
+    @('data\documents\x',$false),@('config\rotacion-20261122T000000Z\secrets.clixml',$false),@(('config\'+('a'*240)),$false))){
+    Assert-H06r ((Test-ConfigItemPath $c[0]) -eq $c[1]) "ruta '$($c[0])' esperaba $($c[1])."
+}
+foreach($c in @(@('config\secrets.clixml','CLIXML'),@('config\X.CLIXML','CLIXML'),@('config\https.p12','P12'),@('config\a.pfx','P12'),@('config\instance.json','ARCHIVO'),@('config\formulario-pull.json.bak-atomic-1','ARCHIVO'),@('config\a.clixml.bak','ARCHIVO'))){
+    Assert-H06r ((Get-ConfigItemKind $c[0]) -ceq $c[1]) "tipo de '$($c[0])' esperaba $($c[1])."
+}
+foreach($c in @(@('config\https.p12','Tls'),@('config\https-anterior-20261122-101010.p12','Tls'),@('config\mysql-trust.p12','Trust'),@('config\HTTPS.p12',''),
+    @('config\sub\https.p12',''),@('config\https-anterior-2026.p12',''),@('config\otro.p12',''),@('config\mysql-trust.p12.bak','') )){
+    Assert-H06r ((Get-P12PasswordName $c[0]) -ceq $c[1]) "clave de '$($c[0])' esperaba '$($c[1])'."
+}
+foreach($c in @(@('D:\R\a.sigerpkg',$false,$true,''),@('D:\R\a.SIGERPKG',$false,$true,''),@('D:\R\a.zip',$false,$true,'EXTENSION'),@('D:\R\a.sigerpkg',$true,$true,'EXISTE'),
+    @('D:\R\a.sigerpkg',$false,$false,'SIN_CARPETA'),@('D:\SIGER-VALIDACION\config\a.sigerpkg',$false,$true,'DENTRO_DE_LA_RAIZ'),@('D:\SIGER-VALIDACION2\a.sigerpkg',$false,$true,''))){
+    Assert-H06r ((@(Get-ExportDestinationBlockers $c[0] 'D:\SIGER-VALIDACION' $c[1] $c[2]) -join ',') -ceq $c[3]) "destino '$($c[0])' esperaba '$($c[3])'."
+}
+foreach($c in @(@('S-1-5-21-1-1005','S-1-5-21-1-500',$true),@('S-1-5-21-1-1005','S-1-5-21-1-1005',$false),@('','S-1-5-21-1-500',$false),@('S-1-5-21-1-1005','',$false))){
+    Assert-H06r ((Test-VerifierAccount $c[0] $c[1]) -eq $c[2]) "cuenta verificadora $($c[1]) frente a $($c[0]) esperaba $($c[2])."
+}
+foreach($c in @(@('siger-ack-1','siger-ack-1',''),@('siger-ack-1','',''),@('siger-ack-1','otra','ACK_KEYID_DISTINTO'),@('mal id','','ACK_KEYID_INVALIDO'),@('','','ACK_KEYID_INVALIDO'),@('SIGER-ACK-1','siger-ack-1','ACK_KEYID_DISTINTO'))){
+    Assert-H06r ((@(Get-AckKeyIdFindings ([PSCustomObject]@{KeyId=$c[0];PullKeyId=$c[1]})) -join ',') -ceq $c[2]) "keyId '$($c[0])' con '$($c[1])' esperaba '$($c[2])'."
+}
+Assert-H06r ((Test-BytesEqual ([byte[]](1,2,3)) ([byte[]](1,2,3))) -and -not (Test-BytesEqual ([byte[]](1,2,3)) ([byte[]](1,2,4))) -and -not (Test-BytesEqual ([byte[]](1,2,3)) ([byte[]](1,2))) -and -not (Test-BytesEqual $null ([byte[]](1)))) 'comparacion de bytes.'
+# Cifrado: misma frase y sal = mismas claves; la frase, la sal o cualquier byte cambian el resultado; iteraciones minimas.
+$h6Pass='frase de paso de prueba de H06r';$h6Salt=[byte[]](1..32)
+$h6Crypto=New-ConfigCrypto $h6Pass $h6Salt 300000
+Assert-H06r ($h6Crypto.Enc.Length -eq 32 -and $h6Crypto.Mac.Length -eq 32 -and $h6Crypto.Fp.Length -eq 32 -and -not (Test-BytesEqual $h6Crypto.Enc $h6Crypto.Mac) -and -not (Test-BytesEqual $h6Crypto.Mac $h6Crypto.Fp)) 'claves derivadas de 96 bytes, distintas entre si.'
+$h6Fp=Get-SecretFingerprint $h6Crypto.Fp 'config\secrets.clixml' 'Owner' 'SECRETO' 'valor'
+foreach($v in @(@('config\secrets.clixml','Owner','SECRETO','valor2'),@('config\secrets.clixml','App','SECRETO','valor'),@('config\otro.clixml','Owner','SECRETO','valor'),@('config\secrets.clixml','Owner','TEXTO','valor'))){
+    Assert-H06r ((Get-SecretFingerprint $h6Crypto.Fp $v[0] $v[1] $v[2] $v[3]) -cne $h6Fp) "la huella no cambia con $($v -join '/')."
+}
+Assert-H06r ((Get-SecretFingerprint $h6Crypto.Mac 'config\secrets.clixml' 'Owner' 'SECRETO' 'valor') -cne $h6Fp -and $h6Fp -cmatch '^[0-9a-f]{64}$') 'la huella depende de la clave derivada de la frase.'
+$h6Json='{"format":"SIGER-CONFIG-1","prueba":"contenido de prueba con tildes: n'+[char]0xF1+'"}'
+$h6Text=Protect-ConfigPayload $h6Crypto $h6Json
+Assert-H06r ((Unprotect-ConfigEnvelope (Read-ConfigEnvelope $h6Text) $h6Crypto) -ceq $h6Json) 'ida y vuelta del cifrado.'
+Assert-H06r (-not $h6Text.Contains('contenido de prueba')) 'el contenido no viaja en claro.'
+Assert-H06r (($h6Text|ConvertFrom-Json).iv -cne ((Protect-ConfigPayload $h6Crypto $h6Json)|ConvertFrom-Json).iv) 'cada cifrado debe usar un IV nuevo.'
+function Get-H06rError([scriptblock]$Block){try{$null=& $Block;return 'SIN_ERROR'}catch{return ([string]$_.Exception.Message).Split(':')[0]}}
+$h6Outer=$h6Text|ConvertFrom-Json
+function New-H06rEnvelope([hashtable]$Change){$o=[ordered]@{};foreach($p in $h6Outer.PSObject.Properties){$o[$p.Name]=$p.Value};foreach($k in $Change.Keys){if($null -eq $Change[$k]){$o.Remove($k)}else{$o[$k]=$Change[$k]}};return ($o|ConvertTo-Json -Compress)}
+function Edit-H06rBase64([string]$Value,[int]$Index){$b=[Convert]::FromBase64String($Value);$b[$Index]=$b[$Index] -bxor 1;return [Convert]::ToBase64String($b)}
+foreach($c in @(
+    @{n='data alterado';t=(New-H06rEnvelope @{data=(Edit-H06rBase64 $h6Outer.data 5)});e='INTEGRIDAD'},
+    @{n='iv alterado';t=(New-H06rEnvelope @{iv=(Edit-H06rBase64 $h6Outer.iv 0)});e='INTEGRIDAD'},
+    @{n='mac alterado';t=(New-H06rEnvelope @{mac=(Edit-H06rBase64 $h6Outer.mac 31)});e='INTEGRIDAD'},
+    @{n='sal alterada';t=(New-H06rEnvelope @{salt=(Edit-H06rBase64 $h6Outer.salt 7)});e='INTEGRIDAD'},
+    @{n='otro formato';t=(New-H06rEnvelope @{format='SIGER-SECRETOS-1'});e='FORMATO'},
+    @{n='campo de mas';t=(New-H06rEnvelope @{extra='x'});e='FORMATO'},
+    @{n='sin mac';t=(New-H06rEnvelope @{mac=$null});e='FORMATO'},
+    @{n='299999 iteraciones';t=(New-H06rEnvelope @{iterations=299999});e='ITERACIONES'},
+    @{n='iteraciones como texto';t=(New-H06rEnvelope @{iterations='300000'});e='ITERACIONES'},
+    @{n='sal corta';t=(New-H06rEnvelope @{salt=[Convert]::ToBase64String([byte[]](1..16))});e='FORMATO'},
+    @{n='no es JSON';t='no es un paquete';e='FORMATO'})){
+    Assert-H06r ((Get-H06rError {Unprotect-ConfigEnvelope (Read-ConfigEnvelope $c.t) $h6Crypto}) -ceq $c.e) "envoltura con $($c.n) esperaba $($c.e)."
+}
+Assert-H06r ((Get-H06rError {Open-ConfigPackage $h6Text 'otra frase de paso de prueba'}) -ceq 'INTEGRIDAD') 'una frase incorrecta debe fallar por integridad.'
+$h6Open=Open-ConfigPackage $h6Text $h6Pass
+Assert-H06r ($h6Open.Json -ceq $h6Json -and (Test-BytesEqual $h6Open.Crypto.Fp $h6Crypto.Fp)) 'la frase correcta abre el paquete y deriva las mismas claves.'
+Assert-H06r ((Get-H06rError {Unprotect-ConfigEnvelope (Read-ConfigEnvelope (New-H06rEnvelope @{iterations=300001})) $h6Crypto}) -ceq 'INTEGRIDAD') 'el HMAC debe cubrir las iteraciones.'
+# Revision del contenido con un paquete sintetico (sin DPAPI): cada alteracion da su hallazgo.
+$h6Secret='valor-secreto-sintetico-H06r-0123456789'
+function New-H06rPayload{
+    $inst=[Text.Encoding]::UTF8.GetBytes('{"namespace":"SIGER-A-2026","root":"D:\\SIGER-VALIDACION","ownerSid":"S-1-5-21-1-1005"}')
+    $props=@(foreach($n in @('Owner','App','Migrator','Backup','Tls','Trust')){[ordered]@{name=$n;type='SECRETO';value=(ConvertTo-Utf8Base64 "$h6Secret-$n");fingerprint=(Get-SecretFingerprint $h6Crypto.Fp 'config\secrets.clixml' $n 'SECRETO' "$h6Secret-$n")}})
+    $p=[ordered]@{format='SIGER-CONFIG-1';createdUtc='20261122T120000Z';computer='EQUIPO';account='EQUIPO\svc';accountSid='S-1-5-21-1-1005';ownerSid='S-1-5-21-1-1005';root='D:\SIGER-VALIDACION';namespace='SIGER-A-2026';database='siger_a_inst';omitted=@();items=@(
+        [ordered]@{path='config\instance.json';kind='ARCHIVO';size=$inst.Length;sha256=(Get-Sha256Hex $inst);content=[Convert]::ToBase64String($inst)},
+        [ordered]@{path='config\secrets.clixml';kind='CLIXML';size=10;sha256=('ab'*32);shape='OBJETO';properties=$props},
+        [ordered]@{path='config\formulario-pull-token.clixml';kind='CLIXML';size=10;sha256=('cd'*32);shape='SECRETO';properties=@([ordered]@{name='';type='SECRETO';value=(ConvertTo-Utf8Base64 "$h6Secret-token");fingerprint=(Get-SecretFingerprint $h6Crypto.Fp 'config\formulario-pull-token.clixml' '' 'SECRETO' "$h6Secret-token")})})}
+    return (($p|ConvertTo-Json -Depth 10 -Compress)|ConvertFrom-Json)
+}
+$h6Base=Test-ConfigPayload (New-H06rPayload) $h6Crypto.Fp
+Assert-H06r (@($h6Base.Findings).Count -eq 0 -and $h6Base.Files -eq 3 -and $h6Base.Secrets -eq 7) "el paquete sintetico debe estar correcto ($(@($h6Base.Findings) -join ','))."
+$h6Mutations=@(
+    @{n='SHA-256 de un archivo';f={param($p) $p.items[0].sha256=('00'*32)};e='SHA256:config\instance.json'},
+    @{n='tamano';f={param($p) $p.items[0].size=1};e='TAMANO:config\instance.json'},
+    @{n='contenido';f={param($p) $p.items[0].content=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('{}'))};e='SHA256:config\instance.json'},
+    @{n='huella de un secreto';f={param($p) $p.items[1].properties[0].fingerprint=('00'*32)};e='HUELLA:config\secrets.clixml#Owner'},
+    @{n='valor de un secreto';f={param($p) $p.items[1].properties[2].value=(ConvertTo-Utf8Base64 'otro')};e='HUELLA:config\secrets.clixml#Migrator'},
+    @{n='ruta con ..';f={param($p) $p.items[0].path='config\..\instance.json'};e='RUTA:config\..\instance.json'},
+    @{n='ruta repetida';f={param($p) $p.items[2].path='config\secrets.clixml'};e='REPETIDO:config\secrets.clixml'},
+    @{n='tipo cambiado';f={param($p) $p.items[0].kind='CLIXML'};e='TIPO:config\instance.json'},
+    @{n='forma desconocida';f={param($p) $p.items[1].shape='LISTA'};e='FORMA:config\secrets.clixml'},
+    @{n='tipo de propiedad';f={param($p) $p.items[1].properties[0].type='ENTERO'};e='FORMA:config\secrets.clixml'},
+    @{n='SECRETO con nombre';f={param($p) $p.items[2].properties[0].name='X'};e='FORMA:config\formulario-pull-token.clixml'},
+    @{n='sin cabecera';f={param($p) $p.ownerSid=''};e='CABECERA:ownerSid'},
+    @{n='otro namespace';f={param($p) $p.namespace='OTRO'};e='CABECERA:namespace'},
+    @{n='otro formato';f={param($p) $p.format='X'};e='CONTENIDO_FORMATO'},
+    @{n='sin instance.json';f={param($p) $p.items[0].path='config\otro.json'};e='SIN_INSTANCE_JSON'})
+foreach($m in $h6Mutations){
+    $p=New-H06rPayload;& $m.f $p
+    Assert-H06r (@((Test-ConfigPayload $p $h6Crypto.Fp).Findings) -ccontains $m.e) "con $($m.n) se esperaba el hallazgo $($m.e)."
+}
+Assert-H06r (@((Test-ConfigPayload (New-H06rPayload) $h6Crypto.Mac).Findings|Where-Object {$_ -like 'HUELLA:*'}).Count -eq 7) 'con otra clave todas las huellas deben fallar.'
+Assert-H06r ((Get-PackageSecret (New-H06rPayload) 'config\secrets.clixml' 'Tls') -ceq "$h6Secret-Tls" -and $null -eq (Get-PackageSecret (New-H06rPayload) 'config\secrets.clixml' 'Nada')) 'lectura de un secreto del paquete.'
+# MySQL: la contrasena solo en MYSQL_PWD del proceso hijo, nunca en argumentos; --no-defaults primero; TLS VERIFY_CA.
+$h6Psi=New-MySqlProbeStartInfo 'C:\no\existe\mysql.exe' 'siger_a_app' 13326 'D:\SIGER-VALIDACION\mysql\data\ca.pem'
+Assert-H06r ($h6Psi.Arguments.StartsWith('--no-defaults ') -and $h6Psi.Arguments.Contains('--ssl-mode=VERIFY_CA') -and $h6Psi.Arguments.Contains('--host=127.0.0.1') -and $h6Psi.Arguments.Contains('--port=13326') -and $h6Psi.Arguments -notmatch '(?i)password|(^|\s)-p' -and -not $h6Psi.EnvironmentVariables.ContainsKey('MYSQL_PWD')) 'argumentos de la prueba de MySQL.'
+Assert-H06r ((Invoke-MySqlProbe $h6Psi $h6Secret) -ceq 'NO_COMPROBADA' -and -not $h6Psi.EnvironmentVariables.ContainsKey('MYSQL_PWD') -and -not $h6Psi.Arguments.Contains($h6Secret) -and [string]::IsNullOrEmpty($env:MYSQL_PWD)) 'la contrasena no queda en el proceso ni en los argumentos.'
+$cpText=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'ConfigPackage.ps1'))
+Assert-H06r ($cpText -notmatch '(?i)\$env:MYSQL_PWD' -and $cpText -notmatch '(?i)--password' -and $cpText -notmatch '(?i)defaults-extra-file') 'ConfigPackage.ps1 no usa la variable del proceso, --password ni un archivo de opciones.'
+Assert-H06r ($cpText -match 'X509KeyStorageFlags\]::EphemeralKeySet' -and $cpText -notmatch '(?i)PersistKeySet|MachineKeySet|UserKeySet|DefaultKeySet') 'los .p12 se abren solo en memoria (EphemeralKeySet).'
+# La verificacion no escribe ni cambia permisos: ninguna funcion que alcanza Test-InstanceConfig.ps1 escribe.
+$cpAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'ConfigPackage.ps1'),[ref]$null,[ref]$null)
+$cpFunctions=@{};foreach($fn in $cpAst.FindAll({param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]},$true)){$cpFunctions[$fn.Name]=$fn}
+$h6WriteCommands=@('Set-Content','Add-Content','Out-File','Export-Clixml','Export-Csv','Set-Acl','New-Item','Copy-Item','Move-Item','Remove-Item','Rename-Item','Set-ItemProperty','Clear-Content','icacls','icacls.exe','takeown','takeown.exe','cacls','Tee-Object','Remove-SecretFile','Save-InstanceJson','Private-Directory')
+$h6WriteMembers=@('WriteAllText','WriteAllBytes','WriteAllLines','AppendAllText','AppendAllLines','Delete','Move','Copy','Replace','Create','CreateText','CreateDirectory','SetAccessControl','SetAttributes','Encrypt','Decrypt','SetCreationTime','SetLastWriteTime')
+function Get-H06rWrites($Ast){
+    $w=@()
+    foreach($c in $Ast.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst]},$true)){$n=$c.GetCommandName();if($n -and $h6WriteCommands -contains $n){$w+=$n};if($n -ceq 'New-Object' -and $c.Extent.Text -match 'FileStream|StreamWriter'){$w+='New-Object FileStream'}}
+    foreach($m in $Ast.FindAll({param($a) $a -is [System.Management.Automation.Language.InvokeMemberExpressionAst]},$true)){if($m.Static -and $m.Expression.Extent.Text -match '(?i)IO\.(File|Directory)\]' -and $h6WriteMembers -contains [string]$m.Member.Extent.Text){$w+="$($m.Expression.Extent.Text)::$($m.Member.Extent.Text)"}}
+    return $w
+}
+function Get-H06rReachable($Ast){
+    $seen=@{};$queue=[System.Collections.Generic.Queue[object]]::new();$queue.Enqueue($Ast)
+    while($queue.Count){$a=$queue.Dequeue();foreach($c in $a.FindAll({param($x) $x -is [System.Management.Automation.Language.CommandAst]},$true)){$n=$c.GetCommandName();if($n -and $cpFunctions.ContainsKey($n) -and -not $seen.ContainsKey($n)){$seen[$n]=$true;$queue.Enqueue($cpFunctions[$n].Body)}}}
+    return @($seen.Keys)
+}
+$tiAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Test-InstanceConfig.ps1'),[ref]$null,[ref]$null)
+$tiReach=Get-H06rReachable $tiAst
+Assert-H06r ($tiReach -contains 'Invoke-ConfigVerification' -and $tiReach -contains 'Compare-ConfigWithDisk' -and $tiReach -contains 'Invoke-MySqlProbe' -and $tiReach -contains 'Invoke-AckKeyCheck') 'no se encontro la cadena de llamadas de la verificacion.'
+$tiWrites=@(Get-H06rWrites $tiAst)+@(foreach($n in $tiReach){Get-H06rWrites $cpFunctions[$n].Body})
+Assert-H06r ($tiWrites.Count -eq 0) "Test-InstanceConfig.ps1 escribe o cambia permisos ($($tiWrites -join ', '))."
+$h6Control=[System.Management.Automation.Language.Parser]::ParseInput('function F{Set-Content -Path a -Value b;icacls x /grant y;[IO.File]::WriteAllText(''a'',''b'');[System.IO.Directory]::CreateDirectory(''d'');$s=New-Object IO.FileStream(''a'',1)}',[ref]$null,[ref]$null)
+Assert-H06r ((@(Get-H06rWrites $h6Control) -join ',') -ceq 'Set-Content,icacls,New-Object FileStream,[IO.File]::WriteAllText,[System.IO.Directory]::CreateDirectory') 'control negativo: la regla de escritura no detecta las escrituras.'
+# Orden en los scripts: cuenta duena antes de descifrar y de pedir la frase; -WhatIf antes de la frase; archivo nuevo
+# (CreateNew); la verificacion rechaza a la cuenta duena antes de comprobar.
+function Get-H06rOffset($Ast,[string]$Name){$c=@($Ast.FindAll({param($a) $a -is [System.Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq $Name},$true));if($c.Count -ne 1){return -1};return $c[0].Extent.StartOffset}
+$exAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Export-InstanceConfig.ps1'),[ref]$null,[ref]$null)
+$exOwner=Get-H06rOffset $exAst 'Assert-InstanceOwner';$exPass=Get-H06rOffset $exAst 'Read-ConfigPassphrase';$exPayload=Get-H06rOffset $exAst 'New-InstanceConfigPayload'
+$exShould=@($exAst.FindAll({param($a) $a -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and $a.Member.Extent.Text -ceq 'ShouldProcess'},$true))
+Assert-H06r ($exOwner -ge 0 -and $exPass -gt $exOwner -and $exPayload -gt $exPass -and $exShould.Count -eq 1 -and $exShould[0].Extent.StartOffset -lt $exPass) 'Export-InstanceConfig.ps1: cuenta duena, -WhatIf, frase y contenido en ese orden.'
+$exText=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Export-InstanceConfig.ps1'))
+Assert-H06r ($exText.Contains('[IO.FileMode]::CreateNew') -and $exText -notmatch '\[IO\.FileMode\]::(Create|OpenOrCreate|Truncate|Append)\b' -and $exText -match 'Read-ConfigPassphrase -Twice' -and @(Get-H06rWrites $exAst|Where-Object {$_ -match 'WriteAll'}).Count -eq 0) 'Export-InstanceConfig.ps1 debe crear un archivo nuevo (sin sobrescribir) y pedir la frase dos veces.'
+$tiVerifier=Get-H06rOffset $tiAst 'Test-VerifierAccount';$tiVerify=Get-H06rOffset $tiAst 'Invoke-ConfigVerification';$tiPass=Get-H06rOffset $tiAst 'Read-ConfigPassphrase';$tiEnvelope=Get-H06rOffset $tiAst 'Read-ConfigEnvelope'
+Assert-H06r ($tiEnvelope -ge 0 -and $tiPass -gt $tiEnvelope -and $tiVerifier -gt $tiPass -and $tiVerify -gt $tiVerifier -and ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Test-InstanceConfig.ps1')) -notmatch 'Read-ConfigPassphrase -Twice')) 'Test-InstanceConfig.ps1: formato antes de la frase y otra cuenta antes de comprobar.'
+# El informe nunca lleva valores.
+$h6Report=Format-ConfigVerification (New-H06rPayload) ([PSCustomObject]@{Content=$h6Base;Disk=[PSCustomObject]@{Equal=@('config\instance.json');Different=@();Missing=@();Unreadable=@();Extra=@();ListUnreadable=$false;P12=@()};Ack='COINCIDE';AckKeyId='siger-ack-1';AckFindings=@();MySql=@([PSCustomObject]@{User='siger_a_app';State='AUTENTICADA'});MySqlNote='';Problems=@()})
+Assert-H06r (($h6Report -join "`n") -notmatch [regex]::Escape($h6Secret) -and ($h6Report[-1]) -ceq 'Resultado: CORRECTO.') 'el informe no debe llevar valores y debe terminar en el resultado.'
+# Identidad ACK (AckKeyCheck.java con un Java disponible): par correcto, cruzado y basura.
+$h6JavaBin=@((Join-Path $project '.tools\java25\bin'),$(if($env:JAVA_HOME){Join-Path $env:JAVA_HOME 'bin'}))|Where-Object {$_ -and (Test-Path -LiteralPath (Join-Path $_ $(if($onWindows){'java.exe'}else{'java'})))}|Select-Object -First 1
+$h6Ack='sin Java: AckKeyCheck.java no se ejercito'
+$h6Dir=Join-Path ([IO.Path]::GetTempPath()) ('siger-h06r-'+[Guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($h6Dir)
+try{
+    if($h6JavaBin){
+        $h6Java=Join-Path $h6JavaBin $(if($onWindows){'java.exe'}else{'java'})
+        $h6Keys=@{}
+        foreach($k in @('a','b')){
+            $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+            try{& $h6Java (Join-Path $PSScriptRoot 'FormularioAckKey.java') (Join-Path $h6Dir "$k-priv.pem") (Join-Path $h6Dir "$k-pub.pem") *> $null}finally{$ErrorActionPreference=$old}
+            $h6Keys[$k]=@([IO.File]::ReadAllText((Join-Path $h6Dir "$k-priv.pem")),[IO.File]::ReadAllText((Join-Path $h6Dir "$k-pub.pem")))
+        }
+        $src=Join-Path $PSScriptRoot 'AckKeyCheck.java'
+        Assert-H06r ((Invoke-AckKeyCheck $h6Java $src $h6Keys.a[0] $h6Keys.a[1]) -ceq 'COINCIDE') 'un par ACK correcto debe COINCIDIR.'
+        Assert-H06r ((Invoke-AckKeyCheck $h6Java $src $h6Keys.a[0] $h6Keys.b[1]) -ceq 'NO_COINCIDE') 'un par ACK cruzado no debe coincidir.'
+        Assert-H06r ((Invoke-AckKeyCheck $h6Java $src 'basura' $h6Keys.a[1]) -ceq 'INVALIDA') 'una privada ilegible debe dar INVALIDA.'
+        Assert-H06r ((Invoke-AckKeyCheck $h6Java $src ($h6Keys.a[0]+$h6Keys.b[0]) $h6Keys.a[1]) -ceq 'INVALIDA') 'dos privadas deben dar INVALIDA.'
+        Assert-H06r ((Invoke-AckKeyCheck (Join-Path $h6Dir 'no-java.exe') $src $h6Keys.a[0] $h6Keys.a[1]) -ceq 'NO_COMPROBADA') 'sin Java debe dar NO_COMPROBADA.'
+        $h6Ack='AckKeyCheck.java con pares reales'
+    }
+    if($onWindows -and $h6JavaBin){
+        # Ida completa como la cuenta actual (DPAPI real) sobre una instancia temporal: inventario, contenido, cifrado,
+        # apertura, revision, comparacion con el disco y salida sin secretos. MySQL no se prueba aqui (ensayo de H06r).
+        $root=Join-Path $h6Dir 'instancia';foreach($d in @('config','mysql','tmp')){[void][IO.Directory]::CreateDirectory((Join-Path $root $d))}
+        $me=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $vals=@{};foreach($n in @('Owner','App','Migrator','Backup','Tls','Trust')){$vals[$n]="$h6Secret-$n-"+[Guid]::NewGuid().ToString('N')}
+        [PSCustomObject]@{Owner=(ConvertTo-SecureString $vals.Owner -AsPlainText -Force);App=(ConvertTo-SecureString $vals.App -AsPlainText -Force);Migrator=(ConvertTo-SecureString $vals.Migrator -AsPlainText -Force);Backup=(ConvertTo-SecureString $vals.Backup -AsPlainText -Force);Tls=(ConvertTo-SecureString $vals.Tls -AsPlainText -Force);Trust=(ConvertTo-SecureString $vals.Trust -AsPlainText -Force)}|Export-Clixml (Join-Path $root 'config\secrets.clixml')
+        [PSCustomObject]@{namespace='SIGER-A-2026';root=$root;mysqlHome=(Join-Path $h6Dir 'sin-mysql');mysqlPort=13399;javaHome=(Split-Path $h6JavaBin -Parent);database='siger_a_inst';mode='INSTITUCIONAL';purpose='VALIDACION';ownerSid=$me}|ConvertTo-Json|Set-Content -Encoding UTF8 (Join-Path $root 'config\instance.json')
+        [IO.File]::WriteAllText((Join-Path $root 'config\formulario-pull.json'),'{"origin":"https://formulario.invalid","scope":"UPR-REQ","ackKeyId":"siger-ack-1","mode":"MANUAL"}')
+        [IO.File]::WriteAllText((Join-Path $root 'config\formulario-pull.json.bak-atomic-0123'),'{}')
+        $vals.Token="$h6Secret-token-"+[Guid]::NewGuid().ToString('N');(ConvertTo-SecureString $vals.Token -AsPlainText -Force)|Export-Clixml (Join-Path $root 'config\formulario-pull-token.clixml')
+        [PSCustomObject]@{KeyId='siger-ack-1';PrivatePem=(ConvertTo-SecureString $h6Keys.a[0] -AsPlainText -Force);PublicPem=$h6Keys.a[1];Source='prueba';ImportedUtc=(Get-Date).ToUniversalTime().ToString('o')}|Export-Clixml (Join-Path $root 'config\formulario-ack-identity.clixml')
+        [IO.File]::WriteAllText((Join-Path $root 'mysql\my.ini'),"[mysqld]`r`nport=13399`r`n")
+        $rot=Join-Path $root 'config\rotacion-20261122T000000Z';[void][IO.Directory]::CreateDirectory($rot);[IO.File]::WriteAllText((Join-Path $rot 'secrets.clixml'),'no es un clixml')
+        $keytool=Join-Path $h6JavaBin 'keytool.exe';$pf=Join-Path $root 'tmp\k.txt'
+        try{
+            [IO.File]::WriteAllText($pf,$vals.Tls)
+            $null=Invoke-Native {& $keytool -genkeypair -alias siger-a-local -keyalg RSA -keysize 2048 -validity 30 -dname 'CN=localhost,OU=SIGER' -storetype PKCS12 -keystore (Join-Path $root 'config\https.p12') '-storepass:file' $pf -noprompt} -Quiet
+            $null=Invoke-Native {& $keytool -exportcert -rfc -alias siger-a-local -keystore (Join-Path $root 'config\https.p12') '-storepass:file' $pf -file (Join-Path $root 'tmp\ca.pem')} -Quiet
+            [IO.File]::WriteAllText($pf,$vals.Trust)
+            $null=Invoke-Native {& $keytool -importcert -alias mysql-local-ca -file (Join-Path $root 'tmp\ca.pem') -keystore (Join-Path $root 'config\mysql-trust.p12') -storetype PKCS12 '-storepass:file' $pf -noprompt} -Quiet
+        }finally{Remove-SecretFile $pf}
+        Assert-H06r ((Test-Path (Join-Path $root 'config\https.p12')) -and (Test-Path (Join-Path $root 'config\mysql-trust.p12'))) 'keytool no creo los almacenes de prueba.'
+        $s=Read-Settings $root
+        $inv=Get-InstanceConfigInventory $root
+        Assert-H06r (@($inv.Items).Count -eq 9 -and @($inv.Problems).Count -eq 0 -and (@($inv.Omitted) -join ',') -ceq 'config\rotacion-20261122T000000Z') "inventario de la instancia temporal ($(@($inv.Items).Count) elementos; $(@($inv.Problems) -join ','))."
+        $crypto=New-ConfigCrypto $h6Pass $null 300000
+        $json=(New-InstanceConfigPayload $s $inv $crypto.Fp)|ConvertTo-Json -Depth 10 -Compress
+        $text=Protect-ConfigPayload $crypto $json
+        $opened=Open-ConfigPackage $text $h6Pass
+        $payload=$opened.Json|ConvertFrom-Json
+        $check=Test-ConfigPayload $payload $opened.Crypto.Fp
+        Assert-H06r (@($check.Findings).Count -eq 0 -and $check.Files -eq 9 -and $check.Secrets -eq 8 -and @($check.P12|Where-Object {$_.Opens -and $_.Matches}).Count -eq 2) "ida completa: el contenido debe estar correcto ($(@($check.Findings) -join ','))."
+        Assert-H06r ((Get-PackageSecret $payload 'config\secrets.clixml' 'Owner') -ceq $vals.Owner -and (Get-PackageSecret $payload 'config\formulario-pull-token.clixml' '') -ceq $vals.Token -and (Get-PackageSecret $payload 'config\formulario-ack-identity.clixml' 'PrivatePem') -ceq $h6Keys.a[0] -and (Get-PackageSecret $payload 'config\formulario-ack-identity.clixml' 'ImportedUtc') -match '^\d{4}-\d\d-\d\dT') 'ida completa: los valores descifrados con DPAPI deben llegar intactos.'
+        $result=Invoke-ConfigVerification $payload $opened.Crypto.Fp $root (Join-Path $PSScriptRoot 'AckKeyCheck.java')
+        $nonMySql=@($result.Problems|Where-Object {$_ -notlike 'MYSQL_*'})
+        Assert-H06r ($nonMySql.Count -eq 0 -and $result.Ack -ceq 'COINCIDE' -and @($result.Disk.Equal).Count -eq 9 -and @($result.Disk.P12|Where-Object {$_.State -ceq 'IGUALES'}).Count -eq 2 -and @($result.MySql|Where-Object {$_.State -ceq 'NO_COMPROBADA'}).Count -eq 4) "ida completa: verificacion contra el disco ($($result.Problems -join ','))."
+        $lines=Format-ConfigVerification $payload $result
+        $all=($lines -join "`n")+$text+$json.Length
+        foreach($v in $vals.Values){Assert-H06r (-not $all.Contains($v)) 'un secreto aparecio en el informe o en el paquete cifrado.'}
+        Assert-H06r (-not $all.Contains('BEGIN PRIVATE KEY')) 'la clave privada ACK aparecio en el informe o en el paquete cifrado.'
+        # Cambios en el disco y en el paquete: cada uno se informa.
+        [IO.File]::WriteAllText((Join-Path $root 'config\formulario-pull.json'),'{"origin":"https://otro.invalid","scope":"UPR-REQ","ackKeyId":"siger-ack-1","mode":"MANUAL"}')
+        [IO.File]::Move((Join-Path $root 'config\formulario-pull.json.bak-atomic-0123'),(Join-Path $h6Dir 'movido.json'))
+        [IO.File]::WriteAllText((Join-Path $root 'config\nuevo.json'),'{}')
+        $d=Compare-ConfigWithDisk $payload $root
+        Assert-H06r ((@($d.Different) -join ',') -ceq 'config\formulario-pull.json' -and (@($d.Missing) -join ',') -ceq 'config\formulario-pull.json.bak-atomic-0123' -and (@($d.Extra) -join ',') -ceq 'config\nuevo.json') 'comparacion con el disco: distinto, falta y extra.'
+        $vp=@((Invoke-ConfigVerification $payload $opened.Crypto.Fp $root (Join-Path $PSScriptRoot 'AckKeyCheck.java')).Problems)
+        Assert-H06r ($vp -ccontains 'DISCO_DISTINTO:config\formulario-pull.json' -and $vp -ccontains 'DISCO_FALTA:config\formulario-pull.json.bak-atomic-0123' -and $vp -ccontains 'DISCO_EXTRA:config\nuevo.json') "la verificacion debe informar las diferencias con el disco ($($vp -join ','))"
+        $bad=$opened.Json|ConvertFrom-Json;foreach($i in $bad.items){if($i.path -ceq 'config\https.p12'){$i.certificates[0].thumbprint='00'*20};if($i.path -ceq 'config\mysql-trust.p12'){$i.password='Tls'}}
+        $badF=@((Test-ConfigPayload $bad $opened.Crypto.Fp).Findings)
+        Assert-H06r ($badF -ccontains 'P12_CERTIFICADOS:config\https.p12' -and $badF -ccontains 'P12_CLAVE:config\mysql-trust.p12') "almacenes: certificados distintos y clave cambiada ($($badF -join ','))."
+        $bad=$opened.Json|ConvertFrom-Json;foreach($i in $bad.items){if($i.path -ceq 'config\secrets.clixml'){foreach($p in $i.properties){if($p.name -ceq 'Tls'){$p.value=(ConvertTo-Utf8Base64 'otra-clave');$p.fingerprint=(Get-SecretFingerprint $opened.Crypto.Fp 'config\secrets.clixml' 'Tls' 'SECRETO' 'otra-clave')}}}}
+        Assert-H06r (@((Test-ConfigPayload $bad $opened.Crypto.Fp).Findings) -ccontains 'P12_NO_ABRE:config\https.p12') 'un almacen que no abre con su clave debe informarse.'
+        $bad=$opened.Json|ConvertFrom-Json;foreach($i in $bad.items){if($i.path -ceq 'config\formulario-ack-identity.clixml'){foreach($p in $i.properties){if($p.name -ceq 'PublicPem'){$p.value=(ConvertTo-Utf8Base64 $h6Keys.b[1])}}}}
+        Assert-H06r ((Invoke-ConfigVerification $bad $opened.Crypto.Fp $root (Join-Path $PSScriptRoot 'AckKeyCheck.java')).Problems -ccontains 'ACK_NO_COINCIDE') 'la verificacion debe detectar una identidad ACK cruzada.'
+        # Formas de clixml no admitidas y almacen sin clave conocida: la exportacion no sigue.
+        foreach($c in @(@('entero',5),@('tabla',@{a='b'}),@('lista',@('a','b')),@('objeto con entero',[PSCustomObject]@{A='x';B=5}),@('texto','solo texto'))){
+            $f=Join-Path $h6Dir 'forma.clixml';$c[1]|Export-Clixml -LiteralPath $f
+            Assert-H06r ((Get-H06rError {ConvertTo-ClixmlModel (Import-Clixml -LiteralPath $f) 'config\forma.clixml'}) -like 'Forma no admitida*') "un clixml con $($c[0]) debe rechazarse."
+            [IO.File]::Delete($f)
+        }
+        [IO.File]::Copy((Join-Path $root 'config\https.p12'),(Join-Path $root 'config\otro.p12'))
+        Assert-H06r (@((Get-InstanceConfigInventory $root).Problems) -ccontains 'P12_SIN_CLAVE_CONOCIDA:config\otro.p12') 'un almacen sin clave conocida debe impedir la exportacion.'
+        $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+        try{$badInv=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Export-InstanceConfig.ps1') -Root $root -Destination (Join-Path $h6Dir 'inv.sigerpkg') -WhatIf 2>&1|ForEach-Object {[string]$_});$badInvCode=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
+        Assert-H06r ($badInvCode -ne 0 -and ($badInv -join ' ') -match 'no se puede exportar' -and ($badInv -join ' ') -match 'P12_SIN_CLAVE_CONOCIDA' -and ($badInv -join ' ') -notmatch 'Whatif: .*Crear el paquete') 'Export-InstanceConfig.ps1 debe negarse con un inventario con problemas, antes de -WhatIf.'
+        [IO.File]::Delete((Join-Path $root 'config\otro.p12'))
+        $junction=Join-Path $root 'config\enlace'
+        $null=& cmd.exe /c mklink /J "$junction" "$h6Dir" 2>&1
+        if([IO.Directory]::Exists($junction)){
+            Assert-H06r ((Get-H06rError {Get-InstanceConfigInventory $root}) -like 'config\ contiene un enlace*') 'un enlace dentro de config\ debe impedir la exportacion.'
+            [IO.Directory]::Delete($junction)
+        }
+        # Scripts con -File: -WhatIf no escribe ni pide la frase; destino existente o de otra extension y otra cuenta se rechazan.
+        $ex=Join-Path $PSScriptRoot 'Export-InstanceConfig.ps1';$ti=Join-Path $PSScriptRoot 'Test-InstanceConfig.ps1';$dest=Join-Path $h6Dir 'paquete.sigerpkg'
+        $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+        try{
+            $what=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ex -Root $root -Destination $dest -WhatIf 2>&1|ForEach-Object {[string]$_})
+            [IO.File]::WriteAllText((Join-Path $h6Dir 'existe.sigerpkg'),'x')
+            $exists=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ex -Root $root -Destination (Join-Path $h6Dir 'existe.sigerpkg') 2>&1|ForEach-Object {[string]$_});$existsCode=$LASTEXITCODE
+            $ext=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ex -Root $root -Destination (Join-Path $h6Dir 'paquete.zip') 2>&1|ForEach-Object {[string]$_});$extCode=$LASTEXITCODE
+            $inside=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ex -Root $root -Destination (Join-Path $root 'tmp\p.sigerpkg') 2>&1|ForEach-Object {[string]$_});$insideCode=$LASTEXITCODE
+            [IO.File]::WriteAllText((Join-Path $h6Dir 'no-paquete.sigerpkg'),'{"format":"OTRO"}')
+            $notPkg=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ti -Package (Join-Path $h6Dir 'no-paquete.sigerpkg') -Root $root 2>&1|ForEach-Object {[string]$_});$notPkgCode=$LASTEXITCODE
+            [IO.File]::WriteAllText((Join-Path $h6Dir 'pocas.sigerpkg'),(New-H06rEnvelope @{iterations=1000}))
+            $few=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ti -Package (Join-Path $h6Dir 'pocas.sigerpkg') -Root $root 2>&1|ForEach-Object {[string]$_});$fewCode=$LASTEXITCODE
+            $instFile=Join-Path $root 'config\instance.json';$instText=[IO.File]::ReadAllText($instFile)
+            [IO.File]::WriteAllText($instFile,$instText.Replace($me,'S-1-5-21-1-2-3-4'))
+            $other=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ex -Root $root -Destination $dest -WhatIf 2>&1|ForEach-Object {[string]$_});$otherCode=$LASTEXITCODE
+            [IO.File]::WriteAllText($instFile,$instText)
+        }finally{$ErrorActionPreference=$old}
+        $whatText=$what -join "`n"
+        Assert-H06r (-not [IO.File]::Exists($dest) -and $whatText -match 'Inventario: 9 archivos' -and $whatText -match 'se omiten config\\rotacion-20261122T000000Z' -and $whatText -notmatch 'Frase de paso' -and $whatText -notmatch 'cimWhatIf') "Export-InstanceConfig.ps1 -WhatIf debe mostrar el inventario sin escribir ni pedir la frase ($whatText)."
+        Assert-H06r ($existsCode -ne 0 -and ($exists -join ' ') -match 'EXISTE' -and [IO.File]::ReadAllText((Join-Path $h6Dir 'existe.sigerpkg')) -ceq 'x') 'Export-InstanceConfig.ps1 no debe sobrescribir un destino existente.'
+        Assert-H06r ($extCode -ne 0 -and ($ext -join ' ') -match 'EXTENSION' -and $insideCode -ne 0 -and ($inside -join ' ') -match 'DENTRO_DE_LA_RAIZ') 'Export-InstanceConfig.ps1 debe rechazar otra extension y un destino dentro de la raiz.'
+        Assert-H06r ($otherCode -ne 0 -and ($other -join ' ') -match 'como la cuenta de servicio de la instancia' -and -not [IO.File]::Exists($dest)) 'Export-InstanceConfig.ps1 debe rechazar a una cuenta que no es la duena.'
+        Assert-H06r ($notPkgCode -ne 0 -and ($notPkg -join ' ') -match 'FORMATO' -and $fewCode -ne 0 -and ($few -join ' ') -match 'ITERACIONES') 'Test-InstanceConfig.ps1 debe rechazar un archivo ajeno y uno con pocas iteraciones antes de pedir la frase.'
+        $allOut=(@($what)+@($exists)+@($ext)+@($inside)+@($notPkg)+@($few)+@($other)) -join "`n"
+        foreach($v in $vals.Values){Assert-H06r (-not $allOut.Contains($v)) 'un secreto aparecio en la salida de un script.'}
+        # Test-InstanceConfig.ps1 ejecutado de verdad (la frase la responde un Read-Host de prueba): la cuenta duena se
+        # rechaza despues de abrir el paquete y antes de comprobar; una frase incorrecta falla por integridad.
+        $own=Join-Path $h6Dir 'propio.sigerpkg';[IO.File]::WriteAllText($own,$text)
+        foreach($c in @(@($h6Pass,'como OTRA cuenta'),@('otra frase de paso de prueba','INTEGRIDAD'))){
+            $wrapper=Join-Path $h6Dir 'verificar.ps1'
+            [IO.File]::WriteAllLines($wrapper,@('$ErrorActionPreference=''Stop''',"function global:Read-Host{param(`$Prompt,[switch]`$AsSecureString) ConvertTo-SecureString '$($c[0])' -AsPlainText -Force}","& '$($ti.Replace("'","''"))' -Package '$($own.Replace("'","''"))' -Root '$($root.Replace("'","''"))'"))
+            $old=$ErrorActionPreference;$ErrorActionPreference='Continue'
+            try{$vo=@(& $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $wrapper 2>&1|ForEach-Object {[string]$_});$vc=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
+            Assert-H06r ($vc -ne 0 -and ($vo -join ' ') -match $c[1] -and ($vo -join ' ') -notmatch 'Resultado:') "Test-InstanceConfig.ps1 con la cuenta duena o una frase incorrecta debe negarse ($($c[1]))."
+            foreach($v in $vals.Values){Assert-H06r (-not ($vo -join ' ').Contains($v)) 'un secreto aparecio en la salida de la verificacion.'}
+        }
+        Clear-ConfigCrypto $crypto;Clear-ConfigCrypto $opened.Crypto
+        $h6Ack+='; ida completa con DPAPI, keytool y los scripts con -File'
+    }
+}finally{if([IO.Directory]::Exists($h6Dir)){[IO.Directory]::Delete($h6Dir,$true)};Clear-ConfigCrypto $h6Crypto;Clear-ConfigCrypto $h6Open.Crypto}
+$h06rSummary="paquete de configuracion de H06r ($h06rCount casos: rutas, tipos, claves de .p12, destino, cuenta verificadora, keyId, cifrado y envoltura, revision del contenido, MySQL sin contrasena en argumentos, verificacion sin escrituras, orden de los scripts; $h6Ack)"
+# --- fin H06r ---
 $invocationSummary="liberacion por analisis en origen ($($originCases.Count) casos y entrega solo al servicio y al ciclo manual); proceso propio por el servicio ($($serviceCases.Count+$appCases.Count) casos); prueba de Graph para activar el correo ($($probeCases.Count) casos); invocacion con -File ($($orders.Count) ordenes documentadas en $invoked procesos, $($pathListCases.Count+$domainListCases.Count) casos de listas y $controlCount controles; sin `$PSScriptRoot en param)"
-Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf, sin Remove-Item); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento); '+$invocationSummary+'; correcciones para Windows de H06c ('+$h06cCount+' casos: cuenta local, cuenta duena, derecho de inicio, descriptor del servicio, control 200, -WhatIf y lista de elementos). No se modifico la configuracion del equipo.')
+Write-Host ('Sintaxis PowerShell y hash .NET correctos: '+$files.Count+' scripts; modo de instancia falla cerrado ('+$cases.Count+' casos); credencial y destinatario Graph ('+($graph.Count+$recipients.Count)+' casos); cierre de la validacion ('+($closure.Count+$unreadable.Count)+' casos); archivos con credenciales (-WhatIf, sin Remove-Item); eliminacion de la validacion ('+$deletionCount+' casos y borrado con reintento); '+$invocationSummary+'; correcciones para Windows de H06c ('+$h06cCount+' casos: cuenta local, cuenta duena, derecho de inicio, descriptor del servicio, control 200, -WhatIf y lista de elementos); '+$h06rSummary+'. No se modifico la configuracion del equipo.')

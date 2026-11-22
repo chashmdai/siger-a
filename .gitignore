@@ -13,6 +13,7 @@ var/
 config/private*
 bootstrap-usuarios.csv
 *.pfx
+*.sigerpkg
 *.jks
 *.keystore
 .env.*

@@ -96,6 +96,8 @@ Por DPAPI, todo lo que lee secretos (arranque, respaldo, migracion, importacione
 
 Si TI crea la raiz por la cuenta: `New-Item -ItemType Directory D:\SIGER-A` y `icacls D:\SIGER-A /grant "DOMINIO\svc-siger:(OI)(CI)F"` (debe quedar vacia; `Init-Server.ps1` la vuelve privada para la cuenta, SYSTEM y Administradores).
 
+**Restablecer la contrasena de la cuenta de servicio** (no cambiarla con la anterior) deja sin descifrar todo lo protegido con su DPAPI. Antes se exporta la configuracion a un paquete portable (0.6.0, H06r; paso P0 de `docs/DESPLIEGUE_VM.md`): `Export-InstanceConfig.ps1`, como la cuenta duena (`ownerSid`), cifra con una frase de paso escrita dos veces todo `config\` (cada `*.clixml` descifrado solo en memoria; los `.p12` deben abrir con su clave de `secrets.clixml`) y `mysql\my.ini`, con el SHA-256 de cada archivo y la huella de cada secreto (formato `SIGER-CONFIG-1`, `.sigerpkg`; `ConfigPackage.ps1`); no sobrescribe y admite `-WhatIf`. `Test-InstanceConfig.ps1`, como otra cuenta y solo con la frase, lo verifica en memoria y sin escribir ni cambiar permisos: integridad, huellas, cada archivo contra el disco, los `.p12` (certificados y vencimiento), la identidad ACK (`AckKeyCheck.java` con el Java de la instancia) y un `SELECT 1` con cada cuenta de MySQL (contrasena en `MYSQL_PWD` del proceso hijo). La importacion despues del restablecimiento y la contrasena de los servicios son del gate H06s (paso V0).
+
 ## Paso 2. Inicializacion unica
 
 Sustituir solo las rutas del release y de MySQL por las carpetas efectivamente extraidas. Cada orden es una linea.

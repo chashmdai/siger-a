@@ -40,6 +40,7 @@ de la validacion y produccion en automatico no se hacen entregas de prueba, y en
 
 | Paso | Que | Quien | Fecha |
 |---|---|---|---|
+| P0 | Exportacion portable de la configuracion de la validacion y su verificacion (H06r) | svc-siger (sesion ya abierta) y administrador | cuanto antes, sin esperar el paquete |
 | Preparacion | ZIP, carpetas y permisos; cifras del cierre con `-WhatIf` | administrador y svc-siger | antes de V1 |
 | V1 | Pausa definitiva del consumidor de la validacion | TI | desde 04/12 |
 | V2 | Cierre de la validacion con 9 recepciones declaradas | svc-siger | desde 04/12 |
@@ -50,6 +51,78 @@ de la validacion y produccion en automatico no se hacen entregas de prueba, y en
 | B | Plan B, solo si la validacion sigue sin pausar ni cerrar | TI y svc-siger | 12/12 |
 
 Cada paso se anota con sus cifras (recepciones, fechas, resultados), sin datos personales ni secretos.
+
+### P0. Exportacion de la configuracion de la validacion
+
+La contrasena de `DDN-SIGER\svc-siger` es desconocida y V3 y V4 la exigen. Restablecerla (paso V0, gate H06s) deja sin
+descifrar todo lo protegido con la DPAPI de la cuenta: `secrets.clixml` (claves de MySQL, HTTPS y truststore), el
+Bearer y la identidad ACK del Formulario. P0 deja antes un paquete portable de toda la configuracion, cifrado con una
+frase de paso y verificado por otra cuenta. **No cambia nada en la validacion**: no la detiene ni toca sus servicios,
+y la PowerShell ya abierta como `svc-siger` se mantiene abierta hasta terminar el punto 4.
+
+Se usan seis archivos del commit `gate H06r` del repositorio (sirven para la validacion 0.4.0; no se espera el paquete
+0.6.0): `Export-InstanceConfig.ps1`, `Test-InstanceConfig.ps1`, `ConfigPackage.ps1`, `AckKeyCheck.java`, `Common.ps1` y
+`Hash.ps1`. Su SHA-256 esta en el registro de H06r de `docs/BITACORA_0_6_0.md` del repositorio.
+
+1. Como administrador, crear la carpeta del paquete con control total para la cuenta de servicio (queda fuera de la
+   validacion, de sus respaldos y de produccion; V6 no la toca):
+
+```powershell
+New-Item -ItemType Directory -Path 'D:\Rotacion-SIGER','D:\Rotacion-SIGER\scripts'
+```
+```powershell
+icacls 'D:\Rotacion-SIGER' /grant 'DDN-SIGER\svc-siger:(OI)(CI)F'
+```
+
+2. Copiar los seis archivos a `D:\Rotacion-SIGER\scripts` y comprobar cada SHA-256 contra el registro de H06r, uno por
+   uno (si alguno no coincide, no se ejecuta nada y se informa al responsable):
+
+```powershell
+certutil -hashfile 'D:\Rotacion-SIGER\scripts\Export-InstanceConfig.ps1' SHA256
+```
+
+   (lo mismo con `Test-InstanceConfig.ps1`, `ConfigPackage.ps1`, `AckKeyCheck.java`, `Common.ps1` y `Hash.ps1`).
+
+3. **En la PowerShell ya abierta como `svc-siger`** (no se usa `runas` ni el cuadro de credenciales: esa sesion es la
+   unica que hoy descifra los secretos). Comprobar la cuenta con `whoami` (debe decir `ddn-siger\svc-siger`) y ver el
+   inventario sin escribir nada:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Rotacion-SIGER\scripts\Export-InstanceConfig.ps1' -Root 'D:\SIGER-VALIDACION' -Destination 'D:\Rotacion-SIGER\validacion-config.sigerpkg' -WhatIf
+```
+
+   Debe listar `config\` completo (entre otros `secrets.clixml`, `formulario-pull-token.clixml`,
+   `formulario-ack-identity.clixml`, `https.p12`, `mysql-trust.p12`, `instance.json` y `service.json`) y
+   `mysql\my.ini`. Luego exportar: pide la frase de paso dos veces, escrita a mano (minimo 20 caracteres; no se pega ni
+   se guarda junto al archivo). Cada secreto se descifra solo en memoria; el archivo es nuevo (nunca sobrescribe), queda
+   solo para la cuenta, SYSTEM y Administradores, y se verifica leyendolo de nuevo. Anotar el SHA-256 que informa:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Rotacion-SIGER\scripts\Export-InstanceConfig.ps1' -Root 'D:\SIGER-VALIDACION' -Destination 'D:\Rotacion-SIGER\validacion-config.sigerpkg'
+```
+
+4. Como administrador, en una consola elevada (otra cuenta: el script rechaza a `svc-siger`), verificar con la frase de
+   paso. No escribe nada ni cambia permisos; comprueba integridad, huellas y SHA-256, cada archivo contra el disco, los
+   `.p12` con su clave del paquete (certificados y vencimiento), que la clave privada ACK corresponde a su publica y a
+   su keyId, y un `SELECT 1` con cada contrasena de MySQL contra el motor de la validacion (que sigue activo):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Rotacion-SIGER\scripts\Test-InstanceConfig.ps1' -Package 'D:\Rotacion-SIGER\validacion-config.sigerpkg' -Root 'D:\SIGER-VALIDACION'
+```
+
+   Debe terminar en `Resultado: CORRECTO.`, con el mismo SHA-256 del punto 3, 4 de 4 cuentas de MySQL autenticadas, la
+   identidad ACK `COINCIDE` y los almacenes `IGUALES`. Si informa archivos `NO_LEGIBLE` (la ACL de `config\` no deja
+   leer al administrador), no se cambian permisos (ni `takeown` ni `icacls` sobre `config\`): se anota lo que no pudo
+   comparar y se informa al responsable. Con cualquier otra observacion, no se sigue: se informa al responsable.
+
+5. Custodia: copiar `validacion-config.sigerpkg` fuera de la VM por un medio aprobado y guardar la frase de paso por
+   separado (otro lugar y otro custodio). Conservar la copia de la VM en `D:\Rotacion-SIGER`. Solo con el punto 4
+   CORRECTO y la copia externa hecha se puede cerrar la PowerShell de `svc-siger`.
+
+Reversion: P0 no cambia la validacion. Si la verificacion falla, el paquete no se usa: se exporta otro con un nombre
+nuevo (el destino nunca se sobrescribe) mientras la sesion siga abierta. Si la sesion se pierde antes de un paquete
+verificado, se detiene y se reevalua con el responsable. El paquete contiene los secretos de la instancia: se borra de
+forma controlada (tambien su copia externa) cuando el responsable lo indique, despues de V5.
 
 ### Preparacion
 

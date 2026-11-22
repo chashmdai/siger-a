@@ -6,7 +6,7 @@ $ErrorActionPreference='Stop'
 # cambia la preferencia durante la importacion; el script conserva su -WhatIf. Sin el modulo (Linux) no se importa.
 if(-not (Get-Module CimCmdlets) -and (Get-Module -ListAvailable CimCmdlets)){
     $cimWhatIf=$WhatIfPreference;$WhatIfPreference=$false
-    try{Import-Module CimCmdlets}finally{$WhatIfPreference=$cimWhatIf;Remove-Variable cimWhatIf}
+    try{Import-Module CimCmdlets}finally{$WhatIfPreference=$cimWhatIf;Remove-Variable cimWhatIf -WhatIf:$false}
 }
 function Read-Settings([string]$Root) {
     $file=Join-Path $Root 'config\instance.json'
