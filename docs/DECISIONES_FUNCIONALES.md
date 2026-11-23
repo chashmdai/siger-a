@@ -213,3 +213,26 @@ de Inicio muestran una marca en cada COM:
    - Fuera de 0.7.0 por decision del responsable: la distribucion territorial del Formulario (que la distribucion de una
      sede vea y distribuya solo las COM de su territorio) pasa a 0.8.0 con decision propia; el orden de prioridad y los
      filtros nuevos en "Por distribuir" no se hacen.
+
+D24 se agrego despues de T05d (decision del responsable del 2026-11-23) y se copio en el gate T03c; su escenario de aceptacion es el 9 de la seccion 0 del plan.
+
+D24. **Aviso a distribucion de las COM del Formulario** (decision del responsable, 2026-11-23, despues de T05d; se
+implementa en T03c). Cuando una COM del Formulario queda registrada y por distribuir, SIGER avisa una sola vez a quienes
+pueden distribuirla (`Access.notifyDistributors`; hoy la funcion `DISTRIBUIDOR`, porque su ambito de origen es el
+receptor central), por la via de avisos que ya existe: "Mis avisos" y, con el correo Graph activo (D16), su correo por
+`MailOutbox`.
+   - Sin tocar la recepcion del Formulario (seccion 2): lo hace una tarea periodica aparte, como `TaskReminders` (cada
+     60 segundos, con el lock global), que busca las COM con origen en el Formulario que siguen por distribuir y aun no
+     tienen este aviso.
+   - Una sola vez por COM: nunca dos avisos de llegada para la misma COM, tampoco despues de un reinicio. Si en ese
+     momento nadie puede distribuir, el aviso no se pierde: sale cuando haya quien pueda y la COM siga por distribuir.
+     Una COM ya distribuida no se avisa.
+   - No cambia los otros avisos: la COM manual ya avisa al crearse (`IntakeCommands.java:65`); la SOL devuelta y la COM
+     rechazada como antecedente siguen igual.
+   - Texto sin datos de personas ni del relato: "Hay un ingreso del Formulario pendiente de distribucion." y, si la COM
+     trae `riesgo` afirmativo (la regla de D23: la pregunta "NNA en riesgo inminente" del Formulario), "Hay un ingreso
+     del Formulario con NNA en riesgo inminente, pendiente de distribucion."
+   - Preferentemente sin migracion. Si la marca de "ya avisado" exige una, sera V17 aditiva, justificada en el plan del
+     gate y aprobada en el GO.
+   - Graph: sin prueba real previa en TEST-SIGER (decision del responsable): el correo se activa en V4 segun D16 y, si
+     falla, se corrige en produccion.

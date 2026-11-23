@@ -29,7 +29,10 @@ import static cl.nexbyte.sigera.Db.*;
  */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,properties={
  "spring.datasource.url=jdbc:h2:mem:sigerainstitutionalreader;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
- "siger.seed-demo=true","siger.data=./target/test-datareader-${random.uuid}","siger.folio-prefix=COMA"})
+ "siger.seed-demo=true","siger.data=./target/test-datareader-${random.uuid}","siger.folio-prefix=COMA",
+ // Sin tareas programadas: el barrido compara las filas de todas las tablas y un aviso de DistributionNotices
+ // (D24) o de TaskReminders escrito entre las dos lecturas haria fallar la prueba al azar.
+ "siger.scheduling=false"})
 @ActiveProfiles("test")
 class InstitutionalReaderTest {
  @DynamicPropertySource static void trustedKeys(DynamicPropertyRegistry registry){FormularioDocs.trustedKeys(registry);}

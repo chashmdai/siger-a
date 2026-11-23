@@ -46,7 +46,7 @@ migraciones):
   institucional. Mientras rige, TI ve un aviso permanente. Al regir de nuevo libera los originales del Formulario que
   quedaron en cuarentena.
 
-Nuevo en 0.7.0 (decisiones D18-D23, "Precision 0.7.0"; migraciones V15 y V16, aditivas):
+Nuevo en 0.7.0 (decisiones D18-D24, "Precision 0.7.0"; migraciones V15 y V16, aditivas):
 
 - **Cobertura territorial de las sedes** (D18-D19): cada sede regional conserva su region fisica y puede atender otras
   regiones del catalogo (cobertura adicional); TI declara tambien las regiones que atiende el nivel central (por
@@ -69,6 +69,12 @@ Nuevo en 0.7.0 (decisiones D18-D23, "Precision 0.7.0"; migraciones V15 y V16, ad
   ("RM" para 13), color regional si la atiende una sede activa y marca roja con icono y texto si el Formulario informa
   riesgo actual (con respiracion lenta solo mientras esta por distribuir, sin animacion con movimiento reducido). Solo
   presentacion: no cambia filas, orden, filtros ni la distribucion manual.
+- **Aviso a distribucion de las COM del Formulario** (D24): una tarea periodica aparte de la recepcion (cada 60
+  segundos) avisa una sola vez por COM del Formulario por distribuir, que no haya pasado por una SOL ni por un vinculo, a
+  quienes pueden distribuirla: "Mis avisos" y, con el correo Graph activo, su correo. Texto fijo, sin datos de personas
+  ni del relato, con un texto propio si el Formulario informa riesgo (regla de D23). Si nadie puede distribuir, el aviso
+  sale cuando haya quien pueda (en produccion, cuando TI cree las cuentas de distribucion en V5). Las COM del Formulario
+  que ya esten por distribuir al instalar 0.7.0 se avisan en el primer ciclo, de a 100 por ciclo.
 
 ## Verificado en la VM
 
@@ -118,9 +124,6 @@ la validacion. Solo un consumidor por cola: al activar produccion, el de la vali
 
 Pendientes para 0.8.0 (cada uno toma un gate propio cuando se planifique):
 
-- **Aviso a distribucion cuando llega una COM del Formulario** (`notifyDistributors`; detalle en
-  `docs/BITACORA_0_6_0.md`): hoy no genera aviso ni correo; solo aparece en la bandeja ("Por distribuir"), con la marca
-  de D23.
 - **Mejoras del correo de avisos**, despues de que produccion este estable: folio en el texto, asunto segun el tipo de
   aviso y enlace directo a la ficha (solo con el id; sirve si los funcionarios acceden por red). El correo sigue sin
   antecedentes ni datos ciudadanos.

@@ -1,7 +1,7 @@
 # SIGER 0.7.0 - pruebas manuales
 
-Recorridos de la cobertura territorial de las sedes, la region de origen de la persona y la bandeja de comunicaciones
-(`docs/PLAN_0_7_0.md`, decisiones D18-D23 y escenarios 1-8). Sirven para el humo de T04 (instancia aislada con datos
+Recorridos de la cobertura territorial de las sedes, la region de origen de la persona, la bandeja de comunicaciones y
+el aviso a distribucion (`docs/PLAN_0_7_0.md`, decisiones D18-D24 y escenarios 1-9). Sirven para el humo de T04 (instancia aislada con datos
 sinteticos), el ensayo de T06b (instancia de ensayo con el paquete de T06a) y, si V4 usa 0.7.0, la revision posterior en
 produccion. Los scripts de 0.7.0 son identicos a los de 0.6.0: la instalacion, el servicio y el Formulario se prueban
 con `docs/PRUEBAS_MANUALES_0_6_0.md` y las ordenes de `docs/DESPLIEGUE_VM.md`; este documento no tiene ordenes propias.
@@ -105,3 +105,21 @@ Con COM del Formulario sinteticas (en el ensayo de T06b; en el humo de T04, simu
 3. Con "reducir movimiento" activado en el sistema operativo, la marca roja no se anima.
 4. La lista muestra las mismas filas, en el mismo orden y con los mismos conteos que sin la marca; los filtros no
    cambian. Una COM de atencion directa no lleva numero.
+
+## 8. Escenario 9: aviso a distribucion de las COM del Formulario
+
+Con COM del Formulario sinteticas (en el ensayo de T06b, recibidas con el correo desactivado), una sin `riesgo` y una
+con `riesgo` afirmativo, como Distribucion. El aviso lo genera una tarea que corre cada minuto: esperar hasta 2 minutos
+despues de la recepcion antes de anotar una falla.
+
+1. "Mis avisos" de cada cuenta de Distribucion: la COM sin riesgo trae "Hay un ingreso del Formulario pendiente de
+   distribucion."; la de riesgo, "Hay un ingreso del Formulario con NNA en riesgo inminente, pendiente de distribucion."
+   El texto no trae nombres, relato ni region. "Abrir con permisos actuales" abre la COM.
+2. Un solo aviso de llegada por COM y por cuenta: tras unos minutos, y despues de reiniciar el servicio, no aparece
+   otro.
+3. Una COM manual registrada en SIGER solo trae su aviso de siempre ("Hay un ingreso pendiente de clasificacion."). Una
+   COM del Formulario distribuida antes de que corra la tarea no recibe el aviso de llegada.
+4. Las cuentas que no distribuyen (TI, Coordinacion regional, Reportes) no reciben este aviso.
+5. En produccion no se crean registros de prueba: el aviso de la primera entrega ciudadana se revisa en "Mis avisos" de
+   Distribucion despues de V5 (antes no hay cuentas de Distribucion y el aviso sale cuando existan). Con el correo Graph
+   activo (D16), cada cuenta de Distribucion con correo recibe ademas el mismo texto por correo.

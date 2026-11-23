@@ -56,6 +56,9 @@ sobre MySQL 8.4 con `MySqlSuite`).
 - `Bootstrap` / `TiRecovery` / `MigrationGuard`: semillas sinteticas o inicializacion institucional, rutinas de
   actualizacion con marcador, recuperacion auditada de TI en un proceso sin web y rechazo de migrar un esquema ajeno.
   `ServiceStop`: parada ordenada del servicio al aparecer `siger.stop-file`. `TaskReminders`: recordatorios programados.
+  `DistributionNotices` (0.7.0, D24): tarea programada aparte de la recepcion que avisa una sola vez a distribucion
+  (`Access.notifyDistributors`, con su correo por `MailOutbox` si Graph esta activo) cada COM del Formulario por
+  distribuir; la marca de "ya avisado" es el propio aviso, sin migracion.
 - `Api` / `ApiErrors` / `SecurityConfig` / `Input` / `Problem`: HTTP, sesion, CSRF, validacion de entrada y errores
   sin datos ciudadanos. Actor del servidor, nunca un rol enviado por el cliente. Texto de busqueda solo en cuerpos POST.
 
