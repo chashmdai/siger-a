@@ -304,11 +304,8 @@ public class Access {
      * manual no tiene region. Solo se entrega en fichas ya autorizadas; no decide ningun destino.
      */
     public String suggestedRegion(long com,String formRegion){
-        if(AdultIdentity.validRegion(formRegion))return formRegion;
-        var fields=db.rows("SELECT field_key,value_text FROM external_field WHERE communication_id=? AND field_group='CAMPO' AND field_key IN ('nna-region','adult-region')",com);
-        for(String key:List.of("nna-region","adult-region"))for(var f:fields)
-            if(key.equals(s(f,"field_key"))&&AdultIdentity.validRegion(s(f,"value_text")))return s(f,"value_text");
-        return null;
+        // Region vigente de D21 (regla unica en OriginRegion.current, la misma de OriginRegion.currentSql).
+        return OriginRegion.current(formRegion,db.rows(OriginRegion.FORM_FIELDS,com));
     }
     /** Aviso interno; con correo Graph activo, su correo se encola en la misma transaccion (MailOutbox). */
     public void notice(long user,String text,String kind,long id) {

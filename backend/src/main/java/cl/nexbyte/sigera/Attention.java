@@ -16,9 +16,10 @@ public class Attention {
     private final Documents documents;
     private final Lifecycle life;
     private final PersonIndex index;
+    private final OriginRegion regions;
     private final JsonMapper json=JsonMapper.builder().build();
-    public Attention(Db db,Access access,Documents documents,Lifecycle life,PersonIndex index){
-        this.db=db;this.access=access;this.documents=documents;this.life=life;this.index=index;
+    public Attention(Db db,Access access,Documents documents,Lifecycle life,PersonIndex index,OriginRegion regions){
+        this.db=db;this.access=access;this.documents=documents;this.life=life;this.index=index;this.regions=regions;
     }
     private long now(){return System.currentTimeMillis();}
     public boolean exists(long req){return db.count("SELECT COUNT(*) FROM attention_record WHERE requirement_id=?",req)>0;}
@@ -168,24 +169,28 @@ public class Attention {
         db.update("INSERT INTO attention_record(requirement_id,modality,data_json,followup_required,updated_by,updated_ms) VALUES(?,?,?,?,?,?)",req,s(data,"modality"),serialized,follow,a.id(),now());
         index.refresh(com);
         documents.attachIntake(a,scope,com,in.values().get("attachment_tokens"));
-        snapshot(a,req,0,"Primer registro con antecedentes disponibles",serialized);
+        snapshot(a,req,0,"Primer registro con antecedentes disponibles",serialized,data);
         db.audit(a.id(),"COM_REGISTRADA_ATENCION","COM",com,scope,"Atencion directa. REQ "+req);
         db.audit(a.id(),"ATENCION_INICIADA","REQ",req,principal,"COM "+com+". Sin SOL ni Caso automatico.");
         if(follow)access.notifyHeads(principal,"Una primera atencion requiere un Caso de seguimiento.","REQ",req);
         if(in.flag("resolve_now"))return resolve(a,req(req),in);
         return new Workflow.Result("REQ",req,"Atencion registrada. COM y REQ creados; puedes completar la ficha o entregarla.");
     }
-    private void snapshot(Actor a,long req,long revision,String reason,String data){
-        db.update("INSERT INTO attention_revision(requirement_id,requirement_revision,author_id,registered_ms,reason,data_json) VALUES(?,?,?,?,?,?)",req,revision,a.id(),now(),reason,data);
+    /** Version de la ficha con su region derivada de sus propios datos (V16, D21). */
+    private void snapshot(Actor a,long req,long revision,String reason,String data,Map<String,Object> form){
+        db.update("INSERT INTO attention_revision(requirement_id,requirement_revision,author_id,registered_ms,reason,data_json,region_code) VALUES(?,?,?,?,?,?,?)",req,revision,a.id(),now(),reason,data,OriginRegion.ofForm(form));
     }
     private Workflow.Result save(Actor a,Map<String,Object> r,Input in){
-        long id=n(r,"id");var data=normalize(in,decode(s(db.one("SELECT data_json FROM attention_record WHERE requirement_id=?",id),"data_json")));String reason=in.text("reason",2000,true),serialized=json.writeValueAsString(data);
+        long id=n(r,"id");var previous=decode(s(db.one("SELECT data_json FROM attention_record WHERE requirement_id=?",id),"data_json"));
+        var data=normalize(in,previous);String reason=in.text("reason",2000,true),serialized=json.writeValueAsString(data);
+        // D21: todo cambio de la region derivada respecto de la version anterior (completar, corregir o quitar), sin codigos.
+        boolean regionChanged=!Objects.equals(OriginRegion.ofForm(previous),OriginRegion.ofForm(data));
         boolean follow=s(data,"course").equals("SEGUIMIENTO");boolean was=b(db.one("SELECT followup_required FROM attention_record WHERE requirement_id=?",id),"followup_required");
         db.update("UPDATE attention_record SET modality=?,data_json=?,followup_required=?,updated_by=?,updated_ms=? WHERE requirement_id=?",s(data,"modality"),serialized,follow,a.id(),now(),id);
         index.refresh(n(r,"communication_id"));
         db.update("UPDATE requirement SET revision=revision+1 WHERE id=?",id);
-        snapshot(a,id,n(r,"revision")+1,reason,serialized);
-        db.audit(a.id(),"FICHA_COMPLEMENTADA","REQ",id,n(r,"principal_scope"),"Version "+(n(r,"revision")+1)+". "+reason);
+        snapshot(a,id,n(r,"revision")+1,reason,serialized,data);
+        db.audit(a.id(),"FICHA_COMPLEMENTADA","REQ",id,n(r,"principal_scope"),"Version "+(n(r,"revision")+1)+". "+(regionChanged?"Region de origen modificada. ":"")+reason);
         if(follow&&!was)access.notifyHeads(n(r,"principal_scope"),"Una primera atencion necesita asignacion de Caso.","REQ",id);
         return new Workflow.Result("REQ",id,"Ficha guardada con historial. El ingreso original permanece intacto.");
     }
@@ -249,6 +254,7 @@ public class Attention {
             out.put("origin",original);
             var form=decode(s(record,"data_json"));out.put("form",form);
             out.put("suggested_region",access.suggestedRegion(n(r,"communication_id"),form.get("region") instanceof String region?region:null));
+            out.put("origin_region",regions.ofRequirement(id)); // D21: registrada, vigente y si fue corregida (solo con la ficha legible).
             out.put("versions",db.rows("SELECT v.id,v.requirement_revision,v.author_id,v.registered_ms,v.reason,u.name AS author FROM attention_revision v JOIN staff u ON u.id=v.author_id WHERE v.requirement_id=? ORDER BY v.id DESC LIMIT 50",id));
             out.put("handoffs",db.rows("SELECT * FROM attention_handoff WHERE requirement_id=? ORDER BY id DESC LIMIT 50",id).stream().map(h->{var row=new LinkedHashMap<>(h);row.put("can_receive",receiving(a,h));row.put("can_withdraw",s(h,"state").equals("PENDIENTE")&&access.reqMain(a,r));return row;}).toList());
         }else out.put("handoffs",db.rows("SELECT h.id,h.state,h.sent_ms,h.target_scope,h.decided_ms FROM attention_handoff h WHERE requirement_id=? AND (sent_by=? OR from_user=?) ORDER BY id DESC LIMIT 50",id,a.id(),a.id()));

@@ -85,10 +85,13 @@ class MySql84UpgradeTest {
         try(var ctx=MySql84IntegrationTest.app(SCHEMA,List.of())){
             assertEquals(migrated,state(),"el arranque normal tras migrate-only no cambia nada");
             var db=ctx.getBean(Db.class);var access=ctx.getBean(Access.class);
-            assertEquals("15",ctx.getBean(Api.class).health().getBody().get("schema"));
-            for(int v=11;v<=14;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
-            for(String marker:List.of(Bootstrap.AUTHORITY_MARKER,Bootstrap.REGIONAL_HEAD_MARKER,PersonIndex.MARKER,Milestones.MARKER))
+            assertEquals("16",ctx.getBean(Api.class).health().getBody().get("schema"));
+            for(int v=11;v<=16;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
+            for(String marker:List.of(Bootstrap.AUTHORITY_MARKER,Bootstrap.REGIONAL_HEAD_MARKER,PersonIndex.MARKER,Milestones.MARKER,OriginRegion.MARKER))
                 assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",marker),marker);
+            // Region de cada version de la ficha (V16, D21): la GENERAL con region 13 y la NNA sin region.
+            assertEquals("13",s(db.one("SELECT region_code FROM attention_revision WHERE id=1"),"region_code"));
+            assertNull(db.one("SELECT region_code FROM attention_revision WHERE id=2").get("region_code"));
 
             // Supresion de AUTORIDAD: 14 revocadas (ninguna borrada) por la identidad tecnica, con su fundamento.
             long maintenance=n(db.one("SELECT id FROM staff WHERE username='sistema:actualizacion' AND technical=TRUE AND enabled=FALSE"),"id");
@@ -136,7 +139,7 @@ class MySql84UpgradeTest {
             long ugi=n(db.one("SELECT id FROM staff WHERE username='direccion.ugi'"),"id");
             db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,?,NULL,0,'PRUEBA DE ACTUALIZACION')",ugi,"REPORTES");
             var reports=ctx.getBean(Reports.class);
-            var total=reports.report(access.actor("direccion.ugi"),new Reports.Request("REQ_TOTAL","2026-11-01","2026-11-30",null,null,null,null,null,null,null,null,null,null,false,null));
+            var total=reports.report(access.actor("direccion.ugi"),new Reports.Request("REQ_TOTAL","2026-11-01","2026-11-30",null,null,null,null,null,null,null,null,null,null,false,null,null));
             var rows=(List<?>)total.get("rows");
             assertEquals(1,rows.size());
             var row=(Map<?,?>)rows.getFirst();

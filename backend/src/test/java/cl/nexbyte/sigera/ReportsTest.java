@@ -124,8 +124,8 @@ class ReportsTest {
         return dx;
     }
 
-    Reports.Request q(String report,String from,String to){return new Reports.Request(report,from,to,null,null,null,null,null,null,null,null,null,null,null,null);}
-    Reports.Request q(String report,String from,String to,String group){return new Reports.Request(report,from,to,null,null,null,null,null,null,null,null,null,group,null,null);}
+    Reports.Request q(String report,String from,String to){return new Reports.Request(report,from,to,null,null,null,null,null,null,null,null,null,null,null,null,null);}
+    Reports.Request q(String report,String from,String to,String group){return new Reports.Request(report,from,to,null,null,null,null,null,null,null,null,null,group,null,null,null);}
     Map<String,Object> report(String who,Reports.Request q){return reports.report(access.actor(who),q);}
     @SuppressWarnings("unchecked") static Map<String,Object> m(Object o){return (Map<String,Object>)o;}
     @SuppressWarnings("unchecked") static List<Map<String,Object>> rows(Map<String,Object> r){return (List<Map<String,Object>>)r.get("rows");}
@@ -168,15 +168,15 @@ class ReportsTest {
         assertEquals(Reports.CALENDAR_NOTE,m(r.get("calendar")).get("note"));
         assertEquals(List.of(),m(r.get("calendar")).get("missing_years"));
         // Sin separar por origen, un solo grupo con las 9; filtro por origen.
-        var all=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,null,false,null));
+        var all=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,null,false,null,null));
         assertEquals(List.of(),all.get("dimensions"));assertEquals(9,count(m(all.get("total"))));assertEquals(1,rows(all).size());
-        var onlyDirect=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,"ATENCION_DIRECTA",null,false,null));
+        var onlyDirect=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,"ATENCION_DIRECTA",null,false,null,null));
         stats(m(onlyDirect.get("total")),2,0,0,0,"hours");
         var byOrigin=report("rep.inst",q("REQ_TOTAL","2026-03-01","2026-03-31","ORIGEN"));
         assertEquals(List.of("ORIGEN"),byOrigin.get("dimensions"));
         assertEquals(7,count(row(byOrigin,"origin","SOL")));assertEquals(2,count(row(byOrigin,"origin","ATENCION_DIRECTA")));
         // Origen tambien filtra los demas tramos: el Caso nace de un REQ con SOL.
-        var gestion=report("rep.inst",new Reports.Request("GESTION_CASO","2026-05-01","2026-05-31",null,null,null,null,null,null,null,null,"ATENCION_DIRECTA",null,null,null));
+        var gestion=report("rep.inst",new Reports.Request("GESTION_CASO","2026-05-01","2026-05-31",null,null,null,null,null,null,null,null,"ATENCION_DIRECTA",null,null,null,null));
         assertEquals(0,count(m(gestion.get("total"))));
         // Un periodo sin feriados nacionales cargados lo advierte.
         var later=report("rep.inst",q("REQ_TOTAL","2025-12-01","2026-03-31"));
@@ -186,24 +186,24 @@ class ReportsTest {
 
     @Test @Order(3) void cruceAmbitoPorMateriaYAlcance(){
         data();
-        var cross=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,"AMBITO_MATERIA",false,null));
+        var cross=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,"AMBITO_MATERIA",false,null,null));
         assertEquals(List.of("AMBITO","MATERIA"),cross.get("dimensions"));
         var keys=rows(cross).stream().map(x->m(x.get("group")).get("scope_code")+"/"+m(x.get("group")).get("matter")+"="+x.get("n")).sorted().toList();
         assertEquals(List.of("REG-DEMO/UPD=1","REG-DEMO/UPR=1","UPR-REQ/null=7"),keys);
         // Raiz de UPD: sus ambitos centrales (sin REQ) mas su materia en sedes.
-        var upd=report("rep.upd",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,"AMBITO_MATERIA",false,null));
+        var upd=report("rep.upd",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,"AMBITO_MATERIA",false,null,null));
         assertEquals(List.of("REG-DEMO/UPD"),rows(upd).stream().map(x->m(x.get("group")).get("scope_code")+"/"+m(x.get("group")).get("matter")).toList());
         // Raiz de UPR: UPR-REQ (ambito central de la unidad) y la materia UPR en la sede.
-        var upr=report("rep.upr",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,"AMBITO_MATERIA",false,null));
+        var upr=report("rep.upr",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,"AMBITO_MATERIA",false,null,null));
         assertEquals(List.of("REG-DEMO/UPR=1","UPR-REQ/null=7"),rows(upr).stream().map(x->m(x.get("group")).get("scope_code")+"/"+m(x.get("group")).get("matter")+"="+x.get("n")).sorted().toList());
         // Area: solo ese ambito. Sede: solo la sede, con sus dos materias.
         assertEquals(7,count(m(report("rep.area",q("REQ_TOTAL","2026-03-01","2026-03-31")).get("total"))));
-        var site=report("rep.sede",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,"MATERIA",false,null));
+        var site=report("rep.sede",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,"MATERIA",false,null,null));
         assertEquals(1,count(row(site,"matter","UPD")));assertEquals(1,count(row(site,"matter","UPR")));
         // Un filtro solo acota dentro del alcance: el area pidiendo la sede no recibe nada.
-        var outside=report("rep.area",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,scope("REG-DEMO"),null,null,null,null,null,null,null,null,null,null));
+        var outside=report("rep.area",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,scope("REG-DEMO"),null,null,null,null,null,null,null,null,null,null,null));
         assertEquals(0,count(m(outside.get("total"))));
-        var matterFilter=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,"REGIONAL",null,null,"UPD",null,null,null,false,null));
+        var matterFilter=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,"REGIONAL",null,null,"UPD",null,null,null,false,null,null));
         assertEquals(1,count(m(matterFilter.get("total"))));
     }
 
@@ -250,7 +250,7 @@ class ReportsTest {
         long req=n(db.one("SELECT requirement_id FROM milestone WHERE event='REQ_CERRADO' AND at_ms=? ORDER BY id LIMIT 1",at(3,2,9)+(long)(10*H)),"requirement_id");
         db.update("UPDATE milestone SET reconstructed=TRUE WHERE requirement_id=? AND event='REQ_CREADO'",req);
         try{
-            var r=report("rep.area",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,null,false,null));
+            var r=report("rep.area",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,null,false,null,null));
             assertEquals(1L,((Number)m(r.get("total")).get("reconstructed")).longValue());
         }finally{db.update("UPDATE milestone SET reconstructed=FALSE WHERE requirement_id=?",req);}
         // Volumen del ultimo anio (fechas de registro reales): COM por ingreso, REQ por origen y REQ regionales sin materia.
@@ -290,7 +290,7 @@ class ReportsTest {
         try{
             var e=assertThrows(Problem.class,()->report("rep.inst",q("REQ_TOTAL","2026-03-01","2026-03-31")));
             assertEquals(409,e.status);assertTrue(e.getMessage().contains("acota el periodo o el ámbito"),e.getMessage());
-            var narrow=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,scope("REG-DEMO"),null,null,null,null,null,null,null,null,null,null));
+            var narrow=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,scope("REG-DEMO"),null,null,null,null,null,null,null,null,null,null,null));
             assertEquals(2,count(m(narrow.get("total"))));
         }finally{reports.limit=Reports.LIMIT;}
         // Entradas invalidas: 400.
@@ -302,7 +302,7 @@ class ReportsTest {
     @Test @Order(8) void auditoriaSinValoresDeFiltros(){
         data();
         long before=db.count("SELECT COUNT(*) FROM audit_event WHERE action='REPORTE'");
-        report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31","UPR",scope("UPR-REQ"),null,null,"BAJA","TELEFONO","UPR",null,"SOL","AMBITO",null,null));
+        report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31","UPR",scope("UPR-REQ"),null,null,"BAJA","TELEFONO","UPR",null,"SOL","AMBITO",null,null,null));
         assertEquals(before+1,db.count("SELECT COUNT(*) FROM audit_event WHERE action='REPORTE'"));
         var e=db.one("SELECT * FROM audit_event WHERE action='REPORTE' ORDER BY id DESC LIMIT 1");
         String note=s(e,"note").isEmpty()?e.values().toString():s(e,"note");
@@ -351,7 +351,7 @@ class ReportsTest {
             assertFalse(Reports.canReport(access.actor("rep.sede")));
             assertEquals(403,assertThrows(Problem.class,()->report("rep.sede",q("REQ_TOTAL","2026-03-01","2026-03-31"))).status);
             // ...pero sus registros historicos siguen en los reportes de institucion y de materia.
-            var inst=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,"AMBITO",false,null));
+            var inst=report("rep.inst",new Reports.Request("REQ_TOTAL","2026-03-01","2026-03-31",null,null,null,null,null,null,null,null,null,"AMBITO",false,null,null));
             assertEquals(2,count(row(inst,"scope_code","REG-DEMO")));
             var upd=report("rep.upd",q("REQ_TOTAL","2026-03-01","2026-03-31","AMBITO_MATERIA"));
             assertEquals(1,count(m(upd.get("total"))));
@@ -407,7 +407,7 @@ class ReportsTest {
         assertEquals("30",row.get("h_req_total"));assertEquals("1",row.get("dh_req_total"));assertEquals("0",row.get("casos"));assertEquals("",row.get("h_primer_caso"));
         assertTrue(row.get("creado").matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")&&row.get("cerrado").matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"),row.toString());
         var regional=line(csv,folio("requirement",d.regionalOpen()));
-        assertEquals("REG-DEMO",regional.get("ambito"));assertEquals("REGIONAL",regional.get("nivel"));assertEquals("05",regional.get("region"));
+        assertEquals("REG-DEMO",regional.get("ambito"));assertEquals("REGIONAL",regional.get("nivel"));assertEquals("05",regional.get("region_sede"));assertEquals("",regional.get("region_registrada"));assertEquals("",regional.get("region_vigente"));
         assertEquals("ABIERTO",regional.get("estado"));assertEquals("",regional.get("cerrado"));assertEquals("",regional.get("h_req_total"));
         var withCase=line(csv,folio("requirement",d.tenureReq()));
         assertEquals("1",withCase.get("casos"));
@@ -443,7 +443,7 @@ class ReportsTest {
         try{
             var e=assertThrows(Problem.class,()->reports.export(access.actor("rep.exp"),"REQ",q(null,null,null)));
             assertEquals(409,e.status);assertTrue(e.getMessage().contains("acota el periodo o el ámbito"),e.getMessage());
-            var narrow=reports.export(access.actor("rep.exp"),"REQ",new Reports.Request(null,null,null,null,scope("REG-DEMO"),null,null,null,null,"UPD",null,null,null,null,null));
+            var narrow=reports.export(access.actor("rep.exp"),"REQ",new Reports.Request(null,null,null,null,scope("REG-DEMO"),null,null,null,null,"UPD",null,null,null,null,null,null));
             assertEquals(1,narrow.rows());
         }finally{reports.limit=Reports.LIMIT;}
         // Auditoria: tipo, cantidad y solo los nombres de los filtros.
