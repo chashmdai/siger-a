@@ -19,7 +19,7 @@ no se inspecciona ni modifica SMR ni otros volumenes (D15).
 3. **MySQL 8.4 Community ZIP** ya extraido en `D:\Herramientas\mysql-8.4` (lo usa la validacion y lo usara produccion).
 4. **`estructura-inicial.json` real de produccion** (decision abierta antes de V4): ambitos, la persona TI y los funcionarios con sus funciones (plantilla y reglas en `config-ejemplo\`). Toda sede regional lleva `"region"` (codigo del Formulario) o `Init-Server.ps1` la rechaza: el `D:\Entregas\estructura-inicial.json` de la validacion es de 0.4.0, no la trae y solo sirve de base. Debe contener el ambito que recibe las Comunicaciones del Formulario (el `scope` de `config\formulario-pull.json` de la validacion, por ejemplo `UPR-REQ`).
 5. **Graph (opcional, D16)**: Tenant ID, Client ID y valor vigente del secreto de SIGER-Notificaciones (permiso `Mail.Send` limitado a `siger@defensorianinez.cl`), entregados de forma privada para escribirlos en la consola de `Import-GraphCredential.ps1`; el destinatario fijo de la prueba de envio (decision abierta); salida desde la VM a `login.microsoftonline.com:443` y `graph.microsoft.com:443` (no verificada en la VM).
-6. **Acceso de funcionarios** (decision abierta antes de V4): solo RDP a la VM, o regla de firewall entrante al puerto 18543 limitada a sus direcciones (decide `-AccesoRed`) y, de preferencia, certificado HTTPS institucional (PFX) para el nombre de la VM.
+6. **Acceso de funcionarios** (decidido el 2026-11-22: produccion **con acceso por red**, `-AccesoRed`, como ya se usa la validacion): regla de firewall entrante al puerto 18543 limitada a sus direcciones (en la VM ya existe "SIGER-A Validacion HTTPS - Red DDN": TCP 18543, perfil Dominio, origen 192.168.100.0/24) y, cuando exista, certificado HTTPS institucional (PFX) para el nombre de la VM; se parte con el autofirmado de `Init-Server.ps1`.
 7. **Motor antivirus** (decision abierta): produccion parte sin motor; mientras tanto los originales del Formulario se
    liberan por el modo de emergencia D17 (ver V4 y la seccion 4).
 
@@ -368,7 +368,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA
 
 Como la cuenta de servicio, inicializar produccion con el paquete 0.6.0, sin `-MismoReleaseQue` (la validacion sigue en
 0.4.0; esa garantia la reemplaza el ensayo de H06e) y con los mismos puertos (libres desde V2). La estructura real se
-copia antes a `D:\Entregas\estructura-inicial-produccion.json`. Con acceso de funcionarios por red (firewall de TI):
+copia antes a `D:\Entregas\estructura-inicial-produccion.json`. Con acceso de funcionarios por red (firewall de TI;
+**es la opcion decidida** el 2026-11-22):
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA\scripts\Init-Server.ps1' -Mode Institucional -Proposito Produccion -EstructuraInicial 'D:\Entregas\estructura-inicial-produccion.json' -Root 'D:\SIGER' -Release 'D:\Entregas\SIGER-FECHA' -MySqlHome 'D:\Herramientas\mysql-8.4' -MySqlPort 13326 -WebPort 18543 -AccesoRed
@@ -492,6 +493,21 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Estado
 
 `Estado.ps1` debe mostrar el Formulario en `ESPERANDO_ENTREGAS`. Toda entrega queda registrada, custodiada y confirmada
 por ACK; ninguna se descarta.
+
+Prueba final del acceso por red (produccion con `-AccesoRed`). Como administrador, comprobar que SIGER escucha en todas
+las interfaces y el MySQL propio solo en loopback: el puerto 18543 aparece en `::` o `0.0.0.0` (Java en Windows abre un
+socket de doble pila: `::` tambien atiende IPv4; ensayo de H06e) y el 13326 solo en `127.0.0.1`:
+
+```powershell
+Get-NetTCPConnection -LocalPort 18543,13326 -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess
+```
+
+Luego, desde un PC de funcionarios de la red 192.168.100.0/24, abrir `https://<nombre o IP de la VM>:18543` (con el
+autofirmado el navegador advierte que no es de confianza y que el nombre no coincide: seccion 4). Debe mostrar el ingreso
+de SIGER. Si no responde: revisar la regla de firewall de Windows del puerto 18543 (la de la validacion sirve, porque el
+puerto es el mismo) y, si existe, el firewall por aplicacion de Kaspersky, que puede exigir una regla para el Java de
+produccion, `D:\SIGER\releases\<release>\runtime\java25\bin\java.exe` (la ruta exacta es el proceso dueno del puerto
+18543). No se cambian reglas sin TI; el resultado se anota y se informa al responsable.
 
 Graph (opcional, D16: produccion puede partir con el correo desactivado). Como la cuenta de servicio, instalar la
 credencial (pide Tenant ID, Client ID y el secreto por consola; deja el correo DESACTIVADO; no copia nada de la

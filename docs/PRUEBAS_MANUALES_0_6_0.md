@@ -82,6 +82,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA
 9. `Invoke-FormularioPull.ps1 -SoloComprobar` acredita la sonda sin reclamar ni confirmar nada (ninguna COM nueva).
 10. `Set-Integration.ps1 -Formulario Automatico -SmrDetenidoConfirmado`, reinicio y `Estado.ps1`: Formulario en
     `ESPERANDO_ENTREGAS`.
+11. Acceso por red (`-AccesoRed`, decidido el 2026-11-22): 18543 escucha en `::` o `0.0.0.0` y 13326 solo en
+    `127.0.0.1`; desde un PC de 192.168.100.0/24, `https://<nombre o IP de la VM>:18543` muestra el ingreso. Si no
+    responde, anotar y revisar con TI el firewall de Windows y el de Kaspersky (prueba final de V4 en la guia).
 
 ## 4. Modo de emergencia D17 (liberacion por analisis en origen, sin fecha de termino)
 
