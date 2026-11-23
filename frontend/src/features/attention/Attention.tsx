@@ -26,6 +26,7 @@ import {OriginalUpload} from './OriginalUpload';
 import {Preview} from './Preview';
 import {adultProblems, upgrade} from './adult/adultForm.ts';
 import {orderedRegions} from './adult/catalog.ts';
+import {correctedOrigin} from '../../lib/regions';
 
 type Pending = {type: string; id: number | null; revision: number | null; data: Row; key: string};
 
@@ -161,6 +162,8 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
   const locked = busy || uncertain;
   const motiveReady = String(form.motive).trim() !== '';
   const next = NEXT_STEP[text(info, 'state')];
+  // D21: la region registrada se muestra solo si una version posterior la corrigio (el servidor lo decide).
+  const originFix = correctedOrigin(obj(info, 'origin_region'), list(ctx.catalog, 'regions').map(r => ({code: text(r, 'code'), name: text(r, 'name')})));
 
   return <section className={'attention' + (isNew ? ' attention-new' : '')}>
     {isNew && <PageHeader eyebrow={<><Icon name="heart" size={14}/>Atención ciudadana</>} title="Nueva atención"
@@ -178,6 +181,7 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
         <div><dt>A cargo de</dt><dd>{nameOf(ctx.catalog, row?.attention_user)}</dd></div>
         <div><dt>Ámbito de atención</dt><dd>{scopeOf(ctx.catalog, row?.attention_scope)}</dd></div>
         <div><dt>Jefatura principal</dt><dd>{scopeOf(ctx.catalog, row?.principal_scope)}</dd></div>
+        {originFix && <div><dt>Región de origen registrada</dt><dd>{originFix.registered}<small className="structure-sub muted">Vigente en la ficha: {originFix.current}. Los reportes usan la registrada.</small></dd></div>}
       </dl>
       {next && <Callout tone={next[0]} title={next[1]}>{next[2]}</Callout>}
       <div className="actions">

@@ -27,7 +27,8 @@ export const REPORT_HELP: Record<string, string> = {
   ANTIGUEDAD: 'REQ y Casos abiertos hoy, por días hábiles desde su creación.',
 };
 
-export const GROUPS = ['NINGUNA', 'UNIDAD', 'AMBITO', 'REGION', 'MATERIA', 'ORIGEN', 'AMBITO_MATERIA', 'SALIDA', 'PERSONA'];
+/** REGION = nivel y region de la sede responsable; REGION_ORIGEN = region de origen registrada de la persona (D21). */
+export const GROUPS = ['NINGUNA', 'UNIDAD', 'AMBITO', 'REGION', 'REGION_ORIGEN', 'MATERIA', 'ORIGEN', 'AMBITO_MATERIA', 'SALIDA', 'PERSONA'];
 /** Tramos con mas de una salida posible: solo en ellos tiene sentido agrupar o separar por salida. */
 export const EXITS = ['TENENCIA_SOL', 'REVISION_CIERRE'];
 
@@ -47,10 +48,13 @@ export const defaultSplit = (code: string) => ({byOrigin: code === 'REQ_TOTAL', 
 
 export type Filters = {
   report: string; from: string; to: string; group: string; byOrigin: boolean; byExit: boolean;
-  unit: string; scope: string; region: string; level: string; complexity: string; channel: string; matter: string; modality: string; origin: string;
+  unit: string; scope: string; region: string; origin_region: string; level: string; complexity: string; channel: string; matter: string; modality: string; origin: string;
 };
-/** Filtros de contenido (no el reporte, el periodo ni la agrupacion): los usa tambien la exportacion. */
-export const FILTER_KEYS = ['unit', 'level', 'region', 'scope', 'complexity', 'channel', 'matter', 'modality', 'origin'] as const;
+/**
+ * Filtros de contenido (no el reporte, el periodo ni la agrupacion): los usa tambien la exportacion. region = region de
+ * la sede; origin_region = region de origen registrada (codigo o SIN = sin region declarada).
+ */
+export const FILTER_KEYS = ['unit', 'level', 'region', 'origin_region', 'scope', 'complexity', 'channel', 'matter', 'modality', 'origin'] as const;
 export const activeFilters = (f: Filters) => FILTER_KEYS.filter(k => f[k] !== '').length;
 export const clearFilters = (f: Filters): Filters => ({...f, ...Object.fromEntries(FILTER_KEYS.map(k => [k, '']))});
 
@@ -64,7 +68,7 @@ export function defaultPeriod(today: string) {
 }
 export function initialFilters(today: string): Filters {
   return {report: 'VOLUMEN', ...defaultPeriod(today), group: 'NINGUNA', byOrigin: false, byExit: false,
-    unit: '', scope: '', region: '', level: '', complexity: '', channel: '', matter: '', modality: '', origin: ''};
+    unit: '', scope: '', region: '', origin_region: '', level: '', complexity: '', channel: '', matter: '', modality: '', origin: ''};
 }
 
 /** Cuerpo de POST /api/reports: sin los filtros vacios; la separacion solo en los tiempos. */
@@ -106,6 +110,7 @@ export function groupParts(dimensions: string[], group: Record<string, unknown>,
       case 'UNIDAD': return {dimension: d, label: String(group.unit ?? '') || 'Sin unidad'};
       case 'AMBITO': return {dimension: d, label: String(group.scope_code ?? '') + (group.regional === true && group.region != null ? ' · ' + regionName(group.region) : '')};
       case 'REGION': return {dimension: d, label: group.level === 'REGIONAL' ? (group.region == null ? 'Sede sin región' : 'Región ' + regionName(group.region)) : 'Nivel central'};
+      case 'REGION_ORIGEN': return {dimension: d, label: group.origin_region == null ? NO_ORIGIN_REGION : regionName(group.origin_region)};
       case 'MATERIA': return {dimension: d, label: group.matter == null ? 'Sin materia' : MATTER_LABELS[String(group.matter)] ?? String(group.matter)};
       case 'ORIGEN': return {dimension: d, label: humanize(group.origin, ORIGIN_LABELS)};
       case 'SALIDA': return {dimension: d, label: humanize(group.exit, EXIT_LABELS)};
@@ -113,6 +118,19 @@ export function groupParts(dimensions: string[], group: Record<string, unknown>,
       default: return {dimension: d, label: String(group[d.toLowerCase()] ?? '')};
     }
   });
+}
+
+/** Region de origen ausente (COM manual, ficha sin region o Formulario sin region valida). */
+export const NO_ORIGIN_REGION = 'Sin región declarada';
+
+/**
+ * Registros con la region de origen corregida (D21): se cuentan por la region registrada. Solo si hay alguno (vacio
+ * con 0); noun = [singular, plural] de lo que se cuenta.
+ */
+export function correctedNote(value: unknown, noun: [string, string]) {
+  const n = Number(value ?? 0);
+  if (!(n > 0)) return '';
+  return `${count(n)} ${n === 1 ? noun[0] : noun[1]} con la región de origen corregida: ${n === 1 ? 'se cuenta' : 'se cuentan'} por la región registrada.`;
 }
 
 /** Rotulo de un conteo del volumen; nulo = "Sin ..." segun lo que se cuenta. */

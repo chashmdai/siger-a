@@ -37,7 +37,7 @@ export const REPORT_LABELS: Record<string, string> = {
   PRIMERA_ATENCION: 'Primera atención', FLUJOS: 'Colaboraciones y traslados', ANTIGUEDAD: 'Antigüedad de abiertos',
 };
 export const REPORT_GROUP_LABELS: Record<string, string> = {
-  NINGUNA: 'Sin agrupar', UNIDAD: 'Unidad', AMBITO: 'Ámbito o sede', REGION: 'Nivel y región', MATERIA: 'Materia', ORIGEN: 'Origen',
+  NINGUNA: 'Sin agrupar', UNIDAD: 'Unidad', AMBITO: 'Ámbito o sede', REGION: 'Nivel y región de la sede', REGION_ORIGEN: 'Región de origen', MATERIA: 'Materia', ORIGEN: 'Origen',
   AMBITO_MATERIA: 'Ámbito y materia', SALIDA: 'Salida', PERSONA: 'Funcionario',
 };
 export const ORIGIN_LABELS: Record<string, string> = {SOL: 'Por SOL', ATENCION_DIRECTA: 'Atención directa'};

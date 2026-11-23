@@ -411,6 +411,17 @@ dialog.modal.profile-modal { --modal-width: 980px; }
 .structure-actions .actions { flex-wrap: wrap; }
 .structure-actions small { font-size: .8rem; }
 .structure-blockers { color: var(--warn-ink); }
+/* Cobertura territorial (0.7.0, T03): nivel central, historia de periodos y efecto antes de confirmar */
+.structure-coverage { display: grid; gap: .45rem; justify-items: start; margin: 0 0 .75rem; }
+.structure-coverage p { margin: 0; }
+.structure-history { margin-top: .35rem; font-size: .8rem; }
+.structure-history > summary { cursor: pointer; color: var(--ink-600); min-height: 24px; }
+.structure-history ul { margin: .35rem 0 0; padding-left: 1rem; display: grid; gap: .4rem; max-width: 26rem; }
+.checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .15rem 1rem; }
+.checklist label.check { margin: 0; min-height: 32px; align-items: center; }
+.action-review { display: grid; gap: .6rem; margin: .5rem 0 1rem; padding: .9rem 1rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-2); }
+.action-review-title { margin: 0; font-size: .95rem; }
+.territorial-effect { margin: 0; padding-left: 1.1rem; display: grid; gap: .35rem; }
 
 /* Buscador de personas y folios (G08b): campo unico, interpretacion, persona, filtros y cadena por resultado. */
 .search-field { display: grid; gap: .35rem; margin: 0 0 1rem; max-width: 760px; }

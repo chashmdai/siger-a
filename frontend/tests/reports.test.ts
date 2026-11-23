@@ -2,8 +2,9 @@
 // ofrecidas, formato con coma decimal, barras, rotulos de grupos y nombre del archivo. node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {activeFilters, barWidth, chileToday, clearFilters, count, days, defaultPeriod, defaultSplit, exportBody, filenameOf, groupParts, groupsFor, hours,
-  initialFilters, keepGroup, requestBody, tallyLabel} from '../src/features/reports/reportsModel.ts';
+import {activeFilters, barWidth, chileToday, clearFilters, correctedNote, count, days, defaultPeriod, defaultSplit, exportBody, filenameOf, groupParts, groupsFor, hours,
+  initialFilters, keepGroup, NO_ORIGIN_REGION, requestBody, tallyLabel} from '../src/features/reports/reportsModel.ts';
+import {REPORT_GROUP_LABELS} from '../src/lib/labels.ts';
 
 const VOLUME = {code: 'VOLUMEN', kind: 'VOLUMEN' as const}, AGE = {code: 'ANTIGUEDAD', kind: 'ANTIGUEDAD' as const};
 const TENURE = {code: 'TENENCIA_SOL', kind: 'TIEMPO' as const}, TOTAL = {code: 'REQ_TOTAL', kind: 'TIEMPO' as const};
@@ -69,4 +70,29 @@ test('nombre del archivo: el del servidor si es seguro; si no, uno neutro', () =
   assert.equal(filenameOf('attachment; filename="siger-req-2026-01-01-2026-12-31.csv"', 'x.csv'), 'siger-req-2026-01-01-2026-12-31.csv');
   assert.equal(filenameOf(null, 'siger-cas.csv'), 'siger-cas.csv');
   assert.equal(filenameOf('attachment; filename="../../a b.csv"', 'siger-cas.csv'), 'siger-cas.csv');
+});
+
+// --- Region de origen (0.7.0, D21; gate T03) ------------------------------------------------------------------------
+test('región de origen: filtro en la consulta y la exportación, agrupación ofrecida y rótulos', () => {
+  const f = {...initialFilters('2026-11-21'), report: 'REQ_TOTAL', group: 'REGION_ORIGEN', region: '04', origin_region: '03'};
+  assert.equal(f.origin_region, '03');
+  assert.equal(initialFilters('2026-11-21').origin_region, '', 'sin filtro por defecto');
+  assert.deepEqual(requestBody(f, TOTAL), {report: 'REQ_TOTAL', from: '2025-11-22', to: '2026-11-21', group: 'REGION_ORIGEN', by_origin: false, by_exit: false, region: '04', origin_region: '03'});
+  assert.deepEqual(exportBody({...f, origin_region: 'SIN'}), {from: '2025-11-22', to: '2026-11-21', region: '04', origin_region: 'SIN'});
+  assert.equal(activeFilters(f), 2);
+  assert.equal(clearFilters(f).origin_region, '');
+  for (const report of [TENURE, TOTAL, AGE]) assert.ok(groupsFor(report, false).includes('REGION_ORIGEN'), report.code);
+  assert.deepEqual(groupsFor(VOLUME, true), ['NINGUNA'], 'el volumen sigue sin agrupar');
+  assert.deepEqual(groupParts(['REGION_ORIGEN', 'REGION'], {origin_region: '15', level: 'REGIONAL', region: '05'}, REGIONS).map(p => p.label), ['Arica y Parinacota', 'Región Valparaíso']);
+  assert.equal(groupParts(['REGION_ORIGEN'], {origin_region: null}, REGIONS)[0].label, NO_ORIGIN_REGION);
+  assert.equal(NO_ORIGIN_REGION, 'Sin región declarada');
+  assert.equal(REPORT_GROUP_LABELS.REGION, 'Nivel y región de la sede');
+  assert.equal(REPORT_GROUP_LABELS.REGION_ORIGEN, 'Región de origen');
+});
+
+test('registros con la región corregida: solo si hay alguno, en singular o plural', () => {
+  assert.equal(correctedNote(0, ['tramo', 'tramos']), '');
+  assert.equal(correctedNote(undefined, ['tramo', 'tramos']), '');
+  assert.equal(correctedNote(1, ['REQ', 'REQ']), '1 REQ con la región de origen corregida: se cuenta por la región registrada.');
+  assert.equal(correctedNote(1234, ['Caso', 'Casos']), '1.234 Casos con la región de origen corregida: se cuentan por la región registrada.');
 });

@@ -2,7 +2,7 @@
 // state, region_code y receives (calculado en el servidor con Access.receiverOf). node --test, sin dependencias.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {complete, destinations, filterRegions, initialChoice, levels, NO_REGION, payloadFor, propose, receiver, withLevel, withRegion, withUnit} from '../src/lib/destination.ts';
+import {centralRegion, complete, coveringSite, destinations, filterRegions, initialChoice, levels, NO_REGION, payloadFor, propose, receiver, withLevel, withRegion, withUnit} from '../src/lib/destination.ts';
 import type {Operation} from '../src/lib/destination.ts';
 import {REGIONS} from '../src/features/attention/adult/catalog.ts';
 
@@ -114,4 +114,74 @@ test('datos de cada comando: materia solo en SOL hacia una sede; área solo en e
   // Cambiar de nivel o de unidad limpia lo elegido después.
   assert.deepEqual(withLevel('CENTRAL'), {level: 'CENTRAL', scope: null, area: null, region: '', matter: ''});
   assert.equal(withUnit(central, UPD.id).area, null);
+});
+
+// --- Cobertura territorial (0.7.0, D18 y D20; gate T03) -------------------------------------------------------------
+// Catalogo con scopes[].coverage (cobertura adicional vigente que publica el servidor) y central_coverage.
+const covering = (code: string, region: string, coverage: string[], name: string, state = 'ACTIVA') => ({...site(code, region, state, name), coverage});
+const COQ = covering('REG-COQ', '04', ['03'], 'Sede Coquimbo'), OHI = covering('REG-OHI', '06', ['07'], "Sede O'Higgins");
+const BIO = covering('REG-BIO', '08', ['16'], 'Sede Biobío'), ARA = covering('REG-ARA', '09', ['14'], 'Sede La Araucanía');
+const territory = (scopes: Record<string, unknown>[], central: string[] = []) => ({...catalog, scopes: [UPR, UPD, UPR_REQ, ...scopes], central_coverage: central});
+
+test('escenarios 1-4: la sede aparece bajo su región física y, marcada, bajo la región que cubre, y se propone', () => {
+  const d = destinations(territory([COQ, OHI, BIO, ARA]), 'SOL');
+  assert.deepEqual(d.regions.map(r => r.code), ['03', '04', '06', '07', '16', '08', '09', '14'], 'de norte a sur, también las regiones cubiertas');
+  for (const [region, own, sede] of [['03', '04', COQ], ['07', '06', OHI], ['16', '08', BIO], ['14', '09', ARA]] as const) {
+    assert.deepEqual(d.regions.find(r => r.code === region)?.sites, [{id: sede.id, code: sede.code, name: sede.name, covering: true}], region);
+    assert.deepEqual(d.regions.find(r => r.code === own)?.sites, [{id: sede.id, code: sede.code, name: sede.name}], 'en su región física sin marca: ' + own);
+    assert.deepEqual(propose(d, region), {level: 'REGIONAL', region, scope: sede.id, area: null, matter: ''}, region);
+    assert.equal(centralRegion(d, region), undefined);
+  }
+  const atacama = withRegion(d, withLevel('REGIONAL'), '03');
+  assert.equal(atacama.scope, COQ.id);
+  assert.equal(coveringSite(d, atacama)?.code, 'REG-COQ');
+  assert.equal(coveringSite(d, withRegion(d, withLevel('REGIONAL'), '04')), undefined, 'en su región física no es cobertura');
+  assert.equal(receiver(d, atacama), 'Coordinación regional · Sede Coquimbo');
+  assert.deepEqual(payloadFor('SOL', atacama), {scope_id: COQ.id});
+  assert.deepEqual(filterRegions(d.regions, 'coquimbo').map(r => r.code), ['03', '04'], 'la búsqueda por sede encuentra también la región cubierta');
+  // Sin cobertura en el catalogo (servidor anterior o sede sin cobertura) la region cubierta no aparece.
+  assert.equal(propose(destinations(territory([site('REG-COQ', '04')]), 'SOL'), '03'), null);
+});
+
+test('escenario 5: sede propia que asume una región cubierta por otra', () => {
+  // Proyectada con dotacion: no recibe; la region sigue propuesta a la sede que la cubre.
+  const projected = destinations(territory([COQ, site('REG-ATA', '03', 'PROYECTADA', 'Sede Atacama')]), 'SOL');
+  assert.deepEqual(projected.regions.find(r => r.code === '03')?.sites.map(s => s.code), ['REG-COQ']);
+  assert.equal(propose(projected, '03')?.scope, COQ.id);
+  // Activada: dos sedes atienden 03 (la propia primero, la que cubre despues) y no hay preseleccion.
+  const ATA = site('REG-ATA', '03', 'ACTIVA', 'Sede Atacama');
+  const both = destinations(territory([COQ, ATA]), 'SOL');
+  assert.deepEqual(both.regions.find(r => r.code === '03')?.sites.map(s => [s.code, s.covering === true]), [['REG-ATA', false], ['REG-COQ', true]]);
+  assert.deepEqual(propose(both, '03'), {level: 'REGIONAL', region: '03', scope: null, area: null, matter: ''});
+  assert.equal(complete(withRegion(both, withLevel('REGIONAL'), '03')), false, 'hay que elegir la sede');
+  // TI retira 03 de la cobertura de Coquimbo: desde ahi se propone la sede propia.
+  const after = destinations(territory([{...COQ, coverage: []}, ATA]), 'SOL');
+  assert.equal(propose(after, '03')?.scope, ATA.id);
+  assert.deepEqual(after.regions.find(r => r.code === '04')?.sites.map(s => s.code), ['REG-COQ']);
+});
+
+test('sedes proyectadas y cerradas no aparecen por su cobertura; cada operación usa receives', () => {
+  const d = destinations(territory([covering('REG-P5', '05', ['02'], 'Sede proyectada', 'PROYECTADA'), covering('REG-C1', '01', ['02'], 'Sede cerrada', 'CERRADA')]), 'SOL');
+  assert.equal(d.regions.find(r => r.code === '02'), undefined);
+  assert.equal(propose(d, '02'), null);
+  for (const op of ALL as Operation[]) assert.equal(propose(destinations(territory([COQ]), op), '03')?.scope, COQ.id, op);
+});
+
+test('escenario 6: la región que atiende el nivel central parte en Nivel central con aviso y sin unidad propuesta', () => {
+  const d = destinations(territory([COQ], ['13']), 'SOL');
+  assert.deepEqual(d.centralRegions, [{code: '13', name: REGIONS['13']}]);
+  assert.equal(propose(d, '13'), null, 'no agrega destinos al selector');
+  assert.ok(!d.regions.some(r => r.code === '13'));
+  assert.deepEqual(centralRegion(d, '13'), {code: '13', name: REGIONS['13']});
+  assert.deepEqual(initialChoice(d, '13'), withLevel('CENTRAL'), 'sin unidad elegida');
+  assert.equal(centralRegion(d, '05'), undefined, 'una región que no atiende el nivel central no avisa');
+  assert.equal(centralRegion(d, null), undefined);
+  // Si una sede tambien atiende la region, rige la propuesta de sede y no hay aviso.
+  const shared = destinations(territory([COQ, covering('REG-V', '05', ['13'], 'Sede Valparaíso')], ['13']), 'SOL');
+  assert.equal(propose(shared, '13')?.scope, shared.regions.find(r => r.code === '13')?.sites[0].id);
+  assert.equal(centralRegion(shared, '13'), undefined);
+  // Sin destinos centrales para la operacion no hay aviso (el selector no puede partir en el nivel central).
+  assert.equal(centralRegion(destinations({...catalog, scopes: [COQ], central_coverage: ['13']}, 'SOL'), '13'), undefined);
+  // Catalogo sin central_coverage: sin aviso.
+  assert.equal(centralRegion(destinations(territory([COQ]), 'SOL'), '13'), undefined);
 });

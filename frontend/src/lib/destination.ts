@@ -4,6 +4,9 @@
  * entrega de primera atencion a jefatura (ENTREGA). Los destinos salen solo de catalog.scopes[].receives, que el
  * servidor calcula con la misma regla que valida cada comando (Access.receiverOf); aqui no se repite esa regla.
  * Dos pasos: nivel central -> unidad y area opcional; sede regional -> region (de norte a sur) y sede.
+ * Cobertura territorial (0.7.0, D18 y D20; gate T03): una sede aparece bajo su region fisica y, marcada (covering),
+ * bajo cada region de su cobertura adicional vigente (scopes[].coverage), despues de las sedes con esa region fisica.
+ * La cobertura del nivel central (central_coverage) no agrega destinos: solo avisa que el nivel central atiende la region.
  */
 import type {Row} from './rows.ts';
 import {list, number, text} from './rows.ts';
@@ -17,13 +20,17 @@ export const REGIONAL_MATTERS = ['UPR', 'UPD', 'UEP'];
 export const NO_REGION = '-';
 
 export type Place = {id: number; code: string; name: string};
+/** Sede bajo una region: covering = la atiende por cobertura adicional (no es su region fisica). */
+export type Site = Place & {covering?: true};
 /** Area de una unidad central. direct: el area recibe por si misma (hoy UPR-REQ, su Coordinadora). */
 export type Area = Place & {direct: boolean};
 /** Unidad central (su Direccion recibe) o, si standalone, un area receptora cuya unidad no recibe. */
 export type Unit = Place & {unit: string; label: string; areas: Area[]; standalone: boolean};
 /** Region del catalogo con sus sedes que reciben la operacion; NO_REGION agrupa las sedes sin region asignada. */
-export type Region = {code: string; name: string; sites: Place[]};
-export type Destinations = {operation: Operation; central: Unit[]; regions: Region[]};
+export type Region = {code: string; name: string; sites: Site[]};
+type Named = {code: string; name: string};
+/** centralRegions: regiones que atiende el nivel central (catalog.central_coverage), con su nombre, de norte a sur. */
+export type Destinations = {operation: Operation; central: Unit[]; regions: Region[]; centralRegions: Named[]};
 export type Level = 'CENTRAL' | 'REGIONAL';
 /** Eleccion en curso. scope = unidad (o area receptora suelta) o sede; area solo en el nivel central; matter solo en SOL a sede. */
 export type Choice = {level: Level; scope: number | null; area: number | null; region: string; matter: string};
@@ -31,6 +38,7 @@ export type Choice = {level: Level; scope: number | null; area: number | null; r
 const receives = (s: Row, op: Operation) => Array.isArray(s.receives) && (s.receives as unknown[]).includes(op);
 const place = (s: Row): Place => ({id: number(s, 'id'), code: text(s, 'code'), name: text(s, 'name')});
 const isRegional = (s: Row) => text(s, 'level') === 'REGIONAL' || s.regional === true;
+const coverageOf = (s: Row) => Array.isArray(s.coverage) ? (s.coverage as unknown[]).map(String) : [];
 
 export function destinations(catalog: Row, operation: Operation): Destinations {
   const all = list(catalog, 'scopes');
@@ -53,14 +61,22 @@ export function destinations(catalog: Row, operation: Operation): Destinations {
   const covered = new Set(units.flatMap(u => u.areas.map(a => a.id)));
   for (const s of central) if (text(s, 'area_code') && receives(s, operation) && !covered.has(number(s, 'id'))) units.push(unitOf(s, [], true));
 
+  // Solo reciben las sedes ACTIVA (receives), asi que una PROYECTADA o CERRADA no aparece tampoco por su cobertura.
   const sites = all.filter(s => isRegional(s) && receives(s, operation));
   const regions: Region[] = list(catalog, 'regions')
-    .map(r => ({code: text(r, 'code'), name: text(r, 'name'), sites: sites.filter(s => text(s, 'region_code') === text(r, 'code')).map(place)}))
+    .map(r => {
+      const code = text(r, 'code');
+      const own = sites.filter(s => text(s, 'region_code') === code).map(place);
+      const covering = sites.filter(s => text(s, 'region_code') !== code && coverageOf(s).includes(code)).map(s => ({...place(s), covering: true as const}));
+      return {code, name: text(r, 'name'), sites: [...own, ...covering]};
+    })
     .filter(r => r.sites.length > 0);
   const known = new Set(regions.map(r => r.code));
   const orphan = sites.filter(s => !known.has(text(s, 'region_code'))).map(place);
   if (orphan.length) regions.push({code: NO_REGION, name: 'Sede sin región asignada', sites: orphan});
-  return {operation, central: units, regions};
+  const centralCodes = Array.isArray(catalog.central_coverage) ? (catalog.central_coverage as unknown[]).map(String) : [];
+  const centralRegions = list(catalog, 'regions').filter(r => centralCodes.includes(text(r, 'code'))).map(r => ({code: text(r, 'code'), name: text(r, 'name')}));
+  return {operation, central: units, regions, centralRegions};
 }
 
 /** Regiones que coinciden con la busqueda (nombre de la region o de sus sedes, sin tildes, palabra por palabra). */
@@ -77,6 +93,23 @@ export function propose(d: Destinations, region: string | null | undefined): Cho
   const r = region ? regionOf(d, region) : undefined;
   if (!r || r.code === NO_REGION) return null;
   return {level: 'REGIONAL', region: r.code, scope: r.sites.length === 1 ? r.sites[0].id : null, area: null, matter: ''};
+}
+
+/**
+ * Region que atiende el nivel central (D18, D20), solo si no hay propuesta de sede (si una sede tambien la atiende,
+ * rige la propuesta de sede) y el nivel central recibe la operacion. No propone unidad: el selector parte en el nivel
+ * central (initialChoice) y lo indica con un aviso.
+ */
+export function centralRegion(d: Destinations, region: string | null | undefined): Named | undefined {
+  if (!region || propose(d, region) || !d.central.length) return undefined;
+  return d.centralRegions.find(r => r.code === region);
+}
+
+/** Sede elegida que atiende la region elegida por cobertura adicional (para explicarlo antes de confirmar). */
+export function coveringSite(d: Destinations, c: Choice): Site | undefined {
+  if (c.level !== 'REGIONAL' || c.scope == null) return undefined;
+  const site = regionOf(d, c.region)?.sites.find(s => s.id === c.scope);
+  return site?.covering ? site : undefined;
 }
 
 /** Eleccion inicial: la propuesta; si no, el nivel central (o el regional si no hay destinos centrales). */

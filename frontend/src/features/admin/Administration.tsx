@@ -17,7 +17,8 @@ import {grantOf, grantState} from './profile';
 const INTEGRATIONS: [string, string][] = [['FORMULARIO_PULL', 'Consumidor del Formulario Público'], ['CORREO_GRAPH', 'Correo institucional (Microsoft Graph)']];
 const WARNING_TITLES: Record<string, string> = {SIN_TI_PERMANENTE: 'Sin cuenta TI permanente', TI_INCOMPATIBLE: 'Cuentas con TI incompatible', HITOS_OMITIDOS: 'Hitos reconstruidos con omisiones',
   LIBERACION_ORIGEN_ACTIVA: 'Rige el modo de emergencia D17 (liberación por análisis en origen)', LIBERACION_ORIGEN_INVALIDA: 'Liberación por análisis en origen sin efecto',
-  LIBERACION_ORIGEN_CON_MOTOR: 'Liberación por análisis en origen con motor configurado'};
+  LIBERACION_ORIGEN_CON_MOTOR: 'Liberación por análisis en origen con motor configurado',
+  REGION_SIN_SEDE: 'Regiones sin una sede activa ni el nivel central que las atienda'};
 const MODE_LABELS: Record<string, string> = {DESACTIVADO: 'Desactivado', MANUAL: 'Ciclo manual', AUTOMATICO: 'Automático', GRAPH: 'Graph'};
 const GRANT_STATES: Record<string, string> = {VIGENTE: 'Vigente', PROGRAMADA: 'Programada', VENCIDA: 'Vencida', REVOCADA: 'Revocada'};
 
@@ -123,7 +124,7 @@ export default function Administration({ctx, auditOnly}: {ctx: Context; auditOnl
           {name: 'Acciones TI', render: r => ti ? accountActions(r) : <span className='muted'>Consulta</span>},
         ]}/>
       </Panel>
-      {ti && <Structure ctx={ctx} rows={list(data, 'structure')} users={list(data, 'users')} grants={list(data, 'grants')} openProfile={setProfile}/>}
+      {ti && <Structure ctx={ctx} rows={list(data, 'structure')} users={list(data, 'users')} grants={list(data, 'grants')} central={obj(data, 'central_coverage')} openProfile={setProfile}/>}
       {ti && <Panel title='Funciones otorgadas' icon='shield' count={list(data, 'grants').length} description='Vigentes, programadas e historia. Para cambiar las funciones de una cuenta usa su perfil; Revocar retira una sola concesión.'>
         <Table rows={list(data, 'grants')} columns={[
           {name: 'Persona', render: g => nameOf(ctx.catalog, g.user_id)},

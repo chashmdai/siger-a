@@ -10,8 +10,8 @@ import {Table} from '../../components/Table';
 import {Busy, Callout, EmptyState, ErrorMessage, PageHeader, Panel} from '../../components/Primitives';
 import {displayDay} from '../admin/calendarModel';
 import type {Filters, ReportDef} from './reportsModel';
-import {activeFilters, barWidth, chileToday, clearFilters, count, days, defaultSplit, EXITS, exportBody, filenameOf, groupParts, groupsFor, hours,
-  initialFilters, keepGroup, NOTE, REPORT_HELP, reportName, requestBody, tallyLabel} from './reportsModel';
+import {activeFilters, barWidth, chileToday, clearFilters, correctedNote, count, days, defaultSplit, EXITS, exportBody, filenameOf, groupParts, groupsFor, hours,
+  initialFilters, keepGroup, NO_ORIGIN_REGION, NOTE, REPORT_HELP, reportName, requestBody, tallyLabel} from './reportsModel';
 
 type Named = {code: string; name: string};
 const KIND_TITLES: Record<string, string> = {VOLUMEN: 'Volumen', TIEMPO: 'Tiempos', ANTIGUEDAD: 'Antigüedad'};
@@ -114,7 +114,8 @@ export default function Reports({ctx}: {ctx: Context}) {
             <div className="form-grid three">
               {select('Unidad', 'unit', units.map(u => ({value: u.code, label: u.code + ' · ' + u.name})), 'Todas')}
               {select('Nivel', 'level', ['CENTRAL', 'REGIONAL'].map(v => ({value: v, label: LEVEL_LABELS[v]})))}
-              {select('Región', 'region', regions.map(r => ({value: r.code, label: r.name})), 'Todas')}
+              {select('Región de la sede', 'region', regions.map(r => ({value: r.code, label: r.name})), 'Todas')}
+              {select('Región de origen', 'origin_region', [...regions.map(r => ({value: r.code, label: r.name})), {value: 'SIN', label: NO_ORIGIN_REGION}], 'Todas')}
               {select('Ámbito o sede', 'scope', scopeOptions)}
               {select('Complejidad', 'complexity', [...['BAJA', 'MEDIANA', 'ALTA'].map(v => ({value: v, label: COMPLEXITY_LABELS[v]})), {value: 'SIN', label: 'Sin clasificar'}], 'Todas')}
               {select('Canal', 'channel', Object.keys(CHANNEL_LABELS).map(v => ({value: v, label: CHANNEL_LABELS[v]})))}
@@ -123,6 +124,7 @@ export default function Reports({ctx}: {ctx: Context}) {
               {select('Origen del REQ', 'origin', Object.keys(ORIGIN_LABELS).map(v => ({value: v, label: ORIGIN_LABELS[v]})))}
             </div>
             <p className="field-help">La materia es la del REQ (o la sugerida de la SOL) y, en los tiempos de Casos, la del Caso. La modalidad solo existe en las primeras atenciones.</p>
+            <p className="field-help">La región de la sede es la del ámbito responsable (en el nivel central no hay). La región de origen es la que se registró de la persona (Formulario o primera atención): una corrección posterior no cambia las cifras.</p>
             {filtersOn > 0 && <button type="button" className="sm" onClick={() => setF(clearFilters)}><Icon name="close" size={16}/>Quitar filtros</button>}
           </div>
         </details>
@@ -133,7 +135,7 @@ export default function Reports({ctx}: {ctx: Context}) {
             <button type="button" disabled={exporting !== ''} onClick={() => void exportRows('CAS')}><Busy busy={exporting === 'CAS'} label="Generando…" idle={<><Icon name="download" size={18}/>Exportar Casos (CSV)</>}/></button>
           </>}
         </div>
-        {exporter && <p className="field-help">La exportación usa el período y los filtros (no la agrupación): una fila por REQ o Caso creado en el período, con folios, códigos, fechas y tiempos. No incluye nombres, RUN, relatos, motivos ni contactos. Separador punto y coma.</p>}
+        {exporter && <p className="field-help">La exportación usa el período y los filtros (no la agrupación): una fila por REQ o Caso creado en el período, con folios, códigos, fechas, tiempos y tres regiones (región de la sede, región de origen registrada y región de origen vigente). No incluye nombres, RUN, relatos, motivos ni contactos. Separador punto y coma.</p>}
         {exportError && <ErrorMessage>{exportError}</ErrorMessage>}
       </form>
     </Panel>
@@ -175,11 +177,12 @@ function Stats({stats, wait}: {stats: Row; wait?: boolean}) {
 
 function TimeResult({data, regions}: {data: Row; regions: Named[]}) {
   const total = data.total as Row, rows = list(data, 'rows'), dimensions = (data.dimensions as string[]) ?? [];
-  const wait = total.wait != null, rebuilt = number(total, 'reconstructed');
+  const wait = total.wait != null, rebuilt = number(total, 'reconstructed'), fixed = correctedNote(total.corrected, ['tramo', 'tramos']);
   const max = Math.max(0, ...rows.map(r => Number(((r.hours ?? {}) as Row).median ?? 0)));
   return <>
     <Panel title="Total" icon="clock"><Stats stats={total} wait={wait}/>
       {rebuilt > 0 && <p className="field-help">{count(rebuilt)} {rebuilt === 1 ? 'tramo fue reconstruido' : 'tramos fueron reconstruidos'} desde la historia anterior a 0.5.0.</p>}
+      {fixed && <p className="field-help">{fixed}</p>}
     </Panel>
     {dimensions.length > 0 && <Panel title="Por grupo" icon="layers" count={rows.length} flush>
       <Table rows={rows} empty="Sin tramos en el período y el alcance consultados." emptyIcon="chart" columns={[
@@ -191,6 +194,7 @@ function TimeResult({data, regions}: {data: Row; regions: Named[]}) {
         {name: 'Máximo', render: r => <span className="tabular nowrap">{hours(((r.hours ?? {}) as Row).max)} · {days(((r.business_days ?? {}) as Row).max)}</span>},
         ...(wait ? [{name: 'Espera (mediana)', render: (r: Row) => <span className="tabular nowrap">{hours(((((r.wait ?? {}) as Row).hours ?? {}) as Row).median)}</span>}] : []),
         {name: 'Reconstruidos', render: r => <span className="tabular">{count(r.reconstructed)}</span>},
+        ...(fixed ? [{name: 'Región de origen corregida', render: (r: Row) => <span className="tabular">{count(r.corrected)}</span>}] : []),
       ]}/>
     </Panel>}
     {number(total, 'n') === 0 && <EmptyState compact icon="chart" title="Sin tramos en el período">No hay tramos de este tiempo que terminen en el período, con tu alcance y los filtros elegidos.</EmptyState>}
@@ -229,6 +233,8 @@ function VolumeResult({data}: {data: Row}) {
       <div><dt>Requerimientos</dt><dd>{count(req.total)}<small>{count(req.with_case)} con Caso · {count(req.without_case)} sin Caso</small></dd></div>
       <div><dt>Casos</dt><dd>{count(cases.total)}</dd></div>
     </dl>
+    {[correctedNote(com.corrected, ['COM', 'COM']), correctedNote(req.corrected, ['REQ', 'REQ']), correctedNote(cases.corrected, ['Caso', 'Casos'])].filter(Boolean)
+      .map(note => <p key={note} className="field-help">{note}</p>)}
     {noMatter > 0 && <Callout tone="warn" title={noMatter === 1 ? '1 REQ regional sin materia' : count(noMatter) + ' REQ regionales sin materia'}>La Coordinación regional registra la materia con el botón Materia del REQ; sin ella no entra en la lectura nacional por materia.</Callout>}
     <Panel title="Comunicaciones" icon="mail">
       <div className="report-tallies">
@@ -258,7 +264,9 @@ function AgeResult({data, regions}: {data: Row; regions: Named[]}) {
   const dimensions = (data.dimensions as string[]) ?? [];
   const block = (title: string, icon: 'folder' | 'briefcase', part: Row) => {
     const totals = (part.brackets ?? {}) as Row, max = Math.max(0, ...BRACKETS.map(b => Number(totals[b] ?? 0)));
+    const fixed = correctedNote(part.corrected, icon === 'folder' ? ['REQ', 'REQ'] : ['Caso', 'Casos']);
     return <Panel title={title} icon={icon} count={number(part, 'n')}>
+      {fixed && <p className="field-help">{fixed}</p>}
       <div className="report-tally"><ul>
         {BRACKETS.map(b => <li key={b}><span className="report-tally-label">{b === '21+' ? 'Más de 20 días hábiles' : b + ' días hábiles'}</span><Bar value={totals[b]} max={max} label={count(totals[b])}/></li>)}
       </ul></div>

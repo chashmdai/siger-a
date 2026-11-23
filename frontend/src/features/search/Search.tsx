@@ -173,7 +173,7 @@ function Filters({reading, state, update, ctx}: {reading: Row; state: SearchStat
         {MATCH_ROLE_LABELS[role] ?? humanize(role)} <span className="panel-count">{Number(count)}</span>
       </button>)}
     </FilterRow>}
-    {orderedRegions.length > 0 && <FilterRow label="Región">
+    {orderedRegions.length > 0 && <FilterRow label="Región de la sede">
       <button type="button" aria-pressed={!state.region} onClick={() => set({region: undefined})}>Todas</button>
       {orderedRegions.map(code => <button type="button" key={code} aria-pressed={state.region === code} onClick={() => set({region: code})}>
         {regionName(code)} <span className="panel-count">{Number(regions[code])}</span>
