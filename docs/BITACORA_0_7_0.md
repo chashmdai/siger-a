@@ -20,7 +20,7 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 | T05c | Prueba local de instancias 0.6.0 y 0.7.0 | CERRADO |
 | T05d | Auditoria independiente: repeticion | CERRADO |
 | T05e | Auditoria independiente de T03c | CERRADO |
-| T06a | Build de entrega en Windows | ABIERTO |
+| T06a | Build de entrega en Windows | CERRADO |
 | T06b | Ensayo diferencial y etiqueta | ABIERTO |
 
 ## Decisiones del responsable
@@ -226,5 +226,19 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 - Hallazgos para gates siguientes: ninguno de esta auditoria. T06a puede comenzar: la ultima auditoria (T05e) queda CERRADO.
 - Pendientes: T06a -> Claude Code; despues T06b. `SOURCE_SHA256.txt` -> T06b.
 - Verificacion manual sugerida al usuario: no aplica.
+
+### T06a - Build de entrega en Windows   (CERRADO)
+- Fecha: 2026-11-23 (commit `gate T06a: build de entrega`, solo esta bitacora), en Windows (TEST-SIGER), clon `C:\sigera`; **base del paquete `c03be29`** (`gate T05e`). GO del responsable con: A) compilar en `C:\sigera` como H06a y H06d, con `git status --porcelain --ignored -- docs scripts deploy/config-ejemplo` vacio antes del build (lo estuvo) y `git status --porcelain` vacio despues (lo estuvo); B) sin tocar `CLAUDE.md`, `README.md` ni `ALCANCE_Y_PENDIENTES.md`; C) registrar la bitacora del paquete con T06a ABIERTO.
+- Hecho: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -IncludeJava` sin `-SkipChecks` (codigo de salida 0): JDK Temurin 25.0.5.1+2, Node v24.22.0 y npm 11.19.1 (`npm ci` acepto el lock sin cambiarlo), Maven 3.9.11. Sin cambios de codigo, scripts ni documentos.
+- **Paquete: `release\SIGER-20261123-133838.zip`, 167.860.504 bytes, SHA-256 `e09de63943b56446260d9cb80eb451a0ecc1272f1e8060fd9ce61dbd9b8e66f2`** (fuera de git, en `C:\sigera\release`). **JAR SHA-256 `8d53e9f041026560af40a55061e74f200056ca07c1a7551f4287bb15f2aca66d`** (`manifest.json`, recalculado igual). Es el ZIP que comprueba `certutil` en V4 de `DESPLIEGUE_VM.md` con 0.7.0 y el que usa T06b. Los ZIP anteriores siguen intactos (`SIGER-20261122-201515.zip` `08a526e2...cb787`, 0.6.0; `SIGER-20261121-234618.zip` `c8d38ace...7de9c`, DESCARTADO).
+- Revision del paquete: `manifest.json` con `version` 0.7.0, `schema` 16, `automatedTestsExecuted` true, Java 25.0.5.1 y Node v24.22.0; `SHA256SUMS.txt` 513 lineas, todas verificadas e igual a la lista de archivos; ZIP con las mismas 514 entradas que la carpeta. `scripts\` (44): SHA-256 iguales, uno a uno, a los del `SHA256SUMS.txt` del ZIP 0.6.0 (leido dentro del ZIP, sin extraerlo, tras comprobar su SHA-256) e identicos a la copia de trabajo; `docs\` (30) y `config-ejemplo\` (3) identicos a la copia de trabajo de `c03be29`, sin faltantes ni sobrantes; `build-info` (pom, lock, `java25-manifest.json`) y `runtime\java25` (431 archivos, con `javac.exe`) iguales al clon; JAR con `build.version=0.7.0`, V1-V16, `DistributionNotices` y los mismos 7 archivos de `frontend\dist`; sin `.clixml`, `.dpapi`, `.pem`, `.p12`, `.pfx`, `.sigerpkg`, `.key`, `.jks`, `.keystore`, `.env`, `.mv.db`, `.log`, `bootstrap-usuarios*`, `recuperacion-ti-*`, `var`, `node_modules` ni `target`.
+- Archivos clave: esta bitacora (unico archivo del commit).
+- Verificacion (Windows, dentro de `Build.ps1`, segun su log): JUnit 191 ejecutadas, 191 ok, 0 omitidas (antes 191, T03c y T05e), `BUILD SUCCESS` (los `ERROR`/excepciones de Graph del log son los rechazos esperados de las pruebas negativas); frontend `tsc --noEmit` y build ok, 112 ok, 0 fallas (antes 112); `Check-Scripts.ps1` con Windows PowerShell 5.1: 40 scripts, 73 ordenes documentadas en 60 procesos y todos los casos; MySQL y humo no aplican (sin codigo).
+- Evidencia de mutacion: no aplica (sin codigo).
+- Condiciones de la seccion 2: comprobadas con `git diff v0.6.0` (vacio en `scripts/`, `.mvn/`, los 7 archivos de la recepcion del Formulario e `IntakeCommands.java`; migraciones solo V15 y V16 agregadas). `git diff 625f748 HEAD -- backend frontend scripts .mvn deploy` vacio: el codigo del paquete es el auditado en T05e.
+- Desvios del plan: ninguno.
+- Hallazgos para gates siguientes: el `docs/BITACORA_0_7_0.md` del paquete muestra T06a ABIERTO (el build precede a este cierre, como en H06d). `CLAUDE.md` (Estado: aun dice que falta T05e), `README.md` y `ALCANCE_Y_PENDIENTES.md` (T05 como pendiente) no se tocaron por decision B: T06b actualiza el estado en esos tres archivos, como H06e. `npm ci` regenero `frontend/node_modules` de `C:\sigera`, como en H06a y H06d. `SHA256SUMS.txt` sale con CRLF (hallazgo de H06a: `tr -d '\r'` para `sha256sum -c`).
+- Pendientes: ensayo diferencial con este ZIP, `SOURCE_SHA256.txt`, etiqueta `v0.7.0`, estado en `CLAUDE.md`, `README.md` y `ALCANCE_Y_PENDIENTES.md` y "Cierre del plan 0.7.0" -> T06b.
+- Verificacion manual sugerida al usuario: `certutil -hashfile C:\sigera\release\SIGER-20261123-133838.zip SHA256` contra el valor de arriba; abrir `manifest.json` de `C:\sigera\release\SIGER-20261123-133838`.
 
 ## Cierre del plan 0.7.0
