@@ -65,7 +65,7 @@ D4. **Consulta institucional** (`CONSULTA_INSTITUCIONAL`): lectura completa de t
 
 D5. **Buscador de personas y folios.** Por RUN, nombre o folio, sobre los datos declarados de requirentes, adultos y NNA. Es un indice de coincidencias, no un registro maestro: no fusiona identidades ni autentica personas. Solo se indexan quien presenta o requiere, NNA, adulto relacionado, acompanante y curador/a (con su nombre de preferencia); nunca la persona senalada del Formulario ni "otra persona" de la COM manual o de la ficha (decision del responsable, gate G07b). `LECTURA` encuentra REQ y Casos por folio, no personas: no lee COM ni fichas de primera atencion. Para buscar personas se concede `CONSULTA_INSTITUCIONAL` (decision del responsable, registrada en el gate G09).
 
-D6. **Reportes.** `REPORTES` (cifras agregadas por unidad o ambito, sin datos de personas), `REPORTES_PERSONAS` (desglose por funcionario; su concesion es una decision institucional) y `EXPORTACION` (filas sin datos ciudadanos). Los tiempos se informan en **horas corridas y en dias habiles** (lunes a viernes, excluidos los feriados del calendario que mantiene TI). Los feriados son nacionales o de una region (codigo del Formulario); uno regional descuenta dias habiles solo en los REQ y Casos de esa region. TI los registra uno a uno o los importa por lineas (todo o nada), siempre con fundamento; retirar uno lo borra del calendario y la historia queda en la auditoria. No se siembran feriados en el codigo (gate G09). Alcance de `REPORTES` y `REPORTES_PERSONAS` (gate G11): nulo = toda la institucion; raiz de una unidad = sus ambitos centrales; area o sede = ese ambito; raiz de UPR, UPD o UEP = ademas lo de su materia en las sedes (como D9). `REPORTES_PERSONAS` exige `REPORTES` en el mismo alcance. TI no recibe reportes (D2). Una concesion sobre una sede cerrada deja de regir, pero los registros historicos de esa sede siguen en los reportes de institucion, unidad y materia. Los tiempos se calculan con el calendario habil vigente: agregar o retirar un feriado cambia tambien los calculos de periodos pasados. Cada tiempo informa cuantos de sus tramos fueron reconstruidos desde la historia anterior a 0.5.0. `EXPORTACION` (gate G12) exige `REPORTES` en el mismo alcance y tiene su mismo alcance: entrega en CSV una fila por REQ o por Caso creado en el periodo (folios, codigos de origen, ingreso, canal, unidad, ambito, nivel, region, materia, complejidad, modalidad, estado, fechas y tiempos en horas y dias habiles), sin nombres, RUN, relato, asunto, motivo ni contactos; si excede el limite se rechaza y nunca se entrega truncado, y cada exportacion se audita con el tipo, la cantidad de filas y los nombres de los filtros. El resumen de bandejas de 0.4.0 (folio, estado, ambito y fecha) tambien exige `EXPORTACION` y sigue acotado a lo que la cuenta lee. Todo CSV usa UTF-8 con BOM, punto y coma, coma decimal, fechas aaaa-mm-dd hh:mm en hora de Chile y el ambito por su codigo.
+D6. **Reportes.** `REPORTES` (cifras agregadas por unidad o ambito, sin datos de personas), `REPORTES_PERSONAS` (desglose por funcionario; su concesion es una decision institucional) y `EXPORTACION` (filas sin datos ciudadanos). Los tiempos se informan en **horas corridas y en dias habiles** (lunes a viernes, excluidos los feriados del calendario que mantiene TI). Los feriados son nacionales o de una region (codigo del Formulario). Los dias habiles descuentan los feriados nacionales y los de la region de la sede responsable; en el nivel central, solo los nacionales. Los dias habiles solo se usan en reportes y antiguedad, no en plazos, alertas ni cierres, y cambiar esta regla requiere aprobacion expresa del responsable (precisado en 0.7.0, D22). TI los registra uno a uno o los importa por lineas (todo o nada), siempre con fundamento; retirar uno lo borra del calendario y la historia queda en la auditoria. No se siembran feriados en el codigo (gate G09). Alcance de `REPORTES` y `REPORTES_PERSONAS` (gate G11): nulo = toda la institucion; raiz de una unidad = sus ambitos centrales; area o sede = ese ambito; raiz de UPR, UPD o UEP = ademas lo de su materia en las sedes (como D9). `REPORTES_PERSONAS` exige `REPORTES` en el mismo alcance. TI no recibe reportes (D2). Una concesion sobre una sede cerrada deja de regir, pero los registros historicos de esa sede siguen en los reportes de institucion, unidad y materia. Los tiempos se calculan con el calendario habil vigente: agregar o retirar un feriado cambia tambien los calculos de periodos pasados. Cada tiempo informa cuantos de sus tramos fueron reconstruidos desde la historia anterior a 0.5.0. `EXPORTACION` (gate G12) exige `REPORTES` en el mismo alcance y tiene su mismo alcance: entrega en CSV una fila por REQ o por Caso creado en el periodo (folios, codigos de origen, ingreso, canal, unidad, ambito, nivel, region, materia, complejidad, modalidad, estado, fechas y tiempos en horas y dias habiles), sin nombres, RUN, relato, asunto, motivo ni contactos; si excede el limite se rechaza y nunca se entrega truncado, y cada exportacion se audita con el tipo, la cantidad de filas y los nombres de los filtros. El resumen de bandejas de 0.4.0 (folio, estado, ambito y fecha) tambien exige `EXPORTACION` y sigue acotado a lo que la cuenta lee. Todo CSV usa UTF-8 con BOM, punto y coma, coma decimal, fechas aaaa-mm-dd hh:mm en hora de Chile y el ambito por su codigo.
 
 D7. **Sede regional = un ambito por sede** (no un ambito por sede y unidad). Su unica cabeza es la Coordinacion regional, con rango de Direccion: se registra como `DIRECCION` en el ambito de la sede. Las sedes no tienen `JEFATURA`. Sigue rigiendo una direccion por ambito. Al actualizar a 0.5.0, cada `JEFATURA` vigente o programada en una sede se revoca y se otorga `DIRECCION` con el mismo periodo (rutina auditada por `sistema:actualizacion`, una sola vez); las subrogancias vigentes pasan a la nueva concesion. Si ya hay una `DIRECCION` superpuesta en la sede, la `JEFATURA` no se convierte y queda como aviso para TI. El rechazo de `JEFATURA` en sedes aplica a concesiones nuevas: una no convertida que se conserva en el perfil no impide guardarlo.
 
@@ -119,3 +119,72 @@ D16. **Correo.** Graph no bloquea la salida a produccion: produccion puede parti
 D17. **Liberacion por analisis en origen (modo de emergencia).** Mientras la VM no tenga un motor antivirus admitido por SIGER (Defender inactivo; Kaspersky KES 14 no integrado; sin ClamAV), los originales recibidos del Formulario se liberan de forma automatica e inmediata al registrarse, sin revision manual. La base es el analisis que el Formulario hace antes de aceptar la entrega (ClamAV e inspector aislado) y la verificacion de SIGER de la firma Ed25519 de la entrega y del SHA-256 de cada original. Solo aplica a los originales del Formulario: los adjuntos subidos en SIGER siguen en cuarentena. Los originales del Formulario que quedaron en cuarentena mientras el modo no regia se liberan al reactivarlo, con la misma verificacion. El modo se activa de forma expresa en la instancia y queda auditado; rige hasta que se configure un motor antivirus admitido o se desactive de forma expresa; la revision periodica queda a cargo del responsable, segun el acta institucional; cada liberacion se audita con el motivo 'analisis en origen del Formulario'. Cuando se configure un motor admitido, el modo se desactiva y vuelve a regir el analisis local. Riesgo residual aceptado por el responsable: amenazas que ClamAV no conocia al momento de la subida. Capas compensatorias: descarga como adjunto con CSP sandbox y nombre neutro, y Kaspersky en la VM y en los equipos. Decision del responsable del 2026-11-21, con correo y constancia institucional.
 
 Excepcion a "los scripts no incluyen comandos destructivos" (H03, 2026-11-21): `scripts/Remove-Validation.ps1` es el unico procedimiento que borra datos, y solo aplica D12. Actua sobre una VALIDACION cerrada por `Close-Validation.ps1` de 0.6.0 (marcador con `kind` CIERRE_VALIDACION y su copia identica en las constancias), con servicios retirados, motor detenido, ningun archivo en uso ni enlace, y una produccion inicializada de la misma cuenta que ya tiene el mismo origen e identidad ACK del Formulario en AUTOMATICO y la credencial de Graph si la validacion la tenia (las unicas copias de esas credenciales en NEW-SIGER estan en la validacion y sus respaldos). Borra solo rutas de `D:` fuera de produccion, de los motores, de Java, de las constancias y del paquete: la raiz, los respaldos con `backup.json` de esa raiz y base, los respaldos abortados que declara el responsable y los ensayos de restauracion hechos sobre su motor. Exige confirmacion de PowerShell y escribir la ruta de la raiz, escribe la constancia antes de borrar y la completa por elemento; ante un fallo se detiene y se repite con lo que queda. Ningun otro script borra datos de una instancia.
+
+## Precision 0.7.0 - cobertura territorial y region de origen
+
+Decisiones del responsable del proyecto del 2026-11-23 (plan en `docs/PLAN_0_7_0.md`, registro en `docs/BITACORA_0_7_0.md`), copiadas en el gate T00. Se implementan por gates (T01-T04); los escenarios de aceptacion 1-7 estan en la seccion 0 del plan. D22 precisa D6.
+
+D18. **Cobertura territorial de las sedes.** Cada sede regional conserva su region fisica (`org_scope.region_code`), que
+siempre cubre y que no se quita, y puede cubrir ademas otras regiones del catalogo del Formulario (cobertura adicional).
+Solo las sedes regionales tienen region fisica y cobertura adicional; la cobertura adicional no repite la region fisica
+ni una region dos veces. Una region puede quedar cubierta por mas de una sede (como D8 ya admite varias sedes en una
+region). La cobertura de una sede PROYECTADA queda preparada y rige al activarse; una sede CERRADA no tiene cobertura
+vigente.
+   - **Nivel central** (precision del responsable, 2026-11-23): la Region Metropolitana (13) la atiende la Oficina
+     Nacional, sin sede regional. TI declara las regiones que atiende el nivel central ("cobertura del nivel central"),
+     con el mismo mecanismo de vigencia, fundamento y auditoria de la cobertura de una sede. No se siembra ninguna region
+     en el codigo ni en migraciones. La cobertura del nivel central no agrega destinos al selector (D20): solo cuenta como
+     region atendida en el aviso `REGION_SIN_SEDE` y en el efecto territorial (D19).
+
+D19. **Administracion, historia y efecto territorial.**
+   - TI administra desde la interfaz la cobertura adicional de cada sede y la del nivel central, con fundamento,
+     concurrencia optimista y auditoria (cobertura anterior -> nueva, solo con codigos de region). Cada region cubierta es
+     un periodo con inicio y termino; terminar no borra: la historia queda consultable en Estructura.
+   - Archivo de estructura inicial: `"cobertura": ["03"]` opcional en cada sede regional y `"coberturaNivelCentral":
+     ["13"]` opcional en la raiz, con las mismas reglas que los comandos. Un archivo sin esas claves sigue valido. 0.6.0
+     ignora esas claves sin aviso: si V4 vuelve a 0.6.0, se retiran del archivo.
+   - Efecto territorial: para cada region que hoy atiende la sede (primero la region fisica, luego la cobertura
+     adicional) o el nivel central, el servidor informa "sigue atendida por <sedes ACTIVA y/o nivel central>" o "queda
+     sin atencion". Las sedes PROYECTADA se informan solo como dato (no reciben). Se calcula en `SCOPE_CLOSE`, en el
+     cambio de cobertura de una sede o del nivel central y en `SCOPE_UPDATE` cuando cambia la region fisica.
+   - Si alguna region queda sin atencion, la orden exige `regiones_sin_sede` igual a la lista que calcula el servidor (si
+     difiere, 409: la situacion cambio) y su fundamento registra la decision institucional. Sin regiones afectadas basta
+     el fundamento de siempre. La auditoria del acto registra el efecto (solo codigos de region y de sede).
+   - Al cerrar una sede, su cobertura adicional termina en el mismo acto. El efecto territorial no es un bloqueo de
+     `Personnel.closeBlockers` (dejaria Cerrar siempre deshabilitado): Estructura lo muestra antes de confirmar. Los
+     bloqueos de cierre de D8 no cambian.
+   - Aviso permanente `REGION_SIN_SEDE` en Administracion: regiones del catalogo que hoy no atiende ninguna sede ACTIVA
+     (por region fisica o cobertura adicional vigente) ni el nivel central (cobertura del nivel central vigente). Con 13
+     declarada como del nivel central, 13 no genera aviso.
+
+D20. **Selector de destino.** Una sede aparece bajo su region fisica y bajo cada region de su cobertura adicional
+vigente. La propuesta no cambia de regla: una sola sede que atiende la region queda preseleccionada; con varias, solo la
+region; sin sede, el nivel central, como hoy (si el nivel central atiende esa region, el selector lo indica con un aviso
+y no propone unidad). Si una sede y el nivel central atienden la misma region, rige la propuesta de sede. El servidor no
+valida la region del destino: el distribuidor conserva la decision. No hay distribucion automatica. La propuesta usa la
+region vigente (D21).
+
+D21. **Region de origen de la persona, con trazabilidad.**
+   - Fuentes existentes e inmutables: en una COM del Formulario, la proyeccion (`external_field` `nna-region` y, si falta
+     o no es valida, `adult-region`), que no cambia despues de crear la COM; en una atencion directa, las versiones de la
+     ficha (`attention_revision`, con autor, fecha y motivo). Una COM del Formulario no tiene ficha. Una COM manual no
+     tiene region.
+   - Region registrada: la del Formulario o, en una atencion directa, la primera region valida que registro la ficha
+     (completar una ficha que no tenia region no es una correccion). Region vigente: la de la version actual de la ficha
+     (en el Formulario, igual a la registrada). Correccion: region vigente distinta de una region ya registrada. Sin
+     region: "sin region declarada".
+   - Mecanismo: V16 agrega una columna derivada con la region de cada version de la ficha (`attention_revision`),
+     escrita al crear la version desde sus propios datos y reconstruible con un marcador (patron de `PersonIndex` y
+     `Milestones`). No cambia la recepcion del Formulario (seccion 2).
+   - Reportes: filtran y agrupan por la region registrada (estable: una correccion posterior no cambia las cifras
+     historicas) e informan cuantos registros tienen la region corregida. La region que hoy informan pasa a rotularse
+     "region de la sede". Exportacion: region registrada, region vigente y region de la sede. La ficha muestra la region
+     registrada cuando difiere de la vigente. `FICHA_COMPLEMENTADA` agrega "Region de origen modificada", sin codigos:
+     los valores quedan en las versiones de la ficha, con su lectura protegida.
+
+D22. **Feriados regionales (sin cambio de regla).** Los dias habiles descuentan los feriados nacionales y los de la region
+de la sede responsable; en el nivel central, solo los nacionales (regla vigente: `Reports.java:206` y `:296-297`). Se
+escribe asi en D6 y se fija con pruebas. Alcance: los dias habiles solo se usan en reportes y antiguedad
+(el calculo de dias habiles (`businessDays`) solo esta en `Reports`; `Csv` y `Holidays` usan solo sus constantes), no en
+plazos, alertas ni cierres. Usar la region de origen cambiaria tambien el nivel central y dependeria de datos declarados
+que pueden faltar o corregirse. Cualquier cambio de esta regla requiere aprobacion expresa del responsable.
