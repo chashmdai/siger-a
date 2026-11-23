@@ -12,6 +12,7 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 | T01 | Cobertura y efecto territorial (servidor) | CERRADO |
 | T02 | Region de origen y reportes | CERRADO |
 | T03 | Interfaz | CERRADO |
+| T03b | Bandeja de distribucion (D23) | ABIERTO |
 | T04 | Cierre de version | ABIERTO |
 | T05 | Auditoria independiente | EXTERNO |
 | T06a | Build de entrega en Windows | ABIERTO |
@@ -26,6 +27,9 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 | Feriados regionales (D22) | T02 | 2026-11-23: se mantiene la region de la sede responsable (nivel central: solo nacionales). Un cambio requiere aprobacion expresa. |
 | Auditoria independiente (T05) | T06a | 2026-11-23: la realiza el asistente del responsable en claude.ai ("Claude Padre"), separada de la implementacion de Claude Code. |
 | Corte para V4 con 0.7.0 | V4 | 2026-11-23: 07/12. V4 con 0.7.0 solo con T06b CERRADO, etiqueta `v0.7.0` y aprobacion expresa; si no, V4 con 0.6.0. Respuesta final el 07/12: |
+| Bandeja de distribucion (D23) | T03b | 2026-11-23 (despues del cierre de T03): marca con la region de origen en numero romano ("RM" para 13), color regional si la atiende una sede ACTIVA; roja si `riesgo` es afirmativo (pregunta "NNA en riesgo inminente" del Formulario), con respiracion de 5 a 6 segundos solo mientras la COM esta por distribuir; solo presentacion. Gate T03b agregado antes de T04 (plan actualizado por el responsable). |
+| Distribucion territorial del Formulario por sede | 0.8.0 | 2026-11-23: fuera de 0.7.0 (cambia el modelo de acceso: funcion con ambito, respaldo central, devolucion, visibilidad doble). Requiere decision propia en 0.8.0. |
+| Orden de prioridad y filtros nuevos en "Por distribuir" | - | 2026-11-23: propuesta descartada por el responsable; no se hace. |
 
 ## Antecedentes para T00
 
@@ -34,6 +38,12 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 - `SOURCE_SHA256.txt` queda desactualizado desde el commit de planificacion; se regenera en T06b.
 - La salida a produccion de 0.6.0 (P0 hecho; V0-V6 desde el 04/12) se sigue registrando en `docs/BITACORA_0_6_0.md`; esta bitacora solo registra los gates T.
 - Condiciones de la seccion 2 del plan: sin cambios en `scripts/` ni `.mvn/`, sin cambios en la recepcion del Formulario y V1-V14 intactas; cada gate las comprueba con `git diff v0.6.0`.
+
+## Antecedentes para T03b
+
+- D23 y T03b se agregaron al plan despues del cierre de T03, en el commit `plan 0.7.0: bandeja de distribucion (T03b)` que hace el responsable de forma manual (no es un gate). T03b copia D23 textual en `DECISIONES_FUNCIONALES.md` ("Precision 0.7.0").
+- Referencias de partida en la seccion 1 del plan (bullet "Bandeja"); T03b las verifica contra el codigo antes de su plan.
+- Reutiliza lo de T01-T03: `OriginRegion.current` (region vigente, la del selector), la cobertura del catalogo (`scopes[].coverage`, `central_coverage`) y la regla del selector en `frontend/src/lib/destination.ts`. No agrega migracion ni cambia la recepcion del Formulario (seccion 2 del plan).
 
 ## Registros de cierre
 
