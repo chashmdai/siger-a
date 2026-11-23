@@ -519,3 +519,16 @@ dialog.modal.profile-modal { --modal-width: 980px; }
   .report-stats dd { font-size: 1.3rem; }
 }
 @media (prefers-reduced-motion: reduce) { .report-bar-fill { transition: none; } }
+
+/*
+ * Marca territorial y de riesgo de la bandeja de comunicaciones (0.7.0, D23; gate T03b). Solo presentacion. Con riesgo,
+ * mientras la COM esta por distribuir, una capa con sombra respira (solo opacidad, ciclo de 5,5 s): no mueve el diseno
+ * de la fila ni recalcula la pagina. Con prefers-reduced-motion queda roja fija.
+ */
+.region-mark { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: .2rem; min-width: 1.9rem; padding: .05rem .42rem; border: 1px solid; border-radius: 999px; font-size: .74rem; font-weight: 700; line-height: 1.35; letter-spacing: .02em; white-space: nowrap; }
+.region-mark-regional { background: var(--region-mark-bg); color: var(--region-mark-ink); border-color: var(--region-mark-line); }
+.region-mark-neutral { background: var(--surface-3); color: var(--ink-600); border-color: var(--line-strong); }
+.region-mark-risk { background: var(--risk-mark-bg); color: var(--risk-mark-ink); border-color: var(--risk-mark-bg); }
+.region-mark-breathing::after { content: ''; position: absolute; inset: -1px; border-radius: inherit; box-shadow: 0 0 0 4px var(--risk-mark-glow); opacity: 0; pointer-events: none; animation: region-mark-breathe 5.5s ease-in-out infinite; }
+@keyframes region-mark-breathe { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .region-mark-breathing::after { animation: none; opacity: 0; } }

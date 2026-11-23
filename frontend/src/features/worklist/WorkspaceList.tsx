@@ -12,6 +12,7 @@ import {Table} from '../../components/Table';
 import type {Column} from '../../components/Table';
 import {Kind, Status} from '../../components/Status';
 import {Icon} from '../../components/Icon';
+import {RegionMark} from '../../components/RegionMark';
 import type {IconName} from '../../components/Icon';
 import {Callout, ErrorMessage, PageHeader} from '../../components/Primitives';
 
@@ -40,10 +41,12 @@ const FILTERS: Record<string, [string, string][]> = {
 const PAGE_SIZE = 25;
 const defaultFilter = (kind: string, initial: string) => initial || (kind === 'tareas' ? 'pending' : 'all');
 
-function columnsFor(kind: string, ctx: Context): Column[] {
+/** Columnas de cada bandeja (exportada para las pruebas de presentacion). */
+export function columnsFor(kind: string, ctx: Context): Column[] {
   const open = (k: string, id: number) => () => ctx.go(k, id);
   const target = BOARD_DETAIL[kind] ?? 'FLUJO';
-  const reference: Column = {name: 'Referencia', render: r => <span className="ref-cell"><Kind kind={target}/><button className="link folio" onClick={open(target, number(r, 'id'))}>{text(r, 'folio') || (target === 'SOL' ? 'SOL ' : 'Petición ') + number(r, 'id')}</button></span>};
+  // En COM, la marca territorial y de riesgo (D23, gate T03b) va junto a la referencia: no agrega ni reordena columnas.
+  const reference: Column = {name: 'Referencia', render: r => <span className="ref-cell"><Kind kind={target}/><button className="link folio" onClick={open(target, number(r, 'id'))}>{text(r, 'folio') || (target === 'SOL' ? 'SOL ' : 'Petición ') + number(r, 'id')}</button>{kind === 'com' && <RegionMark catalog={ctx.catalog} row={r}/>}</span>};
   const state: Column = {name: 'Estado', render: r => <Status value={r.state}/>};
   const scope: Column = {name: 'Ámbito', render: r => scopeOf(ctx.catalog, r.principal_scope ?? r.scope_id ?? r.destination_scope ?? r.origin_scope)};
   const created: Column = {name: 'Registro', render: r => <span className="nowrap">{when(r.created_ms)}</span>};

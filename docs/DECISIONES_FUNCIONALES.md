@@ -188,3 +188,28 @@ escribe asi en D6 y se fija con pruebas. Alcance: los dias habiles solo se usan 
 (el calculo de dias habiles (`businessDays`) solo esta en `Reports`; `Csv` y `Holidays` usan solo sus constantes), no en
 plazos, alertas ni cierres. Usar la region de origen cambiaria tambien el nivel central y dependeria de datos declarados
 que pueden faltar o corregirse. Cualquier cambio de esta regla requiere aprobacion expresa del responsable.
+
+D23 se agrego despues del cierre de T03 (decision del responsable del 2026-11-23) y se copio en el gate T03b; su escenario de aceptacion es el 8 de la seccion 0 del plan.
+
+D23. **Marca territorial y de riesgo en la bandeja de comunicaciones** (decision del responsable, 2026-11-23, despues del
+cierre de T03; se implementa en T03b). La lista de Comunicaciones (todas sus vistas) y la cola "Ingresos por distribuir"
+de Inicio muestran una marca en cada COM:
+   - Numero: la region de origen vigente de la COM (D21; la misma regla del selector, `OriginRegion.current`) en numero
+     romano segun su codigo del Formulario (01 = I ... 12 = XII, 14 = XIV, 15 = XV, 16 = XVI) y "RM" para 13. Sin region
+     declarada, la marca no lleva numero.
+   - Color: uno solo y distintivo cuando esa region la atiende hoy una sede regional ACTIVA, por region fisica o por
+     cobertura vigente (la regla de D18-D20 con la cobertura del catalogo); neutro si solo la atiende el nivel central o
+     nadie. El texto completo (nombre de la region y sede o sedes que la atienden, o "nivel central") va como titulo
+     emergente y texto para lectores de pantalla.
+   - Riesgo: si la COM del Formulario trae el campo `riesgo` afirmativo (`si` o `true`, sin distinguir mayusculas; es la
+     pregunta "NNA en riesgo inminente" del Formulario, rotulada "Riesgo actual" en la ficha COM), la marca es roja en vez
+     del color regional, tambien sin region o en la RM (sin region dice "Riesgo"). Mientras la COM esta por distribuir
+     (la misma condicion del filtro "Por distribuir" de la lista), la marca roja tiene una animacion suave de respiracion
+     (breathing glow) con un ciclo de 5 a 6 segundos, liviana: solo opacidad o sombra, sin mover el diseno de la fila ni
+     recalcular la pagina. Distribuida, queda roja fija. Con `prefers-reduced-motion` no hay animacion. Siempre lleva
+     icono y el texto accesible "Riesgo actual informado": nunca solo color.
+   - Solo presentacion: no cambia quien ve que, los filtros, el orden de la lista, el estado, la complejidad ni la
+     distribucion, y no activa protocolos. La distribucion sigue manual (D20).
+   - Fuera de 0.7.0 por decision del responsable: la distribucion territorial del Formulario (que la distribucion de una
+     sede vea y distribuya solo las COM de su territorio) pasa a 0.8.0 con decision propia; el orden de prioridad y los
+     filtros nuevos en "Por distribuir" no se hacen.

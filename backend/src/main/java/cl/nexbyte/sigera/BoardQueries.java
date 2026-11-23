@@ -71,11 +71,28 @@ public class BoardQueries {
     Visibility visibility(Actor a){return new Visibility(a);}
     static List<Long> grants(Actor a,String...roles){var wanted=Set.of(roles);return a.grants().stream().filter(g->g.scope()!=null&&wanted.contains(g.role())).map(Access.Grant::scope).distinct().toList();}
     private record Spec(String select,String from,String permission,String scope,String search,String order){}
+    /**
+     * Marca territorial y de riesgo de la bandeja de comunicaciones (0.7.0, D23; gate T03b), solo presentacion:
+     * origin_region = region de origen vigente de la COM con la regla del selector de la COM (Access.suggestedRegion(id,null):
+     * Formulario nna-region y luego adult-region; nunca la ficha, de lectura protegida), risk = el primer campo CAMPO
+     * riesgo del Formulario es afirmativo (si o true sin distinguir mayusculas; se decide en Java porque MySQL compara sin
+     * tildes) y to_distribute = la COM cumple la condicion del filtro "Por distribuir" (la misma expresion). El valor del
+     * campo no sale del servidor.
+     */
+    static final String RISK_SQL="(SELECT rf.value_text FROM external_field rf WHERE rf.id=(SELECT MIN(rg.id) FROM external_field rg WHERE rg.communication_id=c.id AND rg.field_group='CAMPO' AND rg.field_key='riesgo'))";
+    static boolean riskAffirmative(Object value){return value instanceof String v&&List.of("si","true").contains(v.toLowerCase(Locale.ROOT));}
+    private static Map<String,Object> comMark(Map<String,Object> row){
+        var out=new LinkedHashMap<String,Object>(row);
+        out.put("risk",riskAffirmative(out.remove("risk_value")));out.put("to_distribute",b(row,"to_distribute"));
+        return out;
+    }
     private Spec spec(Visibility v,String kind){
         Actor a=v.a;
         return switch(kind){
             case "atenciones"->new Spec("r.id,r.folio,r.principal_scope,r.attention_user,r.attention_scope,r.created_by,r.created_ms,r.revision,r.state AS req_state,c.subject,t.modality,t.updated_ms,"+Attention.stateSql("r","t")+" AS state", "requirement r JOIN attention_record t ON t.requirement_id=r.id JOIN communication c ON c.id=r.communication_id",v.reqRead("r"),"r.principal_scope","LOWER(CONCAT(COALESCE(r.folio,''),' ',c.subject))","t.updated_ms DESC,r.id DESC");
-            case "com"->new Spec("c.id,c.folio,c.subject,c.channel,c.state,c.origin_scope,c.created_ms,c.received_ms,c.revision,c.created_by","communication c",v.comRead("c"),"c.origin_scope","LOWER(CONCAT(COALESCE(c.folio,''),' ',c.subject))","c.id DESC");
+            // Marca de la bandeja (D23): solo columnas de lectura; condiciones, filtros, orden y visibilidad no cambian.
+            case "com"->new Spec("c.id,c.folio,c.subject,c.channel,c.state,c.origin_scope,c.created_ms,c.received_ms,c.revision,c.created_by,"
+                +OriginRegion.formularioSql("c")+" AS origin_region,"+RISK_SQL+" AS risk_value,CASE WHEN ("+filter(v,"com","pending")+") THEN 1 ELSE 0 END AS to_distribute","communication c",v.comRead("c"),"c.origin_scope","LOWER(CONCAT(COALESCE(c.folio,''),' ',c.subject))","c.id DESC");
             case "sol"->new Spec("s.id,s.communication_id,s.destination_scope,s.requested_area_scope,s.state,s.created_ms,s.revision,c.folio AS com_folio,c.subject","solicitation s JOIN communication c ON c.id=s.communication_id",v.solRead("s","c"),"s.destination_scope","LOWER(CONCAT(COALESCE(c.folio,''),' ',c.subject))","s.created_ms,s.id");
             case "req"->new Spec("r.id,r.folio,r.communication_id,r.principal_scope,r.attention_user,r.attention_scope,r.complexity,r.state,r.created_ms,r.revision,(SELECT COUNT(*) FROM case_record rc WHERE rc.requirement_id=r.id AND rc.state<>'CERRADO') AS open_cases,(SELECT COUNT(*) FROM case_record tc WHERE tc.requirement_id=r.id) AS total_cases","requirement r",v.reqRead("r"),"r.principal_scope","LOWER(COALESCE(r.folio,''))","r.id DESC");
             case "cas"->new Spec("c.id,c.folio,c.requirement_id,c.scope_id,c.responsible_id,c.objective,c.state,c.created_ms,c.revision,r.folio AS req_folio,r.complexity AS req_complexity,(SELECT COUNT(*) FROM task_item t WHERE t.case_id=c.id AND t.state IN ('PENDIENTE','EN_CURSO')) AS pending_tasks","case_record c JOIN requirement r ON r.id=c.requirement_id",v.caseRead("c"),"c.scope_id","LOWER(CONCAT(COALESCE(c.folio,''),' ',COALESCE(r.folio,''),' ',c.objective))","c.id DESC");
@@ -135,6 +152,7 @@ public class BoardQueries {
         long total=db.count("SELECT COUNT(*)"+from,args.toArray());
         int actual=(int)Math.min(page,Math.max(0,(total-1)/size));args.add(size);args.add((long)actual*size);
         var rows=db.rows("SELECT "+s.select()+from+" ORDER BY "+s.order()+" LIMIT ? OFFSET ?",args.toArray());
+        if(kind.equals("com"))rows=rows.stream().map(BoardQueries::comMark).toList();
         return Map.of("items",rows,"total",total,"page",actual,"size",size);
     }
     private long count(Visibility v,String kind,String filter){var s=spec(v,kind);return db.count("SELECT COUNT(*) FROM "+s.from()+" WHERE ("+s.permission()+") AND ("+filter(v,kind,filter)+")");}

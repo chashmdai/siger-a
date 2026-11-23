@@ -9,6 +9,7 @@ import type {Context} from '../../app/context';
 import {BOARD_DETAIL, boardRoute} from '../../app/routes';
 import {Kind, Status} from '../../components/Status';
 import {Icon} from '../../components/Icon';
+import {RegionMark} from '../../components/RegionMark';
 import {Callout, EmptyState, ErrorMessage, PageHeader, Panel} from '../../components/Primitives';
 import {ACTIONABLE, greeting, say, today} from './texts';
 import {SearchField} from '../search/SearchField';
@@ -85,7 +86,8 @@ export default function Dashboard({ctx, version}: {ctx: Context; version: number
   </section>;
 }
 
-function Queue({queue, ctx}: {queue: Row; ctx: Context}) {
+/** Cola resumida de Inicio (exportada para las pruebas de presentacion). */
+export function Queue({queue, ctx}: {queue: Row; ctx: Context}) {
   const page = obj(queue, 'page'), rows = list(page, 'items'), kind = text(queue, 'route');
   const route = BOARD_DETAIL[kind] ?? 'CAS';
   return <Panel flush title={say(text(queue, 'title'))} count={number(page, 'total')}
@@ -93,7 +95,7 @@ function Queue({queue, ctx}: {queue: Row; ctx: Context}) {
     {rows.length === 0 ? <EmptyState compact icon="checkCircle" title="Sin pendientes en esta cola">Los registros aparecerán aquí cuando te corresponda intervenir.</EmptyState> : <ul className="work-list">
       {rows.map(r => <li key={number(r, 'id')}>
         <button className="work-item" onClick={() => ctx.go(route, kind === 'tareas' ? number(r, 'case_id') : number(r, 'id'))}>
-          <span className="work-item-ref"><Kind kind={route}/><span className="folio">{text(r, 'folio') || text(r, 'case_folio') || 'SOL ' + number(r, 'id')}</span></span>
+          <span className="work-item-ref"><Kind kind={route}/><span className="folio">{text(r, 'folio') || text(r, 'case_folio') || 'SOL ' + number(r, 'id')}</span>{kind === 'com' && <RegionMark catalog={ctx.catalog} row={r}/>}</span>
           <span className="work-item-main">
             <strong>{text(r, 'subject') || text(r, 'title') || text(r, 'objective') || 'Sin asunto registrado'}</strong>
             <span>{kind === 'tareas' ? 'Fecha prevista: ' + when(r.due_ms) : scopeOf(ctx.catalog, r.destination_scope ?? r.principal_scope ?? r.scope_id ?? r.origin_scope) + ' · ' + when(r.created_ms)}</span>

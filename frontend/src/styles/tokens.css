@@ -67,6 +67,10 @@
   --kind-cas-bg: #f8e5ef;  --kind-cas-ink: #85184f;
   --kind-flujo-bg: #fde8e1; --kind-flujo-ink: #9a3412;
 
+  /* Marca de la bandeja de comunicaciones (0.7.0, D23): region atendida por una sede ACTIVA y riesgo actual informado */
+  --region-mark-bg: #ece6f8;  --region-mark-ink: #45237f;  --region-mark-line: #b9a6e3;
+  --risk-mark-bg: #b42332;    --risk-mark-ink: #ffffff;    --risk-mark-glow: rgba(180, 35, 50, .42);
+
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 16px;
