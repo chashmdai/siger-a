@@ -157,8 +157,10 @@ ABIERTO; si el prompt nombra otro, detenerse y preguntar); punto de partida (`gi
 gate cerrado); inventario y plan antes de editar, y confirmacion explicita del responsable; suite completa; registro con
 el formato de la seccion 7; un solo commit `gate TNN: <titulo>`; revision de archivos sensibles con
 `git show --stat HEAD`; push a `main` en `origin`; detencion. Ademas:
-- T05 tiene estado EXTERNO: no lo ejecuta Claude Code (seccion 6).
-- T06a exige T05 CERRADO; si no lo esta, la sesion se detiene e informa.
+- T05 tiene estado EXTERNO: no lo ejecuta Claude Code y la sesion lo salta (seccion 6). Claude Code nunca edita el
+  registro ni el estado de una auditoria.
+- T06a exige que la ultima auditoria (T05 o la que la repita) este CERRADO y que no quede ningun gate de correccion
+  ABIERTO; si no, la sesion se detiene e informa sin editar nada.
 - Si un gate resulta mas grande de lo previsto, se divide (`TNNa` cerrado con lo verificado y `TNNb` ABIERTO).
 
 ## 6. Gates
@@ -170,7 +172,7 @@ el formato de la seccion 7; un solo commit `gate TNN: <titulo>`; revision de arc
 | T02 | Region de origen y reportes | V16 y su reconstruccion con marcador. Region registrada y vigente (D21). Reportes: filtro y agrupacion por region registrada, conteo de corregidas, rotulo "region de la sede". Exportacion con las tres regiones. Auditoria de `FICHA_COMPLEMENTADA`. Feriados sin cambio (D22). | Escenarios 1-4 (region registrada, sede responsable y region de la sede distintas en reportes y exportacion). Una correccion no cambia el reporte; completar no es correccion. Feriado de la region cubierta no se descuenta y el de la region de la sede si. `MySql84UpgradeTest` con la reconstruccion. |
 | T03 | Interfaz | Estructura: cobertura vigente e historia; editar la cobertura de una sede y la del nivel central con fundamento; efecto territorial antes de confirmar (cerrar, cambiar cobertura o region) con la confirmacion de las regiones sin atencion; aviso `REGION_SIN_SEDE`. Selector con cobertura y aviso del nivel central. Reportes y busqueda con los rotulos "region de la sede" y "region de origen". Ficha con la region registrada cuando difiere de la vigente. | Pruebas del frontend: `destination.test.ts` sin regresion de los casos actuales y casos nuevos por escenario; typecheck y build. |
 | T04 | Cierre de version | Version 0.7.0. Documentacion de la seccion 4. `PRUEBAS_MANUALES_0_7_0.md` con los escenarios. | Suite en H2 y sobre MySQL 8.4 (con `MySql84UpgradeTest`); frontend; humo con los escenarios 1-7; condiciones de la seccion 2 comprobadas con `git diff`. |
-| T05 | Auditoria independiente (EXTERNO) | La realiza el asistente del responsable en claude.ai ("Claude Padre"), separado de la implementacion y sin acceso a las sesiones de Claude Code: clon limpio del commit de cierre de T04; alcance del diff contra `v0.6.0`; condiciones de la seccion 2; trazabilidad de D18-D22 y de los escenarios a codigo y pruebas; revision de la evidencia de mutacion; re-ejecucion de la suite por el responsable en un clon limpio fuera de `C:\sigera`, con las ordenes que entregue la auditoria. Claude Code solo transcribe el informe a esta bitacora cuando el responsable se lo pide (commit `gate T05: registro de la auditoria independiente`, solo la bitacora). Con hallazgos, el responsable agrega T05b (correccion, Claude Code) y la auditoria se repite sobre lo corregido. | Informe CORRECTO o con hallazgos; T05 pasa a CERRADO solo con CORRECTO. |
+| T05 | Auditoria independiente (EXTERNO) | La realiza el asistente del responsable en claude.ai ("Claude Padre"), separado de la implementacion y sin acceso a las sesiones de Claude Code: clon limpio del commit de cierre de T04; alcance del diff contra `v0.6.0`; condiciones de la seccion 2; trazabilidad de D18-D22 y de los escenarios a codigo y pruebas; revision de la evidencia de mutacion; re-ejecucion de la suite por el responsable en un clon limpio fuera de `C:\sigera`, con las ordenes que entregue la auditoria. Claude Code no participa: el responsable incorpora a mano a la bitacora el registro de T05 (formato de la seccion 7) y su estado, en un commit `gate T05: auditoria independiente` que solo cambia la bitacora. Con hallazgos, el responsable deja T05 en BLOQUEADO y agrega en la tabla, inmediatamente despues de T05, la fila `T05b` (ABIERTO, correccion de los hallazgos, alcance segun el registro de T05); el prompt universal la toma como primer gate ABIERTO. Cerrado T05b, la auditoria se repite sobre lo corregido y el responsable registra el resultado como `T05c` (EXTERNO), y asi sucesivamente. | Informe CORRECTO o con hallazgos; T05 (o la ultima auditoria) pasa a CERRADO solo con CORRECTO. |
 | T06a | Build de entrega en Windows | Como H06d, desde el commit con T05 CERRADO. | `manifest.json` con 0.7.0, esquema 16 y `automatedTestsExecuted` true; `SHA256SUMS.txt`; los 44 archivos de `scripts\` con SHA-256 iguales a los del paquete 0.6.0; `Check-Scripts.ps1`: 40 scripts (las ordenes documentadas solo cambian si cambio una guia que enlaza, con la diferencia explicada); nombre y SHA-256 del ZIP. |
 | T06b | Ensayo diferencial y etiqueta | En TEST-SIGER, con el paquete de T06a: raiz de ensayo nueva (por ejemplo `D:\Ensayo-T06b\SIGER`; `D:\SIGER` es evidencia de H06e) y una cuenta de ensayo nueva con otro nombre, creada por el responsable (el perfil de `siger-ensayo` sigue pendiente de retiro). V4 completo como en H06e (estructura sintetica con coberturas, nivel central y una sede PROYECTADA; Formulario sintetico generado para la cuenta nueva; Manual; clave del buscador; D17; `Install-Service.ps1`; `Start.ps1`; `Estado.ps1` con 0.7.0 y esquema 16; `Test-Service.ps1 -VentanaAutorizada -IncluirMySql`; escucha por red). En la interfaz: cobertura e historia, escenarios 5, 6 y 7 y el aviso. Al final, limpieza del ensayo, `SOURCE_SHA256.txt` y etiqueta anotada `v0.7.0`. No se repiten P0, V0-V3, plan B, reinicio real, Graph ni los rechazos de D17: los scripts son identicos y quedaron acreditados en H06e. | Resultado de cada paso; nada fuera de las rutas del ensayo; limpieza verificada. |
 
@@ -192,9 +194,31 @@ Maximo 20 lineas por gate; lo importante es lo que necesita la siguiente sesion.
 - Verificacion manual sugerida al usuario: <pasos | no aplica>
 ```
 
-## 8. Prompt de cada sesion (igual para todos los gates de Claude Code)
+## 8. Prompt universal de continuidad (identico en todas las sesiones de Claude Code)
 
-> Lee `CLAUDE.md`, `docs/PLAN_0_7_0.md` y `docs/BITACORA_0_7_0.md`. Trabaja el primer gate ABIERTO (TNN) siguiendo el protocolo de la seccion 5 del plan: inventario y plan antes de editar, suite completa, cierre en la bitacora con el formato de la seccion 7, commit y push a main en origin revisando archivos sensibles, y detente. Responde en espanol.
+El responsable inicia cada sesion con `/clear` y pega siempre este mismo texto, sin cambios. No nombra ningun gate: la
+sesion identifica el primer gate ABIERTO en la bitacora (los EXTERNO, CERRADO, BLOQUEADO y POSTERGADO se saltan). La
+fuente de verdad es el repositorio, no la conversacion.
 
-El usuario hace `/clear` entre gates y reemplaza `TNN` por el gate que espera. Si el gate nombrado no es el primer
-ABIERTO de la bitacora, la sesion se detiene y pregunta antes de leer o editar codigo. T05 no usa este prompt.
+> Lee íntegramente `CLAUDE.md`, `docs/PLAN_0_7_0.md` y `docs/BITACORA_0_7_0.md`.
+> Identifica el primer gate `ABIERTO` según la bitácora y trabaja exclusivamente en él, respetando el protocolo de la sección 5 del plan.
+> Antes de modificar cualquier archivo:
+> * Verifica el estado de Git y las precondiciones del gate.
+> * Revisa los antecedentes, decisiones y restricciones aplicables.
+> * Realiza el inventario técnico y presenta un plan de implementación con las pruebas previstas.
+> * DETENTE y espera mi aprobación explícita (GO).
+>
+> Únicamente después del GO:
+> * Ejecuta el gate dentro del alcance aprobado.
+> * Realiza las pruebas exigidas, incluidas las de regresión y mutación cuando correspondan.
+> * Comprueba las restricciones del plan.
+> * Documenta el cierre en la bitácora con el formato de la sección 7.
+> * Revisa el alcance del commit y la ausencia de archivos sensibles.
+> * Realiza commit y push a `main` en `origin`.
+> * DETENTE. No comiences el siguiente gate.
+>
+> No dependas de conversaciones anteriores ni de información no documentada. Si falta información, existe una discrepancia o necesitas ampliar el alcance, detente y consulta antes de proceder.
+> Responde siempre en español.
+
+Cada cierre deja en la bitacora todo lo que la sesion siguiente necesita (estado, hallazgos, pendientes y evidencias):
+ninguna sesion depende de lo conversado en otra.

@@ -1,7 +1,8 @@
 # SIGER 0.7.0 - bitacora de gates
 
 Estado vivo del trabajo de `docs/PLAN_0_7_0.md`. Cada sesion de Claude Code toma el primer gate ABIERTO, lo cierra aqui con el formato de la seccion 7 del plan, hace commit y push, y se detiene.
-Estados: ABIERTO (por hacer), CERRADO (verificado, con commit y push), BLOQUEADO (detenido; ver su registro), POSTERGADO (fuera del cierre de 0.7.0, con su motivo), EXTERNO (lo realiza el responsable fuera de Claude Code; Claude Code no lo toma y solo transcribe su resultado cuando el responsable se lo pide).
+Estados: ABIERTO (por hacer), CERRADO (verificado, con commit y push), BLOQUEADO (detenido; ver su registro), POSTERGADO (fuera del cierre de 0.7.0, con su motivo), EXTERNO (lo realiza el responsable fuera de Claude Code; Claude Code lo salta y nunca edita su registro ni su estado: el responsable los incorpora a mano, segun la fila T05 de la seccion 6 del plan).
+Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del plan, sin nombrar gates.
 
 ## Estado
 
