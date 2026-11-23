@@ -15,7 +15,7 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 | T03b | Bandeja de distribucion (D23) | CERRADO |
 | T04 | Cierre de version | CERRADO |
 | T05 | Auditoria independiente | BLOQUEADO |
-| T05b | Correccion de documentacion (hallazgos de T05) | ABIERTO |
+| T05b | Correccion de documentacion (hallazgos de T05) | CERRADO |
 | T05c | Prueba local de instancias 0.6.0 y 0.7.0 | ABIERTO |
 | T05d | Auditoria independiente: repeticion | EXTERNO |
 | T06a | Build de entrega en Windows | ABIERTO |
@@ -145,5 +145,17 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 - T05d (EXTERNO, Claude Padre): revisa el diff de T05b y la evidencia de T05c; el responsable incorpora su registro a mano. T06a espera a T05d CERRADO.
 - Pendientes: T05b y T05c -> Claude Code. T05d -> el responsable con Claude Padre. T06a espera a T05d CERRADO.
 - Verificacion manual sugerida al usuario: no aplica.
+
+### T05b - Correccion de documentacion (hallazgos de T05)   (CERRADO)
+- Fecha: 2026-11-23 (commit `gate T05b: correccion de documentacion`), en Windows (TEST-SIGER) con `.tools\`; base `e8a819f`. GO del responsable con: A) precision del hallazgo 1 de T05 por decision del responsable (la auditoria lo habia acotado a 0.7.0): `ARQUITECTURA.md` agrega tambien las piezas que `CLAUDE.md` ya describe y el documento omitia (0.6.0 y anteriores), con la redaccion de `CLAUDE.md` y sin contenido nuevo, y el titulo pasa a "SIGER 0.7.0 - arquitectura"; B) frase de `lib/regionMark.ts` y `components/RegionMark.tsx` en Frontend.
+- Hecho: hallazgo 2: D21 dice "(seccion 2 de `docs/PLAN_0_7_0.md`)". Hallazgo 1: `ARQUITECTURA.md` con titulo 0.7.0; Responsabilidades agrega `Db`, `Queries`, `Rules`, `AdultIdentity`, `Territory` (con la vista previa `POST /api/administration/territorial-effect`), `OriginRegion`, la marca de la bandeja en `BoardQueries` (`origin_region`, `risk`, `to_distribute`), la cobertura en `Personnel`, `OriginRelease`, la entrada externa (`Workflow.conserveExternal`, `ExternalOriginal`, `ExternalProjection`, `FormularioKeys`), el consumidor (`FormularioPull`, `FormularioClient`, `FormularioReception`), `MailOutbox`, `GraphMail`, `GraphCheck`, `IntegrationWatchdog`, `MigrationGuard`, `ServiceStop`, `TaskReminders`, `Input` y `Problem`; Persistencia: 0.6.0 sin migraciones, V15 y V16 (carga y marcador `REGION_FICHA_V16`), V1-V16 intactas y lo siguiente V17, ninguna migracion siembra regiones; Frontend: `actionData.ts`/`checklist`/`review`, `territorialOrders`, cobertura en el selector y la marca; Operacion: cuenta de servicio y servicios, Graph, D17, rotacion y cierre de la validacion (scripts existentes, sin ordenes `-File`). Cada clase y script citado se verifico en el arbol.
+- Archivos clave: `docs/ARQUITECTURA.md`, `docs/DECISIONES_FUNCIONALES.md`, esta bitacora.
+- Verificacion: JUnit H2 185 ok, 0 omitidas (antes 185); frontend typecheck ok, 112 ok (antes 112), build ok; `Check-Scripts.ps1` (5.1): 40 scripts, 73 ordenes en 60 procesos (sin cambio; no enlaza estos documentos); humo no aplica. MySQL no aplica (sin SQL).
+- Evidencia de mutacion: no aplica (solo documentacion).
+- Condiciones de la seccion 2: comprobadas con `git diff v0.6.0` (vacio en `scripts/`, `.mvn/`, los 7 archivos de la recepcion del Formulario e `IntakeCommands.java`; migraciones solo V15 y V16, sin cambios desde T03b). `git diff 26cd46c HEAD -- backend frontend scripts .mvn deploy` vacio (condicion de T05c).
+- Desvios del plan: ninguno. La ampliacion del hallazgo 1 (piezas de 0.6.0 y anteriores, titulo) es la decision A del responsable en el GO. `PLAN_0_7_0.md` conserva su "(seccion 2)" interna (no es ambigua dentro del plan).
+- Hallazgos para gates siguientes: ninguno.
+- Pendientes: prueba local de instancias 0.6.0 y 0.7.0 -> T05c (Claude Code, desde este commit). Revision del diff de T05b y de la evidencia de T05c -> T05d (EXTERNO). `SOURCE_SHA256.txt` -> T06b.
+- Verificacion manual sugerida al usuario: leer `docs/ARQUITECTURA.md` y `git diff e8a819f -- docs/DECISIONES_FUNCIONALES.md`.
 
 ## Cierre del plan 0.7.0

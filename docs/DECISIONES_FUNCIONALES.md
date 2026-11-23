@@ -175,7 +175,7 @@ D21. **Region de origen de la persona, con trazabilidad.**
      region: "sin region declarada".
    - Mecanismo: V16 agrega una columna derivada con la region de cada version de la ficha (`attention_revision`),
      escrita al crear la version desde sus propios datos y reconstruible con un marcador (patron de `PersonIndex` y
-     `Milestones`). No cambia la recepcion del Formulario (seccion 2).
+     `Milestones`). No cambia la recepcion del Formulario (seccion 2 de `docs/PLAN_0_7_0.md`).
    - Reportes: filtran y agrupan por la region registrada (estable: una correccion posterior no cambia las cifras
      historicas) e informan cuantos registros tienen la region corregida. La region que hoy informan pasa a rotularse
      "region de la sede". Exportacion: region registrada, region vigente y region de la sede. La ficha muestra la region
