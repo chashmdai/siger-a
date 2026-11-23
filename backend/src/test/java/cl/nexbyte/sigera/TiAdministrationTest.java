@@ -19,7 +19,7 @@ import static cl.nexbyte.sigera.Db.*;
 @ActiveProfiles("test")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class TiAdministrationTest {
-    @Autowired Workflow flow; @Autowired Access access; @Autowired Db db; @Autowired Queries queries; @Autowired BoardQueries boards;
+    @Autowired Workflow flow; @Autowired Access access; @Autowired Db db; @Autowired Queries queries; @Autowired BoardQueries boards; @Autowired Personnel personnel;
     static final String PASSWORD="Clave-Temporal-Sintetica-2026";
     long scope(String code){return n(db.one("SELECT id FROM org_scope WHERE code=?",code),"id");}
     long user(String name){return n(db.one("SELECT id FROM staff WHERE username=?",name),"id");}
@@ -70,6 +70,8 @@ class TiAdministrationTest {
         admin.put("SCOPE_UPDATE",new Object[]{regDemo,0L,Map.of("name","Cambio","region_code","05","reason","x")});
         admin.put("SCOPE_ACTIVATE",new Object[]{regDemo,0L,Map.of("reason","x")});
         admin.put("SCOPE_CLOSE",new Object[]{regDemo,0L,Map.of("reason","x")});
+        admin.put("SCOPE_COVERAGE",new Object[]{regDemo,0L,Map.of("regions",List.of("03"),"reason","x")});
+        admin.put("CENTRAL_COVERAGE",new Object[]{0L,0L,Map.of("regions",List.of("13"),"reason","x")});
         admin.put("DESIGNATE",new Object[]{null,null,Map.of("scope_id",upd,"titular_id",user("direccion.upd"),"substitute_id",user("profesional.upd"),"reason","x")});
         admin.put("SUBSTITUTE_ACTIVATE",new Object[]{demoDesignation,null,Map.of("from_at",ago(1),"until_at",in(3600),"reason","x")});
         admin.put("DOC_RELEASE",new Object[]{1L,null,Map.of("reason","x")});
@@ -83,6 +85,12 @@ class TiAdministrationTest {
             for(var e:admin.entrySet()){var v=e.getValue();@SuppressWarnings("unchecked") var data=(Map<String,Object>)v[2];
                 assertEquals(403,status(who,e.getKey(),(Long)v[0],(Long)v[1],data),who+" "+e.getKey());}
         assertEquals(0,db.count("SELECT COUNT(*) FROM staff WHERE username='sin.permiso'"));
+        assertEquals(0,db.count("SELECT COUNT(*) FROM territorial_coverage"));
+        // Vista previa del efecto territorial (0.7.0, D19): solo TI; 403 al resto, con cualquier tipo de cambio.
+        for(String who:List.of("gabinete","direccion.upd","auditoria","distribucion","coordinacion.regional"))
+            for(var body:List.<Map<String,Object>>of(Map.of("kind","CIERRE","scope_id",regDemo),Map.of("kind","COBERTURA","scope_id",regDemo,"regions",List.of("03")),
+                    Map.of("kind","REGION","scope_id",regDemo,"region_code","06"),Map.of("kind","NIVEL_CENTRAL","regions",List.of("13"))))
+                assertEquals(403,read(()->personnel.territorialPreview(access.actor(who),new Input(body))),who+" "+body.get("kind"));
 
         // TI crea y edita una cuenta y le concede Distribucion + Administrativo + Profesional.
         long multi=run("ti","STAFF_CREATE",null,null,Map.of("username","multi.funcion","name","Multifuncion sintetica","scope_id",reqScope,"password",PASSWORD,"reason","Alta sintetica")).id();
@@ -154,8 +162,10 @@ class TiAdministrationTest {
         assertTrue(list(workspace,"substitutions").stream().anyMatch(x->n(x,"id")==scheduled&&s(x,"state").equals("PROGRAMADA")));
         var forTi=queries.administration(access.actor("ti"));
         assertTrue(list(forTi,"grants").stream().anyMatch(g->n(g,"id")==administrative&&g.get("revoked_at")!=null));
-        // Instancia sana: sin avisos ni incompatibilidades (la rutina de supresion no encontro AUTORIDAD en las semillas).
-        assertTrue(list(forTi,"warnings").isEmpty());assertTrue(list(forTi,"incompatibilities").isEmpty());
+        // Instancia sana: sin incompatibilidades (la rutina de supresion no encontro AUTORIDAD en las semillas) y, como
+        // unico aviso, REGION_SIN_SEDE (0.7.0, D19): la demo solo tiene REG-DEMO (05) y ninguna cobertura del nivel central.
+        assertEquals(List.of("REGION_SIN_SEDE"),list(forTi,"warnings").stream().map(w->s(w,"code")).toList());
+        assertEquals(15L,n(list(forTi,"warnings").getFirst(),"count"));assertTrue(list(forTi,"incompatibilities").isEmpty());
         assertEquals(0,db.count("SELECT COUNT(*) FROM role_assignment WHERE role_code='AUTORIDAD'"));
         assertFalse(list(forTi,"users").isEmpty());assertFalse(list(forTi,"designations").isEmpty());assertFalse(list(forTi,"substitutions").isEmpty());
         var forAudit=queries.administration(access.actor("auditoria"));

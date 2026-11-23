@@ -212,9 +212,10 @@ public class Bootstrap implements ApplicationRunner {
             if(!code.matches("[A-Z0-9_-]{2,48}")||!codes.add(code))throw invalid("codigo de ambito "+code);
             if(!UNITS.containsKey(text(sc,"unidad",24,true)))throw invalid("unidad del ambito "+code);
             text(sc,"nombre",160,true);text(sc,"sede",48,true);text(sc,"area",48,false);
-            site(sc,code);
+            coverage(sc,site(sc,code),code);
             if(sc.path("regional").asBoolean(false))regionalCodes.add(code);
         }
+        var centralCoverage=coverage(root.path("coberturaNivelCentral"),"coberturaNivelCentral");
         var ti=root.path("ti");String tiUser=user(ti);
         if(!codes.contains(text(ti,"ambito",48,true)))throw invalid("ambito de adscripcion de "+tiUser);
         // Funcionarios opcionales con sus funciones del catalogo (mismas reglas que GRANT_CREATE y PROFILE_SET): una
@@ -255,6 +256,11 @@ public class Bootstrap implements ApplicationRunner {
             }
             long tiId=account(ti,ids,csv);
             db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,'TI',NULL,?,?)",tiId,System.currentTimeMillis(),"INICIALIZACION INSTITUCIONAL. "+basis);
+            // Cobertura territorial inicial (0.7.0, D19): periodos abiertos a nombre de la cuenta TI inicial, con el fundamento del archivo.
+            long now=System.currentTimeMillis();String coverageBasis="INICIALIZACION INSTITUCIONAL. "+basis;
+            for(var sc:scopes){String code=text(sc,"codigo",48,true);
+                Territory.apply(db,tiId,ids.get(code),List.of(),coverage(sc,site(sc,code),code),coverageBasis,now);}
+            Territory.apply(db,tiId,null,List.of(),centralCoverage,coverageBasis,now);
             int people=0;
             for(var f:staff.isArray()?staff:List.<tools.jackson.databind.JsonNode>of()){
                 long id=account(f,ids,csv);people++;
@@ -290,6 +296,29 @@ public class Bootstrap implements ApplicationRunner {
             catch(java.time.DateTimeException e){throw invalid("apertura de la sede "+code+" (aaaa-mm-dd)");}
         }else if(state.equals(Access.ACTIVE))opens=System.currentTimeMillis();
         return new Site(true,region,state,opens);
+    }
+    /**
+     * Cobertura adicional de un ambito del archivo (0.7.0, D18-D19): "cobertura" opcional, solo en sedes regionales, con
+     * las reglas de SCOPE_COVERAGE (codigos del Formulario, sin repetir y sin la region fisica de la sede).
+     */
+    private static List<String> coverage(tools.jackson.databind.JsonNode sc,Site site,String code){
+        var node=sc.path("cobertura");if(node.isMissingNode())return List.of();
+        if(!site.regional())throw invalid("cobertura solo aplica a sedes regionales ("+code+")");
+        var regions=coverage(node,"cobertura de la sede "+code);
+        if(regions.contains(site.region()))throw invalid("cobertura de la sede "+code+": la region fisica "+site.region()+" no va en la cobertura adicional");
+        return regions;
+    }
+    /** Lista de regiones del archivo (cobertura de una sede o del nivel central): arreglo de codigos del Formulario sin repetir. */
+    private static List<String> coverage(tools.jackson.databind.JsonNode node,String label){
+        if(node.isMissingNode())return List.of();
+        if(!node.isArray()||node.size()>AdultIdentity.REGIONS.size())throw invalid(label+" (arreglo de codigos de region)");
+        var out=new ArrayList<String>();
+        for(var r:node){
+            if(!r.isString()||!AdultIdentity.validRegion(r.asString()))throw invalid(label+": region "+(r.isString()?r.asString():"invalida")+" (codigo del Formulario, por ejemplo 05)");
+            if(out.contains(r.asString()))throw invalid(label+": region "+r.asString()+" repetida");
+            out.add(r.asString());
+        }
+        return Territory.ordered(out);
     }
     /** Funcion del catalogo unico; AUTORIDAD (suprimida) o un codigo desconocido invalidan el archivo. */
     private static Roles.Role role(String code,String user){

@@ -16,7 +16,7 @@ import static cl.nexbyte.sigera.Db.*;
 /**
  * Verificacion en un MySQL 8.4 AISLADO y desechable (no el de ninguna instancia ni MySQL80): solo se ejecuta con
  * -Dsiger.mysql.base=jdbc:mysql://127.0.0.1:<puerto> -Dsiger.mysql.user=... -Dsiger.mysql.password=... y esquemas
- * siger_a_mysql_pruebas / siger_a_mysql_inst creados para la prueba. Aplica V1-V14 con Flyway y ejercita sobre MySQL el
+ * siger_a_mysql_pruebas / siger_a_mysql_inst creados para la prueba. Aplica V1-V15 con Flyway y ejercita sobre MySQL el
  * SQL nuevo: ciclo PULL/ACK con productor SINTETICO, consumidor automatico, latidos, outbox con Graph FALSO, comandos
  * de TI, consultas de administracion, liberacion documental, rutinas de arranque de 0.5.0, unicidad del calendario
  * (V13) e inicializacion institucional. Sin red real. El resto de 0.5.0 (sedes, materia, buscador, reportes, perfil)
@@ -36,13 +36,13 @@ class MySql84IntegrationTest {
         return new SpringApplicationBuilder(SigerApplication.class).web(WebApplicationType.NONE).profiles("test").run(args.stream().map(a->"--"+a).toArray(String[]::new));
     }
 
-    @Test void migracionesV1aV14YOperacionContinuaSobreMySql84()throws Exception{
+    @Test void migracionesV1aV15YOperacionContinuaSobreMySql84()throws Exception{
         try(var ctx=app("siger_a_mysql_pruebas",List.of("siger.seed-demo=true","siger.folio-prefix=COMA","siger.formulario-trusted-keys="+FormularioDocs.trustFile(),
                 "siger.mail.mode=GRAPH","siger.mail.allowed-domains=defensorianinez.cl"))){
             var db=ctx.getBean(Db.class);
             assertTrue(s(db.one("SELECT VERSION() AS v"),"v").startsWith("8.4."),"MySQL 8.4");
-            for(int v=1;v<=14;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
-            assertEquals("14",ctx.getBean(Api.class).health().getBody().get("schema"));
+            for(int v=1;v<=15;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
+            assertEquals("15",ctx.getBean(Api.class).health().getBody().get("schema"));
             // Rutinas de arranque de 0.5.0 sobre las semillas: marcadores, hitos sin omisiones y la sede con Coordinacion como DIRECCION.
             for(String marker:List.of(Bootstrap.AUTHORITY_MARKER,Bootstrap.REGIONAL_HEAD_MARKER,PersonIndex.MARKER,Milestones.MARKER))
                 assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",marker),marker);
@@ -126,7 +126,7 @@ class MySql84IntegrationTest {
         Files.writeString(dir.resolve("estructura.json"),InstitutionalBootstrapTest.VALID);
         try(var ctx=app("siger_a_mysql_inst",List.of("siger.bootstrap-file="+dir.resolve("estructura.json")))){
             var db=ctx.getBean(Db.class);
-            assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version='14' AND success=TRUE"));
+            assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version='15' AND success=TRUE"));
             assertEquals(1,db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE"));
             assertEquals(3,db.count("SELECT COUNT(*) FROM org_scope"));
             assertEquals(0,db.count("SELECT COUNT(*) FROM staff WHERE LOWER(name) LIKE '%sintetic%'"));

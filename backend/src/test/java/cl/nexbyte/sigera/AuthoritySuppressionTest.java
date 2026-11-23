@@ -87,9 +87,12 @@ class AuthoritySuppressionTest {
         assertNull(db.one("SELECT revoked_at FROM role_assignment WHERE user_id=? AND role_code='PROFESIONAL'",mixed).get("revoked_at"));
         var conflicts=list(admin,"incompatibilities");
         assertEquals(1,conflicts.size());assertEquals(mixed,n(conflicts.getFirst(),"id"));assertEquals(List.of("PROFESIONAL","TI"),conflicts.getFirst().get("roles"));
-        assertEquals(List.of("TI_INCOMPATIBLE"),list(admin,"warnings").stream().map(w->s(w,"code")).toList());
+        // 0.7.0 (D19): sin sedes ni cobertura del nivel central, las 16 regiones del catalogo quedan sin atencion.
+        assertEquals(List.of("TI_INCOMPATIBLE","REGION_SIN_SEDE"),list(admin,"warnings").stream().map(w->s(w,"code")).toList());
+        assertEquals(16L,n(list(admin,"warnings").getLast(),"count"));
         bootstrap.warnAdministration();
         assertTrue(output.getAll().contains("Administracion: TI_INCOMPATIBLE (cantidad 1)"));
+        assertTrue(output.getAll().contains("Administracion: REGION_SIN_SEDE (cantidad 16)"));
         assertFalse(output.getAll().contains("mixta.sintetica"));
         // Una identidad tecnica alterada (habilitada) detiene la rutina: falla cerrado.
         db.update("UPDATE staff SET enabled=TRUE WHERE id=?",actor);

@@ -42,6 +42,8 @@ class InstitutionalBootstrapTest {
         assertEquals(0,db.count("SELECT COUNT(*) FROM org_scope WHERE code='REG-DEMO' OR LOWER(name) LIKE '%sintetic%'"));
         assertEquals(0,db.count("SELECT COUNT(*) FROM role_assignment WHERE basis LIKE '%SINTETICA%'"));
         for(String table:List.of("communication","requirement","case_record","substitution_designation","document_item"))assertEquals(0,db.count("SELECT COUNT(*) FROM "+table),table);
+        // Un archivo sin "cobertura" ni "coberturaNivelCentral" sigue valido (0.7.0, D19) y no declara cobertura alguna.
+        assertEquals(0,db.count("SELECT COUNT(*) FROM territorial_coverage"));
         var ti=db.one("SELECT * FROM staff WHERE username='ti.institucional'");
         assertTrue(b(ti,"must_change"));assertEquals("ti@defensorianinez.cl",s(ti,"email"));
         assertEquals(1,db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=? AND role_code='TI' AND scope_id IS NULL",n(ti,"id")));

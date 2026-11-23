@@ -187,7 +187,9 @@ class RegionalSitesTest {
         assertEquals(BASIS,s(db.one("SELECT note FROM audit_event WHERE action='CUENTA_ACTUALIZADA' AND resource_id=? ORDER BY id DESC LIMIT 1",prof),"note"));
         assertEquals(0L,n(structure(sur),"staff"));
         assertTrue(refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur)+1,reason()).contains("cambio"));
-        run("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason());
+        // 0.7.0 (D19): su region fisica (14) queda sin atencion; sin la confirmacion expresa el cierre se rechaza.
+        assertTrue(refusal("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),reason()).contains("deja sin atención: Los Ríos (14)"));
+        run("ti","SCOPE_CLOSE",sur,rev("org_scope",sur),Map.of("reason",BASIS,"regiones_sin_sede",List.of("14")));
         var row=db.one("SELECT * FROM org_scope WHERE id=?",sur);
         assertEquals("CERRADA",s(row,"state"));assertFalse(b(row,"enabled"));
         assertTrue(((List<?>)structure(sur).get("close_blockers")).isEmpty(),"una sede cerrada no muestra bloqueos");

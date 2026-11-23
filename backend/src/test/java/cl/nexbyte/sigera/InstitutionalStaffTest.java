@@ -23,11 +23,12 @@ import static cl.nexbyte.sigera.Db.*;
 class InstitutionalStaffTest {
     static final Path DIR=Path.of("target","institucional-staff-"+UUID.randomUUID());
     // Sedes de prueba (D7-D8): una activa con su Coordinacion como DIRECCION y otra proyectada con dotacion preparada.
-    static final String SITES="{\"codigo\":\"REG-SUR\",\"nombre\":\"Sede de prueba Sur\",\"unidad\":\"REG\",\"sede\":\"SEDE-SUR\",\"regional\":true,\"region\":\"10\"},"
-        +"{\"codigo\":\"REG-NORTE\",\"nombre\":\"Sede de prueba Norte\",\"unidad\":\"REG\",\"sede\":\"SEDE-NORTE\",\"regional\":true,\"region\":\"15\",\"estado\":\"PROYECTADA\",\"apertura\":\"2027-03-01\"}";
+    // Cobertura territorial inicial (0.7.0, D19): adicional en ambas sedes (la de la proyectada queda preparada) y del nivel central.
+    static final String SITES="{\"codigo\":\"REG-SUR\",\"nombre\":\"Sede de prueba Sur\",\"unidad\":\"REG\",\"sede\":\"SEDE-SUR\",\"regional\":true,\"region\":\"10\",\"cobertura\":[\"11\",\"14\"]},"
+        +"{\"codigo\":\"REG-NORTE\",\"nombre\":\"Sede de prueba Norte\",\"unidad\":\"REG\",\"sede\":\"SEDE-NORTE\",\"regional\":true,\"region\":\"15\",\"estado\":\"PROYECTADA\",\"apertura\":\"2027-03-01\",\"cobertura\":[\"01\"]}";
     static final String SITE_STAFF="{\"usuario\":\"coord.sur\",\"nombre\":\"Coordinacion Sur\",\"ambito\":\"REG-SUR\",\"funciones\":[{\"funcion\":\"DIRECCION\",\"ambito\":\"REG-SUR\"},{\"funcion\":\"PROFESIONAL\",\"ambito\":\"REG-SUR\"}]},"
         +"{\"usuario\":\"prep.norte\",\"nombre\":\"Dotacion Norte\",\"ambito\":\"REG-NORTE\",\"funciones\":[{\"funcion\":\"DIRECCION\",\"ambito\":\"REG-NORTE\"}]},";
-    static final String STAFF=InstitutionalBootstrapTest.VALID.replace("\"sede\":\"CENTRAL\"}],","\"sede\":\"CENTRAL\"},"+SITES+"],").replace("\"ambito\":\"UGI\"}}","\"ambito\":\"UGI\"},"
+    static final String STAFF=InstitutionalBootstrapTest.VALID.replace("{\"fundamento\"","{\"coberturaNivelCentral\":[\"13\"],\"fundamento\"").replace("\"sede\":\"CENTRAL\"}],","\"sede\":\"CENTRAL\"},"+SITES+"],").replace("\"ambito\":\"UGI\"}}","\"ambito\":\"UGI\"},"
         +"\"funcionarios\":["+SITE_STAFF+"{\"usuario\":\"jefa.req\",\"nombre\":\"Jefa REQ\",\"correo\":\"jefa@defensorianinez.cl\",\"ambito\":\"UPR-REQ\",\"funciones\":[{\"funcion\":\"JEFATURA\",\"ambito\":\"UPR-REQ\"},{\"funcion\":\"PROFESIONAL\",\"ambito\":\"UPR-REQ\"}]},"
         +"{\"usuario\":\"distribuidora\",\"nombre\":\"Distribuidora\",\"ambito\":\"UPR-REQ\",\"funciones\":[{\"funcion\":\"DISTRIBUIDOR\"},{\"funcion\":\"ADMINISTRATIVO\",\"ambito\":\"UPR-REQ\"}]},"
         +"{\"usuario\":\"profesional.req\",\"nombre\":\"Profesional REQ\",\"ambito\":\"UPR-REQ\",\"funciones\":[{\"funcion\":\"PROFESIONAL\",\"ambito\":\"UPR-REQ\"}]}]}");
@@ -56,6 +57,15 @@ class InstitutionalStaffTest {
         assertEquals(1,db.count("SELECT COUNT(*) FROM role_assignment WHERE user_id=(SELECT id FROM staff WHERE username='prep.norte') AND role_code='DIRECCION'"));
         assertFalse(access.actor("prep.norte").head(n(norte,"id")));
         assertEquals(0,db.count("SELECT COUNT(*) FROM communication"));
+        // Cobertura inicial: periodos abiertos a nombre de la TI inicial con el fundamento del archivo, en el orden del catalogo.
+        long tiId=n(db.one("SELECT id FROM staff WHERE username='ti.institucional'"),"id");
+        assertEquals(4,db.count("SELECT COUNT(*) FROM territorial_coverage WHERE until_ms IS NULL AND from_by=? AND from_basis LIKE 'INICIALIZACION INSTITUCIONAL.%'",tiId));
+        var territory=Territory.load(db);
+        assertEquals(List.of("14","11"),territory.coverage(n(sur,"id")));assertEquals(List.of("01"),territory.coverage(n(norte,"id")));
+        assertEquals(List.of("13"),territory.central());
+        assertEquals(List.of("10","14","11"),territory.attendedBy(n(sur,"id")));
+        assertTrue(territory.activeAt("01").isEmpty());assertEquals(List.of("REG-NORTE"),territory.projectedAt("01"));
+        assertEquals(0,db.count("SELECT COUNT(*) FROM territorial_coverage WHERE scope_id=(SELECT id FROM org_scope WHERE code='UGI')"));
         // Flujo real con datos ficticios: la distribuidora registra una COM y la jefatura la recibe (reglas existentes).
         db.update("UPDATE staff SET must_change=FALSE WHERE technical=FALSE");
         long com=flow.run("distribuidora",new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("scope_id",scope,"channel","TELEFONO",
@@ -79,9 +89,20 @@ class InstitutionalStaffTest {
         String closedSite=STAFF.replace("\"estado\":\"PROYECTADA\"","\"estado\":\"CERRADA\"");
         String badOpening=STAFF.replace("2027-03-01","2027-13-01");
         String centralWithRegion=STAFF.replace("\"unidad\":\"UGI\",\"sede\":\"CENTRAL\"","\"unidad\":\"UGI\",\"sede\":\"CENTRAL\",\"region\":\"13\"");
+        // Cobertura (0.7.0, D19): mismas reglas que SCOPE_COVERAGE y CENTRAL_COVERAGE.
+        String coverageWithOwnRegion=STAFF.replace("\"cobertura\":[\"11\",\"14\"]","\"cobertura\":[\"11\",\"10\"]");
+        String coverageRepeated=STAFF.replace("\"cobertura\":[\"11\",\"14\"]","\"cobertura\":[\"11\",\"11\"]");
+        String coverageInvalid=STAFF.replace("\"cobertura\":[\"11\",\"14\"]","\"cobertura\":[\"99\"]");
+        String coverageNotList=STAFF.replace("\"cobertura\":[\"11\",\"14\"]","\"cobertura\":\"11\"");
+        String coverageNotText=STAFF.replace("\"cobertura\":[\"11\",\"14\"]","\"cobertura\":[11]");
+        String coverageInCentral=STAFF.replace("\"unidad\":\"UGI\",\"sede\":\"CENTRAL\"","\"unidad\":\"UGI\",\"sede\":\"CENTRAL\",\"cobertura\":[\"13\"]");
+        String centralInvalid=STAFF.replace("\"coberturaNivelCentral\":[\"13\"]","\"coberturaNivelCentral\":[\"99\"]");
+        String centralRepeated=STAFF.replace("\"coberturaNivelCentral\":[\"13\"]","\"coberturaNivelCentral\":[\"13\",\"13\"]");
+        String centralNotList=STAFF.replace("\"coberturaNivelCentral\":[\"13\"]","\"coberturaNivelCentral\":\"13\"");
         int i=0;
         for(String bad:List.of(twoHeads,tiCombined,tiWithScope,sameTwice,authority,repeated,unknownScope,centralWithScope,
-                               headInSite,siteWithoutRegion,unknownRegion,closedSite,badOpening,centralWithRegion)){
+                               headInSite,siteWithoutRegion,unknownRegion,closedSite,badOpening,centralWithRegion,
+                               coverageWithOwnRegion,coverageRepeated,coverageInvalid,coverageNotList,coverageNotText,coverageInCentral,centralInvalid,centralRepeated,centralNotList)){
             assertNotEquals(STAFF,bad,"caso "+i);
             Path f=DIR.resolve("invalido-"+(i++)+".json");Files.writeString(f,bad);
             var e=assertThrows(IllegalStateException.class,()->bootstrap.institutional(f));

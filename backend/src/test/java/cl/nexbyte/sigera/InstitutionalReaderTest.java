@@ -331,6 +331,8 @@ class InstitutionalReaderTest {
   attempts.put("SCOPE_UPDATE",new Attempt("org_scope",upr,Map.of("name","Intento","reason","Intento")));
   attempts.put("SCOPE_ACTIVATE",new Attempt("org_scope",upr,anyReason));
   attempts.put("SCOPE_CLOSE",new Attempt("org_scope",upr,anyReason));
+  attempts.put("SCOPE_COVERAGE",new Attempt("org_scope",upr,Map.of("regions",List.of("03"),"reason","Intento")));
+  attempts.put("CENTRAL_COVERAGE",new Attempt(null,0L,Map.of("regions",List.of("13"),"reason","Intento")));
   attempts.put("DESIGNATE",new Attempt(null,null,Map.of("scope_id",upr,"titular_id",user(HEAD),"substitute_id",prof,"reason","Intento")));
   attempts.put("SUBSTITUTE_ACTIVATE",new Attempt(null,f.designation(),Map.of("from_at",ago(0),"until_at",Instant.now().plusSeconds(3600).toString(),"reason","Intento")));
   attempts.put("SUBSTITUTE_END",new Attempt("substitution",f.substitution(),anyReason));

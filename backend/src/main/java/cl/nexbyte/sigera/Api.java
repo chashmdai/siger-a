@@ -19,11 +19,11 @@ import static cl.nexbyte.sigera.Db.*;
 public class Api {
     final Attention attention;final BoardQueries boards;volatile boolean ready;
     final Access access;final Workflow flow;final Queries queries;final Documents documents;final Db db;final PasswordEncoder passwords;
-    final Integrations integrations;final PersonSearch search;final Holidays holidays;final Reports reports;final String environment;final String releaseVersion;
-    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,Reports reports,
+    final Integrations integrations;final PersonSearch search;final Holidays holidays;final Reports reports;final Personnel personnel;final String environment;final String releaseVersion;
+    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,Reports reports,Personnel personnel,
                @org.springframework.beans.factory.annotation.Value("${siger.environment-label:}")String environment,BuildProperties buildProperties){
         this.attention=attention;this.access=access;this.flow=flow;this.queries=queries;this.documents=documents;this.db=db;this.passwords=passwords;this.boards=boards;
-        this.integrations=integrations;this.search=search;this.holidays=holidays;this.reports=reports;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
+        this.integrations=integrations;this.search=search;this.holidays=holidays;this.reports=reports;this.personnel=personnel;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
     }
     private String name(Authentication auth){if(auth==null||!(auth.getPrincipal() instanceof SecurityConfig.Principal))throw new Problem(401,"Inicia sesion.");return auth.getName();}
     @GetMapping("/session") public Map<String,Object> session(Authentication auth,CsrfToken csrf){
@@ -90,6 +90,8 @@ public class Api {
     /** Calendario habil (G09): feriados para TI; las demas cuentas reciben 403. */
     @GetMapping("/calendar") public Map<String,Object> calendar(Authentication a){return holidays.calendar(access.actor(name(a)));}
     @GetMapping("/administration") public Map<String,Object> administration(Authentication a){return queries.administration(access.actor(name(a)));}
+    /** Efecto territorial de un cambio hipotetico (0.7.0, D19; solo TI, POST con CSRF, sin escrituras): misma regla que los comandos. */
+    @PostMapping("/administration/territorial-effect") public Map<String,Object> territorialEffect(Authentication a,@RequestBody Map<String,Object> body){return personnel.territorialPreview(access.actor(name(a)),new Input(body));}
     @PostMapping("/commands") public Workflow.Result command(Authentication a,@RequestBody Workflow.Command command){return flow.run(name(a),command);}
     @PostMapping(value="/documents",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> upload(Authentication a,@RequestParam String kind,@RequestParam long target,@RequestParam(defaultValue="false")boolean reserved,@RequestParam(required=false)Long note,@RequestParam(required=false)Long previous,@RequestParam(defaultValue="OTRO")String type,@RequestParam(defaultValue="")String description,@RequestParam UUID key,@RequestParam MultipartFile file)throws Exception{return documents.upload(name(a),kind,target,reserved,note,previous,type,description,key,file);}

@@ -189,6 +189,32 @@ class LoginPasswordTest {
         assertEquals("[\"AMBITO\",\"MATERIA\"]",mapper.readTree(period.body()).get("dimensions").toString());
     }
     /**
+     * Vista previa del efecto territorial (0.7.0, D19) por HTTP: solo TI (403 al resto), POST con CSRF (sin token 403),
+     * GET 405 con Allow y sin escrituras (ni cobertura, ni revisiones, ni auditoria, ni comandos).
+     */
+    @Test void efectoTerritorialSoloTiPorPostConCsrfYSinEscrituras()throws Exception{
+        String json="{\"kind\":\"CIERRE\",\"scope_id\":"+db.one("SELECT id FROM org_scope WHERE code='REG-DEMO'").get("id")+"}";
+        var other=new Browser();String user="direccion.upd",fresh="Nueva-clave-territorio-2026";
+        assertEquals(204,other.login(user,temporary(user)));assertEquals(200,other.password(temporary(user),fresh).statusCode());
+        other=new Browser();assertEquals(204,other.login(user,fresh));assertTrue(other.authenticated()); // token CSRF de la sesion autenticada
+        assertEquals(403,other.send("POST","/administration/territorial-effect","application/json",json).statusCode(),"sin TI");
+        var ti=new Browser();String freshTi="Nueva-clave-territorio-ti-2026";
+        assertEquals(204,ti.login("ti",temporary("ti")));assertEquals(200,ti.password(temporary("ti"),freshTi).statusCode());
+        ti=new Browser();assertEquals(204,ti.login("ti",freshTi));assertTrue(ti.authenticated());
+        var get=ti.send("GET","/administration/territorial-effect",null,null);
+        assertEquals(405,get.statusCode(),get.body());assertTrue(get.headers().firstValue("Allow").orElse("").contains("POST"));
+        var noCsrf=ti.http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/administration/territorial-effect")).header("Content-Type","application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(json)).build(),HttpResponse.BodyHandlers.ofString());
+        assertEquals(403,noCsrf.statusCode(),"POST sin token CSRF");
+        String writes="SELECT (SELECT COUNT(*) FROM territorial_coverage)+(SELECT COUNT(*) FROM audit_event)*1000+(SELECT COUNT(*) FROM command_log)*1000000+(SELECT COALESCE(SUM(revision),0) FROM org_scope)*1000000000";
+        long before=db.count(writes);
+        var post=ti.send("POST","/administration/territorial-effect","application/json",json);
+        assertEquals(200,post.statusCode(),post.body());
+        assertEquals("[\"05\"]",mapper.readTree(post.body()).get("regiones_sin_sede").toString());
+        assertEquals("05",mapper.readTree(post.body()).get("effect").get(0).get("region").asString());
+        assertEquals(before,db.count(writes),"la vista previa no escribe");
+    }
+    /**
      * Exportaciones (G12) por HTTP: el CSV de bandejas exige EXPORTACION (403 sin ella) y sigue acotado a lo que la cuenta
      * lee; ambos CSV traen BOM, punto y coma, fecha aaaa-mm-dd hh:mm y el ambito por su codigo. La exportacion de Reportes
      * es POST con CSRF (GET 405).

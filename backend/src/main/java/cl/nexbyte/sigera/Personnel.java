@@ -83,8 +83,11 @@ public class Personnel {
                 require(!s(s,"state").equals(Access.CLOSED),"El ambito esta cerrado: no se edita.");
                 String name=in.text("name",160,true),region=region(in,b(s,"regional"));long opens=in.instant("opens_at",false);Long opensMs=opens>0?opens:null;
                 require(!name.equals(s(s,"name"))||!Objects.equals(region,s.get("region_code"))||!Objects.equals(opensMs,nullableId(s,"opens_ms")),"El ambito no tiene cambios.");
+                // Cambio de region fisica (D19): nunca una region de su cobertura adicional; efecto territorial si la sede atiende hoy.
+                boolean moved=b(s,"regional")&&!Objects.equals(region,s.get("region_code"));
+                var effect=moved?regionChange(id,region):List.<Map<String,Object>>of();Territory.confirm(in,effect);
                 db.update("UPDATE org_scope SET name=?,region_code=?,opens_ms=?,revision=revision+1 WHERE id=?",name,region,opensMs,id);
-                audit(a,"AMBITO_ACTUALIZADO","AMBITO",id,id,in.reason());return Workflow.done("AMBITO",id);
+                audit(a,"AMBITO_ACTUALIZADO","AMBITO",id,id,(moved?"Region: "+s(s,"region_code")+" -> "+region+". "+suffix(Territory.describe(effect)):"")+in.reason());return Workflow.done("AMBITO",id);
             }
             case "SCOPE_ACTIVATE" -> {
                 ti(a);var s=site(id,revision);
@@ -100,8 +103,27 @@ public class Personnel {
                 require(s(s,"state").equals(Access.ACTIVE),"Solo una sede activa se cierra.");
                 var blockers=closeBlockers(db,id);
                 require(blockers.isEmpty(),"No se puede cerrar la sede: "+String.join("; ",blockers)+".");
+                // Efecto territorial (D19): no es un bloqueo; si una region queda sin atencion, TI la confirma expresamente.
+                var change=closeChange(id);var effect=change.effect();Territory.confirm(in,effect);String reason=in.reason();
                 db.update("UPDATE org_scope SET state=?,enabled=FALSE,revision=revision+1 WHERE id=?",Access.CLOSED,id);
-                audit(a,"AMBITO_CERRADO","AMBITO",id,id,in.reason());return Workflow.done("AMBITO",id);
+                // La cobertura adicional termina en el mismo acto; la historia se conserva.
+                var ended=change.current();Territory.apply(db,a.id(),id,ended,List.of(),reason,System.currentTimeMillis());
+                audit(a,"AMBITO_CERRADO","AMBITO",id,id,suffix(Territory.describe(effect))+(ended.isEmpty()?"":"Cobertura adicional terminada: "+Territory.codes(ended)+". ")+reason);return Workflow.done("AMBITO",id);
+            }
+            case "SCOPE_COVERAGE" -> {
+                ti(a);var s=db.one("SELECT * FROM org_scope WHERE id=?",id);Db.revision(s,revision);
+                var change=coverageChange(s,Territory.regions(in,"regions"));var effect=change.effect();Territory.confirm(in,effect);String reason=in.reason();
+                Territory.apply(db,a.id(),id,change.current(),change.wanted(),reason,System.currentTimeMillis());
+                db.update("UPDATE org_scope SET revision=revision+1 WHERE id=?",id);
+                audit(a,"COBERTURA_ACTUALIZADA","AMBITO",id,id,"Cobertura adicional: "+Territory.codes(change.current())+" -> "+Territory.codes(change.wanted())+". "+suffix(Territory.describe(effect))+reason);
+                return Workflow.done("AMBITO",id);
+            }
+            case "CENTRAL_COVERAGE" -> {
+                ti(a);Db.revision(Map.of("revision",Territory.centralRevision(db)),revision);
+                var change=centralChange(Territory.regions(in,"regions"));var effect=change.effect();Territory.confirm(in,effect);String reason=in.reason();
+                Territory.apply(db,a.id(),null,change.current(),change.wanted(),reason,System.currentTimeMillis());
+                audit(a,"COBERTURA_NIVEL_CENTRAL_ACTUALIZADA","AMBITO",0,null,"Cobertura del nivel central: "+Territory.codes(change.current())+" -> "+Territory.codes(change.wanted())+". "+suffix(Territory.describe(effect))+reason);
+                return Workflow.done("AMBITO",0);
             }
             case "DESIGNATE" -> {
                 ti(a);long scope=in.id("scope_id"),titular=in.id("titular_id"),substitute=in.id("substitute_id");access.scope(scope);
@@ -175,6 +197,62 @@ public class Personnel {
         var s=db.one("SELECT * FROM org_scope WHERE id=?",id);Db.revision(s,revision);
         require(b(s,"regional"),"Solo las sedes regionales se activan o cierran.");
         return s;
+    }
+    // --- Cobertura territorial (0.7.0, D18-D19) -------------------------------------------------------
+    /** Cambio territorial validado: estado antes y despues, sujeto (sede o nivel central) y cobertura actual y pedida. */
+    record Change(Territory.Snapshot before,Territory.Snapshot after,Long scope,List<String> current,List<String> wanted){
+        List<Map<String,Object>> effect(){return Territory.effect(before,after,scope);}
+    }
+    /** Cobertura adicional de una sede: solo sedes regionales no cerradas, sin su region fisica y con cambios. */
+    Change coverageChange(Map<String,Object> s,List<String> wanted){
+        long id=n(s,"id");
+        require(b(s,"regional"),"Solo las sedes regionales tienen cobertura adicional; la del nivel central se declara aparte.");
+        require(!s(s,"state").equals(Access.CLOSED),"La sede esta cerrada: no tiene cobertura.");
+        require(!wanted.contains(s(s,"region_code")),"La region fisica de la sede ("+Territory.name(s(s,"region_code"))+") siempre esta cubierta: no va en la cobertura adicional.");
+        var before=Territory.load(db);var current=before.coverage(id);
+        require(!current.equals(wanted),"La cobertura no tiene cambios.");
+        return new Change(before,before.withCoverage(id,wanted),id,current,wanted);
+    }
+    /** Cobertura del nivel central: regiones que atiende la Oficina Nacional (D18), con cambios. */
+    Change centralChange(List<String> wanted){
+        var before=Territory.load(db);var current=before.central();
+        require(!current.equals(wanted),"La cobertura del nivel central no tiene cambios.");
+        return new Change(before,before.withCentral(wanted),null,current,wanted);
+    }
+    /** Cierre de una sede activa: deja de atender su region fisica y su cobertura adicional, que termina. */
+    Change closeChange(long id){
+        var before=Territory.load(db);return new Change(before,before.closing(id),id,before.coverage(id),List.of());
+    }
+    /** Nueva region fisica de una sede: nunca una de su cobertura adicional (en cualquier estado); efecto si atiende hoy. */
+    List<Map<String,Object>> regionChange(long id,String region){
+        var before=Territory.load(db);
+        require(!before.coverage(id).contains(region),"La region "+Territory.name(region)+" esta en la cobertura adicional de la sede: retirala de la cobertura antes de fijarla como region fisica.");
+        return Territory.effect(before,before.withRegion(id,region),id);
+    }
+    private static String suffix(String text){return text.isEmpty()?"":text+" ";}
+    /**
+     * Vista previa del efecto territorial (solo TI, sin escrituras): la misma validacion y el mismo calculo que el
+     * comando. kind CIERRE (scope_id), COBERTURA (scope_id, regions), REGION (scope_id, region_code) o NIVEL_CENTRAL
+     * (regions). Devuelve el efecto y las regiones que quedarian sin atencion (lo que la orden debe confirmar).
+     */
+    public Map<String,Object> territorialPreview(Actor a,Input in){
+        ti(a);String kind=in.choice("kind","CIERRE","COBERTURA","REGION","NIVEL_CENTRAL");
+        List<Map<String,Object>> effect;
+        if(kind.equals("NIVEL_CENTRAL"))effect=centralChange(Territory.regions(in,"regions")).effect();
+        else{
+            var s=db.one("SELECT * FROM org_scope WHERE id=?",in.id("scope_id"));long id=n(s,"id");
+            switch(kind){
+                case "CIERRE" -> {require(b(s,"regional"),"Solo las sedes regionales se activan o cierran.");require(s(s,"state").equals(Access.ACTIVE),"Solo una sede activa se cierra.");effect=closeChange(id).effect();}
+                case "COBERTURA" -> effect=coverageChange(s,Territory.regions(in,"regions")).effect();
+                default -> {
+                    require(!s(s,"state").equals(Access.CLOSED),"El ambito esta cerrado: no se edita.");
+                    String region=region(in,b(s,"regional"));
+                    require(b(s,"regional")&&!Objects.equals(region,s.get("region_code")),"La region fisica no cambia.");
+                    effect=regionChange(id,region);
+                }
+            }
+        }
+        var out=new LinkedHashMap<String,Object>();out.put("effect",effect);out.put("regiones_sin_sede",Territory.unattended(effect));return out;
     }
     private String scopeCode(Long scope){return scope==null?"sin adscripcion":s(db.one("SELECT code FROM org_scope WHERE id=?",scope),"code");}
     /** Cuentas con funciones vigentes o programadas en el ambito. */
@@ -290,6 +368,8 @@ public class Personnel {
         long conflicts=tiConflicts(db).size();
         if(conflicts>0)out.add(Map.of("code","TI_INCOMPATIBLE","count",conflicts,
             "message","Hay "+conflicts+(conflicts==1?" cuenta que combina":" cuentas que combinan")+" TI con otras funciones. TI no puede tener otras funciones: resuélvelo en el perfil de cada cuenta."));
+        // D19: regiones del catalogo que hoy no atiende ninguna sede ACTIVA ni el nivel central.
+        Territory.warning(db).ifPresent(out::add);
         long omitted=Milestones.omitted(db);
         if(omitted>0)out.add(Map.of("code","HITOS_OMITIDOS","count",omitted,
             "message","Hitos reconstruidos con "+omitted+(omitted==1?" omisión":" omisiones")+": eventos históricos de versiones anteriores que la carga inicial no reconoció. La operación no se ve afectada; los reportes de tiempos no consideran esos eventos."));

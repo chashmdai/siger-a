@@ -41,5 +41,16 @@ public record Input(Map<String,Object> values) {
         }
         return out;
     }
+    /** Lista de textos (por ejemplo, codigos de region), o null si el campo no viene; cada elemento sin espacios extremos. */
+    public List<String> strings(String key, int max) {
+        Object value=values.get(key);if(value==null)return null;
+        if (!(value instanceof List<?> items) || items.size()>max) throw new Problem(400,"Revisa el campo "+key+" (maximo "+max+" elementos).");
+        var out=new ArrayList<String>();
+        for (Object item:items) {
+            if (!(item instanceof String s) || s.strip().length()>40 || s.indexOf(0)>=0) throw new Problem(400,"Campo invalido: "+key);
+            out.add(s.strip());
+        }
+        return out;
+    }
     public String reason() { return text("reason",12000,true); }
 }

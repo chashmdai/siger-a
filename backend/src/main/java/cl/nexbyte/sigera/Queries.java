@@ -28,10 +28,14 @@ public class Queries {
         // Todos los ambitos, tambien las sedes PROYECTADA y CERRADA (con su estado, para etiquetas), con su nivel y las
         // operaciones que reciben segun la misma regla que valida cada comando (Access.destination); solo un ambito
         // activo recibe. La entrega a un profesional se publica aparte, por persona (handoff_scopes).
+        // Cobertura territorial vigente (0.7.0, D18): cobertura adicional abierta de cada sede (rige si la sede esta
+        // ACTIVA; en una PROYECTADA queda preparada) y regiones que atiende el nivel central. Solo codigos de region.
+        var territory=Territory.load(db);
         var catalogScopes=db.rows("SELECT * FROM org_scope ORDER BY id").stream().map(x->{
             var row=new LinkedHashMap<String,Object>(x);row.put("level",b(x,"regional")?"REGIONAL":"CENTRAL");
-            row.put("receives",access.destination(x)?DESTINATION_OPERATIONS:List.of());return (Map<String,Object>)row;}).toList();
-        Map<String,Object> result=new LinkedHashMap<>();result.put("scopes",catalogScopes);
+            row.put("receives",access.destination(x)?DESTINATION_OPERATIONS:List.of());
+            row.put("coverage",territory.coverage(n(x,"id")));return (Map<String,Object>)row;}).toList();
+        Map<String,Object> result=new LinkedHashMap<>();result.put("scopes",catalogScopes);result.put("central_coverage",territory.central());
         result.put("regions",AdultIdentity.REGIONS.entrySet().stream().map(e->Map.of("code",e.getKey(),"name",e.getValue())).toList());result.put("units",db.rows("SELECT * FROM org_unit ORDER BY code"));result.put("roles",Roles.json());result.put("reports",Reports.catalog());
         var enabledScopes=catalogScopes.stream().filter(x->b(x,"enabled")).map(x->n(x,"id")).toList();
         boolean registrar=a.grants().stream().anyMatch(g->g.scope()!=null&&a.registrar(g.scope()));
@@ -221,6 +225,9 @@ public class Queries {
         result.put("warnings",warnings);
         result.put("incompatibilities",ti?Personnel.tiConflicts(db):List.of());
         result.put("structure",ti?structure():List.of());
+        // Cobertura del nivel central (D18): regiones vigentes, historia de periodos y revision para la concurrencia optimista.
+        if(ti){var central=new LinkedHashMap<String,Object>();central.put("regions",Territory.load(db).central());central.put("history",Territory.history(db,null));central.put("revision",Territory.centralRevision(db));result.put("central_coverage",central);}
+        else result.put("central_coverage",Map.of());
         result.put("substitutions",ti?db.rows("SELECT x.*,d.scope_id,d.titular_id,d.substitute_id FROM substitution x JOIN substitution_designation d ON d.id=x.designation_id ORDER BY x.id DESC"):List.of());
         // Operacion de integraciones para TI: estado, pausa y contadores agregados; sin documentos ni contenidos.
         result.put("integrations",ti?integrations.overview():Map.of());
@@ -254,6 +261,11 @@ public class Queries {
         var req=counts("SELECT principal_scope AS k,COUNT(*) AS c FROM requirement WHERE state<>'CERRADO' GROUP BY principal_scope");
         var cases=counts("SELECT scope_id AS k,COUNT(*) AS c FROM case_record WHERE state<>'CERRADO' GROUP BY scope_id");
         var sol=counts("SELECT destination_scope AS k,COUNT(*) AS c FROM solicitation WHERE state='PENDIENTE' GROUP BY destination_scope");
+        var territory=Territory.load(db);
+        Map<Long,List<Map<String,Object>>> periods=new HashMap<>();
+        for(var p:db.rows("SELECT scope_id,id,region_code,from_ms,from_by,from_basis,until_ms,until_by,until_basis FROM territorial_coverage WHERE scope_id IS NOT NULL ORDER BY id DESC")){
+            var m=new LinkedHashMap<String,Object>(p);long scope=n(p,"scope_id");m.remove("scope_id");periods.computeIfAbsent(scope,k->new ArrayList<>()).add(m);
+        }
         return db.rows("SELECT id,code,name,unit_code,area_code,site_code,regional,region_code,state,enabled,opens_ms,revision FROM org_scope ORDER BY id").stream().map(x->{
             long id=n(x,"id");var row=new LinkedHashMap<String,Object>(x);
             row.put("level",b(x,"regional")?"REGIONAL":"CENTRAL");
@@ -261,6 +273,9 @@ public class Queries {
             row.put("staff",staffed.getOrDefault(id,0L));
             row.put("open_req",req.getOrDefault(id,0L));row.put("open_cases",cases.getOrDefault(id,0L));row.put("pending_sol",sol.getOrDefault(id,0L));
             row.put("close_blockers",b(x,"regional")&&s(x,"state").equals(Access.ACTIVE)?Personnel.closeBlockers(db,id):List.of());
+            // Cobertura adicional vigente, historia de periodos y efecto territorial de cerrar la sede (el mismo que SCOPE_CLOSE confirma).
+            row.put("coverage",territory.coverage(id));row.put("coverage_history",periods.getOrDefault(id,List.of()));
+            row.put("territorial_effect",b(x,"regional")&&s(x,"state").equals(Access.ACTIVE)?Territory.effect(territory,territory.closing(id),id):List.of());
             return (Map<String,Object>)row;
         }).toList();
     }
