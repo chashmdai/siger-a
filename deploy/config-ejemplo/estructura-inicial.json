@@ -6,8 +6,9 @@
     {"codigo": "UPR-REQ", "nombre": "Requerimientos / Atencion de Personas", "unidad": "UPR", "area": "REQ", "sede": "CENTRAL"},
     {"codigo": "UPR-PD", "nombre": "Proteccion de Derechos", "unidad": "UPR", "area": "PD", "sede": "CENTRAL"},
     {"codigo": "REG-EJEMPLO", "nombre": "EJEMPLO: Sede regional (reemplazar o retirar)", "unidad": "REG", "sede": "SEDE-EJEMPLO",
-     "regional": true, "region": "05", "estado": "PROYECTADA", "apertura": "2027-03-01"}
+     "regional": true, "region": "05", "estado": "PROYECTADA", "apertura": "2027-03-01", "cobertura": ["06"]}
   ],
+  "coberturaNivelCentral": ["13"],
   "ti": {"usuario": "nombre.apellido.ti", "nombre": "Nombre Apellido (TI)", "correo": "persona.ti@defensorianinez.cl", "ambito": "UGI"},
   "funcionarios": [
     {"usuario": "nombre.distribucion", "nombre": "Nombre Apellido", "correo": "distribucion@defensorianinez.cl", "ambito": "UPR-REQ",

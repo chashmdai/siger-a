@@ -17,6 +17,14 @@ estructura-inicial.json
     11 Aysen, 12 Magallanes). "estado": ACTIVA (por defecto) o PROYECTADA (no recibe nada hasta que TI la active;
     sus cuentas y funciones quedan preparadas). "apertura" opcional, aaaa-mm-dd. La Coordinacion regional se registra
     como DIRECCION de la sede: las sedes no tienen JEFATURA. La sede del ejemplo es ficticia: reemplazarla o retirarla.
+  - Cobertura territorial (desde 0.7.0, D18-D19; ambas claves opcionales):
+    "cobertura": ["03"] en una sede regional = regiones que la sede atiende ademas de su region fisica (codigos del
+    Formulario, sin repetir y sin la region fisica; solo en sedes regionales). En una sede PROYECTADA queda preparada y
+    rige al activarla.
+    "coberturaNivelCentral": ["13"] en la raiz = regiones que atiende el nivel central (por ejemplo, la Region
+    Metropolitana, atendida por la Oficina Nacional). No agrega destinos al selector; solo cuenta como region atendida.
+    Cada region cubierta queda como un periodo a nombre de la TI inicial, con el fundamento del archivo; despues TI la
+    administra en Estructura. SIGER 0.6.0 ignora estas claves sin aviso: si la instalacion vuelve a 0.6.0, se retiran.
   - Desde 0.5.0 TI administra el sistema (cuentas, funciones y subrogancias) sin acceso a expedientes. No existe la
     autoridad habilitante: un archivo con la entrada "autoridad" se rechaza.
 

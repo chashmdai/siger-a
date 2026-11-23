@@ -1,8 +1,11 @@
 # Despliegue de SIGER en la VM institucional
 
 Guia corta de la salida a produccion con SIGER 0.6.0 (`docs/PLAN_0_6_0.md`, decisiones D10-D16 y pasos V1-V6 y B de
-su seccion 3): cerrar la validacion 0.4.0 sin actualizarla, instalar produccion nueva con el paquete 0.6.0, acreditarla
-en automatico y eliminar la validacion con constancia. Cada comando es una linea de PowerShell y se ejecuta tal cual,
+su seccion 3): cerrar la validacion 0.4.0 sin actualizarla, instalar produccion nueva, acreditarla en automatico y
+eliminar la validacion con constancia. P0 y V0-V3 se ejecutan con el paquete 0.6.0. V4 instala produccion con el paquete
+0.7.0 (`docs/PLAN_0_7_0.md`, cobertura territorial de las sedes y region de origen) solo si al corte del 07/12 el gate
+T06b esta CERRADO, existe la etiqueta `v0.7.0` y el responsable lo aprueba de forma expresa; si no, V4 usa el paquete
+0.6.0. Cada comando es una linea de PowerShell y se ejecuta tal cual,
 con `powershell.exe ... -File`, desde una consola de PowerShell. `FECHA` es el sufijo del ZIP (`SIGER-FECHA.zip`). El
 detalle tecnico de cada script esta en `docs/INSTALACION_VM.md` y en su encabezado.
 
@@ -17,7 +20,7 @@ no se inspecciona ni modifica SMR ni otros volumenes (D15).
 1. **Cuenta de servicio** `DDN-SIGER\svc-siger`, la misma de la validacion: sin privilegios administrativos, con su contrasena, inicio de sesion local para `runas` y el derecho "Iniciar sesion como servicio" (ya concedido para la validacion).
 2. **Carpetas** (las crea un administrador en la preparacion): `D:\SIGER` vacia y `D:\SIGER-CONSTANCIAS`, con control total para la cuenta de servicio, y ese mismo control sobre `D:\Respaldos-SIGER-VALIDACION`.
 3. **MySQL 8.4 Community ZIP** ya extraido en `D:\Herramientas\mysql-8.4` (lo usa la validacion y lo usara produccion).
-4. **`estructura-inicial.json` real de produccion** (decision abierta antes de V4): ambitos, la persona TI y los funcionarios con sus funciones (plantilla y reglas en `config-ejemplo\`). Toda sede regional lleva `"region"` (codigo del Formulario) o `Init-Server.ps1` la rechaza: el `D:\Entregas\estructura-inicial.json` de la validacion es de 0.4.0, no la trae y solo sirve de base. Debe contener el ambito que recibe las Comunicaciones del Formulario (el `scope` de `config\formulario-pull.json` de la validacion, por ejemplo `UPR-REQ`).
+4. **`estructura-inicial.json` real de produccion** (decision abierta antes de V4): ambitos, la persona TI y los funcionarios con sus funciones (plantilla y reglas en `config-ejemplo\`). Toda sede regional lleva `"region"` (codigo del Formulario) o `Init-Server.ps1` la rechaza: el `D:\Entregas\estructura-inicial.json` de la validacion es de 0.4.0, no la trae y solo sirve de base. Debe contener el ambito que recibe las Comunicaciones del Formulario (el `scope` de `config\formulario-pull.json` de la validacion, por ejemplo `UPR-REQ`). Con el paquete 0.7.0 admite ademas `"cobertura"` en cada sede regional (regiones que la sede atiende ademas de su region fisica, por ejemplo `["03"]`) y `"coberturaNivelCentral"` en la raiz (regiones que atiende el nivel central, por ejemplo `["13"]`), ambas opcionales (reglas en `config-ejemplo\LEEME.txt`). Si V4 vuelve a 0.6.0, esas dos claves se retiran del archivo: 0.6.0 las ignora sin aviso.
 5. **Graph (opcional, D16)**: Tenant ID, Client ID y valor vigente del secreto de SIGER-Notificaciones (permiso `Mail.Send` limitado a `siger@defensorianinez.cl`), entregados de forma privada para escribirlos en la consola de `Import-GraphCredential.ps1`; el destinatario fijo de la prueba de envio (decision abierta); salida desde la VM a `login.microsoftonline.com:443` y `graph.microsoft.com:443` (no verificada en la VM).
 6. **Acceso de funcionarios** (decidido el 2026-11-22: produccion **con acceso por red**, `-AccesoRed`, como ya se usa la validacion): regla de firewall entrante al puerto 18543 limitada a sus direcciones (en la VM ya existe "SIGER-A Validacion HTTPS - Red DDN": TCP 18543, perfil Dominio, origen 192.168.100.0/24) y, cuando exista, certificado HTTPS institucional (PFX) para el nombre de la VM; se parte con el autofirmado de `Init-Server.ps1`.
 7. **Motor antivirus** (decision abierta): produccion parte sin motor; mientras tanto los originales del Formulario se
@@ -46,7 +49,7 @@ de la validacion y produccion en automatico no se hacen entregas de prueba, y en
 | V1 | Pausa definitiva del consumidor de la validacion | TI | desde 04/12 |
 | V2 | Cierre de la validacion con 9 recepciones declaradas | svc-siger | desde 04/12 |
 | V3 | Retiro de los servicios de la validacion | administrador | desde 04/12 |
-| V4 | Produccion con el paquete 0.6.0, en automatico | svc-siger y administrador | a mas tardar el 10/12 |
+| V4 | Produccion con el paquete 0.7.0 (segun el corte del 07/12) o 0.6.0, en automatico | svc-siger y administrador | con 0.7.0 entre el 08 y el 10/12; con 0.6.0 a mas tardar el 10/12 |
 | V5 | Observacion (D13) y tareas de TI | TI | 10/12-14/12 |
 | V6 | Eliminacion de la validacion con constancia | svc-siger | despues de V5 |
 | B | Plan B, solo si la validacion sigue sin pausar ni cerrar | TI y svc-siger | 12/12 |
@@ -366,9 +369,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\Entregas\SIGER-FECHA
 
 ### V4. Produccion
 
-Como la cuenta de servicio, inicializar produccion con el paquete 0.6.0, sin `-MismoReleaseQue` (la validacion sigue en
-0.4.0; esa garantia la reemplaza el ensayo de H06e) y con los mismos puertos (libres desde V2). La estructura real se
-copia antes a `D:\Entregas\estructura-inicial-produccion.json`. Con acceso de funcionarios por red (firewall de TI;
+Paquete de V4 (decision del corte del 07/12, `docs/PLAN_0_7_0.md` seccion 3): 0.7.0 solo con T06b CERRADO, la
+etiqueta `v0.7.0` y la aprobacion expresa del responsable; si no, 0.6.0, el mismo de P0 y V0-V3. Con 0.7.0, antes de
+seguir, un administrador repite con el ZIP 0.7.0 los primeros pasos de la Preparacion: copiarlo a `D:\Entregas`,
+comprobar su SHA-256 con `certutil` **antes de descomprimirlo** (debe ser igual al que registra T06a en
+`docs/BITACORA_0_7_0.md` del repositorio; si no coincide, no se descomprime ni se instala y se informa al responsable) y
+descomprimirlo con `Expand-Archive`, con las mismas ordenes. En adelante `FECHA` es el sufijo del ZIP 0.7.0 y la
+estructura puede llevar `cobertura` y `coberturaNivelCentral` (punto 4 de "Datos que debe entregar TI"); con 0.6.0
+esas claves se retiran.
+
+Como la cuenta de servicio, inicializar produccion con ese paquete, sin `-MismoReleaseQue` (la validacion sigue en
+0.4.0; esa garantia la reemplaza el ensayo de H06e o, con 0.7.0, el de T06b) y con los mismos puertos (libres desde V2).
+La estructura real se copia antes a `D:\Entregas\estructura-inicial-produccion.json`. Con acceso de funcionarios por red (firewall de TI;
 **es la opcion decidida** el 2026-11-22):
 
 ```powershell
@@ -460,7 +472,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Estado
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Test-Service.ps1' -Root 'D:\SIGER' -VentanaAutorizada -IncluirMySql
 ```
 
-`Estado.ps1` debe mostrar `AppRunning` verdadero, `Health` UP, version 0.6.0 y el Formulario en `DESACTIVADO`: en Manual
+`Estado.ps1` debe mostrar `AppRunning` verdadero, `Health` UP, la version del paquete (0.7.0 o 0.6.0) y el
+Formulario en `DESACTIVADO`: en Manual
 el servicio no tiene consumidor (`MANUAL` solo lo informa el ciclo de `Invoke-FormularioPull.ps1`). Si informa que el
 PID no coincide (corregido en H04a y, para la cuenta local `.\svc-siger`, en H06c; se acredita en H06e), se anota y se
 informa al responsable; la sonda HTTPS de `Start.ps1` sigue siendo la prueba de salud. `Test-Service.ps1` simula la

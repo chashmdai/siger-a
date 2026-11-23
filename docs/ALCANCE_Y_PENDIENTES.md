@@ -1,4 +1,4 @@
-# SIGER 0.6.0 - alcance y pendientes
+# SIGER 0.7.0 - alcance y pendientes
 
 ## Incluido en el fuente
 
@@ -46,6 +46,30 @@ migraciones):
   institucional. Mientras rige, TI ve un aviso permanente. Al regir de nuevo libera los originales del Formulario que
   quedaron en cuarentena.
 
+Nuevo en 0.7.0 (decisiones D18-D23, "Precision 0.7.0"; migraciones V15 y V16, aditivas):
+
+- **Cobertura territorial de las sedes** (D18-D19): cada sede regional conserva su region fisica y puede atender otras
+  regiones del catalogo (cobertura adicional); TI declara tambien las regiones que atiende el nivel central (por
+  ejemplo, la Region Metropolitana). TI la administra en Estructura con fundamento, concurrencia y auditoria (solo
+  codigos); cada region es un periodo y la historia queda consultable. Al cerrar una sede, cambiar su region o su
+  cobertura, o la del nivel central, el servidor informa el efecto territorial (region por region, quien la sigue
+  atendiendo o si queda sin atencion) y, si alguna queda sin atencion, exige confirmar esa lista exacta. Aviso
+  permanente `REGION_SIN_SEDE`. El archivo de estructura inicial admite `cobertura` y `coberturaNivelCentral`.
+- **Selector de destino** (D20): una sede aparece tambien bajo las regiones que cubre; la propuesta no cambia de regla y
+  una region atendida por el nivel central parte en Nivel central con aviso. El servidor no valida la region del
+  destino ni distribuye solo.
+- **Region de origen de la persona** (D21): region registrada (Formulario o primera region de la ficha), vigente y
+  corregida, desde las versiones de la ficha (V16). Reportes con filtro y agrupacion por region de origen registrada,
+  cantidad de corregidas y el rotulo "region de la sede"; exportacion con las tres regiones (`region_sede`,
+  `region_registrada`, `region_vigente`, que reemplazan la columna `region`). La ficha muestra la registrada cuando
+  difiere de la vigente.
+- **Feriados regionales sin cambio de regla** (D22): los dias habiles descuentan los nacionales y los de la region de la
+  sede responsable (nivel central: solo nacionales).
+- **Marca territorial y de riesgo en la bandeja de comunicaciones** (D23): region de origen vigente en numero romano
+  ("RM" para 13), color regional si la atiende una sede activa y marca roja con icono y texto si el Formulario informa
+  riesgo actual (con respiracion lenta solo mientras esta por distribuir, sin animacion con movimiento reducido). Solo
+  presentacion: no cambia filas, orden, filtros ni la distribucion manual.
+
 ## Verificado en la VM
 
 - **PULL/ACK real con el Formulario Publico** (verificado por el responsable el 2026-11-21 en "Auditoria y operacion" de
@@ -81,31 +105,39 @@ la validacion. Solo un consumidor por cola: al activar produccion, el de la vali
 
 ## Pendientes que NO se presentan como terminados
 
-- **Requisito previo a instalar en la VM: build de entrega en Windows** (H06a de `docs/PLAN_0_6_0.md`, que absorbe el
-  G15 de 0.5.0) y ensayo en Windows con ese paquete (H06b, con `SOURCE_SHA256.txt` y las etiquetas): `Build.ps1
-  -IncludeJava` con Node 24 portable, `Check-Scripts.ps1` en Windows PowerShell 5.1 y el paquete 0.6.0
-  `release\SIGER-<fecha>.zip`. La VM se instala con ese paquete: `Init-Server.ps1` exige su `manifest.json`. Los scripts
-  de 0.6.0 (cierre, eliminacion, Graph, D17, `Estado.ps1` como la cuenta de servicio) solo tienen comprobacion de
-  sintaxis y de enlace con `pwsh` en Linux hasta H06b.
+- **Paquete 0.7.0**: auditoria independiente (T05, externa), build de entrega en Windows (T06a) y ensayo diferencial
+  con la etiqueta `v0.7.0` (T06b) de `docs/PLAN_0_7_0.md`. V4 usa 0.7.0 solo si al corte del 07/12 T06b esta CERRADO,
+  existe `v0.7.0` y el responsable lo aprueba de forma expresa; si no, V4 usa el paquete 0.6.0
+  (`SIGER-20261122-201515.zip`, H06d), sin `cobertura` ni `coberturaNivelCentral` en la estructura, y 0.7.0 queda para
+  despues del 15/12 con su propio ensayo de `Update.ps1`. Recorridos de 0.7.0 en `docs/PRUEBAS_MANUALES_0_7_0.md`.
 - Ejecucion en la VM de la salida a produccion (pasos V1-V6 de `docs/PLAN_0_6_0.md` y `docs/DESPLIEGUE_VM.md`): cierre
-  de la validacion 0.4.0 con sus 9 recepciones de prueba, produccion nueva con 0.6.0 en automatico, acreditacion (D13),
-  eliminacion de la validacion con constancia y, sin entregas de prueba en produccion, la primera entrega ciudadana
-  despues del 15/12 como unica prueba de punta a punta (`docs/PRUEBAS_MANUALES_0_6_0.md`). Tambien `Recover-Ti.ps1` y
-  un envio real por Graph.
+  de la validacion 0.4.0 con sus 9 recepciones de prueba, produccion nueva (0.7.0 o 0.6.0 segun el corte) en
+  automatico, acreditacion (D13), eliminacion de la validacion con constancia y, sin entregas de prueba en produccion, la
+  primera entrega ciudadana despues del 15/12 como unica prueba de punta a punta (`docs/PRUEBAS_MANUALES_0_6_0.md`).
+  Tambien `Recover-Ti.ps1` y un envio real por Graph.
 
-Pendientes posteriores a 0.6.0 (cada uno toma un gate propio cuando se planifique; detalle en `docs/BITACORA_0_6_0.md`):
+Pendientes para 0.8.0 (cada uno toma un gate propio cuando se planifique):
 
-- **Aviso a distribucion cuando llega una COM del Formulario**: hoy no genera aviso ni correo; solo aparece en la bandeja
-  ("Por distribuir").
+- **Aviso a distribucion cuando llega una COM del Formulario** (`notifyDistributors`; detalle en
+  `docs/BITACORA_0_6_0.md`): hoy no genera aviso ni correo; solo aparece en la bandeja ("Por distribuir"), con la marca
+  de D23.
 - **Mejoras del correo de avisos**, despues de que produccion este estable: folio en el texto, asunto segun el tipo de
   aviso y enlace directo a la ficha (solo con el id; sirve si los funcionarios acceden por red). El correo sigue sin
   antecedentes ni datos ciudadanos.
+- **Observaciones de los funcionarios**, por recoger despues de la salida a produccion.
+- **Distribucion territorial del Formulario por sede** (D23): que la distribucion de una sede vea y distribuya solo las
+  COM de su territorio; cambia el modelo de acceso y requiere decision propia.
+- **Region de la ficha en la modalidad NNA**: hoy es texto libre y casi siempre queda "sin region declarada" (hallazgo de
+  T02).
+
+Pendientes sin version asignada (detalle en `docs/BITACORA_0_6_0.md`):
+
 - **Motor antivirus definitivo**: ClamAV en `D:\Herramientas\clamav` (sin codigo nuevo; requiere autorizacion de TI y
   salida de red para las firmas) o Kaspersky KES 14 (codigo nuevo en `DocumentScanner`, previa confirmacion con TI de
   que la cuenta de servicio puede analizar). Mientras tanto rige D17 para los originales del Formulario y los adjuntos
   subidos en SIGER siguen en cuarentena.
 - **Antiguedad del respaldo en `Update.ps1`**: hoy acepta cualquier respaldo integro de la misma raiz, base y JAR; sirve
-  al actualizar produccion a 0.7.x.
+  al actualizar produccion (por ejemplo, a 0.7.0 si V4 se hace con 0.6.0).
 - **Paso de solo RDP a acceso por red**: no hay script para cambiar `bindAddress` despues de `Init-Server.ps1` sin
   `-AccesoRed`.
 - **Renovacion del certificado autofirmado**: no hay script para regenerarlo; sin un PFX institucional, su renovacion
