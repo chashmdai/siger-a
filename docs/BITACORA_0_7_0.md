@@ -13,11 +13,13 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 | T02 | Region de origen y reportes | CERRADO |
 | T03 | Interfaz | CERRADO |
 | T03b | Bandeja de distribucion (D23) | CERRADO |
+| T03c | Aviso a distribucion de las COM del Formulario (D24) | ABIERTO |
 | T04 | Cierre de version | CERRADO |
 | T05 | Auditoria independiente | BLOQUEADO |
 | T05b | Correccion de documentacion (hallazgos de T05) | CERRADO |
 | T05c | Prueba local de instancias 0.6.0 y 0.7.0 | CERRADO |
-| T05d | Auditoria independiente: repeticion | EXTERNO |
+| T05d | Auditoria independiente: repeticion | CERRADO |
+| T05e | Auditoria independiente de T03c | EXTERNO |
 | T06a | Build de entrega en Windows | ABIERTO |
 | T06b | Ensayo diferencial y etiqueta | ABIERTO |
 
@@ -34,6 +36,9 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 | Distribucion territorial del Formulario por sede | 0.8.0 | 2026-11-23: fuera de 0.7.0 (cambia el modelo de acceso: funcion con ambito, respaldo central, devolucion, visibilidad doble). Requiere decision propia en 0.8.0. |
 | Orden de prioridad y filtros nuevos en "Por distribuir" | - | 2026-11-23: propuesta descartada por el responsable; no se hace. |
 | Hallazgos de T05 | T05b, T05c, T05d | 2026-11-23: T05b (Claude Code) corrige los dos hallazgos de documentacion. Por decision del responsable, la prueba local de instancias 0.6.0 y 0.7.0 la hace Claude Code en T05c (ABIERTO, alcance en el registro de T05), y la auditoria repetida que exige la seccion 6 del plan pasa a llamarse T05d (EXTERNO, Claude Padre): revisa el diff de T05b y la evidencia de T05c. T06a exige T05d CERRADO. |
+| Correo por Graph en V4 (D16) | V4 | 2026-11-23: el responsable ya tiene los datos de TI (Tenant ID, Client ID y secreto, que nunca se registran) y fija como destinatario de la prueba de envio de `Test-GraphMail.ps1 -Modo Envio` su propio buzon institucional (no se escribe en este repositorio publico). Se hace en V4 con el paquete que se instale; no depende de 0.7.0. Sin prueba real previa en TEST-SIGER (decision del 2026-11-23): se configura en V4 y, si falla, se corrige en produccion. |
+| Aviso a distribucion de las COM del Formulario (D24) | T03c | 2026-11-23 (despues de T05d): se adelanta de 0.8.0 a 0.7.0 en el gate T03c, sin tocar la recepcion del Formulario. Texto con riesgo aprobado: "Hay un ingreso del Formulario con NNA en riesgo inminente, pendiente de distribucion." La auditoria T05e (EXTERNO) revisa T03c antes de T06a. |
+| Cerrar 0.7.0 y absorberla en 0.8.0 | - | 2026-11-23: no; 0.7.0 se cierra con su propio paquete (T06a y T06b) para tener un punto acreditado antes del corte del 07/12. |
 
 ## Antecedentes para T00
 
@@ -48,6 +53,13 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 - D23 y T03b se agregaron al plan despues del cierre de T03, en el commit `plan 0.7.0: bandeja de distribucion (T03b)` que hace el responsable de forma manual (no es un gate). T03b copia D23 textual en `DECISIONES_FUNCIONALES.md` ("Precision 0.7.0").
 - Referencias de partida en la seccion 1 del plan (bullet "Bandeja"); T03b las verifica contra el codigo antes de su plan.
 - Reutiliza lo de T01-T03: `OriginRegion.current` (region vigente, la del selector), la cobertura del catalogo (`scopes[].coverage`, `central_coverage`) y la regla del selector en `frontend/src/lib/destination.ts`. No agrega migracion ni cambia la recepcion del Formulario (seccion 2 del plan).
+
+## Antecedentes para T03c
+
+- D24, el escenario 9 y la fila T03c se agregaron al plan despues de T05d, en el commit que hace el responsable de forma manual (no es un gate). T03c copia D24 textual en `DECISIONES_FUNCIONALES.md` ("Precision 0.7.0").
+- Referencias de partida en la seccion 1 del plan (bullet "Avisos"); T03c las verifica contra el codigo antes de su plan.
+- Condiciones de la seccion 2 sin excepcion: la recepcion del Formulario (`IntakeCommands.conserveExternal` y los 7 archivos) no cambia; el aviso sale de una tarea periodica aparte. La regla de riesgo es la de D23 (`BoardQueries.riskAffirmative`): una sola regla.
+- T06a exige que la ultima auditoria (T05e) este CERRADO. T05e revisa D24 y el escenario 9.
 
 ## Registros de cierre
 
@@ -173,5 +185,17 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 - Hallazgos para gates siguientes: ninguno nuevo. Las COM 3 y 4 solo llevan region (no tienen riesgo); COM 1 (manual, asumida) y la COM de la atencion directa no llevan marca, como en T03b y T04.
 - Pendientes: revision del diff de T05b y de esta evidencia -> T05d (EXTERNO, el responsable con Claude Padre). T06a espera a T05d CERRADO. `SOURCE_SHA256.txt` -> T06b.
 - Verificacion manual sugerida al usuario: no aplica (la instancia estuvo abierta para el responsable antes de la limpieza).
+
+### T05d - Auditoria independiente: repeticion   (CERRADO)
+- Fecha: 2026-11-23 (commit `gate T05d: auditoria independiente y plan T03c`, incorporado a mano por el responsable: este registro y, en el mismo commit, D24 y T03c en el plan y en esta bitacora). Auditor: Claude Padre, sobre un clon de `origin` en `84ffeca` (`gate T05c: prueba local de instancias`), sin acceso a las sesiones de Claude Code.
+- Hecho: revision del diff `e8a819f..84ffeca` (T05b y T05c) y de la evidencia de T05c.
+- Verificacion: el diff solo cambia `docs/ARQUITECTURA.md`, `docs/DECISIONES_FUNCIONALES.md` y esta bitacora; `git diff 26cd46c 84ffeca -- backend frontend scripts .mvn deploy` vacio (el codigo es el auditado en T05, con la suite ejecutada de forma independiente por el responsable: JUnit 185, frontend 112). Hallazgo 2: D21 dice "(seccion 2 de `docs/PLAN_0_7_0.md`)", unico cambio en ese archivo. Hallazgo 1 (con la precision del responsable): `ARQUITECTURA.md` titulado "SIGER 0.7.0 - arquitectura"; persistencia correcta (0.6.0 sin migraciones; V15 y V16 con el marcador `REGION_FICHA_V16`; V1-V16 no se modifican, lo siguiente es V17; ninguna migracion siembra regiones); todas las clases que cita existen en el repositorio (`SIGER` y `SIGERMySQL` son nombres de servicios). T05c: registro completo y coherente con D18-D23 y con el alcance ajustado por el responsable; su commit solo trae esta bitacora; limpieza registrada.
+- Evidencia de mutacion: no aplica (sin codigo desde T05).
+- Condiciones de la seccion 2: CORRECTO (sin cambios desde T05).
+- Resultado: CORRECTO. Los dos hallazgos de T05 quedan corregidos. T05 se conserva en BLOQUEADO como registro historico; esta es la ultima auditoria (seccion 5 del plan).
+- Desvios del plan: T05c la hizo Claude Code y con una sola instancia 0.7.0, por decision del responsable (registrado en T05 y T05c); la independencia se sostiene en la suite que ejecuto el responsable en un clon limpio (T05) y en esta revision.
+- Hallazgos para gates siguientes: ninguno de esta auditoria. Por decision posterior del responsable (D24), antes de T06a va T03c y su auditoria T05e (ver "Antecedentes para T03c").
+- Pendientes: T03c -> Claude Code; T05e -> el responsable con Claude Padre; despues T06a. Graph en V4 con los datos que ya tiene el responsable (ver decisiones). `SOURCE_SHA256.txt` -> T06b.
+- Verificacion manual sugerida al usuario: no aplica.
 
 ## Cierre del plan 0.7.0

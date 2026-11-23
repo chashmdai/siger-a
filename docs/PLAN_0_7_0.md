@@ -95,6 +95,27 @@ de Inicio muestran una marca en cada COM:
      sede vea y distribuya solo las COM de su territorio) pasa a 0.8.0 con decision propia; el orden de prioridad y los
      filtros nuevos en "Por distribuir" no se hacen.
 
+D24. **Aviso a distribucion de las COM del Formulario** (decision del responsable, 2026-11-23, despues de T05d; se
+implementa en T03c). Cuando una COM del Formulario queda registrada y por distribuir, SIGER avisa una sola vez a quienes
+pueden distribuirla (`Access.notifyDistributors`; hoy la funcion `DISTRIBUIDOR`, porque su ambito de origen es el
+receptor central), por la via de avisos que ya existe: "Mis avisos" y, con el correo Graph activo (D16), su correo por
+`MailOutbox`.
+   - Sin tocar la recepcion del Formulario (seccion 2): lo hace una tarea periodica aparte, como `TaskReminders` (cada
+     60 segundos, con el lock global), que busca las COM con origen en el Formulario que siguen por distribuir y aun no
+     tienen este aviso.
+   - Una sola vez por COM: nunca dos avisos de llegada para la misma COM, tampoco despues de un reinicio. Si en ese
+     momento nadie puede distribuir, el aviso no se pierde: sale cuando haya quien pueda y la COM siga por distribuir.
+     Una COM ya distribuida no se avisa.
+   - No cambia los otros avisos: la COM manual ya avisa al crearse (`IntakeCommands.java:65`); la SOL devuelta y la COM
+     rechazada como antecedente siguen igual.
+   - Texto sin datos de personas ni del relato: "Hay un ingreso del Formulario pendiente de distribucion." y, si la COM
+     trae `riesgo` afirmativo (la regla de D23: la pregunta "NNA en riesgo inminente" del Formulario), "Hay un ingreso
+     del Formulario con NNA en riesgo inminente, pendiente de distribucion."
+   - Preferentemente sin migracion. Si la marca de "ya avisado" exige una, sera V17 aditiva, justificada en el plan del
+     gate y aprobada en el GO.
+   - Graph: sin prueba real previa en TEST-SIGER (decision del responsable): el correo se activa en V4 segun D16 y, si
+     falla, se corrige en produccion.
+
 Escenarios de aceptacion (pruebas automatizadas, humo de T04 y, los de interfaz, ensayo de T06b):
 1. Atacama (03) atendida por Coquimbo (04).
 2. Maule (07) atendida por O'Higgins (06).
@@ -113,6 +134,10 @@ Escenarios de aceptacion (pruebas automatizadas, humo de T04 y, los de interfaz,
    con `riesgo` afirmativo -> roja, animada solo por distribuir (ciclo de 5 a 6 segundos) y fija una vez distribuida,
    tambien en la RM o sin region; con `prefers-reduced-motion`, sin animacion. La lista muestra las mismas filas, en el
    mismo orden, que antes del cambio.
+9. Aviso a distribucion (D24): llega una COM del Formulario sin riesgo -> quien distribuye recibe en "Mis avisos" el
+   texto normal y, con el correo Graph activo, se encola su correo; con `riesgo` afirmativo, el texto de riesgo; otro
+   ciclo o un reinicio no repiten el aviso; una COM ya distribuida o una COM manual no reciben este aviso; sin cuentas
+   que puedan distribuir, el aviso sale cuando se habilita una.
 
 ## 1. Punto de partida (verificado al planificar)
 
@@ -138,6 +163,11 @@ Escenarios de aceptacion (pruebas automatizadas, humo de T04 y, los de interfaz,
   region de una COM hoy solo se calcula al abrirla (`suggested_region`, `Queries.java:122`). El Formulario envia
   `riesgo` como campo CAMPO (`si`/`true`; `FormularioDocs.java:124`, `ExternalProjectionTest.java:39`), rotulado
   "Riesgo actual" y tratado como si/no en `frontend/src/lib/formulario.ts:12` y `:28`.
+- Avisos (para T03c; verificado el 23/11 sobre `84ffeca`): `Access.notice` crea el aviso interno y, con Graph activo,
+  encola su correo en la misma transaccion (`Access.java:310-314`, `MailOutbox`); `notifyDistributors` (`:325-328`) avisa
+  a quien puede distribuir la COM. Hoy se llama solo al crear una COM manual (`IntakeCommands.java:65`), al devolver una
+  SOL (`:231`) y al rechazar una COM como antecedente (`:312`): la recepcion del Formulario no avisa. Tarea periodica de
+  referencia: `TaskReminders` (`@Scheduled` cada 60 s, `@Transactional`, `db.lock()`).
 - Scripts: `scripts\` tiene 44 archivos: 39 `.ps1` y 5 fuentes auxiliares (`AckKeyCheck.java`, `FormularioAckKey.java`,
   `PolicySmoke.java`, `HealthProbe.cs` y `SigerService.cs`). `Check-Scripts.ps1` informa 40 scripts: los 39 `.ps1` de
   `scripts\` mas `.mvn\wrapper\maven-wrapper.ps1` (`Check-Scripts.ps1:6-7`); las 5 fuentes auxiliares solo se revisan
@@ -175,16 +205,17 @@ Escenarios de aceptacion (pruebas automatizadas, humo de T04 y, los de interfaz,
   `Update.ps1`.
 - Calendario objetivo: este plan, T00 y T01 hasta el 25/11; T02 el 26-27/11; T03 el 28-29/11; T04 y T05 el 30/11; T06a y
   T06b del 01 al 03/12; margen hasta el 07/12. T00-T03 cerraron el 23/11; T03b (agregado ese dia) va antes de T04 y no
-  mueve el corte.
+  mueve el corte. T03c y su auditoria T05e (agregados el 23/11, despues de T05d) van antes de T06a y tampoco lo mueven.
 
 ## 4. Documentacion que se actualiza
 
-`DECISIONES_FUNCIONALES.md` (D18-D22 y D6 precisada, T00; D23, T03b), `CLAUDE.md` (estado en T00; arquitectura en T04),
+`DECISIONES_FUNCIONALES.md` (D18-D22 y D6 precisada, T00; D23, T03b; D24, T03c), `CLAUDE.md` (estado en T00; arquitectura en T04),
 `ALCANCE_Y_PENDIENTES.md`, `INSTALACION_VM.md`, `DESPLIEGUE_VM.md` (solo V4), `deploy/config-ejemplo/LEEME.txt` y
 `estructura-inicial.json` (claves de cobertura), `README.md` si corresponde y el nuevo `PRUEBAS_MANUALES_0_7_0.md` (T04).
-Los pendientes de 0.7.x registrados en `BITACORA_0_6_0.md` (observaciones de funcionarios y aviso a distribucion de las
-COM del Formulario con `notifyDistributors`) pasan a 0.8.0, junto con la distribucion territorial del Formulario por
-sede (D23) y la region de texto libre de la ficha en la modalidad NNA (hallazgo de T02).
+Los pendientes de 0.7.x (observaciones de funcionarios y aviso a distribucion de las COM del Formulario con
+`notifyDistributors`) pasaron a 0.8.0 en T04, junto con la distribucion territorial del Formulario por sede (D23) y la
+region de texto libre de la ficha en la modalidad NNA (hallazgo de T02). El aviso a distribucion vuelve a 0.7.0 con D24
+(T03c), que lo retira de los pendientes de 0.8.0 en `ALCANCE_Y_PENDIENTES.md`.
 
 ## 5. Protocolo de cada sesion (gate)
 
@@ -208,10 +239,11 @@ el formato de la seccion 7; un solo commit `gate TNN: <titulo>`; revision de arc
 | T02 | Region de origen y reportes | V16 y su reconstruccion con marcador. Region registrada y vigente (D21). Reportes: filtro y agrupacion por region registrada, conteo de corregidas, rotulo "region de la sede". Exportacion con las tres regiones. Auditoria de `FICHA_COMPLEMENTADA`. Feriados sin cambio (D22). | Escenarios 1-4 (region registrada, sede responsable y region de la sede distintas en reportes y exportacion). Una correccion no cambia el reporte; completar no es correccion. Feriado de la region cubierta no se descuenta y el de la region de la sede si. `MySql84UpgradeTest` con la reconstruccion. |
 | T03 | Interfaz | Estructura: cobertura vigente e historia; editar la cobertura de una sede y la del nivel central con fundamento; efecto territorial antes de confirmar (cerrar, cambiar cobertura o region) con la confirmacion de las regiones sin atencion; aviso `REGION_SIN_SEDE`. Selector con cobertura y aviso del nivel central. Reportes y busqueda con los rotulos "region de la sede" y "region de origen". Ficha con la region registrada cuando difiere de la vigente. | Pruebas del frontend: `destination.test.ts` sin regresion de los casos actuales y casos nuevos por escenario; typecheck y build. |
 | T03b | Bandeja de distribucion (D23) | D23 textual en `DECISIONES_FUNCIONALES.md` ("Precision 0.7.0"). Servidor, solo lectura y sin migracion: la lista de comunicaciones y la cola "Ingresos por distribuir" agregan a cada fila la region de origen vigente (`OriginRegion`) y si trae `riesgo` afirmativo (`external_field` CAMPO `riesgo`), sin cambiar sus condiciones, filtros, orden ni visibilidad. Interfaz: marca en la lista y en la cola; funcion pura codigo -> numero romano; regla del color con la cobertura del catalogo (la misma de `lib/destination.ts`); animacion CSS liviana con `prefers-reduced-motion`; texto accesible. Si crece, se divide (T03b y T03c). | Escenario 8: conversion de los 16 codigos; color con los escenarios 1-4, la RM (nivel central) y sin region; riesgo con y sin region, animado solo por distribuir y fijo una vez distribuida; mismas filas y mismo orden que antes en cada vista y en la cola; `riesgo` no afirmativo o ausente sin marca roja. Mutacion por regla. JUnit, frontend y `Check-Scripts.ps1`. |
+| T03c | Aviso a distribucion de las COM del Formulario (D24) | D24 textual en `DECISIONES_FUNCIONALES.md` ("Precision 0.7.0"). Tarea periodica aparte, sin cambiar la recepcion del Formulario ni los otros avisos: un aviso por COM con el texto de D24 por `Access.notifyDistributors`; correo por `MailOutbox` solo con Graph activo. Documentacion: `CLAUDE.md`, `ARQUITECTURA.md`, `ALCANCE_Y_PENDIENTES.md` (el aviso sale de los pendientes de 0.8.0) y `PRUEBAS_MANUALES_0_7_0.md` (escenario 9). Despues, la auditoria T05e (EXTERNO) revisa su diff antes de T06a. | Escenario 9: con correo desactivado, solo aviso interno; con Graph activo, un correo encolado por destinatario (sin enviar: las pruebas no salen a la red); texto de riesgo con la regla de D23; idempotencia tras otro ciclo y tras reinicio; ni COM manual ni ya distribuida; sin quien distribuya, el aviso sale despues. Mutacion por regla. Condiciones de la seccion 2 (la recepcion sin cambios). JUnit, MySQL 8.4 si hay SQL nuevo, frontend y `Check-Scripts.ps1`. |
 | T04 | Cierre de version | Version 0.7.0. Documentacion de la seccion 4. `PRUEBAS_MANUALES_0_7_0.md` con los escenarios. | Suite en H2 y sobre MySQL 8.4 (con `MySql84UpgradeTest`); frontend; humo con los escenarios 1-8; condiciones de la seccion 2 comprobadas con `git diff`. |
 | T05 | Auditoria independiente (EXTERNO) | La realiza el asistente del responsable en claude.ai ("Claude Padre"), separado de la implementacion y sin acceso a las sesiones de Claude Code: clon limpio del commit de cierre de T04; alcance del diff contra `v0.6.0`; condiciones de la seccion 2; trazabilidad de D18-D23 y de los escenarios 1-8 a codigo y pruebas; revision de la evidencia de mutacion; re-ejecucion de la suite por el responsable en un clon limpio fuera de `C:\sigera`, con las ordenes que entregue la auditoria. Claude Code no participa: el responsable incorpora a mano a la bitacora el registro de T05 (formato de la seccion 7) y su estado, en un commit `gate T05: auditoria independiente` que solo cambia la bitacora. Con hallazgos, el responsable deja T05 en BLOQUEADO y agrega en la tabla, inmediatamente despues de T05, la fila `T05b` (ABIERTO, correccion de los hallazgos, alcance segun el registro de T05); el prompt universal la toma como primer gate ABIERTO. Cerrado T05b, la auditoria se repite sobre lo corregido y el responsable registra el resultado como `T05c` (EXTERNO), y asi sucesivamente. | Informe CORRECTO o con hallazgos; T05 (o la ultima auditoria) pasa a CERRADO solo con CORRECTO. |
 | T06a | Build de entrega en Windows | Como H06d, desde el commit con T05 CERRADO. | `manifest.json` con 0.7.0, esquema 16 y `automatedTestsExecuted` true; `SHA256SUMS.txt`; los 44 archivos de `scripts\` con SHA-256 iguales a los del paquete 0.6.0; `Check-Scripts.ps1`: 40 scripts (las ordenes documentadas solo cambian si cambio una guia que enlaza, con la diferencia explicada); nombre y SHA-256 del ZIP. |
-| T06b | Ensayo diferencial y etiqueta | En TEST-SIGER, con el paquete de T06a: raiz de ensayo nueva (por ejemplo `D:\Ensayo-T06b\SIGER`; `D:\SIGER` es evidencia de H06e) y una cuenta de ensayo nueva con otro nombre, creada por el responsable (el perfil de `siger-ensayo` sigue pendiente de retiro). V4 completo como en H06e (estructura sintetica con coberturas, nivel central y una sede PROYECTADA; Formulario sintetico generado para la cuenta nueva; Manual; clave del buscador; D17; `Install-Service.ps1`; `Start.ps1`; `Estado.ps1` con 0.7.0 y esquema 16; `Test-Service.ps1 -VentanaAutorizada -IncluirMySql`; escucha por red). En la interfaz: cobertura e historia, escenarios 5, 6 y 7 y el aviso; escenario 8 en la bandeja con COM sinteticas del Formulario (una de una region cubierta por una sede, una de la RM, una sin region y una con `riesgo` afirmativo, animada por distribuir y fija una vez distribuida). Al final, limpieza del ensayo, `SOURCE_SHA256.txt` y etiqueta anotada `v0.7.0`. No se repiten P0, V0-V3, plan B, reinicio real, Graph ni los rechazos de D17: los scripts son identicos y quedaron acreditados en H06e. | Resultado de cada paso; nada fuera de las rutas del ensayo; limpieza verificada. |
+| T06b | Ensayo diferencial y etiqueta | En TEST-SIGER, con el paquete de T06a: raiz de ensayo nueva (por ejemplo `D:\Ensayo-T06b\SIGER`; `D:\SIGER` es evidencia de H06e) y una cuenta de ensayo nueva con otro nombre, creada por el responsable (el perfil de `siger-ensayo` sigue pendiente de retiro). V4 completo como en H06e (estructura sintetica con coberturas, nivel central y una sede PROYECTADA; Formulario sintetico generado para la cuenta nueva; Manual; clave del buscador; D17; `Install-Service.ps1`; `Start.ps1`; `Estado.ps1` con 0.7.0 y esquema 16; `Test-Service.ps1 -VentanaAutorizada -IncluirMySql`; escucha por red). En la interfaz: cobertura e historia, escenarios 5, 6 y 7 y el aviso; escenario 8 en la bandeja y escenario 9 en "Mis avisos" de distribucion (correo desactivado) con COM sinteticas del Formulario (una de una region cubierta por una sede, una de la RM, una sin region y una con `riesgo` afirmativo, animada por distribuir y fija una vez distribuida). Al final, limpieza del ensayo, `SOURCE_SHA256.txt` y etiqueta anotada `v0.7.0`. No se repiten P0, V0-V3, plan B, reinicio real, Graph ni los rechazos de D17: los scripts son identicos y quedaron acreditados en H06e. | Resultado de cada paso; nada fuera de las rutas del ensayo; limpieza verificada. |
 
 ## 7. Formato del registro de cierre (en la bitacora)
 
