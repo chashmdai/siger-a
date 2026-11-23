@@ -19,7 +19,7 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 | T05b | Correccion de documentacion (hallazgos de T05) | CERRADO |
 | T05c | Prueba local de instancias 0.6.0 y 0.7.0 | CERRADO |
 | T05d | Auditoria independiente: repeticion | CERRADO |
-| T05e | Auditoria independiente de T03c | EXTERNO |
+| T05e | Auditoria independiente de T03c | CERRADO |
 | T06a | Build de entrega en Windows | ABIERTO |
 | T06b | Ensayo diferencial y etiqueta | ABIERTO |
 
@@ -209,5 +209,22 @@ Cada sesion de Claude Code empieza con el prompt universal de la seccion 8 del p
 - Hallazgos para gates siguientes: en produccion no habra distribuidores hasta que TI los cree en V5: el aviso de las COM recibidas antes sale en el primer ciclo despues de que exista una cuenta de Distribucion. El aviso llega hasta 2 minutos despues de la recepcion (primer ciclo a los 60 s del arranque y luego cada 60 s); en el modo MANUAL del Formulario lo emite el servicio, no el ciclo manual (`siger.scheduling=false`). Las cuentas que se habilitan despues del aviso no lo reciben (una sola vez por COM). Un `riesgo` "si" con tilde no es afirmativo (D23 literal).
 - Pendientes: auditoria de T03c -> T05e (EXTERNO, el responsable con Claude Padre); T06a espera a T05e CERRADO. Ensayo del escenario 9 en "Mis avisos" de Distribucion con correo desactivado -> T06b. `SOURCE_SHA256.txt` -> T06b.
 - Verificacion manual sugerida al usuario: leer D24 en `docs/DECISIONES_FUNCIONALES.md` y la seccion 8 de `docs/PRUEBAS_MANUALES_0_7_0.md`; revisar `DistributionNoticeTest` contra el escenario 9.
+
+### T05e - Auditoria independiente de T03c   (CERRADO)
+- Fecha: 2026-11-23 (commit `gate T05e: auditoria independiente de T03c`, incorporado a mano por el responsable: solo este registro y el estado). Auditor: Claude Padre, sobre un clon nuevo de `origin` en `625f748` (`gate T03c: aviso a distribucion`), sin acceso a las sesiones de Claude Code. Ejecucion independiente: el responsable, en un clon limpio en `C:\auditoria-T05e\siger-a` (fuera de `C:\sigera`).
+- Hecho: alcance del diff `155b264..625f748` (10 archivos: `DistributionNotices.java` nueva, `DistributionNoticeTest` y `DistributionNoticeMailTest` nuevas, `InstitutionalReaderTest`, `CLAUDE.md` y cinco documentos, todos declarados en T03c); condiciones de la seccion 2; trazabilidad de D24 y del escenario 9 a codigo y pruebas; revision de la evidencia de mutacion; documentacion.
+- Archivos clave revisados: `DistributionNotices.java`; `Access.java` (`notice`, `notifyDistributors`, `distributes`); `MailOutbox.java` (`enqueue` y cuerpo del correo); `BoardQueries.java` (`RISK_SQL`, `riskAffirmative`, filtro `com:pending`); `TaskReminders.java`; `SigerApplication.java`; los scripts que fijan `SIGER_SCHEDULING`; las tres pruebas; `DECISIONES_FUNCIONALES.md`, `PRUEBAS_MANUALES_0_7_0.md`, `ALCANCE_Y_PENDIENTES.md`, `ARQUITECTURA.md` y `CLAUDE.md`.
+- Verificacion: ejecucion independiente en el clon limpio en `625f748` (Windows, `C:\sigera\.tools` solo lectura): JUnit H2 `Tests run: 191, Failures: 0, Errors: 0, Skipped: 0`, BUILD SUCCESS; frontend `npm ci`, typecheck ok, 112 ok (0 fallas), build ok. La suite sobre MySQL no se repite: su evidencia (194 ok) esta en T03c. Revision del codigo: D24 identica en el plan y en `DECISIONES_FUNCIONALES.md` (comparada por texto); "por distribuir" es el estado `NUEVA` del filtro `com:pending`; los destinatarios salen de `Access.notifyDistributors`, la misma regla de la COM manual (funcion `DISTRIBUIDOR` para el receptor central; jefatura del ambito si el origen es regional); el correo solo se encola con Graph activo (`MailOutbox.enqueue`) y su cuerpo lleva el texto del aviso con el marco fijo, sin datos de expedientes; la tarea solo existe en el proceso de servicio: `@EnableScheduling` depende de `siger.scheduling` y `Migrate.ps1`, `Recover-Ti.ps1`, `Invoke-FormularioPull.ps1` y `Test-GraphMail.ps1` lo fijan en `false` (el ciclo manual, la sonda, la recuperacion de TI y la prueba de Graph lo exigen); mismo patron que `TaskReminders` (`@Transactional`, `db.lock()`, lote de 100). `InstitutionalReaderTest` solo agrega `siger.scheduling=false`, sin perder aserciones.
+- Evidencia de mutacion: revisada la registrada en T03c (17/17); coherente con las pruebas leidas. No se repite.
+- Condiciones de la seccion 2: CORRECTO. `git diff v0.6.0 625f748` vacio en `scripts/`, `.mvn/`, los 7 archivos de la recepcion del Formulario e `IntakeCommands.java`; V1-V14 intactas; sin migracion nueva (la ultima es V16; lo siguiente sigue siendo V17); sin archivos sensibles.
+- Resultado: CORRECTO. Sin hallazgos.
+- Observaciones (no son hallazgos):
+  1. `inbox_notice` no tiene indice por `resource_type` y `resource_id`: la consulta de cada minuto la recorre, con el lock global tomado, mientras haya COM del Formulario por distribuir. Con el volumen inicial de produccion no pesa; si la tabla crece, un indice (V17 aditiva) es candidato para 0.8.0.
+  2. D23 literal: solo `si` o `true` (sin distinguir mayusculas) son afirmativos; `sí` con tilde no. En el recorrido 9, si la primera COM real con riesgo no trae la marca roja ni el texto de riesgo, revisar el valor que envia el Formulario.
+  3. El paso 2 del escenario 9 pide reiniciar el servicio (`Stop.ps1` y `Start.ps1`); no es el reinicio real del equipo que T06b excluye.
+- Desvios del plan: ninguno.
+- Hallazgos para gates siguientes: ninguno de esta auditoria. T06a puede comenzar: la ultima auditoria (T05e) queda CERRADO.
+- Pendientes: T06a -> Claude Code; despues T06b. `SOURCE_SHA256.txt` -> T06b.
+- Verificacion manual sugerida al usuario: no aplica.
 
 ## Cierre del plan 0.7.0
