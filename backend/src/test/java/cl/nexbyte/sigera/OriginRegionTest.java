@@ -212,7 +212,8 @@ class OriginRegionTest {
         }
         // Guardar sin cambiar la region (ni un texto libre que no es region) no la marca.
         long same=attend("REG-04","GENERAL","03");save("REG-04",same,"03");
-        assertEquals("Version 1. Complementacion sintetica de la ficha",complemented(same));
+        // 0.8.0 (E03): la nota termina con la cantidad de campos complementados y rectificados, sin valores.
+        assertEquals("Version 1. Complementacion sintetica de la ficha Campos complementados: 0; rectificados: 0.",complemented(same));
         // La ficha entrega la region registrada y la vigente solo a quien la lee.
         var view=attention.view(access.actor("coord.04"),db.one("SELECT * FROM requirement WHERE id=?",d.fixed()));
         assertEquals(Map.of("registered","03","current","04","corrected",true),view.get("origin_region"));

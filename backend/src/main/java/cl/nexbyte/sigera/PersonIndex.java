@@ -110,6 +110,14 @@ public class PersonIndex {
             for(var f:fichas)ficha(n(f,"requirement_id"),decode(s(f,"data_json")),out);
             return out;
         }
+        // COM manual con ficha de ingreso (0.8.0, E03): unica fuente; sus columnas de resumen son derivadas.
+        var intake=db.rows("SELECT data_json FROM intake_record WHERE communication_id=?",com);
+        if(!intake.isEmpty()){
+            var data=decode(s(intake.getFirst(),"data_json"));
+            if(data.get("presenter") instanceof Map<?,?> presenter&&!presenter.isEmpty())canonical("COM","REQUIRENTE",DeclaredPerson.canonical(presenter),null).ifPresent(out::add);
+            for(var p:DeclaredPerson.canonicalList(data.get("persons")))canonical("COM_PERSONA",s(p,"role"),p,null).ifPresent(out::add);
+            return out;
+        }
         person("COM","REQUIRENTE",s(c,"presenter"),null,parse(s(c,"identity_document")),false,null).ifPresent(out::add);
         for(var p:db.rows("SELECT person_role,name,identity_document FROM communication_person WHERE communication_id=? ORDER BY id",com))
             person("COM_PERSONA",s(p,"person_role"),s(p,"name"),null,parse(s(p,"identity_document")),false,null).ifPresent(out::add);
@@ -128,12 +136,19 @@ public class PersonIndex {
         if(id.empty())id=parse(s(data,"identity_document"));
         person("FICHA","REQUIRENTE",name,s(data,"preferred_name"),id,false,req).ifPresent(out::add);
         person("FICHA","CURADOR",s(data,"guardian_name"),null,Identity.NONE,false,req).ifPresent(out::add);
-        if(data.get("people") instanceof List<?> people)for(Object raw:people){
-            if(!(raw instanceof Map<?,?> p))continue;
-            var row=new HashMap<String,Object>();p.forEach((k,v)->row.put(k.toString(),v));
-            String role=s(row,"role").isEmpty()?"OTRA_PERSONA":s(row,"role");
-            person("FICHA",role,s(row,"name"),s(row,"preferred_name"),parse(s(row,"identity_document")),false,req).ifPresent(out::add);
-        }
+        // Personas relacionadas en vista canonica: 1.0/1.1 (texto libre como legacy_*) y 1.2 (persona-1).
+        for(var row:DeclaredPerson.canonicalList(data.get("people")))
+            canonical("FICHA",s(row,"role").isEmpty()?"OTRA_PERSONA":s(row,"role"),row,req).ifPresent(out::add);
+    }
+    /**
+     * Persona canonica (persona-1): nombre por partes o el historico sin dividir, con su nombre de preferencia; RUN
+     * estructurado, documento extranjero o, si no, el texto historico de identificacion (como antes de 0.8.0).
+     */
+    private static Optional<Ref> canonical(String source,String role,Map<String,Object> p,Long req){
+        Identity id=!s(p,"run_number").isEmpty()?run(s(p,"run_number"),s(p,"run_dv")):Identity.NONE;
+        if(id.empty()&&!s(p,"document_number").isEmpty())id=document(s(p,"document_number"));
+        if(id.empty())id=parse(s(p,"legacy_document"));
+        return person(source,role,DeclaredPerson.name(p),s(p,"preferred_name"),id,false,req);
     }
     @SuppressWarnings("unchecked")
     private Map<String,Object> decode(String value){return value.isBlank()?Map.of():(Map<String,Object>)json.readValue(value,Map.class);}

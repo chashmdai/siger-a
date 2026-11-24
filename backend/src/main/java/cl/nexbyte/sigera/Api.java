@@ -19,11 +19,11 @@ import static cl.nexbyte.sigera.Db.*;
 public class Api {
     final Attention attention;final BoardQueries boards;volatile boolean ready;
     final Access access;final Workflow flow;final Queries queries;final Documents documents;final Db db;final PasswordEncoder passwords;
-    final Integrations integrations;final PersonSearch search;final Holidays holidays;final Reports reports;final Personnel personnel;final StatCatalogs catalogs;final String environment;final String releaseVersion;
-    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,Reports reports,Personnel personnel,StatCatalogs catalogs,
+    final Integrations integrations;final PersonSearch search;final Holidays holidays;final Reports reports;final Personnel personnel;final StatCatalogs catalogs;final IntakeRecord intake;final String environment;final String releaseVersion;
+    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,Reports reports,Personnel personnel,StatCatalogs catalogs,IntakeRecord intake,
                @org.springframework.beans.factory.annotation.Value("${siger.environment-label:}")String environment,BuildProperties buildProperties){
         this.attention=attention;this.access=access;this.flow=flow;this.queries=queries;this.documents=documents;this.db=db;this.passwords=passwords;this.boards=boards;
-        this.integrations=integrations;this.search=search;this.holidays=holidays;this.reports=reports;this.personnel=personnel;this.catalogs=catalogs;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
+        this.integrations=integrations;this.search=search;this.holidays=holidays;this.reports=reports;this.personnel=personnel;this.catalogs=catalogs;this.intake=intake;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
     }
     private String name(Authentication auth){if(auth==null||!(auth.getPrincipal() instanceof SecurityConfig.Principal))throw new Problem(401,"Inicia sesion.");return auth.getName();}
     @GetMapping("/session") public Map<String,Object> session(Authentication auth,CsrfToken csrf){
@@ -49,6 +49,8 @@ public class Api {
         return Map.of("message","Clave actualizada. Ingresa nuevamente.");
     }
     @GetMapping("/attention/{id}/versions/{version}") public Map<String,Object> attentionVersion(Authentication a,@PathVariable long id,@PathVariable long version){return attention.version(access.actor(name(a)),id,version);}
+    /** Version anterior de la ficha de ingreso de una COM manual (0.8.0, E03), con el acceso de la lectura de la COM. */
+    @GetMapping("/intake/{id}/versions/{version}") public Map<String,Object> intakeVersion(Authentication a,@PathVariable long id,@PathVariable long version){return intake.version(access.actor(name(a)),id,version);}
     @GetMapping("/catalog") public Map<String,Object> catalog(Authentication a){return queries.catalog(access.actor(name(a)));}
     @GetMapping("/notices/unread") public Map<String,Long> unread(Authentication a){return Map.of("unread",db.count("SELECT COUNT(*) FROM inbox_notice WHERE user_id=? AND read_ms IS NULL",access.actor(name(a)).id()));}
     @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)

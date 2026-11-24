@@ -37,7 +37,7 @@ import static cl.nexbyte.sigera.Db.*;
 class InstitutionalReaderTest {
  @DynamicPropertySource static void trustedKeys(DynamicPropertyRegistry registry){FormularioDocs.trustedKeys(registry);}
  static final String HEAD="coordinacion.requerimientos",PROF="profesional",ADMIN="administrativo",DIST="distribucion",READER="lector.institucional",MIXED="lector.profesional";
- @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired Queries queries;@Autowired Attention attention;@Autowired Documents documents;@Autowired FormularioReception reception;@Autowired FormularioKeys keys;@Autowired BoardQueries boards;
+ @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired Queries queries;@Autowired Attention attention;@Autowired Documents documents;@Autowired FormularioReception reception;@Autowired FormularioKeys keys;@Autowired BoardQueries boards;@Autowired IntakeRecord intakeRecord;
 
  /** Expedientes sinteticos compartidos por las pruebas; ninguna prueba los modifica con exito salvo la combinada (objetos propios). */
  record Fixture(long comNew,long solPending,long solReturned,long solAssumed,long req,long caseId,long reservedNote,long openNote,long task,long flow,long link,
@@ -234,6 +234,25 @@ class InstitutionalReaderTest {
   assertEquals(10,audits("CONSULTA",reader)-before,"cada ficha consultada queda auditada");
  }
 
+ /** Ficha de ingreso de la COM manual (0.8.0, E03): el lector la lee con sus versiones, no la complementa; TI no la lee. */
+ @Test void fichaDeIngresoLegibleSinFacultadesYTiSinLectura(){
+  long com=run(ADMIN,"COM_CREATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","OFICIO","received_at",ago(300),"subject","Oficio sintetico","body","Relato sintetico",
+   "intake",Map.of("institutions_list",List.of(Map.of("name","Juzgado sintetico","role","Remite el oficio")))));
+  run(ADMIN,"COM_COMPLETE","communication",com,Map.of("intake",Map.of("contact_restrictions","Solo por oficio","institutions_list",List.of(Map.of("name","Juzgado sintetico","role","Remite el oficio"))),"reason","Complemento sintetico"));
+  var detail=detail(READER,"COM",com);
+  @SuppressWarnings("unchecked") var intake=(Map<String,Object>)detail.get("intake");
+  assertNotNull(intake,"el lector ve la ficha de ingreso");assertEquals(false,intake.get("can_complete"));
+  @SuppressWarnings("unchecked") var versions=(List<Map<String,Object>>)intake.get("versions");
+  assertEquals(2,versions.size());
+  long first=n(versions.getLast(),"id");long reader=user(READER),before=audits("FICHA_INGRESO_VERSION_CONSULTADA",reader);
+  var version=intakeRecord.version(access.actor(READER),com,first);
+  assertEquals("",((Map<?,?>)version.get("form")).get("contact_restrictions"));
+  assertEquals(1,audits("FICHA_INGRESO_VERSION_CONSULTADA",reader)-before,"la consulta de una version queda auditada");
+  assertEquals(403,assertThrows(Problem.class,()->intakeRecord.version(access.actor("ti"),com,first)).status,"TI no lee la ficha de ingreso");
+  assertEquals(403,refuse("ti","COM_COMPLETE","communication",com,Map.of("intake",Map.of(),"reason","Intento")).status);
+  assertEquals(403,refuse(READER,"COM_COMPLETE","communication",com,Map.of("intake",Map.of(),"reason","Intento")).status);
+ }
+
  @Test void fichaNnaVersionesYReservasDelReq(){
   var f=fixture();long reader=user(READER);
   var req=detail(READER,"REQ",f.attention());noFaculties("REQ atencion",req);
@@ -300,6 +319,8 @@ class InstitutionalReaderTest {
   var newCom=Map.<String,Object>of("scope_id",upr,"channel","TELEFONO","received_at",ago(60),"subject","Intento","body","Intento");
   attempts.put("COM_CREATE",new Attempt(null,null,newCom));
   attempts.put("COM_IMMEDIATE",new Attempt(null,null,newCom));
+  // Ficha de ingreso (E03): una complementacion valida, para que la unica causa de rechazo sea la funcion.
+  attempts.put("COM_COMPLETE",new Attempt("communication",f.comNew(),Map.of("intake",Map.of("contact_restrictions","Intento"),"reason","Intento")));
   attempts.put("COM_ROUTE",new Attempt("communication",f.comNew(),Map.of("scope_id",upr,"reason","Intento")));
   attempts.put("COM_ASSUME",new Attempt("communication",f.comNew(),Map.of("responsible_id",prof,"reason","Intento")));
   attempts.put("COM_LINK",new Attempt("communication",f.comNew(),Map.of("folio",s(db.one("SELECT folio FROM requirement WHERE id=?",f.req()),"folio"),"reason","Intento")));

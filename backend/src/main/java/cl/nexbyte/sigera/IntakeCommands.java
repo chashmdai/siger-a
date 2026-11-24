@@ -18,20 +18,23 @@ public class IntakeCommands {
     private final Documents documents;
     private final FormularioKeys formularioKeys;
     private final PersonIndex index;
+    private final IntakeRecord records;
 
-    public IntakeCommands(Db db,Access access,Lifecycle life,Documents documents,FormularioKeys formularioKeys,PersonIndex index){
+    public IntakeCommands(Db db,Access access,Lifecycle life,Documents documents,FormularioKeys formularioKeys,PersonIndex index,IntakeRecord records){
         this.db=db;
         this.access=access;
         this.life=life;
         this.documents=documents;
         this.formularioKeys=formularioKeys;
         this.index=index;
+        this.records=records;
     }
 
     Result run(Actor a,String type,long id,Long expected,Input in){
         return switch(type){
             case "COM_CREATE" -> createCom(a,in,false);
             case "COM_IMMEDIATE" -> createCom(a,in,true);
+            case "COM_COMPLETE" -> records.complete(a,id,expected,in);
             case "COM_ROUTE" -> routeCom(a,id,expected,in);
             case "COM_ASSUME" -> assumeOwn(a,id,expected,in);
             case "SOL_ROUTE","SOL_RETURN","SOL_ASSUME","SOL_DISCARD" -> sol(a,type,id,expected,in);
@@ -50,14 +53,25 @@ public class IntakeCommands {
         long received=in.instant("received_at",true);
         require(received<=now(),"La fecha de recepcion no puede ser futura.");
         String subject=in.text("subject",240,true),body=in.text("body",20000,true);
+        // 0.8.0 (E03): con el bloque intake, la ficha de ingreso es la unica fuente (columnas de resumen derivadas y sin
+        // filas en communication_person). Sin el, el formato anterior sigue igual mientras la pantalla no cambie (E04);
+        // E05 lo retira.
+        Object intake=in.values().get("intake");
+        if(intake!=null)for(String key:IntakeRecord.LEGACY_FIELDS){
+            Object value=in.values().get(key);
+            require(value==null||value instanceof List<?> l&&l.isEmpty()||value instanceof String text&&text.isBlank(),"Registra los datos de las personas solo en la ficha de ingreso.");
+        }
         long t=now();
         long com=db.insert("INSERT INTO communication(channel,received_ms,created_ms,created_by,origin_scope,presenter,contact,identity_document,subject,body) VALUES(?,?,?,?,?,?,?,?,?,?)",
             channel,received,t,a.id(),scope,in.text("presenter",200,false),in.text("contact",300,false),in.text("identity_document",100,false),subject,body);
         life.comFolio(com);
         life.milestone("COM_REGISTRADA","COM",com,com,null,null,a.id(),null,scope,t,null);
-        db.update("UPDATE communication SET contact_email=?,contact_phone=?,contact_restrictions=?,presenter_domicile=? WHERE id=?",
-            in.text("contact_email",200,false),in.text("contact_phone",80,false),in.text("contact_restrictions",1000,false),in.text("presenter_domicile",500,false),com);
-        persons(com,in.values().get("persons"));
+        if(intake!=null)records.create(a,com,intake);
+        else{
+            db.update("UPDATE communication SET contact_email=?,contact_phone=?,contact_restrictions=?,presenter_domicile=? WHERE id=?",
+                in.text("contact_email",200,false),in.text("contact_phone",80,false),in.text("contact_restrictions",1000,false),in.text("presenter_domicile",500,false),com);
+            persons(com,in.values().get("persons"));
+        }
         index.refresh(com);
         documents.attachIntake(a,scope,com,in.values().get("attachment_tokens"));
         life.changed(a,"COM_REGISTRADA","COM",com,scope,"Canal "+channel);

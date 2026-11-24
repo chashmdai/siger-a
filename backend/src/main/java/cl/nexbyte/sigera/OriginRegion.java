@@ -15,20 +15,25 @@ import static cl.nexbyte.sigera.Db.*;
  *
  * Fuentes inmutables: en una COM del Formulario, la proyeccion (external_field CAMPO nna-region y, si falta o no es un
  * codigo valido, adult-region), que no cambia despues de crear la COM; en una atencion directa, las versiones de la ficha
- * (attention_revision.region_code, V16: el codigo de data_json.region de cada version si es valido). Una COM manual no
- * tiene region. Valida = codigo del catalogo del Formulario (AdultIdentity.REGIONS); un texto libre no es region.
+ * (attention_revision.region_code, V16: el codigo de data_json.region de cada version si es valido); en una COM manual
+ * con ficha de ingreso (0.8.0, precision de D21 aprobada en D32, gate E03), las versiones de esa ficha
+ * (intake_revision.region_code, region del presentador). Una COM manual sin ficha de ingreso (anterior a 0.8.0) no tiene
+ * region. Valida = codigo del catalogo del Formulario (AdultIdentity.REGIONS); un texto libre no es region.
  *
- * Region registrada: la del Formulario o, en una atencion directa, la de la primera version con region (completar una
- * ficha sin region no es una correccion). Region vigente: la primera valida de (ficha vigente, nna-region, adult-region),
- * la misma regla de Access.suggestedRegion (propuesta de destino, D20). Corregida: hay region registrada y la vigente es
- * distinta (tambien si se quito). Los reportes filtran y agrupan por la registrada (estable ante correcciones).
+ * Region registrada: la del Formulario o, en una atencion directa o una COM manual, la de la primera version con region
+ * (completar una ficha sin region no es una correccion). Region vigente: la primera valida de (ficha vigente,
+ * nna-region, adult-region, ficha de ingreso vigente), la misma regla de Access.suggestedRegion (propuesta de destino,
+ * D20). Corregida: hay region registrada y la vigente es distinta (tambien si se quito). Los reportes filtran y agrupan
+ * por la registrada (estable ante correcciones). Una COM tiene a lo sumo una de las tres fuentes.
  */
 @Service
 public class OriginRegion {
     private static final Logger LOG=LoggerFactory.getLogger(OriginRegion.class);
     static final String MARKER="REGION_FICHA_V16";
     static final int BATCH=500;
-    static final List<String> FORM_KEYS=List.of("nna-region","adult-region");
+    /** Claves de FORM_FIELDS en orden de prioridad: Formulario (NNA y adulto) y ficha de ingreso de la COM manual. */
+    static final String INTAKE_KEY="intake-region";
+    static final List<String> FORM_KEYS=List.of("nna-region","adult-region",INTAKE_KEY);
     /** Codigos del catalogo como literales SQL (solo digitos: se verifica al cargar). */
     static final String CODES;
     static{
@@ -47,8 +52,8 @@ public class OriginRegion {
     /** Region de una version de la ficha (sus propios datos). */
     static String ofForm(Map<String,Object> form){return form==null?null:of(form.get("region"));}
     /**
-     * Region vigente (y propuesta de destino): la primera valida de la ficha vigente, nna-region y adult-region; fields
-     * son las filas CAMPO del Formulario ordenadas por id (la primera valida de cada clave).
+     * Region vigente (y propuesta de destino): la primera valida de la ficha vigente, nna-region, adult-region y la ficha
+     * de ingreso vigente; fields son las filas de FORM_FIELDS (la primera valida de cada clave).
      */
     static String current(String formRegion,List<Map<String,Object>> fields){
         if(of(formRegion)!=null)return formRegion;
@@ -56,8 +61,17 @@ public class OriginRegion {
             if(key.equals(s(f,"field_key"))&&of(f.get("value_text"))!=null)return s(f,"value_text");
         return null;
     }
-    /** Filas CAMPO de region del Formulario de una COM, por id (vacio si la COM no es del Formulario). */
-    static final String FORM_FIELDS="SELECT field_key,value_text FROM external_field WHERE communication_id=? AND field_group='CAMPO' AND field_key IN ('nna-region','adult-region') ORDER BY id";
+    /**
+     * Una fila por clave de FORM_KEYS para la COM del parametro: la primera fila CAMPO valida del Formulario de esa clave
+     * (por id, la misma subconsulta de formularioSql) y la region de la version vigente de la ficha de ingreso (la misma
+     * de intakeCurrentSql). value_text nulo si no hay. Un solo parametro (la COM) para Access.suggestedRegion.
+     */
+    static final String FORM_FIELDS;
+    static{
+        String keys=FORM_KEYS.stream().map(k->"SELECT '"+k+"' AS field_key").collect(Collectors.joining(" UNION ALL "));
+        FORM_FIELDS="SELECT k.field_key,CASE WHEN k.field_key='"+INTAKE_KEY+"' THEN "+intakeCurrentSql("c")+" ELSE (SELECT f.value_text FROM external_field f WHERE f.id=(SELECT MIN(g.id) FROM external_field g WHERE g.communication_id=c.id"
+            +" AND g.field_group='CAMPO' AND g.field_key=k.field_key AND g.value_text IN ("+CODES+"))) END AS value_text FROM communication c CROSS JOIN ("+keys+") k WHERE c.id=?";
+    }
     static boolean corrected(Object registered,Object current){return registered!=null&&!Objects.equals(registered,current);}
     /** Region registrada, vigente y si fue corregida, de un REQ (para la ficha). */
     Map<String,Object> ofRequirement(long req){
@@ -75,15 +89,23 @@ public class OriginRegion {
             +".id AND g.field_group='CAMPO' AND g.field_key='"+key+"' AND g.value_text IN ("+CODES+")))";
     }
     static String formularioSql(String com){return "COALESCE("+formField(com,"nna-region")+","+formField(com,"adult-region")+")";}
-    /** Region registrada: primera version de la ficha con region o, sin ella, el Formulario (alias de communication y requirement). */
+    /** Ficha de ingreso de la COM manual: region de la primera version con region (registrada). */
+    static String intakeRegisteredSql(String com){
+        return "(SELECT v.region_code FROM intake_revision v WHERE v.id=(SELECT MIN(w.id) FROM intake_revision w WHERE w.communication_id="+com+".id AND w.region_code IS NOT NULL))";
+    }
+    /** Ficha de ingreso de la COM manual: region de la version vigente (nula si la vigente no tiene). */
+    static String intakeCurrentSql(String com){
+        return "(SELECT v.region_code FROM intake_revision v WHERE v.id=(SELECT MAX(w.id) FROM intake_revision w WHERE w.communication_id="+com+".id))";
+    }
+    /** Region registrada: primera version de la ficha con region, el Formulario o la ficha de ingreso (alias de communication y requirement). */
     static String registeredSql(String com,String req){
         return "COALESCE((SELECT v.region_code FROM attention_revision v WHERE v.id=(SELECT MIN(w.id) FROM attention_revision w WHERE w.requirement_id="+req
-            +".id AND w.region_code IS NOT NULL)),"+formularioSql(com)+")";
+            +".id AND w.region_code IS NOT NULL)),"+formularioSql(com)+","+intakeRegisteredSql(com)+")";
     }
-    /** Region vigente: la de la version actual de la ficha y luego el Formulario (el mismo orden de current()). */
+    /** Region vigente: la de la version actual de la ficha, el Formulario y la ficha de ingreso (el mismo orden de current()). */
     static String currentSql(String com,String req){
         return "COALESCE((SELECT v.region_code FROM attention_revision v WHERE v.id=(SELECT MAX(w.id) FROM attention_revision w WHERE w.requirement_id="+req
-            +".id)),"+formularioSql(com)+")";
+            +".id)),"+formularioSql(com)+","+intakeCurrentSql(com)+")";
     }
 
     // --- Carga inicial (V16) ---------------------------------------------------------------------

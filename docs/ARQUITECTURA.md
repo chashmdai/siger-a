@@ -33,8 +33,13 @@ sobre MySQL 8.4 con `MySqlSuite`).
   `SCOPE_UPDATE` con cambio de region, y el aviso permanente `REGION_SIN_SEDE`. Vista previa sin escrituras ni
   auditoria: `POST /api/administration/territorial-effect` (`Personnel.territorialPreview`, solo TI).
 - `OriginRegion`: regla unica, en Java y en SQL portable, de la region de origen de la persona: registrada, vigente y
-  corregida (ficha y Formulario). La usan los reportes, la exportacion, la ficha y la region propuesta del selector
-  (`Access.suggestedRegion`). Los dias habiles siguen con la region de la sede (D22).
+  corregida (ficha, Formulario y, desde 0.8.0, la ficha de ingreso de la COM manual). La usan los reportes, la
+  exportacion, la ficha y la region propuesta del selector (`Access.suggestedRegion`). Los dias habiles siguen con la
+  region de la sede (D22).
+- `DeclaredPerson` / `IntakeRecord` (0.8.0, E03): persona declarada canonica (`persona-1`) con las reglas de la ficha
+  1.1 y del Formulario, compartida por la ficha 1.2 y la ficha de ingreso de la COM manual; resumen de cambios
+  (complemento o rectificacion) calculado por el servidor. `IntakeRecord` guarda la ficha de ingreso (unica fuente de
+  esas COM: columnas de resumen derivadas, sin filas en `communication_person`) y atiende `COM_COMPLETE`.
 - `PersonIndex` / `PersonSearch`: indice de coincidencias de personas (derivado, reconstruible) y busqueda por RUN,
   documento, nombre o folio con auditoria HMAC opcional del termino.
 - `Milestones` / `BusinessCalendar` / `Reports` / `Csv`: hitos de cada transicion (y su carga historica), dias
@@ -83,7 +88,10 @@ referencia de `deploy/config-ejemplo/catalogos/` (propuesta version 1, modelo de
 la institucion, con fuentes y huellas en su `LEEME.txt`), que viajan en el paquete dentro de `config-ejemplo\`. La
 funcion `GESTION_ESTADISTICA` (ambito opcional, exige REPORTES en el mismo alcance, incompatible con TI; D43) se concede
 desde E02 y habilita cortes, series y vistas compartidas a partir de E10 y E11.
-V1 a V17 no se modifican nunca; un cambio nuevo se agrega como `V18__...` aditivo, compatible con H2 y MySQL. Ninguna
+V18 (E03): `attention_revision.change_summary` (resumen de cambios de cada version de la ficha; carga de las versiones
+existentes con el marcador `RESUMEN_CAMBIOS_V18`, tambien con `migrate-only`) e `intake_record`/`intake_revision`
+(ficha de ingreso de la COM manual con sus versiones, region del presentador y resumen de cambios).
+V1 a V18 no se modifican nunca; un cambio nuevo se agrega como `V19__...` aditivo, compatible con H2 y MySQL. Ninguna
 migracion siembra sedes, regiones, feriados, catalogos ni personas reales. La actualizacion desde 0.4.0 y desde 0.7.0
 se prueba sobre MySQL 8.4 con volcados sinteticos (`MySql84UpgradeTest`, `MySql84Upgrade070Test`).
 

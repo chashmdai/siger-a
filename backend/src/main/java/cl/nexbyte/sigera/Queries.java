@@ -10,8 +10,8 @@ import static cl.nexbyte.sigera.Db.*;
 public class Queries {
     final Db db;final Access access;final Attention attention;
     private final Integrations integrations;
-    private final Documents documents;private final OriginRelease origin;private final StatCatalogs catalogs;
-    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs){this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
+    private final Documents documents;private final OriginRelease origin;private final StatCatalogs catalogs;private final IntakeRecord intake;
+    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs,IntakeRecord intake){this.intake=intake;this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
     public Map<String,Object> workspace(Actor a){
         // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales:
         // TI administra todas las subrogancias (D1); titular y subrogante ven las propias.
@@ -112,7 +112,9 @@ public class Queries {
                 var c=access.comForRead(a,id);scope=n(c,"origin_scope");out=new LinkedHashMap<>(c);
                 // Misma facultad que COM_LINK (distribucion o jefatura de origen); la consulta institucional no la tiene.
                 out.put("can_link",(access.canDistribute(a,c)||a.head(scope))&&s(c,"state").equals("NUEVA")&&db.count("SELECT COUNT(*) FROM communication_link WHERE communication_id=?",id)==0);
-                out.put("persons",db.rows("SELECT * FROM communication_person WHERE communication_id=? ORDER BY id",id));
+                // Ficha de ingreso (0.8.0, E03) cuando existe: unica fuente de sus personas; si no, communication_person.
+                if(IntakeRecord.exists(db,id)){out.put("intake",intake.view(a,c));out.put("persons",intake.persons(id));}
+                else out.put("persons",db.rows("SELECT * FROM communication_person WHERE communication_id=? ORDER BY id",id));
                 out.put("can_route",access.canDistribute(a,c)&&s(c,"state").equals("NUEVA")&&db.count("SELECT COUNT(*) FROM solicitation WHERE communication_id=?",id)==0);
                 out.put("can_assume",a.head(scope)&&s(c,"state").equals("NUEVA"));out.put("attention_scopes",access.managementScopes(a,scope));
                 out.put("solicitations",db.rows("SELECT * FROM solicitation WHERE communication_id=?",id).stream().filter(s->solVisible(a,s)).toList());

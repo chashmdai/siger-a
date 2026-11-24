@@ -23,6 +23,11 @@ class MySql84Upgrade070Test {
     static final String SCHEMA="siger_a_mysql_upgrade_desde070",DUMP="/upgrade/siger-0.7.0-sintetico.sql";
     /** Tablas de la recepcion del Formulario que ningun codigo actualiza ni borra (seccion 2 del plan 0.8.0). */
     static final List<String> ORIGINALS=List.of("communication_original","external_person","external_attribute","external_field");
+    /**
+     * Marcadores de las rutinas de arranque agregadas despues de 0.7.0: es lo unico que cambia la cantidad de filas de
+     * una tabla existente (application_marker) al actualizar (E03: resumen de cambios de la ficha, V18).
+     */
+    static final List<String> NEW_MARKERS=List.of(Attention.SUMMARY_MARKER);
     @BeforeAll static void requireIsolatedMySql(){MySql84IntegrationTest.requireIsolatedMySql();}
 
     /** Mayor version de las migraciones del codigo (Vn__*.sql). */
@@ -72,13 +77,15 @@ class MySql84Upgrade070Test {
             assertEquals(3,MySql84UpgradeTest.count(c,"SELECT COUNT(*) FROM communication_original"));
             assertEquals(2,MySql84UpgradeTest.count(c,"SELECT COUNT(*) FROM external_person WHERE run_source='SRCEI' AND authenticated=FALSE"));
         }
-        var unchanged=before.stream().filter(t->!t.equals("flyway_schema_history")).toList();
+        var unchanged=before.stream().filter(t->!t.equals("flyway_schema_history")&&!t.equals("application_marker")).toList();
         loaded=counts(unchanged);prints=fingerprints();
+        long markers=counts(List.of("application_marker")).get("application_marker");
         int latest=latest();
 
         // 1. Como Migrate.ps1: sin web, migra y ejecuta las rutinas de arranque; Bootstrap cierra el contexto.
         try(var migrate=MySql84IntegrationTest.app(SCHEMA,List.of("siger.migrate-only=true"))){assertFalse(migrate.isActive(),"migrate-only cierra el proceso");}
         assertEquals(loaded,counts(unchanged),"migrar no cambia la cantidad de filas de ninguna tabla existente");
+        assertEquals(markers+NEW_MARKERS.size(),counts(List.of("application_marker")).get("application_marker"),"solo los marcadores nuevos");
         assertEquals(prints,fingerprints(),"originales del Formulario y external_* identicos");
         var migrated=counts(unchanged);
 
@@ -89,6 +96,14 @@ class MySql84Upgrade070Test {
             for(int v=1;v<=latest;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
             for(String marker:List.of(Bootstrap.AUTHORITY_MARKER,Bootstrap.REGIONAL_HEAD_MARKER,PersonIndex.MARKER,Milestones.MARKER,OriginRegion.MARKER))
                 assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",marker),marker);
+            for(String marker:NEW_MARKERS)assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",marker),marker);
+            // V18: cada version de la ficha con una anterior tiene su resumen de cambios; la primera de cada REQ, no.
+            if(latest>=18){
+                assertEquals(db.count("SELECT COUNT(*) FROM attention_revision v WHERE EXISTS(SELECT 1 FROM attention_revision w WHERE w.requirement_id=v.requirement_id AND w.id<v.id)"),
+                    db.count("SELECT COUNT(*) FROM attention_revision WHERE change_summary IS NOT NULL"));
+                assertTrue(db.count("SELECT COUNT(*) FROM attention_revision WHERE change_summary IS NOT NULL")>0,"el volcado trae una ficha complementada");
+                assertEquals(0,db.count("SELECT COUNT(*) FROM intake_record"),"ninguna COM anterior recibe ficha de ingreso");
+            }
             // Cada original conserva su SHA-256 recalculado sobre el texto guardado.
             for(var o:db.rows("SELECT document,document_sha256 FROM communication_original"))
                 assertEquals(s(o,"document_sha256"),ExternalOriginal.sha256(s(o,"document").getBytes(StandardCharsets.UTF_8)));

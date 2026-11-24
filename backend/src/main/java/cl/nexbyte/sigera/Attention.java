@@ -2,7 +2,11 @@ package cl.nexbyte.sigera;
 
 import java.time.LocalDate;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 import cl.nexbyte.sigera.Access.Actor;
 import static cl.nexbyte.sigera.Db.*;
@@ -11,15 +15,20 @@ import static cl.nexbyte.sigera.Problem.require;
 /** Primera atencion sobre COM/REQ existentes. Workflow conserva la transaccion e idempotencia. */
 @Service
 public class Attention {
+    private static final Logger LOG=LoggerFactory.getLogger(Attention.class);
+    /** Carga del resumen de cambios de las versiones anteriores a 0.8.0 (V18). */
+    static final String SUMMARY_MARKER="RESUMEN_CAMBIOS_V18";
+    static final int BATCH=500;
     private final Db db;
     private final Access access;
     private final Documents documents;
     private final Lifecycle life;
     private final PersonIndex index;
     private final OriginRegion regions;
+    private final TransactionTemplate tx;
     private final JsonMapper json=JsonMapper.builder().build();
-    public Attention(Db db,Access access,Documents documents,Lifecycle life,PersonIndex index,OriginRegion regions){
-        this.db=db;this.access=access;this.documents=documents;this.life=life;this.index=index;this.regions=regions;
+    public Attention(Db db,Access access,Documents documents,Lifecycle life,PersonIndex index,OriginRegion regions,PlatformTransactionManager manager){
+        this.db=db;this.access=access;this.documents=documents;this.life=life;this.index=index;this.regions=regions;this.tx=new TransactionTemplate(manager);
     }
     private long now(){return System.currentTimeMillis();}
     public boolean exists(long req){return db.count("SELECT COUNT(*) FROM attention_record WHERE requirement_id=?",req)>0;}
@@ -47,17 +56,28 @@ public class Attention {
     /** Campos de la ficha 1.1: identificacion estructurada de la persona adulta (todos opcionales). */
     static final List<String> ADULT_KEYS=List.of("presenter_first_name","presenter_middle_name","presenter_last_name","presenter_second_last_name",
         "presenter_run_number","presenter_run_dv","presenter_birth_date","presenter_document_kind","presenter_document_number");
+    /** Versiones de la ficha, en orden: una ficha no vuelve a una version anterior (perderia estructura). */
+    static final List<String> VERSIONS=List.of("1.0","1.1","1.2");
+    /** Campos que agrega la ficha 1.2 (DISENO 3.4); relationship_version la deriva el servidor. */
+    static final List<String> KEYS_12=List.of("relationship_code","facts_region_code","facts_commune","facts_place","institutions_list");
+    static final Set<String> PEOPLE_ROLES=Set.of("NNA","ACOMPANANTE","REQUIRENTE","OTRA_PERSONA");
     /**
      * Esquema pequeno y cerrado, no almacenamiento arbitrario de JSON del navegador. 1.0 se acepta tal como antes;
-     * 1.1 agrega la identificacion y el contacto estructurados de la persona adulta. previous es la ficha vigente:
-     * un valor historico identico se conserva sin revalidarse (los datos anteriores nunca se reescriben).
+     * 1.1 agrega la identificacion y el contacto estructurados de la persona adulta; 1.2 (0.8.0, D33) aplica esas
+     * reglas tambien en la modalidad NNA y agrega personas canonicas (persona-1), relacion con el NNA, hechos e
+     * instituciones. previous es la ficha vigente: un valor historico identico se conserva sin revalidarse (los datos
+     * anteriores nunca se reescriben).
      */
     private Map<String,Object> normalize(Input envelope,Map<String,Object> previous){
         var input=new Input(childMap(envelope,"form"));var out=new LinkedHashMap<String,Object>();
         String version=input.values().containsKey("schema_version")?input.text("schema_version",8,true):"1.0";
-        require(version.equals("1.0")||version.equals("1.1"),"Version de ficha desconocida.");
+        require(VERSIONS.contains(version),"Version de ficha desconocida.");
+        String before=previous.isEmpty()?"1.0":s(previous,"schema_version").isEmpty()?"1.0":s(previous,"schema_version");
+        require(VERSIONS.indexOf(version)>=VERSIONS.indexOf(before),"La ficha ya usa una version posterior; actualiza la pantalla antes de guardar.");
+        boolean v12=version.equals("1.2");
         Set<String> allowed=new HashSet<>(List.of("schema_version","modality","course","people"));
-        if(version.equals("1.1")){
+        if(v12)allowed.addAll(KEYS_12);
+        if(!version.equals("1.0")){
             for(String key:ADULT_KEYS){int limit=switch(key){case "presenter_run_number"->12;case "presenter_run_dv"->1;case "presenter_birth_date"->10;case "presenter_document_number"->40;default->100;};out.put(key,input.text(key,limit,false));allowed.add(key);}
         }
         String[] shortFields={"presenter_name","identity_document","identity_type","relationship","contact_email","contact_phone","presenter_domicile","region","commune","preferred_name","pronouns","supports","court","rit","ruc","guardian_name","nationality","group_description","approximate_count"};
@@ -78,9 +98,10 @@ public class Attention {
         require(input.values().keySet().stream().allMatch(allowed::contains),"La ficha contiene campos no reconocidos.");
         String mode=input.choice("modality","GENERAL","NNA");out.put("modality",mode);
         out.put("schema_version",version);out.put("course",input.choice("course","EN_ATENCION","SEGUIMIENTO"));
-        if(version.equals("1.1"))adult(out,mode,previous);
         Object rawPeople=input.values().getOrDefault("people",List.of());
         if(!(rawPeople instanceof List<?> people)||people.size()>30)throw new Problem(400,"La ficha admite hasta 30 personas; para grupos usa la descripcion colectiva.");
+        if(v12){version12(input,out,mode,previous,people);return out;}
+        if(version.equals("1.1"))adult(out,mode,previous,false);
         var normalized=new ArrayList<Map<String,Object>>();
         Set<String> personKeys=Set.of("role","name","identity_document","relationship","location","age","birth_date","nationality","schooling","preferred_name");
         for(Object raw:people){
@@ -96,51 +117,54 @@ public class Attention {
     }
 
     /**
-     * Reglas 1.1 de la persona adulta. Todo es opcional (solo el motivo es indispensable). Vacio nunca es error; un
-     * valor igual al de la version vigente se conserva aunque no siga el formato nuevo. En la modalidad NNA los campos
-     * de contacto y nacionalidad conservan el texto libre de siempre. El nombre y el documento resumidos que usa la COM
-     * se derivan de las partes estructuradas cuando existen.
+     * Reglas de la persona adulta de nivel superior (DeclaredPerson, las de 1.1). Todo es opcional (solo el motivo es
+     * indispensable). Vacio nunca es error; un valor igual al de la version vigente se conserva aunque no siga el
+     * formato nuevo. En 1.1, la modalidad NNA conserva el texto libre de contacto, region y nacionalidad; en 1.2
+     * (allModalities) las reglas rigen en ambas modalidades. El nombre y el documento resumidos que usa la COM se
+     * derivan de las partes estructuradas cuando existen.
      */
-    private void adult(Map<String,Object> out,String mode,Map<String,Object> previous){
+    private List<String> adult(Map<String,Object> out,String mode,Map<String,Object> previous,boolean allModalities){
         var errors=new ArrayList<String>();
         java.util.function.Predicate<String> kept=key->!s(out,key).isEmpty()&&s(out,key).equals(s(previous,key));
-        java.util.function.BiConsumer<String,String> check=(key,problem)->{if(problem!=null&&!kept.test(key))errors.add(problem);};
-        Map<String,String> nameLabels=Map.of("presenter_first_name","Primer nombre","presenter_middle_name","Segundo nombre","presenter_last_name","Primer apellido","presenter_second_last_name","Segundo apellido");
-        for(String key:List.of("presenter_first_name","presenter_middle_name","presenter_last_name","presenter_second_last_name")){
-            out.put(key,AdultIdentity.normalizeName(s(out,key)));String p=AdultIdentity.nameProblem(s(out,key));check.accept(key,p==null?null:nameLabels.get(key)+": "+p+".");
-        }
-        String birth=AdultIdentity.birthProblem(s(out,"presenter_birth_date"),AdultIdentity.today());check.accept("presenter_birth_date",birth==null?null:"Fecha de nacimiento: "+birth+".");
-        String type=s(out,"identity_type"),number=s(out,"presenter_run_number").replaceAll("[.\\s]",""),dv=s(out,"presenter_run_dv").toUpperCase(Locale.ROOT);
-        out.put("presenter_run_number",number);out.put("presenter_run_dv",dv);
-        if(!number.isEmpty()||!dv.isEmpty()){
-            if(!type.equals("RUN"))errors.add("El RUN corresponde a la identificacion RUN chileno.");
-            else if(number.isEmpty()||dv.isEmpty())errors.add("Completa el numero y el digito verificador del RUN, o deja el RUN en blanco.");
-            else if(!AdultIdentity.validRun(number,dv))errors.add("El numero y el digito verificador del RUN no coinciden.");
-        }
-        String kind=s(out,"presenter_document_kind");out.put("presenter_document_number",AdultIdentity.normalizeDocument(s(out,"presenter_document_number")));
-        if(!kind.isEmpty()||!s(out,"presenter_document_number").isEmpty()){
-            if(!type.equals("OTRO"))errors.add("El documento extranjero corresponde a la identificacion Documento extranjero u otro.");
-            if(!kind.isEmpty()&&!AdultIdentity.DOCUMENT_KINDS.contains(kind))errors.add("Tipo de documento no permitido.");
-            String doc=AdultIdentity.documentProblem(s(out,"presenter_document_number"));check.accept("presenter_document_number",doc==null?null:"Numero de documento: "+doc+".");
-        }
-        if(mode.equals("GENERAL")){
-            out.put("contact_email",AdultIdentity.trim(s(out,"contact_email")));
-            String phone=s(out,"contact_phone"),email=s(out,"contact_email"),region=s(out,"region"),commune=s(out,"commune"),nationality=s(out,"nationality");
-            if(!phone.isEmpty()&&!AdultIdentity.validMobile(phone))check.accept("contact_phone","Celular: escribe los ocho digitos despues de +56 9.");
-            if(!email.isEmpty()&&!AdultIdentity.validEmail(email))check.accept("contact_email","Correo: revisa el formato.");
-            if(!region.isEmpty()&&!AdultIdentity.validRegion(region))check.accept("region","Region: selecciona una region del listado.");
-            if(!commune.isEmpty()&&!(AdultIdentity.validRegion(region)&&AdultIdentity.validCommune(region,commune)))check.accept("commune","Comuna: selecciona una comuna de la region indicada.");
-            if(!nationality.isEmpty()&&!AdultIdentity.validNationality(nationality))check.accept("nationality","Nacionalidad: selecciona un pais o la opcion Otra / situacion especial.");
-            String derived=type.equals("RUN")&&!number.isEmpty()&&!dv.isEmpty()?AdultIdentity.formatRun(number,dv)
-                :type.equals("OTRO")&&!s(out,"presenter_document_number").isEmpty()?documentLabel(kind)+" "+s(out,"presenter_document_number"):"";
+        var k=DeclaredPerson.FICHA;
+        DeclaredPerson.identity(out,k,kept,errors,"");
+        if(mode.equals("GENERAL")||allModalities){
+            DeclaredPerson.contact(out,k,kept,errors,"");
+            String derived=DeclaredPerson.documentSummary(out,k);
             if(!derived.isEmpty())out.put("identity_document",derived);
             else if(!s(out,"identity_document").isEmpty()&&!kept.test("identity_document"))errors.add("Registra el documento en los campos de RUN o de documento extranjero.");
-            String name=String.join(" ",List.of(s(out,"presenter_first_name"),s(out,"presenter_middle_name"),s(out,"presenter_last_name"),s(out,"presenter_second_last_name")).stream().filter(x->!x.isEmpty()).toList());
+            String name=DeclaredPerson.displayName(out,k);
             if(!name.isEmpty())out.put("presenter_name",name);
         }
+        if(!allModalities&&!errors.isEmpty())throw new Problem(400,String.join(" ",errors));
+        return errors;
+    }
+    /**
+     * Ficha 1.2 (DISENO 3.4): reglas de la persona adulta en ambas modalidades, relacion con el NNA del catalogo
+     * vigente, cantidad aproximada entera, hechos, instituciones y personas canonicas. Lo historico identico se
+     * conserva; los textos de 1.0/1.1 de las personas pasan solo como historicos (legacy_*), sin interpretarse.
+     */
+    private void version12(Input input,Map<String,Object> out,String mode,Map<String,Object> previous,List<?> people){
+        var errors=adult(out,mode,previous,true);
+        var codes=DeclaredPerson.Codes.load(db);
+        out.put("relationship_code",input.text("relationship_code",40,false));
+        DeclaredPerson.code(out,"relationship_code","relationship_version",DeclaredPerson.RELATIONSHIP,List.of(previous),codes,errors,"Relacion con el NNA");
+        String count=s(out,"approximate_count");
+        if(!count.isEmpty()&&!count.equals(s(previous,"approximate_count"))&&!count.matches("[1-9][0-9]{0,5}"))errors.add("Cantidad aproximada: escribe un numero entero mayor que cero.");
+        DeclaredPerson.facts(input,out,previous,errors);
+        out.put("institutions_list",DeclaredPerson.institutions(input.values().get("institutions_list"),previous.get("institutions_list"),codes,errors));
+        var before=DeclaredPerson.canonicalList(previous.get("people"));var normalized=new ArrayList<Map<String,Object>>();int i=0;
+        for(Object raw:people)normalized.add(DeclaredPerson.person(raw,PEOPLE_ROLES,before,codes,"Persona "+(++i),false,errors));
+        out.put("people",normalized);
         if(!errors.isEmpty())throw new Problem(400,String.join(" ",errors));
     }
-    private static String documentLabel(String kind){return switch(kind){case "PASAPORTE"->"Pasaporte";case "IDENTIDAD_EXTRANJERA"->"Documento de identidad extranjero";case "OTRO"->"Otro documento";default->"Documento";};}
+    /** Claves que el servidor deriva en esta version (no cuentan en el resumen de cambios). */
+    static Set<String> derived(Map<String,Object> form){
+        var k=DeclaredPerson.FICHA;var out=new HashSet<String>();
+        if(!DeclaredPerson.displayName(form,k).isEmpty())out.add("presenter_name");
+        if(!DeclaredPerson.documentSummary(form,k).isEmpty())out.add("identity_document");
+        return out;
+    }
     public Workflow.Result run(Actor a,String type,long id,Long expected,Input in){
         if(type.equals("ATTENTION_CREATE"))return create(a,in);
         var r=req(id);require(exists(id),"Este REQ no procede de una ficha de primera atencion.");revision(r,expected);
@@ -169,16 +193,22 @@ public class Attention {
         db.update("INSERT INTO attention_record(requirement_id,modality,data_json,followup_required,updated_by,updated_ms) VALUES(?,?,?,?,?,?)",req,s(data,"modality"),serialized,follow,a.id(),now());
         index.refresh(com);
         documents.attachIntake(a,scope,com,in.values().get("attachment_tokens"));
-        snapshot(a,req,0,"Primer registro con antecedentes disponibles",serialized,data);
+        snapshot(a,req,0,"Primer registro con antecedentes disponibles",serialized,data,null);
         db.audit(a.id(),"COM_REGISTRADA_ATENCION","COM",com,scope,"Atencion directa. REQ "+req);
         db.audit(a.id(),"ATENCION_INICIADA","REQ",req,principal,"COM "+com+". Sin SOL ni Caso automatico.");
         if(follow)access.notifyHeads(principal,"Una primera atencion requiere un Caso de seguimiento.","REQ",req);
         if(in.flag("resolve_now"))return resolve(a,req(req),in);
         return new Workflow.Result("REQ",req,"Atencion registrada. COM y REQ creados; puedes completar la ficha o entregarla.");
     }
-    /** Version de la ficha con su region derivada de sus propios datos (V16, D21). */
-    private void snapshot(Actor a,long req,long revision,String reason,String data,Map<String,Object> form){
-        db.update("INSERT INTO attention_revision(requirement_id,requirement_revision,author_id,registered_ms,reason,data_json,region_code) VALUES(?,?,?,?,?,?,?)",req,revision,a.id(),now(),reason,data,OriginRegion.ofForm(form));
+    /**
+     * Version de la ficha con su region derivada de sus propios datos (V16, D21) y el resumen de cambios respecto de la
+     * version anterior (V18, DISENO 2.5; nulo en la primera). Devuelve el resumen.
+     */
+    private Map<String,List<String>> snapshot(Actor a,long req,long revision,String reason,String data,Map<String,Object> form,Map<String,Object> previous){
+        var changes=DeclaredPerson.changes(previous,form,derived(form));
+        db.update("INSERT INTO attention_revision(requirement_id,requirement_revision,author_id,registered_ms,reason,data_json,region_code,change_summary) VALUES(?,?,?,?,?,?,?,?)",
+            req,revision,a.id(),now(),reason,data,OriginRegion.ofForm(form),changes==null?null:json.writeValueAsString(changes));
+        return changes;
     }
     private Workflow.Result save(Actor a,Map<String,Object> r,Input in){
         long id=n(r,"id");var previous=decode(s(db.one("SELECT data_json FROM attention_record WHERE requirement_id=?",id),"data_json"));
@@ -189,8 +219,9 @@ public class Attention {
         db.update("UPDATE attention_record SET modality=?,data_json=?,followup_required=?,updated_by=?,updated_ms=? WHERE requirement_id=?",s(data,"modality"),serialized,follow,a.id(),now(),id);
         index.refresh(n(r,"communication_id"));
         db.update("UPDATE requirement SET revision=revision+1 WHERE id=?",id);
-        snapshot(a,id,n(r,"revision")+1,reason,serialized,data);
-        db.audit(a.id(),"FICHA_COMPLEMENTADA","REQ",id,n(r,"principal_scope"),"Version "+(n(r,"revision")+1)+". "+(regionChanged?"Region de origen modificada. ":"")+reason);
+        var changes=snapshot(a,id,n(r,"revision")+1,reason,serialized,data,previous);
+        // Sin valores: solo version, si cambio la region de origen, el motivo y la cantidad de campos (DISENO 2.5).
+        db.audit(a.id(),"FICHA_COMPLEMENTADA","REQ",id,n(r,"principal_scope"),"Version "+(n(r,"revision")+1)+". "+(regionChanged?"Region de origen modificada. ":"")+reason+" "+DeclaredPerson.summary(changes));
         if(follow&&!was)access.notifyHeads(n(r,"principal_scope"),"Una primera atencion necesita asignacion de Caso.","REQ",id);
         return new Workflow.Result("REQ",id,"Ficha guardada con historial. El ingreso original permanece intacto.");
     }
@@ -255,10 +286,45 @@ public class Attention {
             var form=decode(s(record,"data_json"));out.put("form",form);
             out.put("suggested_region",access.suggestedRegion(n(r,"communication_id"),form.get("region") instanceof String region?region:null));
             out.put("origin_region",regions.ofRequirement(id)); // D21: registrada, vigente y si fue corregida (solo con la ficha legible).
-            out.put("versions",db.rows("SELECT v.id,v.requirement_revision,v.author_id,v.registered_ms,v.reason,u.name AS author FROM attention_revision v JOIN staff u ON u.id=v.author_id WHERE v.requirement_id=? ORDER BY v.id DESC LIMIT 50",id));
+            out.put("versions",db.rows("SELECT v.id,v.requirement_revision,v.author_id,v.registered_ms,v.reason,v.change_summary,u.name AS author FROM attention_revision v JOIN staff u ON u.id=v.author_id WHERE v.requirement_id=? ORDER BY v.id DESC LIMIT 50",id));
             out.put("handoffs",db.rows("SELECT * FROM attention_handoff WHERE requirement_id=? ORDER BY id DESC LIMIT 50",id).stream().map(h->{var row=new LinkedHashMap<>(h);row.put("can_receive",receiving(a,h));row.put("can_withdraw",s(h,"state").equals("PENDIENTE")&&access.reqMain(a,r));return row;}).toList());
         }else out.put("handoffs",db.rows("SELECT h.id,h.state,h.sent_ms,h.target_scope,h.decided_ms FROM attention_handoff h WHERE requirement_id=? AND (sent_by=? OR from_user=?) ORDER BY id DESC LIMIT 50",id,a.id(),a.id()));
         return out;
+    }
+    /**
+     * Resumen de cambios de las versiones existentes (marcador RESUMEN_CAMBIOS_V18): por lotes con el lock global, cada
+     * version contra la anterior del mismo REQ; la primera queda sin resumen. Una version ilegible se omite y se cuenta
+     * (solo cifras en el log). Corre tambien con migrate-only; si se interrumpe, el siguiente arranque la rehace.
+     */
+    void rebuildSummaries(){
+        if(Boolean.TRUE.equals(tx.execute(st->db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",SUMMARY_MARKER)>0)))return;
+        long last=0,versions=0,omitted=0;
+        while(true){
+            final long from=last;
+            long[] result=tx.execute(st->{
+                db.lock();
+                var batch=db.rows("SELECT id,requirement_id,data_json FROM attention_revision WHERE id>? ORDER BY id LIMIT "+BATCH,from);
+                long skipped=0;
+                for(var v:batch){
+                    var previous=db.rows("SELECT data_json FROM attention_revision WHERE requirement_id=? AND id<? ORDER BY id DESC LIMIT 1",n(v,"requirement_id"),n(v,"id"));
+                    if(previous.isEmpty())continue;
+                    try{
+                        var form=decode(s(v,"data_json"));
+                        db.update("UPDATE attention_revision SET change_summary=? WHERE id=?",json.writeValueAsString(DeclaredPerson.changes(decode(s(previous.getFirst(),"data_json")),form,derived(form))),n(v,"id"));
+                    }catch(RuntimeException e){skipped++;}
+                }
+                return new long[]{batch.isEmpty()?0:n(batch.getLast(),"id"),batch.size(),skipped};
+            });
+            if(result==null||result[1]==0)break;
+            last=result[0];versions+=result[1];omitted+=result[2];
+        }
+        tx.execute(st->{
+            db.lock();
+            if(db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",SUMMARY_MARKER)==0)
+                db.update("INSERT INTO application_marker(code,applied_ms) VALUES(?,?)",SUMMARY_MARKER,System.currentTimeMillis());
+            return null;
+        });
+        if(versions>0)LOG.info("Resumen de cambios de la ficha: {} versiones revisadas, {} omitidas.",versions,omitted);
     }
     public Map<String,Object> version(Actor a,long reqId,long version){
         var r=req(reqId);if(!mayRead(a,r))Problem.denied();var v=db.one("SELECT * FROM attention_revision WHERE requirement_id=? AND id=?",reqId,version);
