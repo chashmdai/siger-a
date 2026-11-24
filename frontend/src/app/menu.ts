@@ -43,6 +43,7 @@ export function menuFor(user: User, unread: number): MenuGroup[] {
       [{path: 'subrogancias', label: 'Subrogancias', icon: 'swap'}, has(user, 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'TI')],
       [{path: 'administracion', label: 'Usuarios y permisos', icon: 'shield'}, has(user, 'TI')],
       [{path: 'calendario', label: 'Calendario hábil', icon: 'calendar', hint: 'Feriados nacionales y regionales'}, has(user, 'TI')],
+      [{path: 'catalogos', label: 'Catálogos estadísticos', icon: 'layers', hint: 'Importar, revisar y activar catálogos'}, has(user, 'TI')],
       [{path: 'auditoria', label: 'Auditoría y operación', icon: 'activity'}, has(user, 'TI', 'AUDITORIA')],
     ]],
   ];

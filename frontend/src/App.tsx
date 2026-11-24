@@ -15,6 +15,7 @@ import Detail from './features/detail/Detail';
 import Administration from './features/admin/Administration';
 import Substitutions from './features/admin/Substitutions';
 import Calendar from './features/admin/Calendar';
+import StatCatalogs from './features/admin/StatCatalogs';
 import {has} from './lib/access';
 import Dashboard from './features/dashboard/Dashboard';
 import WorkspaceList from './features/worklist/WorkspaceList';
@@ -174,6 +175,7 @@ export default function App() {
     case 'subrogancias': content = <Substitutions ctx={ctx} workspace={workspace}/>; break;
     case 'reportes': content = user.can_report ? <Reports ctx={ctx}/> : <Dashboard ctx={ctx} version={tick}/>; break;
     case 'calendario': content = has(user, 'TI') ? <Calendar key={tick} ctx={ctx}/> : <Dashboard ctx={ctx} version={tick}/>; break;
+    case 'catalogos': content = has(user, 'TI') ? <StatCatalogs key={tick} ctx={ctx}/> : <Dashboard ctx={ctx} version={tick}/>; break;
     case 'administracion': case 'auditoria': content = <Administration key={view + tick} ctx={ctx} auditOnly={view === 'auditoria'}/>; break;
     default: content = <Dashboard ctx={ctx} version={tick}/>;
   }

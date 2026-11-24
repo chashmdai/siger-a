@@ -32,7 +32,9 @@ public class Api {
         if(logged){var a=access.actor(name(auth));var user=new LinkedHashMap<String,Object>();user.put("id",a.id());user.put("username",a.username());user.put("name",a.name());user.put("home_scope",a.homeScope());user.put("must_change",a.mustChange());
             user.put("grants",a.grants());user.put("substitutions",a.substitutions());user.put("can_search",a.readsRecords());
             // G11/G12: reportes agregados, su desglose por funcionario y la exportacion de filas (cada uno con REPORTES en su alcance).
-            user.put("can_report",Reports.canReport(a));user.put("can_report_people",Reports.canReportPeople(a));user.put("can_export",Reports.canExport(a));result.put("user",user);}
+            user.put("can_report",Reports.canReport(a));user.put("can_report_people",Reports.canReportPeople(a));user.put("can_export",Reports.canExport(a));
+            // E02 (D43): gestion estadistica con REPORTES en el mismo alcance (sin efecto hasta E10 y E11).
+            user.put("can_manage_stats",!Roles.ruling(a,Roles.GESTION_ESTADISTICA).isEmpty());result.put("user",user);}
         return result;
     }
     @PostMapping("/password") @Transactional public Map<String,String> password(Authentication auth,@RequestBody Map<String,Object> body,HttpServletRequest req){

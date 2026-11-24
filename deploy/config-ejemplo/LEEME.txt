@@ -6,10 +6,11 @@ estructura-inicial.json
   funciones. Las claves temporales se generan en la VM (data\bootstrap-usuarios.csv).
   - unidad: UPR, UPD, UEP, UGI, REG, DAI, GAB, DEF o AUD.
   - funciones de funcionarios: ADMINISTRATIVO, PROFESIONAL, JEFATURA, DIRECCION, LECTURA, AUDITORIA (con "ambito");
-    DISTRIBUIDOR, CONSULTA_INSTITUCIONAL y TI (institucionales, sin ambito); REPORTES, REPORTES_PERSONAS y EXPORTACION
-    ("ambito" opcional: sin ambito = toda la institucion; REPORTES_PERSONAS y EXPORTACION exigen REPORTES en el mismo
-    alcance). Una persona puede combinar funciones; se admiten varios distribuidores; una jefatura o direccion por
-    ambito. TI va sola: no se combina con ninguna otra funcion.
+    DISTRIBUIDOR, CONSULTA_INSTITUCIONAL y TI (institucionales, sin ambito); REPORTES, REPORTES_PERSONAS, EXPORTACION y
+    GESTION_ESTADISTICA ("ambito" opcional: sin ambito = toda la institucion; REPORTES_PERSONAS, EXPORTACION y
+    GESTION_ESTADISTICA exigen REPORTES en el mismo alcance; GESTION_ESTADISTICA, desde 0.8.0, aun sin efecto). Una
+    persona puede combinar funciones; se admiten varios distribuidores; una jefatura o direccion por ambito. TI va sola:
+    no se combina con ninguna otra funcion.
   - usuario: en minusculas (letras, digitos, punto, guion o guion bajo; 3 a 64). El ingreso no distingue mayusculas.
   - Sedes regionales (desde 0.5.0): un ambito por sede con "regional": true y "region" (codigo de region del
     Formulario: 15 Arica y Parinacota, 01 Tarapaca, 02 Antofagasta, 03 Atacama, 04 Coquimbo, 05 Valparaiso,
@@ -37,6 +38,11 @@ liberacion-origen.json (0.6.0, D17)
   Set-OriginRelease.ps1 -Desactivar; la revision periodica queda a cargo del responsable. Mientras rige, los originales
   del Formulario se liberan al registrarse por el analisis en origen y TI ve un aviso permanente; los adjuntos subidos
   en SIGER siguen en cuarentena. Incompatible con antivirus.json. Rige desde el siguiente inicio.
+
+catalogos\ (desde 0.8.0, D27)
+  Catalogos estadisticos de referencia (propuesta version 1 y modelo de derechos 2.0 de 2022) y plantillas para la
+  institucion. No se copian a config\: TI los importa desde Administracion > Catalogos estadisticos y los activa solo
+  despues de su validacion institucional. Fuentes, huellas y pendientes en catalogos\LEEME.txt.
 
 Los archivos formulario-pull.json y los secretos del Formulario (*.clixml) los crea Import-SecretPackage.ps1 en la VM.
 En la salida a produccion de 0.6.0 se copian de la validacion a produccion (misma cuenta de servicio, DPAPI) y se deja

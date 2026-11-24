@@ -1,0 +1,535 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "DERECHO",
+  "label": "Modelo de derechos versión 2.0 (2022)",
+  "source": "Defensoría de la Niñez, \"Modelo de conceptualización y categorización de derechos de la niñez y adolescencia\", versión 2.0, 2022 (Observatorio de Derechos). Transcripción de la Tabla 2 (págs. 9-10); sujeta a validación institucional (DI-04).",
+  "items": [
+    {
+      "code": "3",
+      "label": "Vida y supervivencia",
+      "selectable": false,
+      "source_ref": "Tabla 2, p. 9; eje III, p. 11"
+    },
+    {
+      "code": "3.1",
+      "label": "Derecho a la Salud",
+      "parent": "3",
+      "source_ref": "Tabla 2, p. 9; 3.1, p. 11"
+    },
+    {
+      "code": "3.1.01",
+      "label": "Salud integral",
+      "parent": "3.1",
+      "source_ref": "Tabla 2, p. 9; tabla 3.1.2, p. 14"
+    },
+    {
+      "code": "3.1.02",
+      "label": "Salud nutricional",
+      "parent": "3.1",
+      "source_ref": "Tabla 2, p. 9; tabla 3.1.2, p. 14"
+    },
+    {
+      "code": "3.1.03",
+      "label": "Salud sexual y reproductiva",
+      "parent": "3.1",
+      "source_ref": "Tabla 2, p. 9; tabla 3.1.2, p. 14"
+    },
+    {
+      "code": "3.1.04",
+      "label": "Salud bucal",
+      "parent": "3.1",
+      "source_ref": "Tabla 2, p. 9; tabla 3.1.2, p. 14"
+    },
+    {
+      "code": "3.1.05",
+      "label": "Salud mental",
+      "parent": "3.1",
+      "source_ref": "Tabla 2, p. 9; tabla 3.1.2, p. 14"
+    },
+    {
+      "code": "3.2",
+      "label": "Derecho a una vivienda adecuada",
+      "parent": "3",
+      "source_ref": "Tabla 2, p. 9; 3.2, p. 15"
+    },
+    {
+      "code": "3.2.01",
+      "label": "Vivienda",
+      "parent": "3.2",
+      "source_ref": "Tabla 2, p. 9; tabla 3.2.2, p. 17"
+    },
+    {
+      "code": "3.2.02",
+      "label": "Acceso a servicios",
+      "parent": "3.2",
+      "source_ref": "Tabla 2, p. 9; tabla 3.2.2, p. 17"
+    },
+    {
+      "code": "3.2.03",
+      "label": "Seguridad del entorno",
+      "parent": "3.2",
+      "source_ref": "Tabla 2, p. 9; tabla 3.2.2, p. 17"
+    },
+    {
+      "code": "3.3",
+      "label": "Derecho a un medioambiente sano",
+      "parent": "3",
+      "source_ref": "Tabla 2, p. 9; 3.3, p. 18"
+    },
+    {
+      "code": "3.3.01",
+      "label": "Entornos sin contaminación",
+      "parent": "3.3",
+      "source_ref": "Tabla 2, p. 9; tabla 3.3.2, p. 20"
+    },
+    {
+      "code": "3.3.02",
+      "label": "Crisis climática",
+      "parent": "3.3",
+      "source_ref": "Tabla 2, p. 9; tabla 3.3.2, p. 20"
+    },
+    {
+      "code": "3.4",
+      "label": "Derecho a un nivel de vida adecuado",
+      "parent": "3",
+      "source_ref": "Tabla 2, p. 9; 3.4, p. 21"
+    },
+    {
+      "code": "3.4.01",
+      "label": "Seguridad de ingresos y fin a la pobreza",
+      "parent": "3.4",
+      "source_ref": "Tabla 2, p. 9; tabla 3.4.2, p. 24"
+    },
+    {
+      "code": "3.4.02",
+      "label": "Apoyo en situaciones de crisis",
+      "parent": "3.4",
+      "source_ref": "Tabla 2, p. 9; tabla 3.4.2, p. 24"
+    },
+    {
+      "code": "3.4.03",
+      "label": "Protección social",
+      "parent": "3.4",
+      "source_ref": "Tabla 2, p. 9; tabla 3.4.2, p. 24"
+    },
+    {
+      "code": "3.4.04",
+      "label": "Seguridad alimentaria y vestuario",
+      "parent": "3.4",
+      "source_ref": "Tabla 2, p. 9; tabla 3.4.2, p. 24"
+    },
+    {
+      "code": "4",
+      "label": "Desarrollo",
+      "selectable": false,
+      "source_ref": "Tabla 2, p. 9; eje IV, p. 25"
+    },
+    {
+      "code": "4.1",
+      "label": "Derecho al desarrollo integral",
+      "parent": "4",
+      "source_ref": "Tabla 2, p. 9; 4.1, p. 25"
+    },
+    {
+      "code": "4.1.01",
+      "label": "Primera infancia",
+      "parent": "4.1",
+      "source_ref": "Tabla 2, p. 9; tabla 4.1.2, p. 28"
+    },
+    {
+      "code": "4.1.02",
+      "label": "Infancia",
+      "parent": "4.1",
+      "source_ref": "Tabla 2, p. 9; tabla 4.1.2, p. 28"
+    },
+    {
+      "code": "4.1.03",
+      "label": "Adolescencia",
+      "parent": "4.1",
+      "source_ref": "Tabla 2, p. 9; tabla 4.1.2, p. 28"
+    },
+    {
+      "code": "4.2",
+      "label": "Derecho al descanso, esparcimiento y a participar de la cultura y el arte",
+      "parent": "4",
+      "source_ref": "Tabla 2, p. 9; 4.2, p. 29"
+    },
+    {
+      "code": "4.2.01",
+      "label": "Descanso adecuado y tiempo libre",
+      "parent": "4.2",
+      "source_ref": "Tabla 2, p. 9; tabla 4.2.2, p. 31"
+    },
+    {
+      "code": "4.2.02",
+      "label": "Esparcimiento, juego y recreación",
+      "parent": "4.2",
+      "source_ref": "Tabla 2, p. 9; tabla 4.2.2, p. 31"
+    },
+    {
+      "code": "4.2.03",
+      "label": "Culturas y las artes",
+      "parent": "4.2",
+      "source_ref": "Tabla 2, p. 9; tabla 4.2.2, p. 31"
+    },
+    {
+      "code": "4.3",
+      "label": "Derecho a la educación",
+      "parent": "4",
+      "source_ref": "Tabla 2, p. 9; 4.3, p. 32"
+    },
+    {
+      "code": "4.3.01",
+      "label": "Acceso a la educación",
+      "parent": "4.3",
+      "source_ref": "Tabla 2, p. 9; tabla 4.3.2, p. 34"
+    },
+    {
+      "code": "4.3.02",
+      "label": "Calidad y pertinencia de la educación",
+      "parent": "4.3",
+      "source_ref": "Tabla 2, p. 9; tabla 4.3.2, p. 34"
+    },
+    {
+      "code": "4.4",
+      "label": "Derecho al uso y disfrute de su entorno público",
+      "parent": "4",
+      "source_ref": "Tabla 2, p. 9; 4.4, p. 35"
+    },
+    {
+      "code": "4.4.01",
+      "label": "Seguridad y protección de los entornos públicos",
+      "parent": "4.4",
+      "source_ref": "Tabla 2, p. 9; tabla 4.4.2, p. 38"
+    },
+    {
+      "code": "4.4.02",
+      "label": "Planificación y pertinencia de los entornos públicos",
+      "parent": "4.4",
+      "source_ref": "Tabla 2, p. 9; tabla 4.4.2, p. 38"
+    },
+    {
+      "code": "5",
+      "label": "Protección",
+      "selectable": false,
+      "source_ref": "Tabla 2, p. 9; eje V, p. 39"
+    },
+    {
+      "code": "5.1",
+      "label": "Derecho a vivir en familia",
+      "parent": "5",
+      "source_ref": "Tabla 2, p. 9; 5.1, p. 39"
+    },
+    {
+      "code": "5.1.01",
+      "label": "Cuidado y crianza de niños, niñas y adolescentes",
+      "parent": "5.1",
+      "source_ref": "Tabla 2, p. 9; tabla 5.1.2, p. 46"
+    },
+    {
+      "code": "5.1.02",
+      "label": "Procesos que resguarden su derecho a vivir en familia",
+      "parent": "5.1",
+      "source_ref": "Tabla 2, p. 9; tabla 5.1.2, p. 46"
+    },
+    {
+      "code": "5.1.03",
+      "label": "Niños, niñas y adolescentes separados de su entorno familiar",
+      "parent": "5.1",
+      "source_ref": "Tabla 2, p. 9; tabla 5.1.2, p. 46"
+    },
+    {
+      "code": "5.2",
+      "label": "Derecho a estar protegido contra toda forma de violencia",
+      "parent": "5",
+      "source_ref": "Tabla 2, p. 9; 5.2, p. 47"
+    },
+    {
+      "code": "5.2.01",
+      "label": "Descuido o negligencia en el cuidado",
+      "parent": "5.2",
+      "source_ref": "Tabla 2, p. 9; tabla 5.2.2, p. 53"
+    },
+    {
+      "code": "5.2.02",
+      "label": "Violencia mental, psicológica y emocional",
+      "parent": "5.2",
+      "source_ref": "Tabla 2, p. 9; tabla 5.2.2, p. 53"
+    },
+    {
+      "code": "5.2.03",
+      "label": "Violencia física y corporal",
+      "parent": "5.2",
+      "source_ref": "Tabla 2, p. 9; tabla 5.2.2, p. 53"
+    },
+    {
+      "code": "5.2.04",
+      "label": "Torturas y tratos crueles, inhumanos y degradantes",
+      "parent": "5.2",
+      "source_ref": "Tabla 2, p. 9; tabla 5.2.2, p. 53"
+    },
+    {
+      "code": "5.2.05",
+      "label": "Violencia sexual",
+      "parent": "5.2",
+      "source_ref": "Tabla 2, p. 9; tabla 5.2.2, p. 54"
+    },
+    {
+      "code": "5.2.06",
+      "label": "Explotación sexual comercial infantil",
+      "parent": "5.2",
+      "source_ref": "Tabla 2, p. 9; tabla 5.2.2, p. 54"
+    },
+    {
+      "code": "5.2.07",
+      "label": "Explotación económica y trabajo infantil",
+      "parent": "5.2",
+      "source_ref": "Tabla 2, p. 9; tabla 5.2.2, p. 54"
+    },
+    {
+      "code": "5.2.08",
+      "label": "Niños, niñas y adolescentes en contexto de conflictos armados",
+      "parent": "5.2",
+      "source_ref": "Tabla 2, p. 9; tabla 5.2.2, p. 54"
+    },
+    {
+      "code": "5.2.09",
+      "label": "Niños, niñas y adolescentes con conducta delictiva",
+      "parent": "5.2",
+      "source_ref": "Tabla 2, p. 9; tabla 5.2.2, p. 54"
+    },
+    {
+      "code": "5.3",
+      "label": "Derecho a un trato justo",
+      "parent": "5",
+      "source_ref": "Tabla 2, p. 9; 5.3, p. 55"
+    },
+    {
+      "code": "5.3.01",
+      "label": "Trato justo en procedimientos judiciales",
+      "parent": "5.3",
+      "source_ref": "Tabla 2, p. 9; tabla 5.3.2, p. 59"
+    },
+    {
+      "code": "5.3.02",
+      "label": "Sistema de justicia penal adolescente",
+      "parent": "5.3",
+      "source_ref": "Tabla 2, p. 9; tabla 5.3.2, p. 59"
+    },
+    {
+      "code": "5.3.03",
+      "label": "Privación de libertad",
+      "parent": "5.3",
+      "source_ref": "Tabla 2, p. 9; tabla 5.3.2, p. 59"
+    },
+    {
+      "code": "5.4",
+      "label": "Derecho a la no discriminación",
+      "parent": "5",
+      "source_ref": "Tabla 2, p. 9; 5.4, p. 60"
+    },
+    {
+      "code": "5.4.01",
+      "label": "Niños, niñas y adolescentes con discapacidad",
+      "parent": "5.4",
+      "source_ref": "Tabla 2, p. 9; tabla 5.4.2, p. 64"
+    },
+    {
+      "code": "5.4.02",
+      "label": "Niños, niñas y adolescentes migrantes",
+      "parent": "5.4",
+      "source_ref": "Tabla 2, p. 9; tabla 5.4.2, p. 64"
+    },
+    {
+      "code": "5.4.03",
+      "label": "Niños, niñas y adolescentes de pueblos originarios y tribales",
+      "parent": "5.4",
+      "source_ref": "Tabla 2, p. 9; tabla 5.4.2, p. 64"
+    },
+    {
+      "code": "5.4.04",
+      "label": "Mujeres, niñas y adolescentes",
+      "parent": "5.4",
+      "source_ref": "Tabla 2, p. 9; tabla 5.4.2, p. 64"
+    },
+    {
+      "code": "5.4.05",
+      "label": "Niños, niñas y adolescentes de la diversidad sexual",
+      "parent": "5.4",
+      "source_ref": "Tabla 2, p. 9; tabla 5.4.2, p. 65"
+    },
+    {
+      "code": "5.4.06",
+      "label": "Niños, niñas y adolescentes en situación de calle",
+      "parent": "5.4",
+      "source_ref": "Tabla 2, p. 9; tabla 5.4.2, p. 65"
+    },
+    {
+      "code": "5.4.07",
+      "label": "Adolescentes en el sistema de responsabilidad penal",
+      "parent": "5.4",
+      "source_ref": "Tabla 2, p. 9; tabla 5.4.2, p. 65"
+    },
+    {
+      "code": "5.4.08",
+      "label": "Niños, niñas y adolescentes en protección y cuidado",
+      "parent": "5.4",
+      "source_ref": "Tabla 2, p. 9; tabla 5.4.2, p. 65"
+    },
+    {
+      "code": "5.5",
+      "label": "Derecho a la identidad, a tener un nombre y nacionalidad",
+      "parent": "5",
+      "source_ref": "Tabla 2, p. 9; 5.5, p. 66"
+    },
+    {
+      "code": "5.5.01",
+      "label": "Identidad, nombre y nacionalidad",
+      "parent": "5.5",
+      "source_ref": "Tabla 2, p. 9; tabla 5.5.2, p. 67"
+    },
+    {
+      "code": "5.5.02",
+      "label": "Niños, niñas y adolescentes migrantes",
+      "parent": "5.5",
+      "source_ref": "Tabla 2, p. 9; tabla 5.5.2, p. 67"
+    },
+    {
+      "code": "6",
+      "label": "Participación",
+      "selectable": false,
+      "source_ref": "Tabla 2, p. 10; eje VI, p. 68"
+    },
+    {
+      "code": "6.1",
+      "label": "Derecho a la libertad de pensamiento, conciencia y religión",
+      "parent": "6",
+      "source_ref": "Tabla 2, p. 10; 6.1, p. 68"
+    },
+    {
+      "code": "6.1.01",
+      "label": "Libertad de pensamiento, creencias y religión a nivel social, digital y familiar",
+      "parent": "6.1",
+      "source_ref": "Tabla 2, p. 10; tabla 6.1.2, p. 71"
+    },
+    {
+      "code": "6.1.02",
+      "label": "Libertad de pensamiento, creencias y religión en espacios educativos y de responsabilidad del Estado",
+      "parent": "6.1",
+      "source_ref": "Tabla 2, p. 10; tabla 6.1.2, p. 71"
+    },
+    {
+      "code": "6.1.03",
+      "label": "Libertad de pensamiento, creencias y religión de niños, niñas y adolescentes de pueblos o comunidades étnicas, religiosas, lingüísticas, extranjeras o indígenas",
+      "parent": "6.1",
+      "source_ref": "Tabla 2, p. 10; tabla 6.1.2, p. 71"
+    },
+    {
+      "code": "6.2",
+      "label": "Derecho a la información y libertad de expresión",
+      "parent": "6",
+      "source_ref": "Tabla 2, p. 10; 6.2, p. 72"
+    },
+    {
+      "code": "6.2.01",
+      "label": "Conocimiento de los derechos de niños, niñas y adolescentes",
+      "parent": "6.2",
+      "source_ref": "Tabla 2, p. 10; tabla 6.2.2, p. 76"
+    },
+    {
+      "code": "6.2.02",
+      "label": "Acceso a la información en procedimientos judiciales y administrativos",
+      "parent": "6.2",
+      "source_ref": "Tabla 2, p. 10; tabla 6.2.2, p. 76"
+    },
+    {
+      "code": "6.2.03",
+      "label": "Libertad de expresión",
+      "parent": "6.2",
+      "source_ref": "Tabla 2, p. 10; tabla 6.2.2, p. 76"
+    },
+    {
+      "code": "6.3",
+      "label": "Derecho a la libertad de asociación",
+      "parent": "6",
+      "source_ref": "Tabla 2, p. 10; 6.3, p. 77"
+    },
+    {
+      "code": "6.3.01",
+      "label": "Libertad de asociación",
+      "parent": "6.3",
+      "source_ref": "Tabla 2, p. 10; tabla 6.3.2, p. 78"
+    },
+    {
+      "code": "6.3.02",
+      "label": "Libertad para participar en reuniones y manifestaciones pacíficas",
+      "parent": "6.3",
+      "source_ref": "Tabla 2, p. 10; tabla 6.3.2, p. 78"
+    },
+    {
+      "code": "6.4",
+      "label": "Derecho a ser escuchados",
+      "parent": "6",
+      "source_ref": "Tabla 2, p. 10; 6.4, p. 79"
+    },
+    {
+      "code": "6.4.01",
+      "label": "Derecho a ser escuchados en instancias de participación ciudadana y democrática",
+      "parent": "6.4",
+      "source_ref": "Tabla 2, p. 10; tabla 6.4.2, p. 85"
+    },
+    {
+      "code": "6.4.02",
+      "label": "Derecho a ser escuchados en procesos administrativos y judiciales involucrados",
+      "parent": "6.4",
+      "source_ref": "Tabla 2, p. 10; tabla 6.4.2, p. 85"
+    },
+    {
+      "code": "6.4.03",
+      "label": "Derecho a ser escuchados a nivel familiar y social",
+      "parent": "6.4",
+      "source_ref": "Tabla 2, p. 10; tabla 6.4.2, p. 85"
+    },
+    {
+      "code": "7",
+      "label": "Rol del Estado como garante principal",
+      "selectable": false,
+      "source_ref": "Tabla 2, p. 10; VII, p. 86"
+    },
+    {
+      "code": "7.01",
+      "label": "Estrategia y coordinación efectiva para la aplicación de la Convención",
+      "parent": "7",
+      "selectable": false,
+      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
+    },
+    {
+      "code": "7.02",
+      "label": "Enfoque de derechos en las políticas públicas",
+      "parent": "7",
+      "selectable": false,
+      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
+    },
+    {
+      "code": "7.03",
+      "label": "Presupuesto con enfoque de derechos de la niñez y la adolescencia",
+      "parent": "7",
+      "selectable": false,
+      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
+    },
+    {
+      "code": "7.04",
+      "label": "Vigilancia independiente de derechos humanos de la niñez y adolescencia",
+      "parent": "7",
+      "selectable": false,
+      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
+    },
+    {
+      "code": "7.05",
+      "label": "Participación de la sociedad civil, sector empresarial y cooperación internacional",
+      "parent": "7",
+      "selectable": false,
+      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
+    }
+  ]
+}

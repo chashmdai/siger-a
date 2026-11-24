@@ -42,7 +42,7 @@ test('Dirección + consulta: mismo menú que la Dirección sola (ya ve todas las
 
 test('TI: solo administración, además de inicio y avisos', () => {
   const menu = paths(user({role: 'TI', scope: null}));
-  assert.deepEqual(menu, [...PERSONAL, 'subrogancias', 'administracion', 'calendario', 'auditoria']);
+  assert.deepEqual(menu, [...PERSONAL, 'subrogancias', 'administracion', 'calendario', 'catalogos', 'auditoria']);
   assert.deepEqual(menuFor(user({role: 'TI', scope: null}), 0).map(g => g.title), ['Mi trabajo', 'Administración']);
 });
 
@@ -86,4 +86,10 @@ test('Reportes de gestión: solo con can_report (lo decide el servidor), tambié
   // Con otras funciones, se suma al final de su menú, antes de Administración.
   const mixed = paths({...user({role: 'PROFESIONAL', scope: UPR_REQ}), can_report: true});
   assert.ok(mixed.indexOf('reportes') > mixed.indexOf('cas') && mixed.indexOf('reportes') < mixed.indexOf('subrogancias'));
+});
+
+test('Catálogos estadísticos: solo TI (E02); ni Reportes, Gestión estadística, Auditoría ni lectores', () => {
+  assert.ok(paths(user({role: 'TI', scope: null})).includes('catalogos'));
+  for (const grants of [[{role: 'REPORTES', scope: null}, {role: 'GESTION_ESTADISTICA', scope: null}], [{role: 'AUDITORIA', scope: UPR_REQ}], [READER],
+    [{role: 'DIRECCION', scope: UPD}], [{role: 'PROFESIONAL', scope: UPR_REQ}]] as Grant[][]) assert.ok(!paths(user(...grants)).includes('catalogos'), grants.map(g => g.role).join('+'));
 });

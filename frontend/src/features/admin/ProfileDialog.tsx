@@ -196,7 +196,7 @@ export function ProfileDialog({ctx, account, grants, close}: {ctx: Context; acco
           </div>
           {optional.length > 0 && <>
             <h3 className="profile-subtitle">Reportes y exportación</h3>
-            <p className="field-help">Cifras agregadas sin datos de personas. Toda la institución, o un ámbito: la raíz de una unidad abarca sus ámbitos centrales (y, en UPR, UPD o UEP, su materia en las sedes); un área o una sede, solo ese ámbito. Reportes por persona y Exportación exigen Reportes en el mismo alcance.</p>
+            <p className="field-help">Cifras agregadas sin datos de personas. Toda la institución, o un ámbito: la raíz de una unidad abarca sus ámbitos centrales (y, en UPR, UPD o UEP, su materia en las sedes); un área o una sede, solo ese ámbito. Reportes por persona, Exportación y Gestión estadística exigen Reportes en el mismo alcance. Gestión estadística (cortes, series históricas y vistas compartidas) se habilita en las próximas entregas de 0.8.0.</p>
             <div className="profile-matrix-scroll" role="region" aria-label="Reportes y exportación por alcance" tabIndex={0}>
               <table className="profile-matrix profile-reports">
                 <thead><tr><th scope="col">Alcance</th>{optional.map(r => <th scope="col" key={r.code}>{ROLE_LABELS[r.code] ?? humanize(r.code)}</th>)}</tr></thead>

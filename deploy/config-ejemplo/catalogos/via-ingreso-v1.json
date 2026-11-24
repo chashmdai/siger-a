@@ -1,0 +1,53 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "VIA_INGRESO",
+  "label": "Vía de ingreso, propuesta versión 1",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D31, plan 0.8.0); sujeta a validación institucional (DI-01).",
+  "items": [
+    {
+      "code": "FORMULARIO_PUBLICO_ADULTO",
+      "label": "Formulario Público adulto",
+      "source_ref": "D31; canal FORMULARIO_WEB_PUBLICO"
+    },
+    {
+      "code": "FORMULARIO_PUBLICO_NNA",
+      "label": "Formulario Público NNA",
+      "source_ref": "D31; canal FORMULARIO_WEB_NNA"
+    },
+    {
+      "code": "PRESENCIAL",
+      "label": "Presencial",
+      "source_ref": "D31; canal PRESENCIAL"
+    },
+    {
+      "code": "CORREO",
+      "label": "Correo",
+      "source_ref": "D31; canal CORREO"
+    },
+    {
+      "code": "TELEFONO",
+      "label": "Teléfono",
+      "source_ref": "D31; canal TELEFONO"
+    },
+    {
+      "code": "OFICIO",
+      "label": "Oficio",
+      "source_ref": "D31; canal OFICIO"
+    },
+    {
+      "code": "REDES_SOCIALES",
+      "label": "Redes sociales",
+      "source_ref": "D31; canal REDES_SOCIALES"
+    },
+    {
+      "code": "INTEGRANTE_DEFENSORIA",
+      "label": "Integrante de la Defensoría",
+      "source_ref": "D31; canal INTEGRANTE_DEFENSORIA"
+    },
+    {
+      "code": "OTRO",
+      "label": "Otro",
+      "source_ref": "D31; canal OTRO"
+    }
+  ]
+}

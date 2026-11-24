@@ -59,8 +59,8 @@ public class Personnel {
                 ti(a);var grant=db.one("SELECT * FROM role_assignment WHERE id=?",id);
                 require(n(grant,"user_id")!=a.id(),"No modifiques tus propias funciones.");require(grant.get("revoked_at")==null,"La funcion ya fue revocada.");
                 if(s(grant,"role_code").equals(Roles.REPORTES)&&liveIn(n(grant,"user_id"),Roles.REPORTES,nullableId(grant,"scope_id"))<=1)
-                    for(var dependent:List.of(Roles.REPORTES_PERSONAS,Roles.EXPORTACION))
-                        require(liveIn(n(grant,"user_id"),dependent,nullableId(grant,"scope_id"))==0,"Revoca primero "+(dependent.equals(Roles.EXPORTACION)?"Exportacion":"Reportes por persona")+" en ese alcance: exige Reportes en el mismo alcance.");
+                    for(var dependent:Roles.NEEDS_REPORTES)
+                        require(liveIn(n(grant,"user_id"),dependent,nullableId(grant,"scope_id"))==0,"Revoca primero "+dependentName(dependent)+" en ese alcance: exige Reportes en el mismo alcance.");
                 db.update("UPDATE role_assignment SET revoked_at=? WHERE id=? AND revoked_at IS NULL",System.currentTimeMillis(),id);epoch(n(grant,"user_id"));keepTi();
                 audit(a,"FUNCION_REVOCADA","USUARIO",n(grant,"user_id"),nullableId(grant,"scope_id"),s(grant,"role_code")+". "+in.reason());return Workflow.done("PERMISO",id);
             }
@@ -174,8 +174,11 @@ public class Personnel {
     static final Set<String> HEADS=Set.of("JEFATURA","DIRECCION");
     static final String REPORT_PEOPLE_REQUIRES="Reportes por persona exige la funcion Reportes en el mismo alcance.";
     static final String EXPORT_REQUIRES="Exportacion exige la funcion Reportes en el mismo alcance.";
+    static final String STATS_REQUIRES="Gestion estadistica exige la funcion Reportes en el mismo alcance.";
     /** Mensaje de la dependencia de REPORTES (Roles.NEEDS_REPORTES). */
-    static String needsReportes(String role){return role.equals(Roles.EXPORTACION)?EXPORT_REQUIRES:REPORT_PEOPLE_REQUIRES;}
+    static String needsReportes(String role){return switch(role){case Roles.EXPORTACION->EXPORT_REQUIRES;case Roles.GESTION_ESTADISTICA->STATS_REQUIRES;default->REPORT_PEOPLE_REQUIRES;};}
+    /** Nombre visible de una funcion que depende de REPORTES. */
+    static String dependentName(String role){return switch(role){case Roles.EXPORTACION->"Exportacion";case Roles.GESTION_ESTADISTICA->"Gestion estadistica";default->"Reportes por persona";};}
     /** Funciones vigentes o programadas de la cuenta con ese rol y alcance (nulo = institucional). */
     private long liveIn(long user,String role,Long scope){
         List<Object> args=new ArrayList<>(List.of(user,role,System.currentTimeMillis()));if(scope!=null)args.add(scope);

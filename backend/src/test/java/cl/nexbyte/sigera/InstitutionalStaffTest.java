@@ -99,10 +99,15 @@ class InstitutionalStaffTest {
         String centralInvalid=STAFF.replace("\"coberturaNivelCentral\":[\"13\"]","\"coberturaNivelCentral\":[\"99\"]");
         String centralRepeated=STAFF.replace("\"coberturaNivelCentral\":[\"13\"]","\"coberturaNivelCentral\":[\"13\",\"13\"]");
         String centralNotList=STAFF.replace("\"coberturaNivelCentral\":[\"13\"]","\"coberturaNivelCentral\":\"13\"");
+        // Gestion estadistica (0.8.0, D43): exige REPORTES en el mismo alcance y no se combina con TI.
+        String statsAlone=STAFF.replace("[{\"funcion\":\"PROFESIONAL\",\"ambito\":\"UPR-REQ\"}]}]}","[{\"funcion\":\"GESTION_ESTADISTICA\"}]}]}");
+        String statsOtherScope=STAFF.replace("[{\"funcion\":\"PROFESIONAL\",\"ambito\":\"UPR-REQ\"}]}]}","[{\"funcion\":\"REPORTES\",\"ambito\":\"UPR-REQ\"},{\"funcion\":\"GESTION_ESTADISTICA\"}]}]}");
+        String statsWithTi=STAFF.replace("[{\"funcion\":\"PROFESIONAL\",\"ambito\":\"UPR-REQ\"}]}]}","[{\"funcion\":\"TI\"},{\"funcion\":\"REPORTES\"},{\"funcion\":\"GESTION_ESTADISTICA\"}]}]}");
         int i=0;
         for(String bad:List.of(twoHeads,tiCombined,tiWithScope,sameTwice,authority,repeated,unknownScope,centralWithScope,
                                headInSite,siteWithoutRegion,unknownRegion,closedSite,badOpening,centralWithRegion,
-                               coverageWithOwnRegion,coverageRepeated,coverageInvalid,coverageNotList,coverageNotText,coverageInCentral,centralInvalid,centralRepeated,centralNotList)){
+                               coverageWithOwnRegion,coverageRepeated,coverageInvalid,coverageNotList,coverageNotText,coverageInCentral,centralInvalid,centralRepeated,centralNotList,
+                               statsAlone,statsOtherScope,statsWithTi)){
             assertNotEquals(STAFF,bad,"caso "+i);
             Path f=DIR.resolve("invalido-"+(i++)+".json");Files.writeString(f,bad);
             var e=assertThrows(IllegalStateException.class,()->bootstrap.institutional(f));
@@ -112,7 +117,8 @@ class InstitutionalStaffTest {
         // Desde 0.5.0 (D3, D2): varios distribuidores y un funcionario solo con TI son validos; la validacion completa
         // pasa y se detiene ante el archivo de accesos ya creado en esta instancia.
         String accepted=STAFF.replace("[{\"funcion\":\"PROFESIONAL\",\"ambito\":\"UPR-REQ\"}]}]}","[{\"funcion\":\"DISTRIBUIDOR\"}]},"
-            +"{\"usuario\":\"segunda.ti\",\"nombre\":\"Segunda TI\",\"ambito\":\"UGI\",\"funciones\":[{\"funcion\":\"TI\"}]}]}");
+            +"{\"usuario\":\"segunda.ti\",\"nombre\":\"Segunda TI\",\"ambito\":\"UGI\",\"funciones\":[{\"funcion\":\"TI\"}]},"
+            +"{\"usuario\":\"estudios\",\"nombre\":\"Estudios\",\"ambito\":\"UPR-REQ\",\"funciones\":[{\"funcion\":\"REPORTES\",\"ambito\":\"UPR-REQ\"},{\"funcion\":\"GESTION_ESTADISTICA\",\"ambito\":\"UPR-REQ\"}]}]}");
         Path ok=DIR.resolve("valido-0.5.0.json");Files.writeString(ok,accepted);
         assertTrue(assertThrows(IllegalStateException.class,()->bootstrap.institutional(ok)).getMessage().startsWith("Existe un archivo de acceso anterior"));
         // El ejemplo que se entrega en el ZIP (deploy/config-ejemplo) es un archivo valido: la validacion completa pasa y

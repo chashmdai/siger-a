@@ -98,11 +98,11 @@ export function periodProblems(profile: Profile, now: number) {
 /** Funciones marcadas en un ambito (vista movil: contador de cada tarjeta), sin las que esta vista no muestra (skip). */
 export const countIn = (profile: Profile, scope: number, skip: ReadonlySet<string> = new Set()) => [...profile.values()].filter(e => e.scope === scope && !skip.has(e.role)).length;
 
-/** Roles de ambito opcional (REPORTES, REPORTES_PERSONAS, EXPORTACION): bloque propio del perfil, por alcance. */
+/** Roles de ambito opcional (REPORTES, REPORTES_PERSONAS, EXPORTACION, GESTION_ESTADISTICA): bloque propio del perfil, por alcance. */
 export const optionalRoles = (roles: RoleDef[]) => new Set(roles.filter(r => r.reach === 'OPCIONAL').map(r => r.code));
 export const REPORTES = 'REPORTES';
 /** Funciones que solo rigen con REPORTES en el mismo alcance (Roles.NEEDS_REPORTES en el servidor). */
-export const NEEDS_REPORTES = new Set(['REPORTES_PERSONAS', 'EXPORTACION']);
+export const NEEDS_REPORTES = new Set(['REPORTES_PERSONAS', 'EXPORTACION', 'GESTION_ESTADISTICA']);
 
 /**
  * Filas del bloque "Reportes y exportacion": siempre "Toda la institucion" (null) y luego cada ambito con alguna de esas

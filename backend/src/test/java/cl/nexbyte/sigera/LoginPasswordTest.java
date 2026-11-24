@@ -237,9 +237,14 @@ class LoginPasswordTest {
         // EXPORTACION sin REPORTES en el mismo alcance no rige.
         db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) SELECT id,'EXPORTACION',NULL,0,'Prueba sintetica' FROM staff WHERE username=?",user);
         assertTrue(browser.session().contains("\"can_export\":false"));
+        // E02 (D43): GESTION_ESTADISTICA tampoco rige sin REPORTES en el mismo alcance (institucional ni de UPR-REQ).
+        assertTrue(browser.session().contains("\"can_manage_stats\":false"));
+        db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) SELECT id,'GESTION_ESTADISTICA',NULL,0,'Prueba sintetica' FROM staff WHERE username=?",user);
+        assertTrue(browser.session().contains("\"can_manage_stats\":false"),"sin REPORTES institucional");
         assertEquals(403,browser.send("GET","/export?kind=COM",null,null).statusCode());
         db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) SELECT id,'REPORTES',NULL,0,'Prueba sintetica' FROM staff WHERE username=?",user);
         assertTrue(browser.session().contains("\"can_export\":true"));
+        assertTrue(browser.session().contains("\"can_manage_stats\":true"),"con REPORTES institucional");
         var board=browser.send("GET","/export?kind=COM",null,null);
         assertEquals(200,board.statusCode(),board.body());
         assertTrue(board.headers().firstValue("Content-Type").orElse("").startsWith("text/csv"));

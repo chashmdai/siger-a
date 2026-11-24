@@ -221,3 +221,14 @@ test('Reportes por persona y Exportación exigen Reportes en el mismo alcance; q
   assert.deepEqual([...without.keys()].sort(), ['EXPORTACION@', 'REPORTES@']);
   assert.deepEqual(diff(own, payload(without, NOW)).revoke.map(g => g.role_code), ['REPORTES']);
 });
+
+test('Gestión estadística exige Reportes en el mismo alcance y se quita con Reportes (E02, D43)', () => {
+  const own = liveGrants([grantOf({id: 9, user_id: 7, role_code: 'REPORTES', scope_id: 3, valid_from: NOW - 9 * HOUR, valid_until: null, revoked_at: null})], 7, NOW);
+  let profile = initial(own);
+  assert.equal(needsReportes(profile, 'GESTION_ESTADISTICA', 3), false);
+  assert.equal(needsReportes(profile, 'GESTION_ESTADISTICA', null), true, 'sin Reportes institucional');
+  profile = toggleReport(profile, 'GESTION_ESTADISTICA', 3, true, own);
+  assert.deepEqual(diff(own, payload(profile, NOW)).grant, [{role: 'GESTION_ESTADISTICA', scope_id: 3}]);
+  const without = toggleReport(profile, 'REPORTES', 3, false, own);
+  assert.equal(without.size, 0, 'quitar Reportes quita Gestión estadística del mismo alcance');
+});

@@ -1,0 +1,63 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "TIPO_ACTUACION",
+  "label": "Tipo de actuación, propuesta versión 1",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D36, plan 0.8.0); sujeta a validación institucional (DI-03).",
+  "items": [
+    {
+      "code": "ORIENTACION",
+      "label": "Orientación",
+      "source_ref": "D36"
+    },
+    {
+      "code": "RESPUESTA_DIRECTA",
+      "label": "Respuesta directa",
+      "source_ref": "D36"
+    },
+    {
+      "code": "DERIVACION_EXTERNA",
+      "label": "Derivación externa",
+      "source_ref": "D36"
+    },
+    {
+      "code": "OFICIO",
+      "label": "Oficio",
+      "source_ref": "D36"
+    },
+    {
+      "code": "DENUNCIA_ADMINISTRATIVA",
+      "label": "Denuncia administrativa",
+      "source_ref": "D36"
+    },
+    {
+      "code": "DENUNCIA_PENAL",
+      "label": "Denuncia penal",
+      "source_ref": "D36"
+    },
+    {
+      "code": "MEDIDA_PROTECCION",
+      "label": "Medida de protección",
+      "source_ref": "D36"
+    },
+    {
+      "code": "QUERELLA",
+      "label": "Querella",
+      "source_ref": "D36"
+    },
+    {
+      "code": "ACCION_CONSTITUCIONAL",
+      "label": "Acción constitucional",
+      "source_ref": "D36"
+    },
+    {
+      "code": "AMICUS_CURIAE",
+      "label": "Amicus curiae",
+      "source_ref": "D36"
+    },
+    {
+      "code": "OTRA",
+      "label": "Otra actuación",
+      "source_ref": "D36"
+    }
+  ]
+}

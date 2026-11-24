@@ -1,0 +1,33 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "TIPO_SOLICITUD",
+  "label": "Tipo de solicitud, propuesta versión 1",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D29, plan 0.8.0); sujeta a validación institucional (DI-01).",
+  "items": [
+    {
+      "code": "VULNERACION",
+      "label": "Vulneración de derechos",
+      "source_ref": "D29"
+    },
+    {
+      "code": "CONSULTA_ORIENTACION",
+      "label": "Consulta u orientación",
+      "source_ref": "D29"
+    },
+    {
+      "code": "PROMOCION",
+      "label": "Promoción",
+      "source_ref": "D29"
+    },
+    {
+      "code": "RECLAMO_OTRA_INSTITUCION",
+      "label": "Reclamo sobre otra institución",
+      "source_ref": "D29"
+    },
+    {
+      "code": "OTRO",
+      "label": "Otro",
+      "source_ref": "D29"
+    }
+  ]
+}

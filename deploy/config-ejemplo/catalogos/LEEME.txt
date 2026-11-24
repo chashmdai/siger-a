@@ -1,0 +1,99 @@
+Catalogos estadisticos de referencia de SIGER 0.8.0 (D27, gate E02). Estado: PROPUESTA.
+
+Que son
+  Archivos que TI importa en SIGER desde Administracion > Catalogos estadisticos > Importar catalogo. Ninguna migracion
+  los carga. Al importarse quedan como version PROPUESTA: no se publican ni se exigen. TI los activa (con fundamento)
+  solo despues de su validacion institucional: DI-01 (tipo de solicitud, tipo de requirente y via), DI-02 (contexto,
+  caracterizacion y tramos de edad), DI-03 (tipo de actuacion, tipo de institucion y relacion) y DI-04 (derechos).
+  Sin version vigente, nada se exige. Formato: siger-catalogo-1 (JSON). Un archivo ya importado (misma huella) como
+  propuesta o vigente se rechaza.
+
+Archivos
+  tipo-solicitud-v1.json     TIPO_SOLICITUD, 5 valores (D29). Pendiente DI-01.
+  tipo-requirente-v1.json    TIPO_REQUIRENTE, 4 valores (D30). Pendiente DI-01: si "actuacion de oficio" es un
+                             tipo de requirente.
+  via-ingreso-v1.json        VIA_INGRESO, 9 valores (D31); source_ref indica el canal de SIGER de cada via. Pendiente
+                             DI-01: si "integrante de la Defensoria" es una via.
+  tipo-actuacion-v1.json     TIPO_ACTUACION, 11 valores (D36). Pendiente DI-03.
+  tipo-institucion-v1.json   TIPO_INSTITUCION, 5 valores: los de instituciones[].tipo del Formulario Publico
+                             (formulario-web 6f886eb, ValidacionAdultos.java, linea 63); source_ref = valor exacto del
+                             Formulario. Pendiente DI-03.
+  relacion-v1.json           RELACION, 9 valores: los del campo relacion del Formulario Publico (formulario-web
+                             6f886eb, ValidacionAdultos.java, linea 52) con los rotulos de su resumen (reviewModel.ts);
+                             source_ref = valor exacto del Formulario. El Formulario tiene ademas otra lista para la
+                             persona ADULTO_RELACIONADO (Familiar, Representante, Persona de contacto, Testigo, Otro
+                             adulto relacionado, linea 96), que no forma parte de esta version (DISENO 2.2). Pendiente
+                             DI-03.
+  derechos-2022-v2.json      DERECHO, 87 items (77 seleccionables). Ver "Modelo de derechos". Pendiente DI-04.
+  plantillas/                CONTEXTO, CARACTERIZACION y TRAMO_EDAD sin items: su contenido lo define la institucion
+                             (DI-02). Se completan los items y se importan; sin items SIGER las rechaza ("El catalogo
+                             no tiene items"). TRAMO_EDAD: tramos sin jerarquia con range_from y range_to en anios
+                             cumplidos que cubren exactamente de 0 a 130, contiguos y sin solapes (por ejemplo, un
+                             tramo final 18-130).
+
+Campos de cada item
+  code (mayusculas, digitos, punto, guion o guion bajo; maximo 40), label, parent (codigo de un item anterior; opcional),
+  selectable (verdadero por defecto), range_from y range_to (solo TRAMO_EDAD) y source_ref (referencia a la fuente;
+  maximo 80). PENDIENTE, SIN_INFORMACION, NO_DECLARADO y NO_APLICA son valores especiales fijos de SIGER: no se usan
+  como codigos.
+
+Modelo de derechos (derechos-2022-v2.json)
+  Fuente: Defensoria de la Ninez, "Modelo de conceptualizacion y categorizacion de derechos de la ninez y
+  adolescencia", Version 2.0, 2022 (Observatorio de Derechos). 96 paginas.
+  URL: https://observatorio.defensorianinez.cl/wp-content/uploads/2022/10/Instructivo-categorizacion-de-derechos-.pdf
+  SHA-256 del PDF transcrito: 4a21a6fe227a8f786effd66b400a432e8d0802304d0c55b6995ad5fab52eb25e (el PDF no se guarda
+  en el repositorio).
+  Transcripcion: rotulos textuales de la Tabla 2 "Resumen de la categorizacion de derechos, segun eje, derecho y
+  subcategorias" (pags. 9-10), con la pagina de cada derecho (indice) y de la tabla de subcategorias de cada derecho
+  en source_ref.
+  - Ejes III Vida y supervivencia (p. 11), IV Desarrollo (p. 25), V Proteccion (p. 39) y VI Participacion (p. 68):
+    codigos 3, 4, 5 y 6, no seleccionables.
+  - 17 derechos con la numeracion del modelo (3.1 a 6.4), seleccionables.
+  - 60 subcategorias, sin numeracion en el modelo: codigo propio de SIGER <derecho>.<orden en la Tabla 2> (3.1.01...),
+    seleccionables. El nivel de clasificacion (derecho o subcategoria) lo decide DI-04.
+  - VII Rol del Estado como garante principal (p. 86; subcategorias en la tabla 7.2, p. 91): codigo 7 y sus 5
+    subcategorias (7.01 a 7.05), transcritas como no seleccionables, sujetas a DI-04.
+  No transcrito, sujeto a DI-04:
+  - VIII Grupos prioritarios (pags. 92-95): tabla de grupos con descripcion, instrumentos relevantes y categorias de
+    derechos relevantes.
+  - Dimensiones de seguimiento por niveles de resultado, proceso y estructura (tablas x.y.2 de cada derecho y 7.2):
+    son indicadores de seguimiento, no categorias para clasificar requerimientos.
+  Diferencias de rotulo entre la Tabla 2 (transcrita) y las tablas x.y.2 de cada derecho:
+  - 3.4.02  Tabla 2 "Apoyo en situaciones de crisis"; tabla 3.4.2 (p. 24) "Apoyo en situaciones especiales".
+  - 4.1     Tabla 2 e indice "Derecho al desarrollo integral"; titulo de la tabla 4.1.2 (p. 28) "Derecho a un
+            desarrollo integral".
+  - 5.2.08  Tabla 2 "Ninos, ninas y adolescentes en contexto de conflictos armados"; tabla 5.2.2 (p. 54) "Ninos, ninas
+            y adolescentes en conflictos armados".
+  - 5.4.08  Tabla 2 "Ninos, ninas y adolescentes en proteccion y cuidado"; tabla 5.4.2 (2) (p. 65) "Ninos, ninas y
+            adolescentes en el sistema de proteccion y bajo cuidado".
+  - 6.1.02  Tabla 2 "... en espacios educativos y de responsabilidad del Estado"; tabla 6.1.2 (p. 71) "... en espacios
+            educativos de responsabilidad del Estado".
+  - 6.2.02  Tabla 2 "Acceso a la informacion en procedimientos judiciales y administrativos"; tabla de 6.2 (p. 76)
+            "Acceso a la informacion en instancias y procedimientos judiciales y administrativos".
+  - 6.4.02  Tabla 2 "Derecho a ser escuchados en procesos administrativos y judiciales involucrados"; tabla 6.4.2
+            (p. 85) "Derecho a ser escuchados en procesos administrativos y judiciales".
+  - 7.03    Tabla 2 "Presupuesto con enfoque de derechos de la ninez y la adolescencia"; tabla 7.2 (p. 91)
+            "Presupuesto con enfoque de derechos de la ninez".
+  - 7.04    Tabla 2 "Vigilancia independiente de derechos humanos de la ninez y adolescencia"; tabla 7.2 "Vigilancia
+            independiente de derechos humanos de la ninez".
+  - 7.05    Tabla 2 "Participacion de la sociedad civil, sector empresarial y cooperacion internacional"; tabla 7.2
+            "Participacion de la sociedad civil, sector empresarial y coop. internacional".
+  - 3.1     Tabla 2 "Derecho a la Salud"; indice y titulo de la seccion "Derecho a la salud".
+  Numeracion impresa en el modelo: la tabla de 3.3 dice "3.2.2" (p. 20), la de 6.2 dice "6.1.2" (p. 76), la
+  continuacion de 5.2 dice "5.3.2" (p. 54) y la segunda tabla de 5.4 no lleva numero (p. 65). source_ref usa el
+  numero del derecho ("tabla 6.2.2").
+  Verificacion de la transcripcion contra el PDF: pendiente del responsable antes de activar (plan 0.8.0, E02).
+
+Huellas
+  SHA-256 que SIGER registra al importar cada archivo (texto sin BOM y con saltos de linea LF; igual en Windows y en
+  Linux). La pantalla de catalogos muestra los primeros 12 caracteres de la huella de cada version.
+  056b1c57c2b3f1d9b2fa7d776ea3a3cc700ee5c56ba0fad781e477ca0cda4676  tipo-solicitud-v1.json
+  edcc097464b100c0913885c36bfb55355f63ded3e51079036b112fc63a44baf3  tipo-requirente-v1.json
+  024f07916109a5df4098e27d0ce02651fece003b05268dd2b5c99f1eed0cf7fb  via-ingreso-v1.json
+  272e29a0746934ed4a3c368fb988112d40d37e9798c124d01fe47b466863c478  tipo-actuacion-v1.json
+  f0a3141a71edfd34a781bba3915093d15dd75c8967289270101d3ebbc6719187  tipo-institucion-v1.json
+  f1845d9bee5ef6b5e4f0718bece80072c6860c93a8bc275af961e54ea5fb262d  relacion-v1.json
+  fb985d09ad3f633f68c6324b889a63ec0863b12f4abb72130fd02d7aad3ef57c  derechos-2022-v2.json
+  3639ab0d0cc5a3f4b6960ab50dbf512037f7999ee4a7c16278b89656ca62c55b  plantillas/contexto.json
+  b6a07f6e6155abc8a5191ffc2605b0cd4fbd5bcefeb8c8c2dac22b3ac70bd8ab  plantillas/caracterizacion.json
+  14094e6cf8924d072041aa1f40fa9821812deb989bb549fc5b7e35b17189de83  plantillas/tramo-edad.json

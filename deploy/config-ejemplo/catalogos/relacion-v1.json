@@ -1,0 +1,53 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "RELACION",
+  "label": "Relación con el NNA, propuesta versión 1",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (DISEÑO 2.2): valores del campo relacion del Formulario Público (formulario-web 6f886eb) y sus rótulos; sujeta a validación institucional (DI-03).",
+  "items": [
+    {
+      "code": "MADRE",
+      "label": "Madre",
+      "source_ref": "madre"
+    },
+    {
+      "code": "PADRE",
+      "label": "Padre",
+      "source_ref": "padre"
+    },
+    {
+      "code": "CUIDADOR",
+      "label": "Cuidador o cuidadora",
+      "source_ref": "cuidador"
+    },
+    {
+      "code": "OTRO_FAMILIAR",
+      "label": "Otro familiar",
+      "source_ref": "otro-familiar"
+    },
+    {
+      "code": "DOCENTE",
+      "label": "Docente o profesional educativo",
+      "source_ref": "docente"
+    },
+    {
+      "code": "SALUD",
+      "label": "Profesional de salud",
+      "source_ref": "salud"
+    },
+    {
+      "code": "TESTIGO",
+      "label": "Persona testigo",
+      "source_ref": "testigo"
+    },
+    {
+      "code": "ORGANIZACION",
+      "label": "Representante de una organización",
+      "source_ref": "organizacion"
+    },
+    {
+      "code": "OTRO",
+      "label": "Otro",
+      "source_ref": "otro"
+    }
+  ]
+}

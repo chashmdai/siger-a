@@ -1,0 +1,28 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "TIPO_REQUIRENTE",
+  "label": "Tipo de requirente, propuesta versión 1",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D30, plan 0.8.0); sujeta a validación institucional (DI-01).",
+  "items": [
+    {
+      "code": "PERSONA_NATURAL_ADULTA",
+      "label": "Persona natural adulta",
+      "source_ref": "D30"
+    },
+    {
+      "code": "NNA",
+      "label": "Niño, niña o adolescente",
+      "source_ref": "D30"
+    },
+    {
+      "code": "PERSONA_JURIDICA_ORGANISMO",
+      "label": "Persona jurídica u organismo",
+      "source_ref": "D30"
+    },
+    {
+      "code": "ACTUACION_DE_OFICIO",
+      "label": "Actuación de oficio",
+      "source_ref": "D30"
+    }
+  ]
+}

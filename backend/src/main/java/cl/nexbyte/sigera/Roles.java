@@ -27,8 +27,14 @@ public final class Roles {
     public static final String REPORTES_PERSONAS="REPORTES_PERSONAS";
     /** Exportacion de filas sin datos ciudadanos (G12): CSV de REQ y Casos de Reportes y resumen de bandejas; exige REPORTES en el mismo alcance. */
     public static final String EXPORTACION="EXPORTACION";
-    /** Funciones que solo rigen con REPORTES vigente en el mismo alcance (G11, G12). */
-    public static final Set<String> NEEDS_REPORTES=Set.of(REPORTES_PERSONAS,EXPORTACION);
+    /**
+     * Gestion estadistica (0.8.0, D43, gate E02): generar y anular cortes, importar y anular series y compartir
+     * configuraciones dentro de su alcance; exige REPORTES en el mismo alcance y es incompatible con TI. Se concede desde
+     * E02, pero no habilita nada hasta E10 y E11 (desvio registrado en la bitacora).
+     */
+    public static final String GESTION_ESTADISTICA="GESTION_ESTADISTICA";
+    /** Funciones que solo rigen con REPORTES vigente en el mismo alcance (G11, G12, E02), en orden estable. */
+    public static final Set<String> NEEDS_REPORTES=Collections.unmodifiableSet(new LinkedHashSet<>(List.of(REPORTES_PERSONAS,EXPORTACION,GESTION_ESTADISTICA)));
     public static final List<Role> ALL=List.of(
         new Role("ADMINISTRATIVO",Reach.AMBITO,"OPERATIVA"),
         new Role("PROFESIONAL",Reach.AMBITO,"OPERATIVA"),
@@ -41,6 +47,7 @@ public final class Roles {
         new Role(REPORTES,Reach.OPCIONAL,"REPORTES"),
         new Role(REPORTES_PERSONAS,Reach.OPCIONAL,"REPORTES"),
         new Role(EXPORTACION,Reach.OPCIONAL,"REPORTES"),
+        new Role(GESTION_ESTADISTICA,Reach.OPCIONAL,"REPORTES"),
         new Role(TI,Reach.INSTITUCIONAL,"ADMINISTRACION"));
     private static final Map<String,Role> BY_CODE=new LinkedHashMap<>();
     static { for(var r:ALL)BY_CODE.put(r.code(),r); }
@@ -64,6 +71,13 @@ public final class Roles {
     public static boolean opensIntake(String code) {
         var role=BY_CODE.get(code);
         return role!=null&&role.group().equals("OPERATIVA");
+    }
+    /**
+     * Concesiones de una funcion de NEEDS_REPORTES que rigen: las que tienen REPORTES vigente en el mismo alcance (nulo =
+     * institucion). Es la regla de la sesion (can_manage_stats) y de las facultades estadisticas de E10 y E11.
+     */
+    public static List<Access.Grant> ruling(Access.Actor a,String role) {
+        return a.grants().stream().filter(g->g.role().equals(role)&&a.grants().stream().anyMatch(x->x.role().equals(REPORTES)&&Objects.equals(x.scope(),g.scope()))).toList();
     }
     public static List<Map<String,Object>> json() { return ALL.stream().map(Role::json).toList(); }
 }

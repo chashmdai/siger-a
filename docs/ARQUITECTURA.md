@@ -78,6 +78,11 @@ el lock global y marcador `REGION_FICHA_V16`, tambien con `migrate-only`).
 0.8.0 agrega V17 (catalogos estadisticos versionados, E01: `stat_catalog_version`, `stat_catalog_item` y
 `stat_catalog_mapping`; una sola version VIGENTE por catalogo garantizada por el UNIQUE de `current_catalog`, que solo
 tiene valor mientras la version esta VIGENTE). TI los importa y activa con fundamento; ninguna migracion los siembra.
+Desde E02 TI lo hace en la pantalla `#catalogos` (Administracion > Catalogos estadisticos) con los archivos de
+referencia de `deploy/config-ejemplo/catalogos/` (propuesta version 1, modelo de derechos 2.0 de 2022 y plantillas para
+la institucion, con fuentes y huellas en su `LEEME.txt`), que viajan en el paquete dentro de `config-ejemplo\`. La
+funcion `GESTION_ESTADISTICA` (ambito opcional, exige REPORTES en el mismo alcance, incompatible con TI; D43) se concede
+desde E02 y habilita cortes, series y vistas compartidas a partir de E10 y E11.
 V1 a V17 no se modifican nunca; un cambio nuevo se agrega como `V18__...` aditivo, compatible con H2 y MySQL. Ninguna
 migracion siembra sedes, regiones, feriados, catalogos ni personas reales. La actualizacion desde 0.4.0 y desde 0.7.0
 se prueba sobre MySQL 8.4 con volcados sinteticos (`MySql84UpgradeTest`, `MySql84Upgrade070Test`).

@@ -8,7 +8,7 @@ export const KIND_SHORT: Record<string, string> = {COM: 'COM', SOL: 'SOL', REQ: 
 /** AUTORIDAD fue suprimido en 0.5.0 (D1): su etiqueta solo se usa para mostrar el historial. */
 export const ROLE_LABELS: Record<string, string> = {
   ADMINISTRATIVO: 'Administrativo', PROFESIONAL: 'Profesional', JEFATURA: 'Jefatura', DIRECCION: 'Dirección', DISTRIBUIDOR: 'Distribución',
-  AUTORIDAD: 'Autoridad (suprimido)', LECTURA: 'Lectura', CONSULTA_INSTITUCIONAL: 'Consulta institucional', AUDITORIA: 'Auditoría', REPORTES: 'Reportes', REPORTES_PERSONAS: 'Reportes por persona', EXPORTACION: 'Exportación', TI: 'TI',
+  AUTORIDAD: 'Autoridad (suprimido)', LECTURA: 'Lectura', CONSULTA_INSTITUCIONAL: 'Consulta institucional', AUDITORIA: 'Auditoría', REPORTES: 'Reportes', REPORTES_PERSONAS: 'Reportes por persona', EXPORTACION: 'Exportación', GESTION_ESTADISTICA: 'Gestión estadística', TI: 'TI',
 };
 
 /** En las sedes regionales la Direccion de la sede es la Coordinacion regional y no hay Jefatura (D7). */
