@@ -346,6 +346,10 @@ class InstitutionalReaderTest {
   attempts.put("HOLIDAY_ADD",new Attempt(null,null,Map.of("day","2026-12-25","name","Navidad","reason","Intento")));
   attempts.put("HOLIDAY_IMPORT",new Attempt(null,null,Map.of("lines","2026-12-25 Navidad","reason","Intento")));
   attempts.put("HOLIDAY_REMOVE",new Attempt(null,1L,anyReason));
+  // Catalogos estadisticos (E01): solo TI; un archivo valido para que la unica causa de rechazo sea la funcion.
+  attempts.put("CATALOG_IMPORT",new Attempt(null,null,Map.of("content",StatCatalogsTest.file("TIPO_SOLICITUD","A","B"),"reason","Intento")));
+  attempts.put("CATALOG_ACTIVATE",new Attempt(null,1L,anyReason));
+  attempts.put("CATALOG_MAPPING_IMPORT",new Attempt(null,null,Map.of("from_version",1L,"to_version",2L,"content",StatCatalogsTest.mapping("A","A"),"reason","Intento")));
 
   return attempts;
  }

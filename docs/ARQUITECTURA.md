@@ -73,9 +73,14 @@ global, y dejan un marcador.
 0.6.0 no agrega migraciones. 0.7.0 agrega V15 (`territorial_coverage`: periodos de cobertura de cada sede y del nivel
 central, con inicio, termino, actor y fundamento; `scope_id` nulo = nivel central; terminar no borra) y V16
 (`attention_revision.region_code`: region de cada version de la ficha, escrita al crearla; carga inicial por lotes con
-el lock global y marcador `REGION_FICHA_V16`, tambien con `migrate-only`). V1 a V16 no se modifican nunca; un cambio
-nuevo se agrega como `V17__...` aditivo, compatible con H2 y MySQL. Ninguna migracion siembra sedes, regiones,
-feriados ni personas reales.
+el lock global y marcador `REGION_FICHA_V16`, tambien con `migrate-only`).
+
+0.8.0 agrega V17 (catalogos estadisticos versionados, E01: `stat_catalog_version`, `stat_catalog_item` y
+`stat_catalog_mapping`; una sola version VIGENTE por catalogo garantizada por el UNIQUE de `current_catalog`, que solo
+tiene valor mientras la version esta VIGENTE). TI los importa y activa con fundamento; ninguna migracion los siembra.
+V1 a V17 no se modifican nunca; un cambio nuevo se agrega como `V18__...` aditivo, compatible con H2 y MySQL. Ninguna
+migracion siembra sedes, regiones, feriados, catalogos ni personas reales. La actualizacion desde 0.4.0 y desde 0.7.0
+se prueba sobre MySQL 8.4 con volcados sinteticos (`MySql84UpgradeTest`, `MySql84Upgrade070Test`).
 
 La COM conserva original y folio; el REQ sigue siendo el padre de los Casos. El indice de personas no es un registro
 maestro: no fusiona identidades. La ficha JSON se valida con lista cerrada de campos y se entrega solo en detalle

@@ -14,8 +14,8 @@ import static cl.nexbyte.sigera.Problem.require;
 @Service
 public class Personnel {
     private final Db db;private final Access access;private final PasswordEncoder passwords;private final Integrations integrations;private final MailOutbox mail;
-    private final Documents documents;private final Holidays holidays;
-    public Personnel(Db db,Access access,PasswordEncoder passwords,Integrations integrations,MailOutbox mail,Documents documents,Holidays holidays){this.db=db;this.access=access;this.passwords=passwords;this.integrations=integrations;this.mail=mail;this.documents=documents;this.holidays=holidays;}
+    private final Documents documents;private final Holidays holidays;private final StatCatalogs catalogs;
+    public Personnel(Db db,Access access,PasswordEncoder passwords,Integrations integrations,MailOutbox mail,Documents documents,Holidays holidays,StatCatalogs catalogs){this.db=db;this.access=access;this.passwords=passwords;this.integrations=integrations;this.mail=mail;this.documents=documents;this.holidays=holidays;this.catalogs=catalogs;}
     public Workflow.Result run(Actor a,String type,long id,Long revision,Input in){
         switch(type){
             case "STAFF_CREATE" -> {
@@ -166,6 +166,8 @@ public class Personnel {
             case "MAIL_RESOLVE" -> {return mail.resolve(a,id,in.choice("decision","REENVIAR","DESCARTAR"),in.reason());}
             // Calendario habil (G09): feriados nacionales y regionales, con fundamento; retirar borra y deja la historia en auditoria.
             case "HOLIDAY_ADD","HOLIDAY_IMPORT","HOLIDAY_REMOVE" -> {return holidays.run(a,type,id,in);}
+            // Catalogos estadisticos versionados (0.8.0, D27, E01): importar, activar y correspondencias, con fundamento.
+            case "CATALOG_IMPORT","CATALOG_ACTIVATE","CATALOG_MAPPING_IMPORT" -> {return catalogs.run(a,type,id,revision,in);}
             default -> throw new Problem(400,"Operacion de administracion desconocida.");
         }
     }

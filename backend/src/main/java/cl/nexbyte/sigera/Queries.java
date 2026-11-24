@@ -10,8 +10,8 @@ import static cl.nexbyte.sigera.Db.*;
 public class Queries {
     final Db db;final Access access;final Attention attention;
     private final Integrations integrations;
-    private final Documents documents;private final OriginRelease origin;
-    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin){this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;}
+    private final Documents documents;private final OriginRelease origin;private final StatCatalogs catalogs;
+    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs){this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
     public Map<String,Object> workspace(Actor a){
         // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales:
         // TI administra todas las subrogancias (D1); titular y subrogante ven las propias.
@@ -37,6 +37,8 @@ public class Queries {
             row.put("coverage",territory.coverage(n(x,"id")));return (Map<String,Object>)row;}).toList();
         Map<String,Object> result=new LinkedHashMap<>();result.put("scopes",catalogScopes);result.put("central_coverage",territory.central());
         result.put("regions",AdultIdentity.REGIONS.entrySet().stream().map(e->Map.of("code",e.getKey(),"name",e.getValue())).toList());result.put("units",db.rows("SELECT * FROM org_unit ORDER BY code"));result.put("roles",Roles.json());result.put("reports",Reports.catalog());
+        // Catalogos estadisticos (0.8.0, D27): solo la version VIGENTE de cada catalogo y los valores especiales.
+        result.put("stat_catalogs",catalogs.published());
         var enabledScopes=catalogScopes.stream().filter(x->b(x,"enabled")).map(x->n(x,"id")).toList();
         boolean registrar=a.grants().stream().anyMatch(g->g.scope()!=null&&a.registrar(g.scope()));
         Map<Long,Actor> actors=new HashMap<>();for(var candidate:access.enabledActors())actors.put(candidate.id(),candidate);
@@ -238,7 +240,7 @@ public class Queries {
         if(ti){var policy=new LinkedHashMap<String,Object>(documents.releasePolicy());policy.put("origin_release",origin.policy());result.put("document_policy",policy);}
         else result.put("document_policy",Map.of());
         // Auditoria: eventos de su alcance mas toda la administracion de cuentas, ambitos, subrogancias y calendario habil. TI: administracion y sistema.
-        String administrative=(auditor?"'USUARIO','AMBITO','SUBROGANCIA','CALENDARIO'":"")+(auditor&&ti?",":"")+(ti?"'USUARIO','SISTEMA','AMBITO','SUBROGANCIA','CALENDARIO'":"");
+        String administrative=(auditor?"'USUARIO','AMBITO','SUBROGANCIA','CALENDARIO','CATALOGO_ESTADISTICO'":"")+(auditor&&ti?",":"")+(ti?"'USUARIO','SISTEMA','AMBITO','SUBROGANCIA','CALENDARIO','CATALOGO_ESTADISTICO'":"");
         result.put("audit",db.rows("SELECT e.*,u.name AS actor FROM audit_event e JOIN staff u ON u.id=e.actor_id WHERE e.scope_id IN ("+BoardQueries.ids(BoardQueries.grants(a,"AUDITORIA"))+") OR e.resource_type IN ("+administrative+") ORDER BY e.id DESC LIMIT 300"));
         return result;
     }

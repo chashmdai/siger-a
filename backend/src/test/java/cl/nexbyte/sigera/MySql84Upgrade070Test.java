@@ -1,0 +1,102 @@
+package cl.nexbyte.sigera;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.security.MessageDigest;
+import java.sql.*;
+import java.util.*;
+import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static cl.nexbyte.sigera.Db.*;
+
+/**
+ * Actualizacion 0.7.0 -> version actual sobre un MySQL 8.4 AISLADO y desechable (E01 de 0.8.0; mismas propiedades que
+ * {@link MySql84IntegrationTest}; sin ellas se omite). Carga el volcado sintetico {@code upgrade/siger-0.7.0-sintetico.sql}
+ * (V16, semillas demo de 0.7.0 y registros creados con sus comandos: recorrido completo de hitos, Formulario adulto y los
+ * dos vectores NNA SRCeI de E00, fichas 1.0 y 1.1, transferencia, derivacion, vinculos admitido y devuelto, COM invalida y
+ * pendientes, REQ cerrados y reactivado, cobertura de sede y del nivel central y una sede proyectada). Arranca con
+ * {@code migrate-only}, como {@code Migrate.ps1}, y luego en modo normal: las migraciones nuevas se aplican, ninguna
+ * tabla existente cambia de cantidad de filas (salvo el historial de Flyway), los originales del Formulario y sus filas
+ * {@code external_*} quedan identicos y ningun catalogo estadistico queda sembrado.
+ */
+class MySql84Upgrade070Test {
+    static final String SCHEMA="siger_a_mysql_upgrade_desde070",DUMP="/upgrade/siger-0.7.0-sintetico.sql";
+    /** Tablas de la recepcion del Formulario que ningun codigo actualiza ni borra (seccion 2 del plan 0.8.0). */
+    static final List<String> ORIGINALS=List.of("communication_original","external_person","external_attribute","external_field");
+    @BeforeAll static void requireIsolatedMySql(){MySql84IntegrationTest.requireIsolatedMySql();}
+
+    /** Mayor version de las migraciones del codigo (Vn__*.sql). */
+    static int latest()throws Exception{
+        try(var files=Files.list(Path.of("src/main/resources/db/migration"))){
+            return files.map(p->p.getFileName().toString()).filter(f->f.matches("V\\d+__.+\\.sql")).mapToInt(f->Integer.parseInt(f.substring(1,f.indexOf("__")))).max().orElseThrow();
+        }
+    }
+    static List<String> tables(Connection c)throws SQLException{
+        var out=new ArrayList<String>();
+        try(var st=c.prepareStatement("SELECT table_name FROM information_schema.tables WHERE table_schema=? ORDER BY table_name")){
+            st.setString(1,SCHEMA);try(var rs=st.executeQuery()){while(rs.next())out.add(rs.getString(1).toLowerCase(Locale.ROOT));}
+        }
+        return out;
+    }
+    /** Filas por tabla de las tablas dadas. */
+    static Map<String,Long> counts(List<String> tables)throws SQLException{
+        var out=new TreeMap<String,Long>();
+        try(var c=MySql84UpgradeTest.connect(SCHEMA)){for(String t:tables)out.put(t,MySql84UpgradeTest.count(c,"SELECT COUNT(*) FROM "+t));}
+        return out;
+    }
+    /** SHA-256 de todas las columnas de todas las filas, en orden de id, de cada tabla de los originales. */
+    static Map<String,String> fingerprints()throws Exception{
+        var out=new TreeMap<String,String>();
+        try(var c=MySql84UpgradeTest.connect(SCHEMA)){
+            for(String t:ORIGINALS){
+                var digest=MessageDigest.getInstance("SHA-256");
+                try(var st=c.createStatement();var rs=st.executeQuery("SELECT * FROM "+t+" ORDER BY id")){
+                    int columns=rs.getMetaData().getColumnCount();
+                    while(rs.next()){
+                        for(int i=1;i<=columns;i++){String v=rs.getString(i);digest.update((v==null?"\u0000NULL":v).getBytes(StandardCharsets.UTF_8));digest.update((byte)0x1f);}
+                        digest.update((byte)0x1e);
+                    }
+                }
+                out.put(t,HexFormat.of().formatHex(digest.digest()));
+            }
+        }
+        return out;
+    }
+
+    @Test void actualizacionDesdeUnVolcadoSintetico070()throws Exception{
+        MySql84UpgradeTest.load(SCHEMA,DUMP);
+        List<String> before;Map<String,Long> loaded;Map<String,String> prints;
+        try(var c=MySql84UpgradeTest.connect(SCHEMA)){
+            assertEquals(16,MySql84UpgradeTest.count(c,"SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success=TRUE"));
+            before=tables(c);
+            assertEquals(3,MySql84UpgradeTest.count(c,"SELECT COUNT(*) FROM communication_original"));
+            assertEquals(2,MySql84UpgradeTest.count(c,"SELECT COUNT(*) FROM external_person WHERE run_source='SRCEI' AND authenticated=FALSE"));
+        }
+        var unchanged=before.stream().filter(t->!t.equals("flyway_schema_history")).toList();
+        loaded=counts(unchanged);prints=fingerprints();
+        int latest=latest();
+
+        // 1. Como Migrate.ps1: sin web, migra y ejecuta las rutinas de arranque; Bootstrap cierra el contexto.
+        try(var migrate=MySql84IntegrationTest.app(SCHEMA,List.of("siger.migrate-only=true"))){assertFalse(migrate.isActive(),"migrate-only cierra el proceso");}
+        assertEquals(loaded,counts(unchanged),"migrar no cambia la cantidad de filas de ninguna tabla existente");
+        assertEquals(prints,fingerprints(),"originales del Formulario y external_* identicos");
+        var migrated=counts(unchanged);
+
+        // 2. Arranque normal (sin semillas, como la VM): nada cambia.
+        try(var ctx=MySql84IntegrationTest.app(SCHEMA,List.of())){
+            var db=ctx.getBean(Db.class);
+            assertEquals(String.valueOf(latest),ctx.getBean(Api.class).health().getBody().get("schema"));
+            for(int v=1;v<=latest;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
+            for(String marker:List.of(Bootstrap.AUTHORITY_MARKER,Bootstrap.REGIONAL_HEAD_MARKER,PersonIndex.MARKER,Milestones.MARKER,OriginRegion.MARKER))
+                assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",marker),marker);
+            // Cada original conserva su SHA-256 recalculado sobre el texto guardado.
+            for(var o:db.rows("SELECT document,document_sha256 FROM communication_original"))
+                assertEquals(s(o,"document_sha256"),ExternalOriginal.sha256(s(o,"document").getBytes(StandardCharsets.UTF_8)));
+            // Ninguna migracion siembra catalogos estadisticos (V17 en adelante).
+            if(latest>=17)for(String t:List.of("stat_catalog_version","stat_catalog_item","stat_catalog_mapping"))assertEquals(0,db.count("SELECT COUNT(*) FROM "+t),t);
+            assertEquals(0,Milestones.omitted(db));
+        }
+        assertEquals(migrated,counts(unchanged),"el arranque normal tras migrate-only no cambia nada");
+        assertEquals(prints,fingerprints());
+    }
+}

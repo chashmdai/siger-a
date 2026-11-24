@@ -29,14 +29,16 @@ class MySql84UpgradeTest {
             System.getProperty("siger.mysql.user"),System.getProperty("siger.mysql.password"));
     }
     /** El volcado de mysqldump termina cada sentencia en fin de linea (los saltos de un texto van escapados). */
-    static void load()throws Exception{
+    static void load()throws Exception{load(SCHEMA,DUMP);}
+    /** Carga un volcado sintetico en un esquema recreado vacio (tambien el de 0.7.0, MySql84Upgrade070Test). */
+    static void load(String schema,String dump)throws Exception{
         try(var c=connect("");var st=c.createStatement()){
-            st.execute("DROP DATABASE IF EXISTS "+SCHEMA);
-            st.execute("CREATE DATABASE "+SCHEMA+" CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
+            st.execute("DROP DATABASE IF EXISTS "+schema);
+            st.execute("CREATE DATABASE "+schema+" CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
         }
         int statements=0;
-        try(var c=connect(SCHEMA);var st=c.createStatement();
-            var in=new BufferedReader(new InputStreamReader(Objects.requireNonNull(MySql84UpgradeTest.class.getResourceAsStream(DUMP)),StandardCharsets.UTF_8))){
+        try(var c=connect(schema);var st=c.createStatement();
+            var in=new BufferedReader(new InputStreamReader(Objects.requireNonNull(MySql84UpgradeTest.class.getResourceAsStream(dump)),StandardCharsets.UTF_8))){
             var sql=new StringBuilder();
             for(String line;(line=in.readLine())!=null;){
                 if(sql.isEmpty()&&(line.isBlank()||line.startsWith("--")))continue;
@@ -85,8 +87,8 @@ class MySql84UpgradeTest {
         try(var ctx=MySql84IntegrationTest.app(SCHEMA,List.of())){
             assertEquals(migrated,state(),"el arranque normal tras migrate-only no cambia nada");
             var db=ctx.getBean(Db.class);var access=ctx.getBean(Access.class);
-            assertEquals("16",ctx.getBean(Api.class).health().getBody().get("schema"));
-            for(int v=11;v<=16;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
+            assertEquals("17",ctx.getBean(Api.class).health().getBody().get("schema"));
+            for(int v=11;v<=17;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
             for(String marker:List.of(Bootstrap.AUTHORITY_MARKER,Bootstrap.REGIONAL_HEAD_MARKER,PersonIndex.MARKER,Milestones.MARKER,OriginRegion.MARKER))
                 assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",marker),marker);
             // Region de cada version de la ficha (V16, D21): la GENERAL con region 13 y la NNA sin region.

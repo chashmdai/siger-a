@@ -64,7 +64,7 @@ public class Workflow {
                  "NOTE_RECTIFY","TASK_CREATE","TASK_EDIT","TASK_COMPLETE","TASK_CANCEL","TASK_ATTEMPT" -> cases.run(a,type,id,expected,in);
             case "NOTICE_READ" -> readNotice(a,id);
             case "STAFF_CREATE","STAFF_UPDATE","STAFF_RESET","GRANT_CREATE","GRANT_REVOKE","PROFILE_SET","SCOPE_CREATE","SCOPE_UPDATE","SCOPE_ACTIVATE","SCOPE_CLOSE","SCOPE_COVERAGE","CENTRAL_COVERAGE","DESIGNATE","SUBSTITUTE_ACTIVATE","SUBSTITUTE_END","DOC_RELEASE","INTEGRATION_PAUSE","INTEGRATION_RESUME","MAIL_RESOLVE",
-                 "HOLIDAY_ADD","HOLIDAY_IMPORT","HOLIDAY_REMOVE" -> personnel.run(a,type,id,expected,in);
+                 "HOLIDAY_ADD","HOLIDAY_IMPORT","HOLIDAY_REMOVE","CATALOG_IMPORT","CATALOG_ACTIVATE","CATALOG_MAPPING_IMPORT" -> personnel.run(a,type,id,expected,in);
             default -> throw new Problem(400,"Comando desconocido.");
         };
         db.update("INSERT INTO command_log(command_key,actor_id,payload_hash,result_kind,result_id,result_message,created_ms) VALUES(?,?,?,?,?,?,?)",
