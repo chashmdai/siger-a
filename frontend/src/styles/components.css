@@ -173,6 +173,19 @@ label.has-error input, label.has-error select { border-color: var(--danger-ink);
 .nationality-field { border: 0; margin: 0 0 .4rem; padding: 0; min-width: 0; }
 .nationality-field legend { font-weight: 600; font-size: .9rem; color: var(--ink-800); margin-bottom: .4rem; }
 @media (max-width: 480px) { .run-fields { grid-template-columns: minmax(0, 1fr) auto 5.5rem; } }
+/* Persona declarada (0.8.0, E04): par region y comuna con su leyenda, datos opcionales en "Más datos". */
+.region-pair { border: 0; margin: 0 0 .4rem; padding: 0; min-width: 0; }
+.form-grid > .region-pair { grid-column: 1 / -1; }
+.region-pair > legend { font-weight: 600; font-size: .9rem; color: var(--ink-800); margin-bottom: .4rem; }
+.more-data { margin: 0 0 1rem; border-top: 1px dashed var(--line); padding-top: .6rem; }
+.more-data > summary { display: inline-flex; align-items: center; gap: .4rem; min-height: 2.5rem; font-weight: 600; color: var(--ink-800); list-style: none; }
+.more-data > summary::-webkit-details-marker { display: none; }
+.more-data[open] > summary { margin-bottom: .6rem; }
+.more-data-body { animation: fade-in var(--base) var(--ease); }
+.person-fields > .legacy-note { margin-top: 0; }
+.intake-summary .preview-person { margin-bottom: 1rem; }
+.intake-complete .actions { justify-content: flex-end; }
+@media (prefers-reduced-motion: reduce) { .more-data-body { animation: none; } }
 
 /* Datos clave */
 .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .9rem 1.4rem; margin: 0; }

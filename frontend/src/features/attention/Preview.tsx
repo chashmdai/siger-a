@@ -2,17 +2,29 @@ import {useEffect, useRef} from 'react';
 import type {Row} from '../../lib/rows';
 import {list, obj, text, when} from '../../lib/rows';
 import {CHANNEL_LABELS, humanize, PERSON_ROLE_LABELS} from '../../lib/labels';
+import type {StatCodes} from '../../lib/person/personModel.ts';
+import {canonicalInstitutions, canonicalList, codeLabel, NO_CODES, personFacts} from '../../lib/person/personModel.ts';
+import {regionName} from '../../lib/person/catalog.ts';
 import {Icon} from '../../components/Icon';
 import {useExit} from '../../components/useExit';
-import {LABELS, optionLabel, OPTIONS, PREVIEW_PERSON_LABELS} from './schema';
+import {LABELS, optionLabel, OPTIONS} from './schema';
 import {displayValue} from './adult/adultForm.ts';
 import emblem from '../../assets/emblema-320.png';
 
-/** Valor visible de un campo: etiqueta de la opcion cerrada o el texto registrado. */
-const shown = (key: string, value: string) => key === 'modality' ? (value === 'NNA' ? 'Atención directa a NNA' : 'Persona adulta o atención general') : OPTIONS[key] ? optionLabel(key, value) : displayValue(key, value);
+/** Valor visible de un campo: etiqueta de la opcion cerrada, rotulo del listado o el texto registrado (nunca un codigo). */
+function shown(key: string, value: string, codes: StatCodes) {
+  if (key === 'modality') return value === 'NNA' ? 'Atención directa a NNA' : 'Persona adulta o atención general';
+  if (OPTIONS[key]) return optionLabel(key, value).replaceAll('_', ' ');
+  if (key === 'relationship_code') return codeLabel(codes.relationship, value);
+  if (key === 'facts_region_code') return regionName(value);
+  return displayValue(key, value);
+}
 
-/** Ficha completa o version anterior, imprimible. Solo muestra los campos informados. */
-export function Preview({data, close}: {data: Row; close: () => void}) {
+/**
+ * Ficha completa o version anterior, imprimible. Solo muestra los campos informados. Lee las versiones 1.0, 1.1 y 1.2:
+ * las personas en su vista canonica (persona-1, con el texto libre anterior como registrado antes).
+ */
+export function Preview({data, close, codes = NO_CODES}: {data: Row; close: () => void; codes?: StatCodes}) {
   const ref = useRef<HTMLDialogElement>(null);
   const [leaving, exit] = useExit(close);
   useEffect(() => {ref.current?.showModal();}, []);
@@ -38,11 +50,16 @@ export function Preview({data, close}: {data: Row; close: () => void}) {
         </dl>
         <p className="muted">Solo se muestran los campos informados; los ausentes permanecen sin informar. Los datos de identificación y contacto son declarados: no se verificaron con ClaveÚnica, Registro Civil ni PISEE.</p>
         <dl className="preview-fields">
-          {Object.entries(LABELS).filter(([k]) => text(f, k)).map(([k, l]) => <div key={k}><dt>{l}</dt><dd className="preserve">{OPTIONS[k] || k === 'modality' ? shown(k, text(f, k)).replaceAll('_', ' ') : shown(k, text(f, k))}</dd></div>)}
+          {Object.entries(LABELS).filter(([k]) => text(f, k)).map(([k, l]) => <div key={k}><dt>{l}</dt><dd className="preserve">{shown(k, text(f, k), codes)}</dd></div>)}
         </dl>
-        {list(f, 'people').map((p, i) => <section key={i} className="preview-person">
-          <h3>Persona relacionada {i + 1}</h3>
-          <dl className="preview-fields">{Object.entries(p).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{PREVIEW_PERSON_LABELS[k] ?? k}</dt><dd>{k === 'role' ? humanize(v, PERSON_ROLE_LABELS) : String(v)}</dd></div>)}</dl>
+        {canonicalList(list(f, 'people')).map((p, i) => <section key={i} className="preview-person">
+          <h3>Persona relacionada {i + 1} · {humanize(p.role, PERSON_ROLE_LABELS)}</h3>
+          <dl className="preview-fields">{personFacts(p, codes).map(([l, v]) => <div key={l}><dt>{l}</dt><dd className="preserve">{v}</dd></div>)}</dl>
+        </section>)}
+        {canonicalInstitutions(f.institutions_list).map((x, i) => <section key={'i' + i} className="preview-person">
+          <h3>Institución {i + 1}</h3>
+          <dl className="preview-fields">{([['Nombre', x.name], ['Tipo', codeLabel(codes.institution, x.type_code)], ['Rol o vínculo', x.role], ['Región', x.region_code ? regionName(x.region_code) : ''], ['Comuna', x.commune]] as [string, string][])
+            .filter(([, v]) => v).map(([l, v]) => <div key={l}><dt>{l}</dt><dd>{v}</dd></div>)}</dl>
         </section>)}
       </div>
       <footer className="modal-foot print-hide">

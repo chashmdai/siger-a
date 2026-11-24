@@ -12,6 +12,7 @@ import {Icon} from '../../components/Icon';
 import {Callout, EmptyState, Facts, Panel} from '../../components/Primitives';
 import {Files} from './Files';
 import {ActionBar, DetailGrid} from './parts';
+import {IntakeRecordPanel} from '../intake/IntakeRecordPanel';
 
 /** Comunicacion: lo recibido, tal como se registro. Distribucion, antecedente o asuncion propia. */
 export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
@@ -22,6 +23,8 @@ export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
   const continuity = list(r, 'solicitations').length + list(r, 'requirements').length + list(r, 'links').length;
   // COM del Formulario Publico: proyeccion autorizada que entrega el servidor (sin el documento original).
   const external = obj(r, 'external'), isExternal = Object.keys(external).length > 0;
+  // COM manual con ficha de ingreso (0.8.0, D33): sus datos se leen de la ficha, con versiones y complementacion.
+  const hasIntake = Object.keys(obj(r, 'intake')).length > 0;
   const presenter = list(external, 'persons').find(p => text(p, 'person_role') === 'PRESENTADOR') ?? {};
   const identitySource = text(presenter, 'run_number') && bool(presenter, 'run_valid') ? humanize(presenter.run_source, SOURCE_LABELS) : text(presenter, 'foreign_document_number') ? 'Documento extranjero declarado' : '';
   return <DetailGrid
@@ -37,7 +40,8 @@ export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
         <p className="preserve reading">{text(r, 'body') || (isExternal ? 'El tipo de presentación no incluye un relato.' : 'Sin relato registrado.')}</p>
       </Panel>
       {isExternal && <ExternalCom external={external}/>}
-      {list(r, 'persons').length > 0 && <Panel title="Personas relacionadas" icon="people" count={list(r, 'persons').length} description="Datos declarados en el ingreso; no constituyen un registro maestro.">
+      {hasIntake && <IntakeRecordPanel r={r} ctx={ctx}/>}
+      {!hasIntake && list(r, 'persons').length > 0 && <Panel title="Personas relacionadas" icon="people" count={list(r, 'persons').length} description="Datos declarados en el ingreso; no constituyen un registro maestro.">
         <Table rows={list(r, 'persons')} columns={[
           {name: 'Rol', render: p => humanize(p.person_role, PERSON_ROLE_LABELS)},
           {name: 'Nombre / identificación', render: p => <>{text(p, 'name')}<small>{text(p, 'identity_document')}</small></>},

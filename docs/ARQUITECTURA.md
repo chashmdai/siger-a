@@ -113,6 +113,13 @@ ordenes territoriales de Estructura (`structureModel.ts: territorialOrders`) pid
 El selector lista una sede tambien bajo cada region de su cobertura vigente. `lib/regionMark.ts` y
 `components/RegionMark.tsx` arman la marca de D23 en la lista de comunicaciones y en la cola de Inicio.
 
+Desde 0.8.0 (E04, D33), `lib/person/` (reglas de identidad y contacto, catalogos de territorio y paises, modelo de la
+persona canonica `persona-1`) y `components/person/` (controles, tarjeta de persona con "Más datos", instituciones,
+lugar de los hechos y seleccion de codigos del listado vigente) son comunes a la ficha 1.2 de primera atencion
+(`features/attention/fichaModel.ts`) y a la ficha de ingreso de la COM manual (`features/intake/intakeModel.ts`, panel
+en la ficha de la COM). Los archivos `territorio.json` y `paises.json` siguen en `features/attention/adult/` (huellas de
+E00); los modulos de esa carpeta reexportan los de `lib/person/`.
+
 Presentacion: sistema visual propio sin dependencias nuevas (tokens CSS, iconos propios, Cabin OFL y escudo
 institucional servidos desde el JAR), con barra lateral por tipo de trabajo, paleta Ctrl+K, fichas con cadena
 COM->SOL->REQ->Caso y version movil. Decisiones en `docs/DISENO_0_4_0.md`.

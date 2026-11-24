@@ -20,7 +20,7 @@ export function AttentionSummary({form}: {form: AttentionData}) {
         <h3><Icon name="message" size={18}/>Motivo inicial</h3>
         <blockquote className="preserve">{String(form.motive) || 'Sin motivo registrado.'}</blockquote>
         <Facts items={[
-          ['Persona requirente', (form.modality === 'NNA' ? '' : fullName(form)) || String(form.presenter_name) || 'Sin identificar'],
+          [form.modality === 'NNA' ? 'NNA que solicita atención' : 'Persona requirente', fullName(form) || String(form.presenter_name) || 'Sin identificar'],
           ['Modalidad', form.modality === 'NNA' ? 'Escucha directa a NNA' : 'General o persona adulta'],
           ['Contacto', optionLabel('safe_contact', form.safe_contact) || 'Por verificar'],
           ['Personas relacionadas', form.people.length === 0 ? 'Ninguna agregada' : form.people.length === 1 ? '1 persona' : `${form.people.length} personas`],

@@ -1,23 +1,26 @@
-// Ficha de primera atencion, esquema 1.1 (1.0 sigue legible y se actualiza al editarla). El servidor valida la misma
-// lista cerrada de campos (Attention.normalize): agregar un campo aqui exige agregarlo tambien alli.
-import {ADULT_KEYS, SCHEMA_VERSION} from './adult/adultForm.ts';
+// Ficha de primera atencion, esquema 1.2 (0.8.0, D33, gate E04; DISENO 3.4). 1.0 y 1.1 siguen legibles y pasan a 1.2 al
+// editarlas (fichaModel.ts: prepareFicha), sin reescribir lo historico. El servidor valida la misma lista cerrada de campos
+// (Attention.normalize y version12): agregar un campo aqui exige agregarlo tambien alli (tests/ficha12.test.ts compara
+// ambas listas).
+import {ADULT_KEYS} from './adult/adultForm.ts';
+import type {DeclaredPerson, Institution} from '../../lib/person/personModel.ts';
 
-export type Person = {role: string; name: string; identity_document: string; relationship: string; location: string; age: string; birth_date: string; nationality: string; schooling: string; preferred_name: string};
-export type AttentionData = {schema_version: string; modality: string; course: string; people: Person[]; [key: string]: string | Person[]};
+/** Version que escribe la pantalla. */
+export const FICHA_VERSION = '1.2';
+export type Person = DeclaredPerson;
+export type AttentionData = {schema_version: string; modality: string; course: string; people: DeclaredPerson[]; institutions_list: Institution[]; [key: string]: string | DeclaredPerson[] | Institution[]};
 
+/** Campos que agrega la ficha 1.2 (Attention.KEYS_12); relationship_version la deriva el servidor y no se envia. */
+export const KEYS_12 = ['relationship_code', 'facts_region_code', 'facts_commune', 'facts_place', 'institutions_list'] as const;
 /** Campos de texto y de seleccion de la ficha; vacio significa "no registrado", no una respuesta negativa. */
-export const STRING_FIELDS = [...ADULT_KEYS, 'presenter_name', 'identity_document', 'identity_type', 'relationship', 'contact_email', 'contact_phone', 'presenter_domicile', 'region', 'commune', 'preferred_name', 'pronouns', 'supports', 'court', 'rit', 'ruc', 'guardian_name', 'nationality', 'group_description', 'approximate_count', 'motive', 'story', 'request_text', 'observations', 'orientation', 'actions', 'commitments', 'institutions', 'safety_note', 'participation_note', 'child_message', 'identity_note', 'priority_note', 'safe_contact', 'judicial_status', 'guardian_status', 'participation', 'participation_mode', 'role_explained', 'priority', 'children_scope'];
+export const STRING_FIELDS = [...ADULT_KEYS, 'presenter_name', 'identity_document', 'identity_type', 'relationship', 'contact_email', 'contact_phone', 'presenter_domicile', 'region', 'commune', 'preferred_name', 'pronouns', 'supports', 'court', 'rit', 'ruc', 'guardian_name', 'nationality', 'group_description', 'approximate_count', 'motive', 'story', 'request_text', 'observations', 'orientation', 'actions', 'commitments', 'institutions', 'safety_note', 'participation_note', 'child_message', 'identity_note', 'priority_note', 'safe_contact', 'judicial_status', 'guardian_status', 'participation', 'participation_mode', 'role_explained', 'priority', 'children_scope', 'relationship_code', 'facts_region_code', 'facts_commune', 'facts_place'];
 
-export const emptyPerson = (): Person => ({role: 'NNA', name: '', identity_document: '', relationship: '', location: '', age: '', birth_date: '', nationality: '', schooling: '', preferred_name: ''});
 export function emptyForm(): AttentionData {
-  return {...Object.fromEntries(STRING_FIELDS.map(k => [k, ''])), schema_version: SCHEMA_VERSION, modality: 'GENERAL', course: 'EN_ATENCION', people: []};
+  return {...Object.fromEntries(STRING_FIELDS.map(k => [k, ''])), schema_version: FICHA_VERSION, modality: 'GENERAL', course: 'EN_ATENCION', people: [], institutions_list: []};
 }
 export const MAX_PEOPLE = 30;
+/** Roles de las personas relacionadas de la ficha (Attention.PEOPLE_ROLES). */
 export const PERSON_ROLES = ['NNA', 'ACOMPANANTE', 'REQUIRENTE', 'OTRA_PERSONA'];
-export const PERSON_FIELDS = ['name', 'identity_document', 'relationship', 'location', 'age', 'birth_date', 'nationality', 'schooling', 'preferred_name'] as const;
-export const PERSON_LABELS: Record<(typeof PERSON_FIELDS)[number], string> = {name: 'Nombre o referencia', identity_document: 'Identificación disponible', relationship: 'Vínculo', location: 'Domicilio o localización', age: 'Edad informada o aproximada', birth_date: 'Fecha de nacimiento', nationality: 'Nacionalidad', schooling: 'Escolaridad', preferred_name: 'Nombre de preferencia'};
-/** Etiquetas breves de persona en la vista imprimible. */
-export const PREVIEW_PERSON_LABELS: Record<string, string> = {role: 'Rol', name: 'Nombre', identity_document: 'Documento', relationship: 'Vínculo', location: 'Localización', age: 'Edad', birth_date: 'Nacimiento', nationality: 'Nacionalidad', schooling: 'Escolaridad', preferred_name: 'Nombre preferido'};
 
 /** Etiquetas de la ficha; su orden es el de la vista imprimible. */
 export const LABELS: Record<string, string> = {
@@ -25,12 +28,13 @@ export const LABELS: Record<string, string> = {
   presenter_first_name: 'Primer nombre', presenter_middle_name: 'Segundo nombre', presenter_last_name: 'Primer apellido', presenter_second_last_name: 'Segundo apellido',
   identity_type: 'Tipo de identificación', presenter_run_number: 'RUN (número)', presenter_run_dv: 'RUN (dígito verificador)',
   presenter_document_kind: 'Tipo de documento', presenter_document_number: 'Número de documento', identity_document: 'Documento de identidad',
-  presenter_birth_date: 'Fecha de nacimiento', relationship: 'Vínculo con el NNA',
-  contact_email: 'Correo', contact_phone: 'Teléfono', presenter_domicile: 'Domicilio del requirente', region: 'Región de atención', commune: 'Comuna de atención',
+  presenter_birth_date: 'Fecha de nacimiento', relationship: 'Vínculo con el NNA', relationship_code: 'Relación con el NNA',
+  contact_email: 'Correo', contact_phone: 'Teléfono', presenter_domicile: 'Domicilio del requirente', region: 'Región del requirente', commune: 'Comuna del requirente',
   preferred_name: 'Nombre de preferencia', pronouns: 'Forma de trato o pronombres', supports: 'Apoyos de comunicación o accesibilidad', court: 'Tribunal o fiscalía', rit: 'RIT', ruc: 'RUC',
   guardian_name: 'Curador/a conocido/a', nationality: 'Nacionalidad declarada', group_description: 'Descripción del grupo de NNA', approximate_count: 'Cantidad aproximada',
   motive: 'Motivo inicial', story: 'Relato de la persona o voz del NNA', request_text: 'Qué solicita a la Defensoría', observations: 'Observaciones de quien atiende',
-  orientation: 'Orientación o material entregado', actions: 'Acciones realizadas durante este contacto', commitments: 'Gestiones comprometidas (aún no realizadas)', institutions: 'Instituciones intervinientes',
+  orientation: 'Orientación o material entregado', actions: 'Acciones realizadas durante este contacto', commitments: 'Gestiones comprometidas (aún no realizadas)', institutions: 'Instituciones intervinientes (texto)',
+  facts_region_code: 'Región de los hechos', facts_commune: 'Comuna de los hechos', facts_place: 'Lugar de los hechos',
   safety_note: 'Indicaciones de contacto seguro', participation_note: 'Manifestación u observación sobre su participación', child_message: 'Mensaje espontáneo del NNA',
   identity_note: 'Información voluntaria relevante para el trato', priority_note: 'Necesidad de atención prioritaria observada', safe_contact: 'Condición de contacto',
   judicial_status: 'Antecedentes judiciales', guardian_status: 'Curador/a ad litem', participation: 'Disposición a conversar', participation_mode: 'Forma de expresar su decisión',

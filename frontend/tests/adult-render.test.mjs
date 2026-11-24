@@ -25,7 +25,7 @@ const count = (html, needle) => html.split(needle).length - 1;
 
 test('ficha adulta: identificacion separada, contacto estructurado y catalogos', () => {
   const html = render({...form.emptyForm(), motive: 'Consulta'});
-  for (const label of ['Primer nombre', 'Segundo nombre', 'Primer apellido', 'Segundo apellido', 'Identificación disponible', 'Fecha de nacimiento', 'Nacionalidad declarada', 'Buscar país', 'Celular de contacto', 'Correo de contacto', 'Región de atención', 'Comuna de atención', 'Preferencias de trato', 'Forma de trato o pronombres', 'Nombre de preferencia'])
+  for (const label of ['Primer nombre', 'Segundo nombre', 'Primer apellido', 'Segundo apellido', 'Identificación disponible', 'Fecha de nacimiento', 'Nacionalidad declarada', 'Buscar país', 'Celular de contacto', 'Correo de contacto', 'Región y comuna del requirente', 'Preferencias de trato', 'Forma de trato o pronombres', 'Nombre de preferencia'])
     assert.ok(html.includes(label), label);
   assert.ok(html.includes('+56 9'));
   assert.ok(html.includes('inputMode="numeric"') || html.includes('inputmode="numeric"'));
@@ -40,7 +40,7 @@ test('region de atencion en el orden publicado por el catalogo (de norte a sur)'
   const catalog = await vite.ssrLoadModule('/src/features/attention/adult/catalog.ts');
   const published = ['15', '01', '02', '03', '04', '05', '13', '06', '07', '16', '08', '09', '14', '10', '11', '12'].map(code => ({code}));
   const html = render({...form.emptyForm(), motive: 'Consulta'}, {}, () => true, catalog.orderedRegions(published));
-  const select = html.slice(html.indexOf('Región de atención'), html.indexOf('Comuna de atención'));
+  const select = html.slice(html.indexOf('Región y comuna del requirente'), html.indexOf('Selecciona primero una región'));
   const codes = [...select.matchAll(/<option value="(\d{2})">/g)].map(m => m[1]);
   assert.deepEqual(codes, published.map(r => r.code));
   assert.ok(select.indexOf('Arica y Parinacota') < select.indexOf('Tarapacá') && select.indexOf('Aysén') < select.indexOf('Magallanes'));
@@ -70,9 +70,9 @@ test('ficha 1.0 con valores fuera de catalogo: se muestran como registrados ante
   assert.ok(!html.includes('role="alert"'), 'lo historico no se marca como error');
 });
 
-test('modalidad NNA conserva sus controles de texto libre', () => {
+test('modalidad NNA usa los controles estructurados (ficha 1.2, D33)', () => {
   const html = render({...form.emptyForm(), modality: 'NNA', motive: 'Escucha'});
   assert.ok(html.includes('NNA que solicita atención'));
-  assert.ok(!html.includes('+56 9') && !html.includes('Buscar país') && !html.includes('Primer apellido'));
-  assert.ok(html.includes('Región de atención') && html.includes('Comuna de atención'));
+  assert.ok(html.includes('+56 9') && html.includes('Buscar país') && html.includes('Primer apellido'));
+  assert.ok(html.includes('Región y comuna del requirente'));
 });

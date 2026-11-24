@@ -7,22 +7,21 @@ import {localTime, number, text, when} from '../../lib/rows';
 import {registersAt} from '../../lib/access';
 import {scopeOf, scopes} from '../../lib/catalog';
 import {CHANNELS} from '../../lib/fields';
-import {CHANNEL_LABELS, labeled, PERSON_ROLE_LABELS} from '../../lib/labels';
+import {CHANNEL_LABELS, labeled} from '../../lib/labels';
 import type {Context} from '../../app/context';
 import {ChipRadios} from '../../components/Choice';
 import {Icon} from '../../components/Icon';
 import type {IconName} from '../../components/Icon';
-import {Busy, Callout, EmptyState, ErrorMessage, PageHeader} from '../../components/Primitives';
+import {Busy, Callout, ErrorMessage, PageHeader} from '../../components/Primitives';
+import {orderedRegions} from '../../lib/person/catalog.ts';
+import {list} from '../../lib/rows';
+import {statCodes} from '../../lib/person/personModel.ts';
+import type {IntakeControls} from './IntakeFields';
+import {FactsAndInstitutions, PersonsFields, PresenterFields} from './IntakeFields';
+import type {IntakeData, PresenterKind} from './intakeModel.ts';
+import {comCreatePayload, emptyIntake, intakeProblems} from './intakeModel.ts';
 
-type Person = {role: string; name: string; identity_document: string; relationship: string; location: string};
-const PERSON_FIELDS = ['role', 'name', 'identity_document', 'relationship', 'location'] as const;
-const PERSON_LABELS: Record<keyof Person, string> = {role: 'Relación con el ingreso', name: 'Nombre disponible', identity_document: 'Identificación disponible', relationship: 'Vínculo con el requiriente', location: 'Antecedentes de localización del NNA o persona'};
-const PERSON_ROLES = ['NNA', 'ACOMPANANTE', 'OTRA_PERSONA'];
-const MAX_PERSONS = 12;
-const emptyPerson = (): Person => ({role: 'NNA', name: '', identity_document: '', relationship: '', location: ''});
-const personMax = (k: keyof Person) => k === 'location' ? 500 : k === 'identity_document' ? 100 : 200;
-
-const SECTIONS: [id: string, title: string, icon: IconName][] = [['recepcion', 'Recepción', 'inbox'], ['requiriente', 'Requiriente y contacto', 'user'], ['personas', 'Personas relacionadas', 'people'], ['antecedentes', 'Antecedentes', 'message'], ['documentos', 'Documentos', 'file']];
+const SECTIONS: [id: string, title: string, icon: IconName][] = [['recepcion', 'Recepción', 'inbox'], ['requiriente', 'Quién presenta y contacto', 'user'], ['personas', 'Personas relacionadas', 'people'], ['antecedentes', 'Antecedentes', 'message'], ['documentos', 'Documentos', 'file']];
 
 function Section({n, children, lead}: {n: number; children: ReactNode; lead?: ReactNode}) {
   const [id, title, icon] = SECTIONS[n - 1];
@@ -36,13 +35,16 @@ function Section({n, children, lead}: {n: number; children: ReactNode; lead?: Re
 }
 
 /**
- * Registro de una Comunicacion externa por clasificar: crea solo la COM, pendiente de distribucion.
+ * Registro de una Comunicacion externa por clasificar: crea solo la COM, pendiente de distribucion, con su ficha de
+ * ingreso (0.8.0, D33: persona canonica, hechos e instituciones; intakeModel.ts). Lo minimo sigue siendo asunto y relato.
  * La clave de operacion se conserva mientras la pantalla siga abierta, para reintentos seguros.
  */
 export default function Intake({ctx, completed}: {ctx: Context; completed: (r: Result) => void}) {
   const [scope, setScope] = useState(String(ctx.user.home_scope)), [channel, setChannel] = useState('PRESENCIAL'), [received, setReceived] = useState(localTime());
-  const [values, setValues] = useState<Record<string, string>>({presenter: '', identity_document: '', presenter_domicile: '', contact_email: '', contact_phone: '', contact_restrictions: '', contact: '', subject: '', body: '', reason: '', result: 'ORIENTACION'});
-  const [persons, setPersons] = useState<Person[]>([]), [drafts, setDrafts] = useState<Row[]>([]), [selected, setSelected] = useState<string[]>([]);
+  const [values, setValues] = useState<Record<string, string>>({subject: '', body: ''});
+  const [intake, setIntake] = useState<IntakeData>(emptyIntake), [kind, setKind] = useState<PresenterKind>('PERSONA');
+  const [touched, setTouched] = useState<Set<string>>(() => new Set()), [attempted, setAttempted] = useState(false);
+  const [drafts, setDrafts] = useState<Row[]>([]), [selected, setSelected] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [fileEpoch, setFileEpoch] = useState(0);
   const key = useRef(crypto.randomUUID()), uploadKey = useRef(crypto.randomUUID());
   useEffect(() => {
@@ -52,7 +54,10 @@ export default function Intake({ctx, completed}: {ctx: Context; completed: (r: R
   }, [ctx.user.id]);
   const allowed = scopes(ctx.catalog, s => registersAt(ctx.user, number(s, 'id')));
   const change = (field: string, value: string) => setValues(v => ({...v, [field]: value}));
-  const updatePerson = (i: number, k: keyof Person, value: string) => setPersons(rows => rows.map((p, n) => n === i ? {...p, [k]: value} : p));
+  const codes = statCodes(ctx.catalog);
+  const problems = intakeProblems(intake, kind, {}, codes);
+  const c: IntakeControls = {data: intake, previous: emptyIntake(), update: setIntake, kind, setKind, codes, regions: orderedRegions(list(ctx.catalog, 'regions')),
+    error: key => problems[key] && (attempted || touched.has(key)) ? problems[key] : undefined, touch: key => setTouched(old => old.has(key) ? old : new Set(old).add(key))};
   const clearFile = () => {setFile(null); setFileEpoch(x => x + 1);};
 
   async function prepare() {
@@ -87,10 +92,11 @@ export default function Intake({ctx, completed}: {ctx: Context; completed: (r: R
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (file) {setError('Prepara el archivo elegido o retíralo antes de confirmar el ingreso.'); return;}
+    if (Object.keys(problems).length) {setAttempted(true); setError('Revisa los datos marcados. Puedes dejarlos en blanco si aún no se conocen.'); return;}
     setBusy(true);
     setError('');
     try {
-      const payload = {...values, scope_id: scope, channel, received_at: new Date(received).toISOString(), persons, attachment_tokens: selected};
+      const payload = comCreatePayload({scope, channel, received, subject: values.subject, body: values.body, attachments: selected}, intake, kind);
       completed(await command('COM_CREATE', null, null, payload, key.current));
     } catch (e) {
       setError((e as Error).message);
@@ -119,37 +125,16 @@ export default function Intake({ctx, completed}: {ctx: Context; completed: (r: R
             </div>
             <ChipRadios legend="Canal real" value={channel} options={labeled(CHANNELS, CHANNEL_LABELS)} onChange={setChannel}/>
           </Section>
-          <Section n={2} lead="Solo lo que la persona haya entregado. Un dato ausente no impide registrar el ingreso.">
-            <div className="form-grid">
-              {field('presenter', 'Requiriente o presentador', 200)}
-              {field('identity_document', 'Identificación declarada (opcional)', 100)}
-              {field('presenter_domicile', 'Domicilio del requiriente (no el del NNA)', 500)}
-              {field('contact_email', 'Correo autorizado (opcional)', 200, false, 'email')}
-              {field('contact_phone', 'Teléfono autorizado (opcional)', 80)}
-              {field('contact', 'Otro medio de contacto (opcional)', 300)}
-            </div>
-            <label>Restricciones o indicaciones de contacto seguro<textarea maxLength={1000} value={values.contact_restrictions} onChange={e => change('contact_restrictions', e.target.value)} placeholder="Por ejemplo: no llamar; solo correo autorizado."/></label>
+          <Section n={2}>
+            <PresenterFields c={c}/>
           </Section>
           <Section n={3} lead="Opcional. No es un registro maestro de personas ni una búsqueda por RUN: conserva los antecedentes de este ingreso.">
-            {persons.length === 0 && <EmptyState compact icon="people" title="Sin personas agregadas">Agrega a un NNA u otra persona solo si es pertinente para este ingreso.</EmptyState>}
-            <ul className="people-list">
-              {persons.map((person, i) => <li className="person-card" key={i}>
-                <div className="person-card-head">
-                  <h3><span className="avatar sm" aria-hidden="true">{i + 1}</span>Persona {i + 1}</h3>
-                  <button type="button" className="ghost sm" onClick={() => setPersons(rows => rows.filter((_, n) => n !== i))}><Icon name="close" size={16}/>Retirar de esta captura</button>
-                </div>
-                <div className="form-grid">
-                  {PERSON_FIELDS.map(k => <label key={k}>{PERSON_LABELS[k]}{k === 'role'
-                    ? <select value={person.role} onChange={e => updatePerson(i, 'role', e.target.value)}>{PERSON_ROLES.map(v => <option key={v} value={v}>{PERSON_ROLE_LABELS[v] ?? v}</option>)}</select>
-                    : <input maxLength={personMax(k)} value={person[k]} onChange={e => updatePerson(i, k, e.target.value)}/>}</label>)}
-                </div>
-              </li>)}
-            </ul>
-            <button type="button" disabled={persons.length >= MAX_PERSONS} onClick={() => setPersons(rows => [...rows, emptyPerson()])}><Icon name="plus" size={18}/>Agregar NNA o persona relacionada</button>
+            <PersonsFields c={c}/>
           </Section>
           <Section n={4}>
             {field('subject', 'Asunto', 240, true, 'text', 'Una frase que permita reconocer el ingreso en las bandejas.')}
             <label><span>Relato original y antecedentes disponibles<span className="required-mark" aria-hidden="true">*</span></span><textarea required rows={6} maxLength={20000} value={values.body} onChange={e => change('body', e.target.value)}/></label>
+            <FactsAndInstitutions c={c}/>
           </Section>
           <Section n={5} lead="Se preparan en almacenamiento privado y se incorporan con la COM al confirmar. Siempre quedan en cuarentena.">
             <div className="file-picker">

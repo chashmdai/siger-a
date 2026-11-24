@@ -16,7 +16,7 @@ import {Icon} from '../../components/Icon';
 import {Busy, Callout, ErrorMessage, PageHeader, Panel} from '../../components/Primitives';
 import {reducedMotion} from '../../components/useExit';
 import type {AttentionData, Person} from './schema';
-import {STEPS, emptyForm} from './schema';
+import {STEPS} from './schema';
 import {controls, FirstContact, FormSection, Listening, ModalitySelect, Outcome} from './FormSections';
 import {AttentionSummary} from './AttentionSummary';
 import {AttentionActions} from './AttentionActions';
@@ -24,8 +24,10 @@ import {Handoffs} from './Handoffs';
 import {PreparedFiles} from './PreparedFiles';
 import {OriginalUpload} from './OriginalUpload';
 import {Preview} from './Preview';
-import {adultProblems, upgrade} from './adult/adultForm.ts';
-import {orderedRegions} from './adult/catalog.ts';
+import {fichaPayload, fichaProblems, prepareFicha, problemStep} from './fichaModel.ts';
+import {orderedRegions} from '../../lib/person/catalog.ts';
+import type {Institution} from '../../lib/person/personModel.ts';
+import {changeSummaryText, statCodes} from '../../lib/person/personModel.ts';
 import {correctedOrigin} from '../../lib/regions';
 
 type Pending = {type: string; id: number | null; revision: number | null; data: Row; key: string};
@@ -44,9 +46,9 @@ const NEXT_STEP: Record<string, ['info' | 'warn', string, string]> = {
 export default function Attention({ctx, row, completed}: {ctx: Context; row?: Row; completed?: (r: Result) => void}) {
   const info = row ? obj(row, 'attention') : {};
   const isNew = !row;
-  // Version guardada: se conserva intacta; el borrador en pantalla se prepara como ficha 1.1 (ver upgrade).
+  // Version guardada: se conserva intacta; el borrador en pantalla se prepara como ficha 1.2 (fichaModel.ts: prepareFicha).
   const saved = row ? obj(info, 'form') : {};
-  const [form, setForm] = useState<AttentionData>(() => upgrade({...emptyForm(), ...saved}) as AttentionData);
+  const [form, setForm] = useState<AttentionData>(() => prepareFicha(saved));
   const [touched, setTouched] = useState<Set<string>>(() => new Set()), [attempted, setAttempted] = useState(false);
   const [editing, setEditing] = useState(isNew), [scope, setScope] = useState(String(ctx.user.home_scope)), [channel, setChannel] = useState('PRESENCIAL'), [received, setReceived] = useState(localTime());
   const [step, setStep] = useState(1), [dirty, setDirty] = useState(false), [reason, setReason] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(false), [preview, setPreview] = useState<Row | null>(null);
@@ -78,11 +80,14 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
 
   const change = (key: string, value: string) => {setForm(old => ({...old, [key]: value})); setDirty(true);};
   const setPeople = (update: (people: Person[]) => Person[]) => {setForm(old => ({...old, people: update(old.people)})); setDirty(true);};
-  const problems = adultProblems(form, saved);
+  const setInstitutions = (update: (items: Institution[]) => Institution[]) => {setForm(old => ({...old, institutions_list: update(old.institutions_list)})); setDirty(true);};
+  // Codigos vigentes de relacion y tipo de institucion (sin listado vigente, solo texto).
+  const codes = statCodes(ctx.catalog);
+  const problems = fichaProblems(form, saved, codes);
   const touch = (key: string) => setTouched(old => old.has(key) ? old : new Set(old).add(key));
   // Regiones en el orden que publica el servidor (catalog.regions), de norte a sur.
   const regionOrder = orderedRegions(list(ctx.catalog, 'regions'));
-  const c = controls(form, change, setPeople, saved, problems, key => attempted || touched.has(key), touch, regionOrder);
+  const c = controls(form, change, setPeople, saved, problems, key => attempted || touched.has(key), touch, regionOrder, codes, setInstitutions);
 
   function goStep(n: number) {
     setStep(n);
@@ -116,10 +121,14 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
     e.preventDefault();
     if (unprepared) {setError('Prepara el archivo seleccionado o retíralo antes de guardar.'); return;}
     if (!String(form.motive).trim()) {setError('Escribe un motivo breve. No necesitas RUN ni todos los datos personales.'); goStep(1); return;}
-    if (Object.keys(problems).length) {setAttempted(true); setError('Revisa los datos marcados en Primer abordaje. Puedes dejarlos en blanco si aún no se conocen.'); goStep(1); return;}
+    const marked = Object.keys(problems);
+    if (marked.length) {
+      const where = Math.min(...marked.map(problemStep));
+      setAttempted(true); setError(`Revisa los datos marcados en ${STEPS[where - 1].title}. Puedes dejarlos en blanco si aún no se conocen.`); goStep(where); return;
+    }
     if (isNew && (!scope || !received || Number.isNaN(new Date(received).getTime()))) {setError('Selecciona el ámbito y una fecha de recepción válida.'); goStep(1); return;}
     if (!isNew && !reason.trim()) {setError('Indica el motivo de la complementación.'); return;}
-    const data: Row = {form};
+    const data: Row = {form: fichaPayload(form)};
     if (isNew) Object.assign(data, {scope_id: Number(scope), channel, received_at: new Date(received).toISOString(), attachment_tokens: attachments});
     else data.reason = reason;
     pending.current = {type: isNew ? 'ATTENTION_CREATE' : 'ATTENTION_SAVE', id: row ? number(row, 'id') : null, revision: row ? number(row, 'revision') : null, data, key: crypto.randomUUID()};
@@ -135,7 +144,7 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
   }
   function cancelEditing() {
     if (!dirty || confirm('¿Descartar los cambios no guardados de esta pantalla?')) {
-      setForm({...emptyForm(), ...obj(info, 'form')} as AttentionData);
+      setForm(prepareFicha(obj(info, 'form')));
       setDirty(false);
       setEditing(false);
       setError('');
@@ -244,6 +253,7 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
             {list(info, 'versions').map(v => <li key={number(v, 'id')}>
               <div className="timeline-head"><strong>{text(v, 'author')}</strong><span className="timeline-meta">{when(v.registered_ms)}</span></div>
               {text(v, 'reason') && <p className="timeline-body">{text(v, 'reason')}</p>}
+              {changeSummaryText(v.change_summary) && <p className="timeline-meta">{changeSummaryText(v.change_summary)}</p>}
               <div className="timeline-actions"><button className="sm" onClick={() => void oldVersion(number(v, 'id'))}><Icon name="eye" size={16}/>Ver versión {text(v, 'requirement_revision')}</button></div>
             </li>)}
           </ol>}
@@ -251,6 +261,6 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
       </details>
     </>}
     {!editing && error && <ErrorMessage>{error}</ErrorMessage>}
-    {preview && <Preview data={preview} close={() => setPreview(null)}/>}
+    {preview && <Preview data={preview} codes={codes} close={() => setPreview(null)}/>}
   </section>;
 }

@@ -4,11 +4,16 @@ import {ChoiceCards} from '../../components/Choice';
 import {Icon} from '../../components/Icon';
 import type {IconName} from '../../components/Icon';
 import {Callout, EmptyState} from '../../components/Primitives';
-import {PERSON_ROLE_LABELS} from '../../lib/labels';
 import type {AttentionData, Person} from './schema';
-import {LABELS, MAX_PEOPLE, OPTIONS, PERSON_FIELDS, PERSON_LABELS, PERSON_ROLES, emptyPerson} from './schema';
+import {LABELS, MAX_PEOPLE, OPTIONS, PERSON_ROLES} from './schema';
 import {AdultContact, AdultPresenter} from './adult/AdultSections';
-import {orderedRegions} from './adult/catalog.ts';
+import {orderedRegions} from '../../lib/person/catalog.ts';
+import type {DeclaredPerson, Institution, StatCodes} from '../../lib/person/personModel.ts';
+import {canonicalInstitutions, canonicalList, emptyPerson, NO_CODES} from '../../lib/person/personModel.ts';
+import type {PersonGroup} from '../../components/person/PersonCard';
+import {PersonCard} from '../../components/person/PersonCard';
+import {InstitutionList} from '../../components/person/InstitutionList';
+import {FactsFields} from '../../components/person/FactsFields';
 
 /** Controles enlazados a la ficha en edicion; cada cambio marca la pantalla con cambios sin guardar. */
 export type Controls = {
@@ -25,14 +30,21 @@ export type Controls = {
   select: (key: string, help?: string) => ReactNode;
   /** Codigos de region en el orden de catalog.regions (orderedRegions). */
   regions: readonly string[];
+  /** Codigos vigentes de relacion y tipo de institucion (sin vigente, solo texto). */
+  codes: StatCodes;
+  setInstitutions: (update: (items: Institution[]) => Institution[]) => void;
+  /** Personas e instituciones de la version guardada, en vista canonica. */
+  previousPeople: DeclaredPerson[];
+  previousInstitutions: Institution[];
 };
 
 export function controls(form: AttentionData, change: Controls['change'], setPeople: Controls['setPeople'],
   previous: Record<string, unknown> = {}, errors: Record<string, string> = {}, shown: (key: string) => boolean = () => false, touch: (key: string) => void = () => {},
-  regions: readonly string[] = orderedRegions(undefined)): Controls {
+  regions: readonly string[] = orderedRegions(undefined), codes: StatCodes = NO_CODES, setInstitutions: Controls['setInstitutions'] = () => {}): Controls {
   const value = (key: string) => String(form[key] ?? '');
   return {
-    form, previous, change, setPeople, touch, regions,
+    form, previous, change, setPeople, touch, regions, codes, setInstitutions,
+    previousPeople: canonicalList(previous.people ?? []), previousInstitutions: canonicalInstitutions(previous.institutions_list ?? []),
     error: key => errors[key] && shown(key) ? errors[key] : undefined,
     input: (key, type = 'text', help, max = 500) => <LabeledField label={LABELS[key] ?? key} help={help}><input type={type} maxLength={max} value={value(key)} onChange={e => change(key, e.target.value)}/></LabeledField>,
     area: (key, help, required = false) => <LabeledField label={LABELS[key] ?? key} help={help} required={required}><textarea rows={key === 'motive' || key === 'story' ? 4 : 3} required={required} maxLength={key === 'safety_note' ? 1000 : 12000} value={value(key)} onChange={e => change(key, e.target.value)}/></LabeledField>,
@@ -55,7 +67,10 @@ export function ModalitySelect({c}: {c: Controls}) {
   ]}/>;
 }
 
-/** Paso 1: motivo, persona requirente, contacto seguro y personas relacionadas. */
+/** Datos de cada persona relacionada a la vista (los mismos de la ficha 1.1); el resto va en "Más datos". */
+export const FICHA_PERSON_MAIN: PersonGroup[] = ['names', 'identity', 'relationship', 'location', 'age', 'birth', 'nationality', 'schooling', 'preferences'];
+
+/** Paso 1: motivo, persona requirente (o NNA que consulta), contacto seguro y personas relacionadas. */
 export function FirstContact({c, intake}: {c: Controls; intake?: ReactNode}) {
   const {form} = c;
   const nna = form.modality === 'NNA';
@@ -66,49 +81,23 @@ export function FirstContact({c, intake}: {c: Controls; intake?: ReactNode}) {
     <FormSection title="Motivo inicial" icon="message" lead="Es lo único necesario para comenzar. Un resumen preliminar basta; no se exige un relato completo.">
       <div className="motive-field">{c.area('motive', undefined, true)}</div>
     </FormSection>
-    {!nna && <AdultPresenter c={c}/>}
-    {!nna && <AdultContact c={c}/>}
-    {nna && <FormSection title="NNA que solicita atención" icon="user" lead="Completa solo lo que la persona entregue. Los datos pueden quedar pendientes.">
-      <div className="form-grid">
-        {c.input('presenter_name', 'text', 'Puede quedar pendiente.', 200)}
-        {c.select('identity_type')}
-        {c.input('identity_document', 'text', 'Dato declarado; no acredita identidad.', 100)}
-        {c.input('relationship')}
-        {c.input('presenter_domicile')}
-        {c.input('nationality')}
-        {c.input('preferred_name', 'text', nna ? 'Cómo prefiere que se le nombre.' : undefined)}
-        {c.input('pronouns')}
-      </div>
-      {c.input('supports', 'text', 'Por ejemplo: intérprete, lengua de señas, lectura fácil.')}
-    </FormSection>}
-    {nna && <FormSection title="Contacto seguro" icon="lock" lead="Registra cómo y cuándo es seguro contactar. En esta fase no se envían correos ni mensajes reales.">
-      <div className="form-grid">
-        {c.input('contact_phone', 'tel', undefined, 80)}
-        {c.input('contact_email', 'email', undefined, 200)}
-        {c.select('safe_contact')}
-        {c.input('region')}
-        {c.input('commune')}
-      </div>
-      {c.area('safety_note', 'Por ejemplo: no llamar al teléfono del hogar; solo contactar en horario escolar.')}
-      {form.safe_contact === 'NO_CONTACTAR' && <Callout tone="warn">Quedará destacado en la ficha que no se debe contactar por estos medios.</Callout>}
-    </FormSection>}
+    <AdultPresenter c={c} nna={nna}/>
+    <AdultContact c={c} nna={nna}/>
     <FormSection title="NNA y personas relacionadas" icon="people" lead="No es un registro maestro de personas ni requiere RUN. Un acompañante no es automáticamente representante.">
       {c.select('children_scope')}
-      {form.children_scope === 'GRUPO' && <div className="form-grid">{c.input('group_description')}{c.input('approximate_count')}</div>}
+      {form.children_scope === 'GRUPO' && <div className="form-grid">{c.input('group_description')}
+        <LabeledField label={LABELS.approximate_count} help="Número entero." error={c.error('approximate_count')}>
+          <input type="text" inputMode="numeric" maxLength={6} value={String(form.approximate_count ?? '')} aria-invalid={!!c.error('approximate_count') || undefined}
+            onChange={e => c.change('approximate_count', e.target.value)} onBlur={() => c.touch('approximate_count')}/>
+        </LabeledField>
+      </div>}
       {form.people.length === 0 && <EmptyState compact icon="people" title="Sin personas agregadas">Agrega solo a quienes sea pertinente individualizar en esta atención.</EmptyState>}
       <ul className="people-list">
-        {form.people.map((p, i) => <li className="person-card" key={i}>
-          <div className="person-card-head">
-            <h3><span className="avatar sm" aria-hidden="true">{i + 1}</span>Persona relacionada {i + 1}</h3>
-            <button type="button" className="ghost sm" onClick={() => c.setPeople(people => people.filter((_, n) => i !== n))}><Icon name="close" size={16}/>Retirar de esta versión</button>
-          </div>
-          <div className="form-grid three">
-            <LabeledField label="Relación con la atención"><select value={p.role} onChange={e => updatePerson(i, 'role', e.target.value)}>{PERSON_ROLES.map(v => <option key={v} value={v}>{PERSON_ROLE_LABELS[v] ?? v}</option>)}</select></LabeledField>
-            {PERSON_FIELDS.map(k => <LabeledField key={k} label={PERSON_LABELS[k]}><input type={k === 'birth_date' ? 'date' : 'text'} maxLength={500} value={p[k]} onChange={e => updatePerson(i, k, e.target.value)}/></LabeledField>)}
-          </div>
-        </li>)}
+        {form.people.map((p, i) => <PersonCard key={i} index={i} title={`Persona relacionada ${i + 1}`} person={p} previous={c.previousPeople}
+          change={(key, value) => updatePerson(i, key, value)} error={key => c.error(`people.${i}.${key}`)} touch={key => c.touch(`people.${i}.${key}`)}
+          codes={c.codes} regions={c.regions} main={FICHA_PERSON_MAIN} roles={PERSON_ROLES} remove={() => c.setPeople(people => people.filter((_, n) => i !== n))}/>)}
       </ul>
-      <button type="button" disabled={form.people.length >= MAX_PEOPLE} onClick={() => c.setPeople(people => [...people, emptyPerson()])}><Icon name="plus" size={18}/>Agregar persona relacionada</button>
+      <button type="button" disabled={form.people.length >= MAX_PEOPLE} onClick={() => c.setPeople(people => [...people, emptyPerson('NNA')])}><Icon name="plus" size={18}/>Agregar persona relacionada</button>
     </FormSection>
   </>;
 }
@@ -131,8 +120,14 @@ export function Listening({c}: {c: Controls}) {
       {c.area('observations', 'Hechos observables; no atribuir competencias clínicas al rol de registro.')}
       {c.area('orientation')}
     </FormSection>
+    <FormSection title="Lugar de los hechos" icon="flag" lead="Opcional. Dónde ocurrieron los hechos que motivan la atención, si se conocen.">
+      <FactsFields values={form} previous={c.previous} change={c.change} error={c.error} touch={c.touch} regions={c.regions}/>
+    </FormSection>
     <FormSection title="Antecedentes complementarios" icon="layers">
-      {c.area('institutions')}
+      <h3 className="form-subtitle">Instituciones intervinientes</h3>
+      <InstitutionList items={form.institutions_list} previous={c.previousInstitutions} update={c.setInstitutions} error={key => c.error(`institutions_list.${key}`)}
+        touch={key => c.touch(`institutions_list.${key}`)} codes={c.codes} regions={c.regions}/>
+      {String(c.previous.institutions ?? '') !== '' && c.area('institutions', 'Registrado antes como texto; se conserva. Agrega las instituciones en la lista.')}
       <div className="form-grid">{c.select('judicial_status')}{c.select('priority', 'No cambia la complejidad del REQ ni activa protocolos automáticos.')}</div>
       {form.judicial_status === 'SI' && <div className="form-grid three nested">{c.input('court')}{c.input('rit')}{c.input('ruc')}{c.select('guardian_status')}{c.input('guardian_name')}</div>}
       {form.priority === 'PRIORITARIA' && c.area('priority_note')}

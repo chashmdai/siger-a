@@ -1,5 +1,6 @@
-// Ficha 1.1: identificacion y contacto estructurados de la persona adulta (modalidad GENERAL). La ficha NNA conserva
-// sus campos. Todo es opcional salvo el motivo; los datos son declarados y nunca se presentan como verificados.
+// Ficha 1.1: identificacion y contacto estructurados de la persona adulta (modalidad GENERAL). La ficha NNA 1.1 conserva
+// sus campos; la ficha 1.2 (0.8.0, fichaModel.ts) aplica presenterProblems en ambas modalidades. Todo es opcional salvo
+// el motivo; los datos son declarados y nunca se presentan como verificados.
 import {communesOf, isCountry, matchCommune, matchCountry, matchRegion, NATIONALITY_PREFIX, regionName, validCommune, validNationality, validRegion} from './catalog.ts';
 import {birthDateProblem, canonicalMobile, cleanEmail, documentNumberProblem, formatRunNumber, MOBILE_PATTERN, nameProblem, normalizeDocumentNumber, normalizeName, pastedRun, validEmail, validRun} from './identity.ts';
 
@@ -72,8 +73,14 @@ export function documentSummary(form: Form): string {
  * historico) no se revalida. Vacio nunca es un problema: la ficha admite informacion parcial.
  */
 export function adultProblems(form: Form, previous: Form = {}): Record<string, string> {
+  return form.modality === 'NNA' ? {} : presenterProblems(form, previous);
+}
+/**
+ * Las mismas reglas sin mirar la modalidad: la ficha 1.2 (0.8.0, D33) las aplica tambien a la modalidad NNA
+ * (Attention.version12 con allModalities). La ficha 1.1 sigue usando adultProblems.
+ */
+export function presenterProblems(form: Form, previous: Form = {}): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (form.modality === 'NNA') return errors;
   const kept = (key: string) => str(form, key) !== '' && str(form, key) === str(previous, key);
   const check = (key: string, problem: string | null) => {if (problem && !kept(key)) errors[key] = problem;};
   for (const key of NAME_KEYS) check(key, nameProblem(str(form, key)));
