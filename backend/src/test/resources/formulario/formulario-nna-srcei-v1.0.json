@@ -1,0 +1,84 @@
+{
+  "comunicacion" : {
+    "version" : "1.0",
+    "id" : "66666666-6666-4666-8666-666666666670",
+    "recorridoId" : "66666666-6666-4666-8666-666666666667",
+    "tipo" : "NNA",
+    "recibidaEn" : "2026-11-15T12:00:00Z",
+    "avisoVersion" : "NNA_SRCEI_SINTETICO_1",
+    "aceptaCanalDigital" : false,
+    "datos" : {
+      "campos" : {
+        "nna-primary-method" : "unsafe",
+        "nna-region" : "13",
+        "nna-story" : "Relato exclusivamente sintético para el contrato NNA SRCeI."
+      },
+      "personas" : [ ],
+      "instituciones" : [ ],
+      "adjuntos" : [ ]
+    },
+    "personas" : [ {
+      "id" : "presentador-nna",
+      "rol" : "PRESENTADOR",
+      "runNumero" : "99999999",
+      "runDv" : "9",
+      "modulo11" : true,
+      "autenticada" : false,
+      "estadoConsulta" : "PARCIAL",
+      "consultadaEn" : "2026-11-15T12:00:00Z",
+      "consultaRef" : "66666666-6666-4666-8666-666666666666",
+      "atributos" : {
+        "primerApellido" : {
+          "valor" : "APELLIDO SINTETICO",
+          "codigo" : null,
+          "fuente" : "SRCEI",
+          "nivel" : "CONTRASTADO_EN_FUENTE",
+          "observadoEn" : "2026-11-15T12:00:00Z",
+          "evidencia" : "66666666-6666-4666-8666-666666666666"
+        },
+        "fechaNacimiento" : {
+          "valor" : "2012-03-04",
+          "codigo" : null,
+          "fuente" : "SRCEI",
+          "nivel" : "CONTRASTADO_EN_FUENTE",
+          "observadoEn" : "2026-11-15T12:00:00Z",
+          "evidencia" : "66666666-6666-4666-8666-666666666666"
+        },
+        "runDv" : {
+          "valor" : "9",
+          "codigo" : null,
+          "fuente" : "SRCEI",
+          "nivel" : "CONTRASTADO_EN_FUENTE",
+          "observadoEn" : "2026-11-15T12:00:00Z",
+          "evidencia" : "66666666-6666-4666-8666-666666666666"
+        },
+        "runNumero" : {
+          "valor" : "99999999",
+          "codigo" : null,
+          "fuente" : "SRCEI",
+          "nivel" : "CONTRASTADO_EN_FUENTE",
+          "observadoEn" : "2026-11-15T12:00:00Z",
+          "evidencia" : "66666666-6666-4666-8666-666666666666"
+        },
+        "nombres" : {
+          "valor" : "NOMBRE SINTETICO",
+          "codigo" : null,
+          "fuente" : "SRCEI",
+          "nivel" : "CONTRASTADO_EN_FUENTE",
+          "observadoEn" : "2026-11-15T12:00:00Z",
+          "evidencia" : "66666666-6666-4666-8666-666666666666"
+        }
+      },
+      "discrepancias" : { }
+    } ],
+    "adjuntos" : [ ]
+  },
+  "sha256" : "277f40bf49f67c6ffecdcd31ee8de29d3c612f5821533020441f72c83840ec56",
+  "huellaProcedencia" : "dfa631787f07fee7d3b6e80d615f4086a214986f8192687ea29a8929cadcf91f",
+  "custodia" : {
+    "algoritmo" : "Ed25519",
+    "keyId" : "nna-srcei-public-test",
+    "payload" : "eyJ2ZXJzaW9uIjoiMS4wIiwiaWQiOiI2NjY2NjY2Ni02NjY2LTQ2NjYtODY2Ni02NjY2NjY2NjY2NzAiLCJyZWNpYmlkYUVuIjoiMjAyNi0xMS0xNVQxMjowMDowMFoiLCJ0aXBvUmVjZXBjaW9uIjoiQ1VTVE9ESUFfUFVCTElDQSIsImh1ZWxsYUNvbnRlbmlkbyI6IjI3N2Y0MGJmNDlmNjdjNmZmZWNkY2QzMWVlOGRlMjlkM2M2MTJmNTgyMTUzMzAyMDQ0MWY3MmM4Mzg0MGVjNTYiLCJodWVsbGFQcm9jZWRlbmNpYSI6ImRmYTYzMTc4N2YwN2ZlZTdkM2I2ZTgwZDYxNWY0MDg2YTIxNDk4NmY4MTkyNjg3ZWEyOWE4OTI5Y2FkY2Y5MWYiLCJlbWlzb3IiOiJGT1JNVUxBUklPX1BVQkxJQ09fREROIiwiYXZpc29WZXJzaW9uIjoiTk5BX1NSQ0VJX1NJTlRFVElDT18xIn0",
+    "firma" : "HzPqujLt3G17ottAbAPBp4gDMhmU0REu9w_Wp2gMMwCS1KL1WWEz51-9_zZ2EXqMhfZhFb_tn2CqWz8GB239Cw"
+  }
+}

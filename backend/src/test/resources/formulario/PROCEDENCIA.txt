@@ -1,0 +1,31 @@
+Procedencia de los recursos del contrato del Formulario Publico (SIGER 0.8.0, gate E00, 2026-11-24).
+
+Repositorio: chashmdai/formulario-web, leido sin modificarlo (clon temporal fuera de este repositorio).
+Commit: 6f886eb125695f284be495ae1593547875b1c834 (2026-11-15, main).
+Nota contractual: contratos/NOTA_PROCEDENCIA_RUN_SRCEI.md (RUN del presentador NNA con fuente SRCEI y nivel
+CONTRASTADO_EN_FUENTE, no autenticado; "SIGER debe confirmar su consumidor antes de desplegar").
+
+Los tres archivos de esta carpeta son copia byte a byte del blob de git (fin de linea LF). Las huellas son SHA-256 del
+contenido con fin de linea LF: las pruebas pasan CRLF a LF antes de calcularlas y antes de ExternalOriginal.parse (una
+copia de trabajo de Windows con "* text=auto" tiene CRLF). La clave publica es solo de prueba: no se instala en un
+ambiente operativo. No se copia la clave institucional sintetica (institution-public-nna-srcei-test.json): solo
+verifica los ACK de ejemplo del Formulario; las pruebas de SIGER firman su ACK con un par propio generado en memoria.
+Los vectores contienen solo identidad ficticia (RUN 99999999-9).
+
+Formato de cada linea de huella: <sha256>  <nombre>  <origen en formulario-web>
+
+f7cbc491ad0426ab7afcccd898f0854bf8aa28cf17d12466ae28e38d95ee9380  formulario-nna-srcei-v1.0.json  contratos/fixtures/formulario-nna-srcei-v1.0.json
+3ae1f376e5b980260ff02e5ddabf571cdfbbb52edeb2b9fb7c1537ee68d4ff87  formulario-nna-srcei-v1.1.json  contratos/fixtures/formulario-nna-srcei-v1.1.json
+3c003093b1a504ca0f65cd173980e0683d9d6af384756091050746e3177da5dc  public-nna-srcei-test.json  contratos/fixtures/public-nna-srcei-test.json
+
+Adjunto del vector 1.1 (no es un archivo del Formulario: sus 45 bytes los define NnaSrceiFixtures.original(), en
+formulario-publico/backend/src/test/java/cl/nexbyte/siger/robustez/NnaSrceiFixtures.java; la prueba de recepcion los
+incrusta):
+
+b5a546c94e508a25afa40d7b4f4e2a7e43c51eedfb477bc6816f14a5d10ab8bb  adjunto-v1.1  NnaSrceiFixtures.original()
+
+Catalogos del Formulario (no se copian; SIGER tiene los suyos en backend/src/main/resources/catalog/ y en
+frontend/src/features/attention/adult/, que deben tener la misma huella):
+
+191621ac1fbbe69e7d45eb069b193c76493b4373ad187267b5339a76c98ae66b  territorio.json  formulario-publico/front/src/formulario/territorio.json
+0cc7d5c8eb3054cde6cf11c35b124facc58a1dbb793096673cbd1666f0e4bd26  paises.json  formulario-publico/front/src/formulario/paises.json

@@ -236,3 +236,204 @@ receptor central), por la via de avisos que ya existe: "Mis avisos" y, con el co
      gate y aprobada en el GO.
    - Graph: sin prueba real previa en TEST-SIGER (decision del responsable): el correo se activa en V4 segun D16 y, si
      falla, se corrige en produccion.
+
+## Precision 0.8.0 - normalizacion integral e inteligencia de negocios para Estudios
+
+Copia textual de las decisiones D25-D51 de `docs/PLAN_0_8_0.md` (seccion 0), aprobadas por el responsable el
+2026-11-24, con sus precisiones del plan, las respuestas DI-05 a DI-10 y los ajustes de aprobacion (gate E00). Las
+definiciones institucionales abiertas (DI-xx) y las respuestas posteriores estan en `docs/BITACORA_0_8_0.md`; el
+diseno de referencia, en `docs/DISENO_0_8_0.md`.
+
+D25. **Unidad estadistica del requerimiento recibido** (DP-01). La COM es la unidad estadistica del requerimiento
+recibido, exista o no un REQ. La cadena COM, SOL, REQ y Caso se cuenta una sola vez. Las COM invalidas se excluyen, las
+duplicadas se cuentan y las vinculadas como antecedente no se cuentan como requerimientos nuevos. Se incluyen las
+pendientes y las primeras atenciones. Reaperturas, transferencias y Casos adicionales no multiplican el conteo.
+   - Precision del plan: computable = estado distinto de INVALIDA y de VINCULADA; una COM cuyo vinculo se devolvio
+     vuelve a NUEVA y vuelve a contar (`DISENO` 4.1). Las excluidas y los antecedentes se informan aparte, nunca se
+     pierden.
+
+D26. **Fechas y periodos** (DP-02). `received_ms` para la demanda institucional, `created_ms` para el registro
+administrativo y la fecha de creacion del REQ para el analisis operacional, en America/Santiago. Periodos
+personalizados y predefinidos: Cuenta Publica (julio a junio), anio calendario, semestre, trimestre y mes. Se
+identifican los registros tardios. Los reportes operacionales existentes se conservan.
+   - Precision del plan: registro tardio = recibido en el periodo y registrado despues de su fin (`DISENO` 5.5).
+
+D27. **Catalogos estadisticos versionados.** Precision del plan para D29-D31 y D34-D36: cada catalogo (tipo de
+solicitud, requirente, via, contexto, caracterizacion, derecho, tipo de actuacion, tipo de institucion, relacion) es un
+dato versionado con estado PROPUESTA, VIGENTE o RETIRADA, fuente y fundamento; TI lo importa y activa (D1), su
+contenido lo valida la institucion; ninguna migracion lo siembra; las correspondencias entre versiones permiten
+comparar anios. Cada clasificacion guarda la version del catalogo con que se registro (`DISENO` 3.1).
+
+D28. **Captura progresiva, estados y completitud** (DP-12). Captura progresiva sin bloquear ingresos ni atencion
+urgente. Las dimensiones estadisticas pertinentes deben estar resueltas al cierre. Estados: pendiente, sin informacion,
+no declarado, no aplica e informado; el estado pendiente impide el cierre. No se obliga a inventar datos. Indicadores de
+calidad y completitud por variable, ambito y periodo.
+   - Precision del plan: variables pertinentes por tipo de cierre en `DISENO` 4.5; una variable solo es exigible si su
+     catalogo tiene version VIGENTE; una propuesta no es un estado: deja la variable pendiente hasta su confirmacion;
+     una sola regla (`StatCompleteness`) para los bloqueos que se muestran y los que se validan.
+
+D29. **Tipo de solicitud** (DP-04). Clasificacion institucional: vulneracion, consulta u orientacion, promocion,
+reclamo sobre otra institucion, otro y valores especiales. Catalogo versionado sujeto a validacion institucional. Los
+datos estructurados del Formulario son propuesta, que un funcionario confirma o corrige. Se conserva el dato original.
+   - Precision del plan: reglas de propuesta version 1 en `DISENO` 4.2 (la COM NNA no tiene propuesta).
+
+D30. **Tipo de requirente y roles** (DP-05). Clasificacion independiente: persona natural adulta, NNA, persona
+juridica u organismo, actuacion de oficio y valores especiales. Se distinguen presentador, requirente, representacion,
+modalidad de atencion y persona afectada.
+   - Precision del plan: equivalencias de roles en `DISENO` 2.3; los codigos historicos de roles no se reescriben.
+
+D31. **Via de ingreso** (DP-06). Formulario Publico adulto, Formulario Publico NNA, presencial, correo, telefono,
+oficio, redes sociales, integrante de la Defensoria y otro. Agrupaciones estadisticas sin perder el canal original. Se
+diferencian via, modalidad de atencion, tipo de requirente y medio de contacto. Correcciones auditadas.
+   - Precision del plan: canales manuales nuevos `REDES_SOCIALES` e `INTEGRANTE_DEFENSORIA`; la via se deriva del canal
+     (estado informado, origen sistema) y una correccion es un evento con motivo; el canal original no cambia.
+
+D32. **Territorio multidimensional** (DP-07). Region y comuna del requirente, del NNA afectado y de los hechos;
+sede responsable inicial y vigente; cobertura territorial historica; region de origen registrada. No se confunden
+estas dimensiones ni se modifican inadvertidamente las reglas territoriales vigentes.
+   - Precision del plan: fuentes por dimension en `DISENO` 4.6. D18-D24 no cambian, salvo una precision de D21
+     aprobada aqui: una COM manual tiene region de origen si la registra su ficha de ingreso (D33). D22 no cambia.
+   - DI-08 (2026-11-24): el rotulo de la region de la ficha es "Region y comuna del requirente", sin modificar D21.
+
+D33. **Normalizacion integral de la captura** (DP-08 y condicion transversal). El Formulario y las fichas de SIGER son
+referencias complementarias; la ficha presencial conserva integramente su informacion institucional. Un mismo dato
+tiene la misma estructura y significado en todos los mecanismos. Region y comuna estructuradas en la ficha NNA y en la
+COM manual; normalizacion de identidad, contacto, personas relacionadas e instituciones; reutilizacion de componentes
+y validaciones; se conservan los campos exclusivos, la captura progresiva, los datos historicos y su procedencia; no se
+inventa informacion ni se dividen nombres historicos; se distingue complementacion de rectificacion; no se duplican
+fuentes de verdad. No se modifican los originales firmados, contratos ni protocolos de integracion del Formulario.
+   - Precision del plan: matriz en `DISENO` 2.2; esquema canonico `persona-1` (2.4); ficha 1.2 (3.4); ficha de ingreso
+     de la COM manual (3.5); resumen de cambios COMPLEMENTO/RECTIFICACION calculado por el servidor (2.5).
+
+D34. **Derechos, contexto y caracterizacion** (DP-09). Clasificacion oficial de derechos de la Defensoria segun su
+version vigente, con categorias, subcategorias y dimensiones; sin inventar categorias ni suponer 24 derechos. Se
+distinguen contexto, derechos afectados y caracterizacion de la vulneracion. Seleccion multiple, busqueda, navegacion
+jerarquica, clasificacion progresiva e historial. Componente reutilizable: en `RequirementDetail.tsx` despues de "Datos
+del REQ", en `CaseDetail.tsx` despues de "Datos del Caso", accesible desde "Registrar actuacion" y desde la primera
+atencion. Clasifican profesionales, integrantes autorizados, jefaturas, direcciones y coordinaciones regionales dentro
+de sus facultades efectivas de gestion, sin rol nuevo, respetando ambito y lectura institucional. Los derechos se
+consolidan entre REQ y Casos sin duplicar conteos ni exponer informacion no autorizada.
+   - Precision del plan: version vigente identificada = "Modelo de conceptualizacion y categorizacion de derechos de la
+     ninez y adolescencia", version 2.0 (2022): 4 ejes, 17 derechos y sus subcategorias (`DISENO` 11), los mismos 17 del
+     Informe Anual 2026; confirmacion institucional en DI-04. Reglas de clasificacion y consolidacion en `DISENO` 4.3 y
+     4.4.
+
+D35. **Inmutabilidad de los expedientes cerrados** (DP-09 y DP-15). Un expediente cerrado es inmutable; cualquier
+modificacion requiere reapertura formal, sin excepciones para jefaturas, direcciones, UEP o TI.
+   - Precision del plan: rige para toda clasificacion, actuacion y ficha; las excepciones actuales que no modifican el
+     expediente (`LINK_DECIDE` sobre un REQ cerrado y `CASE_ACK`) se documentan y se prueban (`DISENO` 1.2, S2). La COM
+     descartada no tiene reapertura: su clasificacion queda como se registro al descartarla.
+
+D36. **Actuaciones y respuestas institucionales** (DP-10). Se actualizan los mecanismos existentes de actuaciones; no
+se crea un modulo paralelo. Tipificacion estructurada de orientaciones, respuestas directas, derivaciones externas,
+oficios, denuncias administrativas y penales, medidas de proteccion, querellas, acciones constitucionales, amicus curiae
+y otras actuaciones; fecha efectiva, autor, ambito e instituciones cuando corresponda; se conservan constancias,
+documentos, reserva e historial; se distinguen acciones realizadas de compromisos; se cuentan actuaciones y
+requerimientos unicos; no se desarrolla un sistema paralelo de seguimiento judicial.
+   - Precision del plan: `management_note.action_type`, `note_institution`, `task_item.action_type` (compromiso) y
+     resultado estructurado de la primera atencion (`DISENO` 3.3).
+
+D37. **Dimensiones temporales de analisis** (DP-11). Analisis segun las dimensiones al ingreso de la COM, al
+constituirse el REQ, vigentes, a una fecha historica y segun cortes estadisticos, sin reconstruir informacion historica
+sin evidencia (`DISENO` 4.7).
+
+D38. **Motor estadistico nativo y explorador** (DP-13). Motor estadistico propio en Java y MySQL; SIGER es la
+herramienta principal de analisis institucional, sin depender de Excel ni Power BI. Explorador multidimensional
+intuitivo para Estudios: filtros combinables, cruces, tablas dinamicas, matrices, comparaciones temporales, series
+historicas, frecuencias, porcentajes, graficos y configuraciones reutilizables. Pantalla, exportacion y cortes comparten
+una unica metodologia de calculo; agregacion eficiente en SQL; metodologia, permisos y validaciones en Java.
+   - Precision del plan: fuente derivada unica por COM sin tabla materializada para lo vigente, objetivo de rendimiento
+     y alternativa con decision (`DISENO` 5).
+   - Ajuste de aprobacion: edad (en anios y por tramos) y nacionalidad (pais y agrupacion) del NNA afectado y del
+     requirente persona natural son dimensiones estadisticas, calculadas solo desde datos estructurados; sin informacion
+     suficiente, la categoria es "sin informacion" y el explorador muestra el porcentaje con dato (`DISENO` 4.8).
+   - Ajuste de aprobacion: graficos de barras, barras apiladas, lineas y circulares; el circular solo para una
+     distribucion de valor unico cuyas partes suman el total (`DISENO` 10.3).
+
+D39. **Cortes estadisticos** (DP-03). Inmutables, versionados, auditados y reproducibles, con fundamento, metodologia,
+catalogos, calendario, filtros, metadatos y SHA-256; comparables con datos vigentes y con otros cortes. Destinataria
+principal: la Direccion de UEP, en especial Estudios. Se respetan las facultades existentes y se definen las necesarias
+para generarlos (D43).
+
+D40. **Exportaciones** (DP-13). CSV, XLSX y ZIP con agregados, microdatos estadisticos autorizados, diccionarios,
+catalogos, metadatos y huellas de integridad; exportacion de graficos y tablas. Las dependencias nuevas se evaluan antes
+de pedir autorizacion.
+   - Precision del plan: XLSX y ZIP con la JDK; sin dependencias nuevas salvo autorizacion (DI-12); contenido del
+     paquete en `DISENO` 8.
+   - Ajuste de aprobacion: las dimensiones multivaluadas (derechos, contexto, caracterizacion, actuaciones,
+     instituciones y datos de varios NNA afectados) se exportan sin duplicar requerimientos ni perder valores: el
+     microdato tiene una fila por requerimiento y un archivo relacionado con una fila por requerimiento y valor; el
+     agregado distingue requerimientos con el valor, menciones y total de requerimientos unicos (`DISENO` 4.4 y 8).
+
+D41. **Cifras exactas y proteccion de datos** (DP-14). Se reportan las cifras exactas, incluso categorias con un solo
+requerimiento. No hay supresion primaria ni secundaria, modo publicable diferenciado ni limite arbitrario de
+dimensiones. Se mantienen permisos, auditoria, proteccion de datos personales y reserva; el riesgo residual de
+reidentificacion se documenta; la reportabilidad integra no autoriza exponer identidades ni antecedentes reservados.
+
+D42. **Series historicas y clasificacion retrospectiva** (DP-15). Importacion de series agregadas de informes
+anteriores o del legado con un asistente CSV/XLSX muy simple (plantillas, correspondencia de columnas, vista previa,
+validacion, fuente, periodo, metodologia y confirmacion). Comparaciones historicas sin combinar automaticamente series
+incompatibles o superpuestas. No se migran expedientes ni se conecta al legado. Clasificacion retrospectiva de registros
+propios de SIGER con trazabilidad y reapertura obligatoria cuando esten cerrados.
+   - Ajuste de aprobacion: cada serie declara su ambito (institucional o una sede) al importarse; la ven las cuentas con
+     REPORTES cuyo alcance cubre ese ambito; la importan y anulan cuentas con GESTION_ESTADISTICA en ese alcance; TI no
+     accede (D2); exportarla exige EXPORTACION (`DISENO` 7).
+   - DI-07 (2026-11-24): se conservan integramente el mecanismo de reapertura y el motor de tiempos; sin modalidades
+     especiales de reapertura ni cambios en `REQ_TOTAL`. La trazabilidad de lo retrospectivo la registra el sistema en
+     el evento (referencia a la reapertura vigente y origen RETROSPECTIVA).
+
+D43. **Facultades estadisticas.** Precision del plan para D38-D42: funcion nueva `GESTION_ESTADISTICA` (alcance
+opcional, exige REPORTES en el mismo alcance, incompatible con TI) para generar y anular cortes, importar y anular
+series y compartir configuraciones; REPORTES ve el explorador, los cortes y las series de su alcance; EXPORTACION
+exporta, incluidos los microdatos; TI administra los catalogos; la clasificacion usa la facultad efectiva de gestion
+(`DISENO` 9). Aprobada por el responsable el 2026-11-24.
+
+### Hoja de ruta 0.9.0, no vigente en 0.8.0 (D44-D49)
+
+Hoja de ruta 0.9.0: D44 a D49 quedan aprobadas y postergadas por decision del responsable del 2026-11-24 (seccion 3);
+no rigen en 0.8.0, ningun gate de 0.8.0 las implementa y se conservan para la planificacion de 0.9.0 (seccion 9).
+
+D44. **Fechas de las sedes** (DP-16). Fecha proyectada, apertura efectiva y activacion como datos distintos.
+   - Precision del plan: `opens_ms` = apertura proyectada; `opened_ms` = apertura efectiva declarada por TI;
+     `activated_ms` = instante de `SCOPE_ACTIVATE`; la historia de la activacion se reconstruye desde `AMBITO_ACTIVADO`
+     marcada como reconstruida (`DISENO` 3.6).
+   - DI-06 (2026-11-24): tres fechas independientes. TI declara la apertura efectiva al activar la sede, con la fecha
+     actual por defecto y posibilidad de modificarla (en la activacion y despues, con motivo auditado).
+
+D45. **Distribucion territorial del Formulario** (DP-16). Se incorporara en 0.9.0 (`DISENO` 15.2).
+   - DI-05 (2026-11-24): distribucion por la coordinacion regional de la sede del territorio, con respaldo central;
+     visibilidad nacional para la distribucion central; las COM sin region quedan a cargo del nivel central; avisos
+     territoriales; las devoluciones vuelven a la bandeja que corresponda; ante concurrencia prevalece la primera
+     operacion valida.
+
+D46. **Correo de avisos** (DP-16). Folio en el aviso, asunto segun el tipo de aviso y enlace directo a la ficha, sin
+datos ciudadanos (`DISENO` 15.3).
+   - DI-09 (2026-11-24): asuntos diferenciados segun los eventos existentes que generan avisos, con folio, descripcion
+     breve y enlace directo cuando este habilitado el acceso por red; sin datos personales.
+
+D47. **Observaciones de funcionarios** (DP-16). Se incorporan conforme se reciban y validen: el responsable las registra
+y valida en la bitacora y cada una se convierte en un gate acotado. En 0.8.0 solo se registran; su incorporacion pasa
+a 0.9.0, salvo que el responsable decida expresamente incluir una que corresponda a los objetivos de 0.8.0.
+
+D48. **Indice de `inbox_notice`** (DP-16). Se evalua con medicion y se implementa solo si se justifica (`DISENO` 15.4).
+
+D49. **Scripts** (DP-16). Antiguedad del respaldo en `Update.ps1` y paso de RDP a acceso por red, cada uno en un gate
+propio de scripts.
+   - DI-10 (2026-11-24): desestimada la renovacion del certificado; se mantienen el certificado y la configuracion
+     HTTPS actuales.
+
+### Vigentes en 0.8.0 (D50-D51)
+
+D50. **Actualizacion de produccion y verificacion** (DP-17). Se aprovechan los ensayos y evidencias existentes; no se
+repiten innecesariamente las pruebas de infraestructura. Las verificaciones se concentran en las migraciones nuevas,
+H2 y MySQL 8.4, la integridad de datos, los permisos, los originales firmados y las funcionalidades nuevas. Se ensaya la
+actualizacion desde la version efectiva de produccion, con respaldo previo verificado y auditoria independiente. Una
+vez autorizada, la actualizacion se instala sin periodos artificiales de espera.
+
+D51. **Organizacion de la version** (DP-18, ajustada por el responsable el 2026-11-24). 0.8.0 se concentra en la
+normalizacion integral y la inteligencia de negocios para Estudios; los pendientes operacionales (D44-D49) pasan a 0.9.0
+(seccion 9). Sin otra division ni limite artificial de gates: los gates se consolidan segun las dependencias reales, sin
+comprometer criterios, pruebas ni seguridad. Prefijo E, decisiones D25 en adelante y migraciones V17 en adelante. La
+facilidad de uso es criterio transversal de aceptacion, en especial para la Direccion de UEP (`DISENO` 10.5). El
+ejecutor puede ser Claude Code o Codex: el repositorio agrega un `AGENTS.md` que remite a `CLAUDE.md`, sin duplicar
+contenido.
