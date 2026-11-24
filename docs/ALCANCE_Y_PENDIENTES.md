@@ -111,9 +111,9 @@ la validacion. Solo un consumidor por cola: al activar produccion, el de la vali
 
 ## Pendientes que NO se presentan como terminados
 
-- **Paquete 0.7.0**: auditoria independiente (T05, externa), build de entrega en Windows (T06a) y ensayo diferencial
-  con la etiqueta `v0.7.0` (T06b) de `docs/PLAN_0_7_0.md`. V4 usa 0.7.0 solo si al corte del 07/12 T06b esta CERRADO,
-  existe `v0.7.0` y el responsable lo aprueba de forma expresa; si no, V4 usa el paquete 0.6.0
+- **Uso del paquete 0.7.0 en V4**: el paquete `SIGER-20261123-133838.zip` (T06a) quedo ensayado en TEST-SIGER (T06b,
+  CERRADO) con la etiqueta `v0.7.0`. V4 lo usa solo si el responsable lo aprueba de forma expresa al corte del 07/12;
+  si no, V4 usa el paquete 0.6.0
   (`SIGER-20261122-201515.zip`, H06d), sin `cobertura` ni `coberturaNivelCentral` en la estructura, y 0.7.0 queda para
   despues del 15/12 con su propio ensayo de `Update.ps1`. Recorridos de 0.7.0 en `docs/PRUEBAS_MANUALES_0_7_0.md`.
 - Ejecucion en la VM de la salida a produccion (pasos V1-V6 de `docs/PLAN_0_6_0.md` y `docs/DESPLIEGUE_VM.md`): cierre
@@ -132,6 +132,9 @@ Pendientes para 0.8.0 (cada uno toma un gate propio cuando se planifique):
   COM de su territorio; cambia el modelo de acceso y requiere decision propia.
 - **Region de la ficha en la modalidad NNA**: hoy es texto libre y casi siempre queda "sin region declarada" (hallazgo de
   T02).
+- **Fecha de apertura al activar una sede** (observacion de T06b, comportamiento anterior a 0.7.0): `SCOPE_ACTIVATE`
+  conserva la fecha de apertura proyectada que ya estaba declarada (`COALESCE`), aunque la sede se active antes; en el
+  ensayo, la sede activada siguio mostrando "Apertura 01-03-27". Decidir si la activacion registra la fecha real.
 
 Pendientes sin version asignada (detalle en `docs/BITACORA_0_6_0.md`):
 
