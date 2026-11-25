@@ -60,6 +60,10 @@ sobre MySQL 8.4 con `MySqlSuite`).
 - `StatCompleteness` (E07): una regla alimenta bloqueos visibles y valida el cierre del REQ, la resolución de primera
   atención y el descarte duplicado. Suma la clasificación del REQ y sus Casos para saber si una vulneración está
   completa. La región del requirente se mide como calidad y la propuesta sigue pendiente hasta su confirmación.
+- `StatSource` / `StatEngine` (E08): motor estadístico nativo (`POST /api/stats/query`, contrato en
+  `CONTRATO_STATS_0_8_0.md`). Una fila por COM y relaciones aparte para lo multivaluado, agregadas en SQL dentro del
+  alcance de REPORTES; porcentajes, comparaciones, rótulos y avisos en Java. Corte "al constituirse el REQ" al fin del
+  comando que lo creó; `Workflow` espera a que el reloj supere el fin del comando anterior y evita empates.
 - `PersonIndex` / `PersonSearch`: indice de coincidencias de personas (derivado, reconstruible) y busqueda por RUN,
   documento, nombre o folio con auditoria HMAC opcional del termino.
 - `Milestones` / `BusinessCalendar` / `Reports` / `Csv`: hitos de cada transicion (y su carga historica), dias
@@ -117,7 +121,8 @@ V20 (E06): `stat_catalog_item.description`, `management_note.action_type`/`actio
 (carga historica con el marcador `RESULTADO_INMEDIATO_V20`, tambien con `migrate-only`).
 V21 (E07): `stat_declared_version` y `stat_declared_person` proyectan las fichas originales sin guardar las fechas de
 nacimiento. `DIMENSIONES_V21` identifica la carga histórica idempotente, que también corre con `migrate-only`.
-V1 a V21 no se modifican nunca; un cambio nuevo se agrega como `V22__...` aditivo, compatible con H2 y MySQL. Ninguna
+V22 (E08): indices de las fechas de análisis y del resultado de los comandos, con su evidencia de EXPLAIN en la bitácora.
+V1 a V22 no se modifican nunca; un cambio nuevo se agrega como `V23__...` aditivo, compatible con H2 y MySQL. Ninguna
 migracion siembra sedes, regiones, feriados, catalogos ni personas reales. La actualizacion desde 0.4.0 y desde 0.7.0
 se prueba sobre MySQL 8.4 con volcados sinteticos (`MySql84UpgradeTest`, `MySql84Upgrade070Test`).
 

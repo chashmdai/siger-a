@@ -640,6 +640,11 @@ en la misma ventana, inmediatamente antes de `Update.ps1`).
 responsable valida y Claude Padre las convierte en gates de alcance acotado de 0.9.0, salvo decision expresa de
 incluir en 0.8.0 una que corresponda a sus objetivos.
 
+15.7 Instituciones de los hechos (GO de E08, 2026-11-25): dimension estadistica multiple con el tipo, la region y la
+comuna de las instituciones declaradas en la ficha de primera atencion, la ficha de ingreso y el Formulario
+(`external_field` INSTITUCION). En 0.8.0 `TIPO_INSTITUCION` sale solo de `note_institution` ("Tipo de institucion de las
+actuaciones"); las declaradas estan en JSON y exigen una proyeccion relacional por version, como V21.
+
 ## 16. Riesgos
 - R1 Catalogos sin validacion institucional (DI-01 a DI-04): se desarrolla con versiones PROPUESTA; la activacion en
   produccion espera la validacion.

@@ -106,44 +106,53 @@ public class StatValues {
         return rows.isEmpty()?null:n(rows.getFirst(),"id");
     }
     /** Version del catalogo activa en t (activada hasta t y no retirada antes o en t), o la VIGENTE si t es null. */
-    private static String active(String v,Long at){
+    private static String active(String v,Long at){return activeAt(v,text(at));}
+    private static String activeAt(String v,String at){
         return at==null?v+".`current_catalog`="+v+".catalog":v+".activated_ms<="+at+" AND ("+v+".retired_ms IS NULL OR "+v+".retired_ms>"+at+")";
     }
 
     // --- Lectura (SQL portable; misma regla, probada contra la de Java en H2 y MySQL) ----------------------------
+    // Instante: null (vigente), un literal en milisegundos (Long) o, desde E08, una expresion SQL por fila (String). Las
+    // firmas con Long delegan en las *At y producen el mismo texto (StatExpressionsTest). La expresion no puede usar los alias
+    // internos e, e2, dv, di, a, r ni v.
+    private static String text(Long at){return at==null?null:at.toString();}
     private static String single(String variable){
         if(!SINGLE.contains(variable))throw new IllegalArgumentException(variable);
         return variable;
     }
-    private static String last(String c,String variable,Long at){
+    private static String last(String c,String variable,String at){
         return "(SELECT MAX(e.id) FROM stat_event e WHERE e.communication_id="+c+".id AND e.record_type='COM' AND e.record_id="+c+".id AND e.variable='"+single(variable)
             +"' AND e.event IN ('SET','STATUS')"+(at==null?"":" AND e.recorded_ms<="+at)+")";
     }
-    private static String field(String c,String variable,Long at,String column){
+    private static String field(String c,String variable,String at,String column){
         return "(SELECT e2."+column+" FROM stat_event e2 WHERE e2.id="+last(c,variable,at)+")";
     }
-    private static String derivedCode(String c){
+    static String derivedCode(String c){
         var sql=new StringBuilder("CASE "+c+".channel");
         CHANNEL_VIA.forEach((channel,via)->sql.append(" WHEN '").append(channel).append("' THEN '").append(via).append("'"));
         return sql.append(" END").toString();
     }
     /** Version del catalogo VIA_INGRESO (vigente, o activa en t) que tiene la via derivada del canal; null si no aplica. */
-    private static String derivedVersion(String c,String variable,Long at){
+    static String derivedVersion(String c,String variable,String at){
         if(!variable.equals(VIA_INGRESO))return "NULL";
         return "(SELECT MAX(dv.id) FROM stat_catalog_version dv JOIN stat_catalog_item di ON di.version_id=dv.id WHERE dv.catalog='"+VIA_INGRESO+"' AND di.selectable=TRUE AND "
-            +active("dv",at)+" AND di.code=("+derivedCode(c)+")"+(at==null?"":" AND "+c+".created_ms<="+at)+")";
+            +activeAt("dv",at)+" AND di.code=("+derivedCode(c)+")"+(at==null?"":" AND "+c+".created_ms<="+at)+")";
     }
     /** Estado de la variable de valor unico de la COM con alias c (vigente si at es null). */
-    static String stateSql(String c,String variable,Long at){
+    static String stateSql(String c,String variable,Long at){return stateSqlAt(c,variable,text(at));}
+    static String stateSqlAt(String c,String variable,String at){
         return "COALESCE("+field(c,variable,at,"status")+",CASE WHEN "+derivedVersion(c,variable,at)+" IS NOT NULL THEN '"+INFORMED+"' ELSE '"+PENDING+"' END)";
     }
-    static String codeSql(String c,String variable,Long at){
+    static String codeSql(String c,String variable,Long at){return codeSqlAt(c,variable,text(at));}
+    static String codeSqlAt(String c,String variable,String at){
         return "CASE WHEN "+last(c,variable,at)+" IS NULL THEN (CASE WHEN "+derivedVersion(c,variable,at)+" IS NOT NULL THEN "+derivedCode(c)+" END) ELSE "+field(c,variable,at,"code")+" END";
     }
-    static String versionSql(String c,String variable,Long at){
+    static String versionSql(String c,String variable,Long at){return versionSqlAt(c,variable,text(at));}
+    static String versionSqlAt(String c,String variable,String at){
         return "CASE WHEN "+last(c,variable,at)+" IS NULL THEN "+derivedVersion(c,variable,at)+" ELSE "+field(c,variable,at,"catalog_version_id")+" END";
     }
-    static String originSql(String c,String variable,Long at){
+    static String originSql(String c,String variable,Long at){return originSqlAt(c,variable,text(at));}
+    static String originSqlAt(String c,String variable,String at){
         return "CASE WHEN "+last(c,variable,at)+" IS NULL THEN (CASE WHEN "+derivedVersion(c,variable,at)+" IS NOT NULL THEN '"+SYSTEM+"' END) ELSE "+field(c,variable,at,"origin")+" END";
     }
     private static String multiple(String variable){
@@ -151,14 +160,20 @@ public class StatValues {
         return variable;
     }
     /** Codigos del conjunto vigente de la variable multiple para el registro (type constante, record = expresion SQL). */
-    static String setSql(String type,String record,String variable,Long at){
+    static String setSql(String type,String record,String variable,Long at){return setSqlAt(type,record,variable,text(at));}
+    static String setSqlAt(String type,String record,String variable,String at){
+        return "SELECT DISTINCT a.code FROM stat_event a WHERE a.record_type='"+type+"' AND a.record_id="+record+" AND a.variable='"+multiple(variable)+"' AND "+addedSql(at);
+    }
+    /** Condicion sobre el evento con alias a: agrega un codigo que sigue en el conjunto (en el instante at, si se indica). */
+    static String addedSql(String at){
         String t=at==null?"":" AND a.recorded_ms<="+at,tr=at==null?"":" AND r.recorded_ms<="+at;
-        return "SELECT DISTINCT a.code FROM stat_event a WHERE a.record_type='"+type+"' AND a.record_id="+record+" AND a.variable='"+multiple(variable)+"' AND a.event='ADD'"+t
+        return "a.event='ADD'"+t
             +" AND NOT EXISTS(SELECT 1 FROM stat_event r WHERE r.record_type=a.record_type AND r.record_id=a.record_id AND r.variable=a.variable AND r.event='REMOVE' AND r.code=a.code AND r.id>a.id"+tr+")";
     }
-    static String setStateSql(String type,String record,String variable,Long at){
+    static String setStateSql(String type,String record,String variable,Long at){return setStateSqlAt(type,record,variable,text(at));}
+    static String setStateSqlAt(String type,String record,String variable,String at){
         String t=at==null?"":" AND e.recorded_ms<="+at;
-        return "CASE WHEN EXISTS("+setSql(type,record,variable,at)+") THEN '"+INFORMED+"' ELSE COALESCE((SELECT e2.status FROM stat_event e2 WHERE e2.id=(SELECT MAX(e.id) FROM stat_event e WHERE e.record_type='"
+        return "CASE WHEN EXISTS("+setSqlAt(type,record,variable,at)+") THEN '"+INFORMED+"' ELSE COALESCE((SELECT e2.status FROM stat_event e2 WHERE e2.id=(SELECT MAX(e.id) FROM stat_event e WHERE e.record_type='"
             +type+"' AND e.record_id="+record+" AND e.variable='"+multiple(variable)+"' AND e.event='STATUS'"+t+")),'"+PENDING+"') END";
     }
 

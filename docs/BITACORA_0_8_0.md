@@ -21,7 +21,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E05 | Clasificacion estadistica de la COM: modelo, via, propuestas y trazabilidad (servidor) | CERRADO |
 | E06 | Derechos, contexto, caracterizacion y actuaciones tipificadas (servidor) | CERRADO |
 | E07 | Dimensiones territoriales y demograficas, completitud y reglas de cierre (servidor) | CERRADO |
-| E08 | Motor estadistico: fuente unica, agregacion, series temporales y comparaciones (servidor) | ABIERTO |
+| E08 | Motor estadistico: fuente unica, agregacion, series temporales y comparaciones (servidor) | CERRADO |
 | E09 | Captura estadistica en el flujo (interfaz): caracterizacion, derechos, actuaciones y cierre | ABIERTO |
 | E10 | Cortes estadisticos y configuraciones guardadas (servidor) | ABIERTO |
 | E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | ABIERTO |
@@ -235,7 +235,7 @@ GO del responsable (2026-11-25), con estas respuestas y condiciones:
 
 Ejecutado en c9abb9a (gate E07: dimensiones y completitud).
 
-### E08 - plan y GO del 2026-11-25
+### E08 - plan y GO del 2026-11-25 (ejecutado)
 
 Plan presentado por Codex. Base comprobada `c9abb9a`, cierre de E07, con `main`, `origin/main` y la rama remota en
 el mismo commit y árbol de trabajo limpio. E07, sus dependencias y E00 están CERRADOS. El contrato del Formulario
@@ -501,6 +501,43 @@ se fijarán explícitamente en la base de prueba.
 - E08 sigue ABIERTO. El GO se registra con el commit de solo documentación `docs: plan y GO de E08`.
   La implementación se realizará en una sesión posterior.
 
+#### GO de ejecución (2026-11-25, sesión de Claude Code) y evidencia de EXPLAIN
+
+La sesión que ejecuta comprobó la base (`c9abb9a` más el commit de documentación `6a483c7`) y, antes de editar, informó
+que `AL_REQ` dependía de milisegundos: en 200 altas de cada tipo sobre H2, dos corridas, quedaban fuera la ficha de
+`ATTENTION_CREATE` (78 y 79), su clasificación (116 y 120) y los derechos de `COM_IMMEDIATE` (55 y 64). El responsable
+respondió «GO: A(a), B sí, C sí»:
+
+- A(a). `AL_REQ` corta al término del comando que constituyó el REQ. Se autorizan `TerritorialDims.java` y
+  `PersonDims.java`, solo en el modo REQ. Corte determinista también con el mismo milisegundo, prueba
+  `actoDeConstitucion` con su mutación, `corteVersionReq` para la evidencia de un comando posterior y medición repetida
+  de 200 altas en H2 y MySQL, con 0 pérdidas e igual resultado en dos corridas.
+- B. Sobrecargas en `StatValues.java` sin cambiar el SQL actual, con prueba carácter por carácter.
+- C. Definiciones 1 a 5: conciliación con Reports como está propuesta; alcance de los Casos también en la completitud
+  (documentado en el contrato); `TIPO_INSTITUCION` solo de `note_institution`, con el rótulo "Tipo de institución de las
+  actuaciones", y la dimensión "instituciones de los hechos" en la hoja de ruta 0.9.0; `REMISION_CONCLUIDA` conserva su
+  código y suma al total; complejidad, materia y modalidad históricas por código de auditoría o versión, nunca por texto,
+  y sin evidencia pendientes con aviso.
+- El resto, como está registrado. Consultado durante el gate, el responsable autorizó además el cambio mínimo en
+  `Workflow.java`: el empate de milisegundo no es imposible (el reloj avanza de 1 en 1 ms) ni se resuelve leyendo
+  (`ATTENTION_CREATE` con tipo de solicitud seguido de un `STAT_CLASSIFY` que corrige la vía deja las mismas filas que un
+  `ATTENTION_CREATE` con ambas); con el lock global tomado, cada comando espera a que el reloj supere el fin del anterior.
+
+Evidencia de EXPLAIN previa a V22 (MySQL 8.4.13 aislado, 50.005 COM sintéticas, 35.001 REQ, 20.000 Casos, 85.000
+comandos; consulta de marzo de 2026; columnas tabla, acceso y filas estimadas):
+
+| Camino crítico | Antes de V22 |
+|---|---|
+| Periodo por recepción (`communication.received_ms`) | `c` ALL, sin índice, 49.801 filas |
+| Periodo por registro (`communication.created_ms`) | `c` ALL, sin índice, 49.801 filas |
+| Periodo por constitución (`requirement.created_ms`) | `q` ALL, sin índice, 34.894 filas |
+| Periodo por creación del Caso (`case_record.created_ms`) | `cx` ALL, sin índice, 20.049 filas |
+| Corte `AL_REQ` (`command_log` por resultado) | `l` ALL, sin índice, 84.348 filas por cada REQ |
+
+Con V22 los cinco pasan a `range` o `ref` sobre su índice (4.464, 4.464, 3.123, 1.785 filas y 1 por REQ).
+
+Ejecutado en el commit `gate E08: motor estadistico`.
+
 ## Registros de cierre
 
 ### E00 - Linea base, decisiones, AGENTS.md y contrato del Formulario   (CERRADO)
@@ -644,3 +681,120 @@ se fijarán explícitamente en la base de prueba.
 - Hallazgos para gates siguientes: E08 puede consumir las expresiones SQL de dimensiones y los indicadores. El estado consolidado de calidad de derechos y contexto prioriza INFORMADO, luego el estado especial del REQ y después el del primer Caso con uno. E09 dispone de `stat_completeness`, `closure_blockers`, `resolve_blockers` y `discard_blockers`.
 - Pendientes: consumo estadístico en E08, captura y diálogos en E09, panel de calidad en E13 y medición de rendimiento en E14.
 - Verificación manual sugerida al usuario: en una instancia de ensayo con catálogos vigentes, resolver una vulneración con y sin derecho y contexto. El segundo intento puede completar la clasificación y cerrar en el mismo acto.
+
+### E08 - Motor estadistico: fuente unica, agregacion, series temporales y comparaciones (servidor)   (CERRADO)
+- Fecha: 2026-11-25 (commit `gate E08: motor estadistico`), DDN-TEST-SIGER (Windows), Claude Code; base `6a483c7` (cierre de E07 `c9abb9a` más el plan y GO registrados).
+- GO del responsable: el plan y las condiciones registrados arriba, más «GO: A(a), B sí, C sí» y la autorización de `Workflow.java` dadas en esta sesión (sección "GO de ejecución").
+- Hecho: `StatSource` (fuente única: una sentencia SQL portable con CTE para celdas, márgenes, total, tardíos, versiones, cobertura e historia) y `StatEngine` (`POST /api/stats/query`; validación cerrada, porcentajes, comparaciones, rótulos, avisos y auditoría `STAT_CONSULTA`), con 12 medidas y 63 dimensiones publicadas en `/api/catalog` (`stats`), según `docs/CONTRATO_STATS_0_8_0.md`.
+- Hecho: `AL_REQ` corta al fin del comando que constituyó el REQ (`TerritorialDims.constitutedSql`, también en `PersonDims` modo REQ) y `Workflow.afterPreviousCommand` hace imposible el empate de milisegundo (tope 200 ms). Sobrecargas `*At` de `StatValues` sin cambiar el SQL anterior (`StatExpressionsTest`). Definiciones C1-C5 aplicadas; "instituciones de los hechos" en la hoja de ruta 0.9.0 (PLAN 9, DISENO 15.7).
+- Archivos clave: `StatSource.java`, `StatEngine.java` (nuevos), `StatValues.java`, `TerritorialDims.java`, `PersonDims.java`, `Workflow.java`, `Api.java`, `Queries.java`, `V22__indices_motor_estadistico.sql`; `StatEngineTest` (33), `StatModesTest` (15), `StatQueryHttpTest` (5), `StatExpressionsTest` (1), `StatFixture`, `src/test/resources/stats/` (poblacion.csv, esperados.csv, expresiones-e07.txt); `docs/CONTRATO_STATS_0_8_0.md`, `CLAUDE.md`, `docs/ARQUITECTURA.md`, PLAN, DISENO.
+- Migraciones: V22, cinco índices (`communication.received_ms`, `communication.created_ms`, `requirement.created_ms`, `case_record.created_ms`, `command_log(result_kind,result_id,created_ms)`), con la evidencia de EXPLAIN registrada antes (arriba); esquema 22.
+- Verificación: JUnit H2 313 ok, 0 omitidas (antes 259); MySQL 8.4.13 (suite completa con `siger.mysql.suite=true`: `MySqlSuite` + `MySql84IntegrationTest` + `MySql84UpgradeTest` 0.4.0 -> V22 + `MySql84Upgrade070Test` 0.7.0 -> V22) 317 ok, 0 omitidas (antes 263), con `communication_original` y `external_*` idénticos; procedimiento de E00 en `127.0.0.1:3417` (al forzar `internal_tmp_mem_storage_engine=MEMORY` en un diagnóstico el servidor desechable cayó y se reinició), detenido con `mysqladmin shutdown`, puerto sin escucha, sin procesos propios y datadir borrado; `MySQL80` intacto; frontend typecheck ok, 154 ok, build ok; humo 23/23 con el JAR (perfil local, H2 en `backend/target/humo-e08`, puerto 18643, todo borrado al terminar): catálogos de referencia importados y activados por TI, REPORTES concedida, COM manual y atención directa con derechos, cruces, `AL_REQ`, actuaciones, serie con comparación, completitud, 400, 405, 403 sin CSRF, sin REPORTES y TI; `Check-Scripts.ps1` (powershell.exe 5.1 con las rutas nativas de módulos, al final y sin Maven ni npm): 40 scripts, 73 órdenes en 60 procesos.
+- Medición de 200 altas de cada tipo (`ATTENTION_CREATE` con ficha y clasificación; `COM_IMMEDIATE` con derechos y contexto): con el corte anterior quedaban fuera, en H2, 85/163/44 y 88/166/43 (ficha/clasificación/derechos) y, en MySQL, 199/200/200 y 198/200/199; con el código final, 0 `PENDIENTE` en ocho dimensiones `AL_REQ` en las dos corridas de cada motor y celdas idénticas (200).
+- Rendimiento (MySQL, 50.005 COM sintéticas, Cuenta Pública): la mayoría de las consultas entre 0,2 y 3,5 s; tramo y región del NNA afectado 5-6 s y completitud 8-10 s. Medición formal y decisión en E14 (DISENO 5.7).
+- Evidencia de mutación: 92 mutaciones temporales en copias de trabajo, todas fallaron en la prueba prevista (tabla abajo).
+- Condiciones de la sección 2: `git diff v0.7.0` vacío para la recepción del Formulario (7 archivos), `Reports.java`, `Territory.java`, `scripts/` y `.mvn/`; `conserveExternal` idéntico (41 líneas); V1-V21 sin cambios; `OriginRegion`, `Access`, `Rights`, `IntakeCommands`, `RequirementCommands` (incluido `REOPEN_*`) y `Attention` sin cambios respecto de `c9abb9a`; ninguna escritura en `communication_original` ni `external_*`; TI 403; sin dependencias nuevas.
+- Facilidad de uso: no aplica (servidor); los rechazos explican qué corregir en lenguaje llano (400 por campo y 409 del límite técnico).
+- Definiciones usadas: DI-01 a DI-04 (catálogos de referencia en las pruebas); DI-07 (reapertura sin cambios).
+- Desvíos del plan: (1) `Workflow.java` fuera de la lista original, autorizado durante el gate. (2) Población: C se registra el 03/11 (no el 08/10) para que la serie por fecha de registro sea distinguible; la cifra por recepción no cambia. (3) "Cumple 10 años el día de recepción" se prueba con quien cumple 11 al día siguiente, porque UTC solo adelanta la fecha.
+- Diferencias de referencia: `CREACION_CASO` como fecha de análisis de `CASOS`; `SIN_DESGLOSE` (derecho sin subcategoría); en `ESTADO_SOL` la falta de evidencia es `SIN_INFORMACION`; dimensiones `AMBITO` (de referencia) y `ESTADO_*` agregadas; los actos no tienen valor "al ingreso" (en `AL_INGRESO` se informan los vigentes); intervalos de comparación sin par conservan su clave.
+- Hallazgos para gates siguientes: MySQL 8.4 falla (error 1112) o cae con `internal_tmp_mem_storage_engine=MEMORY` (servidor desechable reiniciado) cuando crea claves automáticas sobre un CTE referenciado varias veces: toda unión o filtro sobre un CTE va como expresión (`+0`, `CONCAT`), con `JOIN_FIXED_ORDER` y CTE de una sola evaluación (`LIMIT`), y los barridos lo comprueban con EXPLAIN (`StatEngineTest.explained`). E10 congela la fuente con `StatSource.Plan`; E11 exporta con el mismo motor y debe excluir las constancias reservadas en el diccionario; E12/E13 leen `stats` de `/api/catalog`.
+- Pendientes: rendimiento formal y eventual alternativa -> E14; cortes y comparación con un corte (`cut_id`, `CORTE`) -> E10; instituciones de los hechos -> 0.9.0.
+- Verificación manual sugerida al usuario: `.\mvnw.cmd -B -ntp -f backend\pom.xml test -Dtest=StatEngineTest,StatModesTest,StatQueryHttpTest`; en local, con REPORTES, `POST /api/stats/query` con `{"measure":"INGRESOS","rows":["CANAL"],"period":{"type":"CUENTA_PUBLICA","from":"2025-07-01"}}`.
+
+Mutaciones de E08 (regla -> prueba que falló):
+
+| Regla | Prueba que falló |
+|---|---|
+| 01 agrupar por propuesta en vez del valor confirmado | StatEngineTest.figuraSolicitud:99 |
+| 02 derivar el requirente del canal | StatEngineTest.figuraRequirente:100 |
+| 03a usar el canal como clave de via | StatEngineTest.figuraVia:101 |
+| 03b perder la agrupacion padre | StatEngineTest.figuraVia:101 |
+| 04a region de la sede en vez de la del requirente | StatEngineTest.figuraRegion:102 |
+| 04b omitir el valor especial | StatEngineTest.figuraRegion:102 |
+| 05a incluir invalidas | StatEngineTest.descarteD25:106 |
+| 05b excluir duplicadas | StatEngineTest.descarteD25:106 |
+| 06a usar RECHAZADA como devolucion | StatEngineTest.antecedenteD25:370 |
+| 06b ignorar returned_ms (vigente) | StatEngineTest.antecedenteD25:372 |
+| 06c ignorar returned_ms (a una fecha) | StatModesTest.estadoHistoricoD25:69 |
+| 07a exigir REQ | StatEngineTest.pendientesYDirectaD25:112 |
+| 07b exigir SOL | StatEngineTest.pendientesYDirectaD25:112 |
+| 08 contar hijos como ingresos | StatEngineTest.cadenaUnicaD25:121 |
+| 09 aplicar el estado vigente a todos los cortes | StatModesTest.estadoHistoricoD25:64 |
+| 10a dia civil en UTC | StatEngineTest.bordeCuentaPublica:133 |
+| 10b incluir el limite superior | StatEngineTest.bordeCuentaPublica:132 |
+| 11a offset unico | StatModesTest.horarioChile:78 |
+| 11b agrupar por dia UTC | StatModesTest.horarioChile:78 |
+| 12a usar > en el limite exclusivo | StatEngineTest.registroTardio:148 |
+| 12b usar created_ms como fecha de demanda | StatEngineTest.figuraSolicitud:99, StatEngineTest.registroTardio:141, StatEngineTest.serieMes:204 |
+| 13a quitar la deduplicacion COM-valor | StatEngineTest.mencionesDerecho:157 |
+| 13b equiparar menciones y clasificaciones | StatEngineTest.mencionesDerecho:160 |
+| 14a dividir por las menciones | StatEngineTest.porcentajeMultivalor:168 |
+| 14b suprimir el aviso | StatEngineTest.porcentajeMultivalor:170 |
+| 15a sumar celdas para los margenes | StatEngineTest.cruceDosMultiples:176 |
+| 15b unir solo por Caso | StatEngineTest.cruceDosMultiples:175 |
+| 15c menciones sin deduplicar en los margenes | StatEngineTest.cruceDosMultiples:182 |
+| 16 sumar derechos para el total por canal | StatEngineTest.cruceUnicaYMultiple:187 |
+| 17a INNER JOIN que borra pendientes | StatEngineTest.estadosYFiltros:191 |
+| 17b contar dos veces con el filtro | StatEngineTest.estadosYFiltros:194 |
+| 18a sumar padre e hijo como dos valores | StatModesTest.jerarquiaYRetiro:226 |
+| 18b omitir REMOVE | StatModesTest.jerarquiaYRetiro:228 |
+| 19a contar la version rectificada | StatEngineTest.actuacionesVigentes:354 |
+| 19b contar la reservada | StatEngineTest.actuacionesVigentes:354 |
+| 19c contar la tarea | StatEngineTest.actuacionesVigentes:354 |
+| 19d contar ambas fuentes de orientacion | StatEngineTest.actuacionesVigentes:354 |
+| 20a AL_INGRESO con la version actual | StatModesTest.cuatroModos:94 |
+| 20b AL_REQ con la version actual | StatModesTest.cuatroModos:95 |
+| 20c FECHA con la version actual | StatModesTest.cuatroModos:96 |
+| 20d clasificacion siempre vigente | StatModesTest.cuatroModos:108 |
+| 21a usar < en vez de <= | StatModesTest.corteVersionReq:139 |
+| 21b permitir la version posterior | StatModesTest.corteVersionReq:139 |
+| 21c cortar en requirement.created_ms | StatModesTest.actoDeConstitucion:154 |
+| 21d sin espera entre comandos | StatModesTest.actoDeConstitucion:166 |
+| 21e sin tope de espera | StatModesTest.actoDeConstitucion:181 |
+| 22 leer la complejidad actual en FECHA | StatModesTest.historiaSinEvidencia:191 |
+| 22b leer la materia actual en FECHA | StatModesTest.historiaSinEvidencia:207 |
+| 22c leer la modalidad actual en FECHA | StatModesTest.historiaSinEvidencia:215 |
+| 23a omitir los meses vacios | StatEngineTest.serieMes:204 |
+| 23b serie por fecha de registro | StatEngineTest.serieMes:204 |
+| 24a inicio del trimestre | StatEngineTest.serieTrimestre:205 |
+| 24b inicio del semestre | StatEngineTest.serieSemestre:206 |
+| 24c inicio del anio | StatEngineTest.serieAnio:207 |
+| 24d inicio de la Cuenta Publica | StatEngineTest.serieCuentaPublica:208 |
+| 25a el mismo desplazamiento para ambas comparaciones | StatEngineTest.comparaciones:215 |
+| 25b dividir por el periodo actual | StatEngineTest.comparaciones:217 |
+| 26a autorizar por el origen | StatEngineTest.alcanceSede:230 |
+| 26b autorizar por la sede historica | StatEngineTest.alcanceSede:238 |
+| 26c sin alcance antes de agregar | StatEngineTest.alcanceSede:230 |
+| 27a ignorar la materia | StatEngineTest.alcanceMateriaYCaso:241 |
+| 27b admitir un Caso de otra sede | StatEngineTest.alcanceMateriaYCaso:244 |
+| 28a quitar la guarda de REPORTES | StatQueryHttpTest.soloConReportes:70 |
+| 28b quitar la guarda de TI | StatQueryHttpTest.tiNunca:80 |
+| 28c quitar el requisito CSRF | StatQueryHttpTest.csrfObligatorio:87 |
+| 28d agregar GET | StatQueryHttpTest.soloPorPost:97 |
+| 29a recepcion en la consulta administrativa | StatEngineTest.conciliaComPorCanal:262 |
+| 29b omitir una categoria informativa | StatEngineTest.conciliaComPorCanal:262 |
+| 30a multiplicar A por sus Casos | StatEngineTest.conciliaReqPorEstado:272 |
+| 30b usar la fecha de la COM | StatEngineTest.conciliaReqPorEstado:275 |
+| 31a ignorar AMBITO_ACTIVADO | StatModesTest.sedeActivadaYCerrada:263 |
+| 31b ignorar AMBITO_CERRADO | StatModesTest.sedeActivadaYCerrada:263 |
+| 31c exigir enabled actual | StatModesTest.sedeActivadaYCerrada:263 |
+| 32 dar cobertura a las proyectadas | StatModesTest.sedeProyectada:274 |
+| 33a omitir la cobertura del nivel central | StatModesTest.coberturaCentral:284 |
+| 33b incluir el instante de termino | StatModesTest.coberturaCentral:284 |
+| 34a leer la clave adulta para el NNA | StatModesTest.formularioTerritorio:295 |
+| 34b comuna de quien presenta como comuna de los hechos | StatModesTest.formularioTerritorio:298 |
+| 35a edad en UTC | StatModesTest.demografiaEstadistica:313 |
+| 35b interpretar el texto historico | StatModesTest.demografiaEstadistica:313 |
+| 35c serializar la fecha de nacimiento | StatModesTest.demografiaEstadistica:322 |
+| 36a elevar la propuesta a informada | StatModesTest.calidadYPropuesta:338 |
+| 36b perder el estado especial | StatModesTest.calidadYPropuesta:338 |
+| 36c completitud con Casos ajenos | StatModesTest.completitudConCasoAjeno:364 |
+| 36d descartar REMISION_CONCLUIDA | StatModesTest.remisionConcluida:374 |
+| 37a serializar el cuerpo en la auditoria | StatEngineTest.auditoriaSoloNombres:285 |
+| 37b aceptar una clave sin validar | StatEngineTest.contratoCerrado:305 |
+| 38a una lectura JDBC por COM | StatEngineTest.consultasPorConjunto:339 |
+| 38b truncar en vez de rechazar | StatEngineTest.limiteDeCeldas:313 |
+| 39 cambiar una expresion de E05 | StatExpressionsTest.expresionesIgualesALasDeE07:63 |
+| 40 rotulo de las instituciones | StatEngineTest.actuacionesVigentes:361 |
+| 41 unir un CTE por su columna (clave automatica de MySQL) | StatEngineTest.barridoDeCruces:414 (MySQL, EXPLAIN) |

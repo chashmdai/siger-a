@@ -150,7 +150,7 @@ public class PersonDims {
         if(mode==TerritorialDims.Mode.VIGENTE)return StatValues.codeSql(com,"TIPO_REQUIRENTE",null);
         return "(SELECT e.code FROM stat_event e WHERE e.communication_id="+com+".id AND e.record_type='COM' AND e.record_id="
             +com+".id AND e.variable='TIPO_REQUIRENTE' AND e.event IN ('SET','STATUS')"
-            +(mode==TerritorialDims.Mode.REQ?" AND e.recorded_ms<="+req+".created_ms":"")
+            +(mode==TerritorialDims.Mode.REQ?" AND e.recorded_ms<="+TerritorialDims.constitutedSql(req):"")
             +" ORDER BY e.id "+(mode==TerritorialDims.Mode.REQ?"DESC":"ASC")+" LIMIT 1)";
     }
 

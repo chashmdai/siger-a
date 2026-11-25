@@ -777,6 +777,7 @@ archivos previstos y pruebas, esta en `DISENO_0_8_0.md` seccion 15.
 | Antiguedad del respaldo en `Update.ps1` | D49 | - | 15.5 |
 | Paso de RDP a acceso por red (requisito del enlace directo del correo) | D49 | - | 15.5 |
 | Renovacion del certificado autofirmado | D49 | DI-10: desestimada; se mantienen certificado y HTTPS | 15.5 |
+| Dimension estadistica "instituciones de los hechos" (ficha, ficha de ingreso y Formulario) | D38 | GO de E08 (2026-11-25) | 15.7 |
 | Otras mejoras operacionales sin relacion directa con los objetivos de 0.8.0 | - | - | - |
 
 En 0.8.0 la seguridad de la actualizacion se mantiene con los scripts y procedimientos vigentes: respaldo con

@@ -11,10 +11,20 @@ public class TerritorialDims {
 
     public TerritorialDims(Db db){this.db=db;}
 
+    /**
+     * Instante en que termina el comando que constituyo el REQ (0.8.0, E08): el primero de command_log con ese resultado.
+     * Lo que escribe ese comando (ficha, clasificacion y derechos del acto) pertenece a la constitucion; lo del comando
+     * siguiente es siempre posterior (Workflow.afterPreviousCommand).
+     */
+    static String constitutedSql(String req){
+        return "COALESCE((SELECT MIN(l.created_ms) FROM command_log l WHERE l.result_kind='REQ' AND l.result_id="+req
+            +".id),"+req+".created_ms)";
+    }
+
     static String versionSql(String com,String req,Mode mode,Long at){
         String cutoff=switch(mode){
             case INGRESO,VIGENTE -> "";
-            case REQ -> " AND d.registered_ms<="+req+".created_ms";
+            case REQ -> " AND d.registered_ms<="+constitutedSql(req);
             case HISTORICO -> " AND d.registered_ms<="+java.util.Objects.requireNonNull(at);
         };
         return "(SELECT d.id FROM stat_declared_version d WHERE d.communication_id="+com+".id"+cutoff

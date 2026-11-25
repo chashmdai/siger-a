@@ -29,6 +29,10 @@ public class Workflow {
     private final Personnel personnel;
     private final Rights rights;
     private final JsonMapper json=JsonMapper.builder().build();
+    /** Tope de la espera entre comandos: solo se alcanza si el reloj del servidor retrocede. */
+    static final long MAX_WAIT_MS=200;
+    /** Instante de fin (command_log.created_ms) del ultimo comando de este proceso. */
+    static volatile long lastEnd;
 
     public Workflow(Db db,Access access,IntakeCommands intake,RequirementCommands requirements,CaseCommands cases,Attention attention,Personnel personnel,Rights rights){
         this.db=db;
@@ -45,6 +49,7 @@ public class Workflow {
     public Result run(String username,Command cmd){
         if(cmd==null||cmd.key()==null||cmd.type()==null)throw new Problem(400,"Falta clave de operacion o comando.");
         db.lock();
+        afterPreviousCommand();
         Actor a=access.actor(username);
         if(a.mustChange())throw new Problem(428,"Cambia la clave temporal antes de operar.");
         String hash=hash(Arrays.asList(cmd.type(),cmd.id(),cmd.revision(),ordered(cmd.data())));
@@ -70,9 +75,22 @@ public class Workflow {
                  "HOLIDAY_ADD","HOLIDAY_IMPORT","HOLIDAY_REMOVE","CATALOG_IMPORT","CATALOG_ACTIVATE","CATALOG_MAPPING_IMPORT" -> personnel.run(a,type,id,expected,in);
             default -> throw new Problem(400,"Comando desconocido.");
         };
+        long end=Lifecycle.now();
         db.update("INSERT INTO command_log(command_key,actor_id,payload_hash,result_kind,result_id,result_message,created_ms) VALUES(?,?,?,?,?,?,?)",
-            cmd.key().toString(),a.id(),hash,result.kind(),result.id(),result.message(),Lifecycle.now());
+            cmd.key().toString(),a.id(),hash,result.kind(),result.id(),result.message(),end);
+        lastEnd=end;
         return result;
+    }
+
+    /**
+     * Todo lo que escribe un comando lleva un instante posterior al fin del comando anterior (0.8.0, E08): con el lock
+     * global tomado, espera a que el reloj lo supere (normalmente menos de 1 ms). Asi el corte "al constituirse el REQ"
+     * (TerritorialDims.constitutedSql) incluye todo lo escrito por el comando que creo el REQ y nada del siguiente, sin
+     * empates de milisegundo. Con el reloj atrasado la espera termina en MAX_WAIT_MS: no detiene el servicio.
+     */
+    private static void afterPreviousCommand(){
+        long until=System.nanoTime()+MAX_WAIT_MS*1_000_000;
+        while(Lifecycle.now()<=lastEnd&&System.nanoTime()<until)Thread.onSpinWait();
     }
 
     /**

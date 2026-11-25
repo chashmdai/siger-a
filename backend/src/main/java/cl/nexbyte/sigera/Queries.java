@@ -10,9 +10,9 @@ import static cl.nexbyte.sigera.Db.*;
 public class Queries {
     final Db db;final Access access;final Attention attention;
     private final Integrations integrations;
-    private final Documents documents;private final OriginRelease origin;private final StatCatalogs catalogs;private final IntakeRecord intake;private final StatValues stats;private final Rights rights;private final Lifecycle life;
+    private final Documents documents;private final OriginRelease origin;private final StatCatalogs catalogs;private final IntakeRecord intake;private final StatValues stats;private final Rights rights;private final Lifecycle life;private final StatEngine engine;
     private final StatCompleteness completeness;
-    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs,IntakeRecord intake,StatValues stats,Rights rights,Lifecycle life,StatCompleteness completeness){this.completeness=completeness;this.intake=intake;this.stats=stats;this.rights=rights;this.life=life;this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
+    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs,IntakeRecord intake,StatValues stats,Rights rights,Lifecycle life,StatCompleteness completeness,StatEngine engine){this.completeness=completeness;this.engine=engine;this.intake=intake;this.stats=stats;this.rights=rights;this.life=life;this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
     public Map<String,Object> workspace(Actor a){
         // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales:
         // TI administra todas las subrogancias (D1); titular y subrogante ven las propias.
@@ -41,6 +41,8 @@ public class Queries {
         // Catalogos estadisticos (0.8.0, D27): solo la version VIGENTE de cada catalogo y los valores especiales.
         result.put("stat_catalogs",catalogs.published());
         result.put("stat_completeness",completeness.requirements());
+        // Motor estadistico (0.8.0, E08): medidas, dimensiones y opciones de la consulta, solo para quien puede usarlo.
+        if(StatEngine.allowed(a))result.put("stats",engine.catalog());
         var enabledScopes=catalogScopes.stream().filter(x->b(x,"enabled")).map(x->n(x,"id")).toList();
         boolean registrar=a.grants().stream().anyMatch(g->g.scope()!=null&&a.registrar(g.scope()));
         Map<Long,Actor> actors=new HashMap<>();for(var candidate:access.enabledActors())actors.put(candidate.id(),candidate);

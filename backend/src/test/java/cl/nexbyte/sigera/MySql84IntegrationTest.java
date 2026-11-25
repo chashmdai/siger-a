@@ -42,7 +42,7 @@ class MySql84IntegrationTest {
             var db=ctx.getBean(Db.class);
             assertTrue(s(db.one("SELECT VERSION() AS v"),"v").startsWith("8.4."),"MySQL 8.4");
             for(int v=1;v<=19;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
-            assertEquals("21",ctx.getBean(Api.class).health().getBody().get("schema"));
+            assertEquals("22",ctx.getBean(Api.class).health().getBody().get("schema"));
             // Rutinas de arranque de 0.5.0 sobre las semillas: marcadores, hitos sin omisiones y la sede con Coordinacion como DIRECCION.
             for(String marker:List.of(Bootstrap.AUTHORITY_MARKER,Bootstrap.REGIONAL_HEAD_MARKER,PersonIndex.MARKER,Milestones.MARKER))
                 assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",marker),marker);
@@ -126,7 +126,7 @@ class MySql84IntegrationTest {
         Files.writeString(dir.resolve("estructura.json"),InstitutionalBootstrapTest.VALID);
         try(var ctx=app("siger_a_mysql_inst",List.of("siger.bootstrap-file="+dir.resolve("estructura.json")))){
             var db=ctx.getBean(Db.class);
-            assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version='21' AND success=TRUE"));
+            assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version='22' AND success=TRUE"));
             assertEquals(1,db.count("SELECT COUNT(*) FROM staff WHERE technical=FALSE"));
             assertEquals(3,db.count("SELECT COUNT(*) FROM org_scope"));
             assertEquals(0,db.count("SELECT COUNT(*) FROM staff WHERE LOWER(name) LIKE '%sintetic%'"));
