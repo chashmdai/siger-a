@@ -1,6 +1,6 @@
 # SIGER 0.8.0 - respuestas de validación de catálogos (DI-01 a DI-04)
 
-Respuesta propuesta del responsable del 2026-11-24, pendiente de conformidad institucional de la Dirección de UEP. Es la fuente con que E06 prepara los archivos de referencia de `deploy/config-ejemplo/catalogos/`, que quedan en estado PROPUESTA. TI los activa en la actualización de producción solo con conformidad definitiva.
+Respuesta del responsable del 2026-11-24, con conformidad institucional de la Dirección de UEP del 2026-11-25. Es la fuente con que E06 prepara los archivos de referencia de `deploy/config-ejemplo/catalogos/`, que quedan en estado PROPUESTA. TI los activa en la actualización de producción solo con conformidad definitiva.
 
 Reglas de transcripción para E06:
 - Los rótulos y las definiciones se copian textuales de este archivo.
