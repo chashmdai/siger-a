@@ -39,7 +39,14 @@ sobre MySQL 8.4 con `MySqlSuite`).
 - `DeclaredPerson` / `IntakeRecord` (0.8.0, E03): persona declarada canonica (`persona-1`) con las reglas de la ficha
   1.1 y del Formulario, compartida por la ficha 1.2 y la ficha de ingreso de la COM manual; resumen de cambios
   (complemento o rectificacion) calculado por el servidor. `IntakeRecord` guarda la ficha de ingreso (unica fuente de
-  esas COM: columnas de resumen derivadas, sin filas en `communication_person`) y atiende `COM_COMPLETE`.
+  esas COM: columnas de resumen derivadas, sin filas en `communication_person`) y atiende `COM_COMPLETE`. Desde E05
+  `COM_CREATE` y `COM_IMMEDIATE` exigen la ficha de ingreso (400 sin ella); las COM anteriores siguen legibles.
+- `StatValues` / `StatProposals` (0.8.0, E05): clasificacion estadistica de la COM (tipo de solicitud, tipo de
+  requirente y via de ingreso) en `stat_event`, solo inserciones; regla unica en Java y SQL portable del valor vigente,
+  a una fecha y del conjunto de las variables multiples; via derivada del canal calculada sin escribir; propuestas de
+  la regla version 1 desde los datos estructurados del Formulario, que nunca cuentan como informadas. `STAT_CLASSIFY` y
+  el bloque `stat` de los comandos de ingreso y distribucion; facultad `Access.statWritable`, inmutabilidad de lo
+  descartado, vinculado o cerrado (D35) y origen RETROSPECTIVA tras la reapertura existente (DI-07).
 - `PersonIndex` / `PersonSearch`: indice de coincidencias de personas (derivado, reconstruible) y busqueda por RUN,
   documento, nombre o folio con auditoria HMAC opcional del termino.
 - `Milestones` / `BusinessCalendar` / `Reports` / `Csv`: hitos de cada transicion (y su carga historica), dias
@@ -91,7 +98,8 @@ desde E02 y habilita cortes, series y vistas compartidas a partir de E10 y E11.
 V18 (E03): `attention_revision.change_summary` (resumen de cambios de cada version de la ficha; carga de las versiones
 existentes con el marcador `RESUMEN_CAMBIOS_V18`, tambien con `migrate-only`) e `intake_record`/`intake_revision`
 (ficha de ingreso de la COM manual con sus versiones, region del presentador y resumen de cambios).
-V1 a V18 no se modifican nunca; un cambio nuevo se agrega como `V19__...` aditivo, compatible con H2 y MySQL. Ninguna
+V19 (E05): `stat_event` (eventos de clasificacion estadistica; ninguna migracion los escribe).
+V1 a V19 no se modifican nunca; un cambio nuevo se agrega como `V20__...` aditivo, compatible con H2 y MySQL. Ninguna
 migracion siembra sedes, regiones, feriados, catalogos ni personas reales. La actualizacion desde 0.4.0 y desde 0.7.0
 se prueba sobre MySQL 8.4 con volcados sinteticos (`MySql84UpgradeTest`, `MySql84Upgrade070Test`).
 

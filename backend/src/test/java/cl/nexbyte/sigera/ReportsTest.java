@@ -48,7 +48,7 @@ class ReportsTest {
         return flow.run(who,new Workflow.Command(UUID.randomUUID(),type,id,rev,data)).id();
     }
     long com(String subject){
-        return run(ADMIN,"COM_CREATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",ago(300),"subject",subject,"body","Relato sintetico"));
+        return run(ADMIN,"COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",ago(300),"subject",subject,"body","Relato sintetico"));
     }
     long solOf(long com){return n(db.one("SELECT id FROM solicitation WHERE communication_id=?",com),"id");}
     /** COM distribuida a un destino (con materia sugerida en una sede) y asumida: devuelve el REQ. */
@@ -87,7 +87,7 @@ class ReportsTest {
         }
         // Atenciones resueltas en el acto (origen atencion directa, duracion 0).
         for(int i=0;i<2;i++){
-            long req=run(ADMIN,"COM_IMMEDIATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","PRESENCIAL","received_at",ago(600),"subject","Orientacion","body","Relato sintetico",
+            long req=run(ADMIN,"COM_IMMEDIATE",null,null,Map.of("intake",Map.of(),"scope_id",scope("UPR-REQ"),"channel","PRESENCIAL","received_at",ago(600),"subject","Orientacion","body","Relato sintetico",
                 "reason","Orientacion entregada","effective_at",ago(300),"result","ORIENTACION"));
             move(req,"REQ_CREADO",at(3,3,10));move(req,"REQ_CERRADO",at(3,3,10));
         }

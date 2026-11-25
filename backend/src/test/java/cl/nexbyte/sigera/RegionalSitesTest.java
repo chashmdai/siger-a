@@ -58,7 +58,7 @@ class RegionalSitesTest {
         return run("ti","SCOPE_CREATE",null,null,Map.of("unit_code","REG","code",code,"name","Sede sintetica "+code,"site_code","SEDE-"+code,"regional",true,"region_code",region,"state",state,"reason",BASIS)).id();
     }
     long com(String subject){
-        return run("distribucion","COM_CREATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",ago(60),"subject",subject,"body","Relato sintetico")).id();
+        return run("distribucion","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",ago(60),"subject",subject,"body","Relato sintetico")).id();
     }
 
     @Test @Order(1) void demoConCoordinacionComoDireccionYCatalogoDeDestinos(){

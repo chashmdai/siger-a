@@ -89,7 +89,7 @@ class DistributionNoticeTest {
 
     @Test void niManualNiDistribuidaNiDevueltaNiAtencionDirecta(){
         long sc=scope("UPR-REQ");
-        long manual=run("administrativo","COM_CREATE",null,null,Map.of("scope_id",sc,"channel","TELEFONO","received_at",Instant.now().minusSeconds(120).toString(),"subject","COM manual sintetica","body","Relato sintetico")).id();
+        long manual=run("administrativo","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",sc,"channel","TELEFONO","received_at",Instant.now().minusSeconds(120).toString(),"subject","COM manual sintetica","body","Relato sintetico")).id();
         long routed=formulario(null);
         run("distribucion","COM_ROUTE",routed,revision("communication",routed),Map.of("scope_id",scope("UPR"),"reason","Clasificacion sintetica"));
         long req=run("administrativo","ATTENTION_CREATE",null,null,new LinkedHashMap<>(Map.of("scope_id",sc,"channel","PRESENCIAL","received_at",Instant.now().minusSeconds(600).toString(),

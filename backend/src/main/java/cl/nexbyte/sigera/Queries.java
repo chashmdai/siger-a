@@ -10,8 +10,8 @@ import static cl.nexbyte.sigera.Db.*;
 public class Queries {
     final Db db;final Access access;final Attention attention;
     private final Integrations integrations;
-    private final Documents documents;private final OriginRelease origin;private final StatCatalogs catalogs;private final IntakeRecord intake;
-    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs,IntakeRecord intake){this.intake=intake;this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
+    private final Documents documents;private final OriginRelease origin;private final StatCatalogs catalogs;private final IntakeRecord intake;private final StatValues stats;
+    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs,IntakeRecord intake,StatValues stats){this.intake=intake;this.stats=stats;this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
     public Map<String,Object> workspace(Actor a){
         // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales:
         // TI administra todas las subrogancias (D1); titular y subrogante ven las propias.
@@ -124,6 +124,8 @@ public class Queries {
                 // Solo en la ficha autorizada (comForRead): datos de identificacion y registrales del Formulario.
                 if(c.get("external_source")!=null)out.put("external",external(id));
                 out.put("suggested_region",access.suggestedRegion(id,null));
+                // Caracterizacion estadistica (0.8.0, E05): estado, valor, propuesta aparte e historial con su motivo.
+                out.put("characterization",stats.view(a,c,true));
             }
             case "SOL" -> {
                 var s=db.one("SELECT * FROM solicitation WHERE id=?",id);if(!solVisible(a,s))Problem.denied();scope=n(s,"destination_scope");out=new LinkedHashMap<>(s);
@@ -139,6 +141,8 @@ public class Queries {
                 out.put("case_scopes",areas.stream().map(x->n(x,"id")).filter(sc->access.canOpenCaseUnder(scope,sc)&&a.head(sc)).toList());
                 if(r.get("solicitation_id")!=null)out.put("requested_area_scope",db.one("SELECT requested_area_scope FROM solicitation WHERE id=?",n(r,"solicitation_id")).get("requested_area_scope"));
                 var com=db.one("SELECT * FROM communication WHERE id=?",n(r,"communication_id"));out.put("can_read_com",access.comRead(a,com));
+                // Caracterizacion de su COM (E05); el motivo, texto libre, solo para quien lee la COM o el registro del REQ.
+                out.put("characterization",stats.view(a,com,access.comRead(a,com)||access.reqRecords(a,r)));
                 out.put("case_rows",db.rows("SELECT * FROM case_record WHERE requirement_id=? ORDER BY id",id).stream().map(c->{
                     if(access.caseRead(a,c)){var v=caseSummary(a,c);v.put("readable",true);return v;}
                     if(a.head(scope)){var v=pick(c,"id","folio","state","scope_id");v.put("readable",false);return v;}return null;

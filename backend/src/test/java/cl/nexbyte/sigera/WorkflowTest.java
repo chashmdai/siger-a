@@ -31,7 +31,7 @@ class WorkflowTest {
         head1=user("jefe1",scope1,"DIRECCION");head2=user("jefe2",scope2,"DIRECCION");
         grant(head1,"DIRECCION",uprRoot);grant(head2,"DIRECCION",updRoot);
         prof=user("prof",scope1,"PROFESIONAL");
-        long com=run("distribuidor","COM_CREATE",0,null,Map.of("scope_id",scope1,"channel","TELEFONO","received_at",Instant.now().minusSeconds(60).toString(),"subject","Prueba sintetica","body","Relato sintetico")).id();
+        long com=run("distribuidor","COM_CREATE",0,null,Map.of("intake",Map.of(),"scope_id",scope1,"channel","TELEFONO","received_at",Instant.now().minusSeconds(60).toString(),"subject","Prueba sintetica","body","Relato sintetico")).id();
         long sol=run("distribuidor","COM_ROUTE",com,rev("communication",com),Map.of("scope_id",scope1,"reason","Competencia sintetica")).id();
         long req=run("jefe1","SOL_ASSUME",sol,rev("solicitation",sol),Map.of("responsible_id",prof,"reason","Asuncion de prueba")).id();
         assertEquals(0,db.count("SELECT COUNT(*) FROM case_record WHERE requirement_id=?",req));
@@ -52,7 +52,7 @@ class WorkflowTest {
         run("jefe1","REQ_CLOSE",req,rev("requirement",req),Map.of("reason","Cierre expreso"));
         assertEquals("CERRADO",s(db.one("SELECT state FROM requirement WHERE id=?",req),"state"));
         // Segunda gestion para comprobar derivacion sin cierre parcial ni duplicados.
-        long com2=run("jefe1","COM_CREATE",0,null,Map.of("scope_id",scope1,"channel","PRESENCIAL","received_at",Instant.now().minusSeconds(10).toString(),"subject","Derivacion sintetica","body","Antecedente de prueba")).id();
+        long com2=run("jefe1","COM_CREATE",0,null,Map.of("intake",Map.of(),"scope_id",scope1,"channel","PRESENCIAL","received_at",Instant.now().minusSeconds(10).toString(),"subject","Derivacion sintetica","body","Antecedente de prueba")).id();
         long req2=run("jefe1","COM_ASSUME",com2,rev("communication",com2),Map.of("responsible_id",prof,"reason","Ingreso propio")).id();
         long origin=run("jefe1","REQ_CASE_CREATE",req2,rev("requirement",req2),Map.of("responsible_id",prof,"objective","Objetivo origen","matter","UPR")).id();
         run("prof","TASK_CREATE",origin,rev("case_record",origin),Map.of("executor_id",prof,"title","Obligatoria sintetica","mandatory",true));
@@ -73,20 +73,20 @@ class WorkflowTest {
         long reqArea=db.insert("INSERT INTO org_scope(code,name,unit_code,area_code,site_code) VALUES('UPR-REQ','Requerimientos','UPR','REQ','CENTRAL')");
         long coordinator=user("coordinadora-prueba",reqArea,"JEFATURA");
         long reqProfessional=user("prof-requerimientos-prueba",reqArea,"PROFESIONAL");
-        long com3=run("distribuidor","COM_CREATE",0,null,Map.of("scope_id",scope1,"channel","TELEFONO","received_at",Instant.now().minusSeconds(15).toString(),"subject","Ingreso Requerimientos","body","Sintetico")).id();
+        long com3=run("distribuidor","COM_CREATE",0,null,Map.of("intake",Map.of(),"scope_id",scope1,"channel","TELEFONO","received_at",Instant.now().minusSeconds(15).toString(),"subject","Ingreso Requerimientos","body","Sintetico")).id();
         long sol3=run("distribuidor","COM_ROUTE",com3,rev("communication",com3),Map.of("scope_id",uprRoot,"area_scope_id",reqArea,"reason","Enviar a coordinacion")).id();
         assertEquals(reqArea,n(db.one("SELECT destination_scope FROM solicitation WHERE id=?",sol3),"destination_scope"));
         assertThrows(Problem.class,()->run("jefe1","SOL_ASSUME",sol3,rev("solicitation",sol3),Map.of("responsible_id",reqProfessional,"reason","No recibe la directora")));
         long req3=run("coordinadora-prueba","SOL_ASSUME",sol3,rev("solicitation",sol3),Map.of("responsible_id",reqProfessional,"reason","Asume su area")).id();
         assertEquals(reqArea,n(db.one("SELECT principal_scope FROM requirement WHERE id=?",req3),"principal_scope"));
-        long com4=run("distribuidor","COM_CREATE",0,null,Map.of("scope_id",scope1,"channel","CORREO","received_at",Instant.now().minusSeconds(15).toString(),"subject","Ingreso Difusion UPD","body","Sintetico")).id();
+        long com4=run("distribuidor","COM_CREATE",0,null,Map.of("intake",Map.of(),"scope_id",scope1,"channel","CORREO","received_at",Instant.now().minusSeconds(15).toString(),"subject","Ingreso Difusion UPD","body","Sintetico")).id();
         long sol4=run("distribuidor","COM_ROUTE",com4,rev("communication",com4),Map.of("scope_id",updRoot,"area_scope_id",scope2,"reason","Area particular sin coordinacion")).id();
         var row4=db.one("SELECT destination_scope,requested_area_scope FROM solicitation WHERE id=?",sol4);
         assertEquals(updRoot,n(row4,"destination_scope"));assertEquals(scope2,n(row4,"requested_area_scope"));
         assertThrows(Problem.class,()->run("coordinadora-prueba","SOL_ASSUME",sol4,rev("solicitation",sol4),Map.of("responsible_id",head2,"reason","No tiene competencia")));
         long req4=run("jefe2","SOL_ASSUME",sol4,rev("solicitation",sol4),Map.of("responsible_id",head2,"reason","Asuncion Direccion UPD")).id();
         assertEquals(updRoot,n(db.one("SELECT principal_scope FROM requirement WHERE id=?",req4),"principal_scope"));
-        long com5=run("distribuidor","COM_CREATE",0,null,Map.of("scope_id",scope1,"channel","TELEFONO","received_at",Instant.now().minusSeconds(15).toString(),"subject","UPR sin area","body","Sintetico")).id();
+        long com5=run("distribuidor","COM_CREATE",0,null,Map.of("intake",Map.of(),"scope_id",scope1,"channel","TELEFONO","received_at",Instant.now().minusSeconds(15).toString(),"subject","UPR sin area","body","Sintetico")).id();
         long sol5=run("distribuidor","COM_ROUTE",com5,rev("communication",com5),Map.of("scope_id",uprRoot,"reason","Sin area decidida")).id();
         assertThrows(Problem.class,()->run("jefe1","SOL_ASSUME",sol5,rev("solicitation",sol5),Map.of("responsible_id",reqProfessional,"reason","No salta la coordinacion")));
         run("jefe1","SOL_ASSUME",sol5,rev("solicitation",sol5),Map.of("responsible_id",prof,"reason","Prof autorizado por su Directora"));

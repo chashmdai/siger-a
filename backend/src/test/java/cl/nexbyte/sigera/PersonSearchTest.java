@@ -33,7 +33,7 @@ class PersonSearchTest {
     static final String KEY="clave-sintetica-de-pruebas-hmac-0123456789";
     static final String READER="lector.buscador";
     @DynamicPropertySource static void trustedKeys(DynamicPropertyRegistry registry){FormularioDocs.trustedKeys(registry);}
-    @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired PersonSearch search;@Autowired BoardQueries boards;
+    @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired PersonSearch search;@Autowired BoardQueries boards;@Autowired PersonIndex index;
 
     record Data(long ana,long mariana,long anabel,long external,long ficha,long fichaCom,long caseId,long regional){}
     static Data d;
@@ -46,9 +46,10 @@ class PersonSearchTest {
         return flow.run(who,new Workflow.Command(UUID.randomUUID(),type,id,rev,data)).id();
     }
     long com(String who,String scope,String presenter,String identity){
-        var data=new HashMap<String,Object>(Map.of("scope_id",scope(scope),"channel","TELEFONO","received_at",ago(120),"subject","Ingreso sintetico","body","Relato sintetico","presenter",presenter));
-        if(identity!=null)data.put("identity_document",identity);
-        return run(who,"COM_CREATE",null,null,data);
+        // COM anterior a 0.8.0 (formato retirado en E05): sus datos historicos se insertan por SQL (LegacyCom).
+        var legacy=new HashMap<String,Object>(Map.of("presenter",presenter));
+        if(identity!=null)legacy.put("identity_document",identity);
+        return LegacyCom.create(flow,db,index,who,Map.of("scope_id",scope(scope),"channel","TELEFONO","received_at",ago(120),"subject","Ingreso sintetico","body","Relato sintetico"),legacy);
     }
     /**
      * Datos sinteticos: COM manuales en UPR-REQ (Ana Perez Soto con RUN, NNA y "otra persona"; Mariana con pasaporte;
@@ -61,7 +62,7 @@ class PersonSearchTest {
         long reader=db.insert("INSERT INTO staff(username,name,password_hash,home_scope,must_change) VALUES(?,?,'test-non-login',?,FALSE)",READER,"Lector buscador sintetico",scope("UGI"));
         db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) VALUES(?,?,NULL,0,'PRUEBA AUTOMATICA')",reader,Roles.CONSULTA_INSTITUCIONAL);
         long upr=scope("UPR-REQ");
-        long ana=run("distribucion","COM_CREATE",null,null,Map.of("scope_id",upr,"channel","TELEFONO","received_at",ago(120),"subject","Ingreso sintetico","body","Relato sintetico",
+        long ana=LegacyCom.create(flow,db,index,"distribucion",Map.of("scope_id",upr,"channel","TELEFONO","received_at",ago(120),"subject","Ingreso sintetico","body","Relato sintetico"),Map.of(
             "presenter","Ana Pérez Soto","identity_document","RUN 12.345.678-5","persons",List.of(Map.of("role","NNA","name","Benjamín Rojas"),Map.of("role","OTRA_PERSONA","name","Hugo Lagos"))));
         long mariana=com("distribucion","UPR-REQ","Mariana Ríos","Pasaporte AB-123.456");
         long anabel=com("distribucion","UPR-REQ","Anabel Fuentes","123456785");

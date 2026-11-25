@@ -41,7 +41,7 @@ class ComBoardMarkTest {
     }
     /** COM manual con filas CAMPO insertadas (para el orden de varias filas riesgo). */
     long manual(String... kv){
-        long com=run("administrativo","COM_CREATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",Instant.now().minusSeconds(120).toString(),"subject","COM manual sintetica","body","Relato sintetico")).id();
+        long com=run("administrativo","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",Instant.now().minusSeconds(120).toString(),"subject","COM manual sintetica","body","Relato sintetico")).id();
         for(int i=0;i<kv.length;i+=2)db.update("INSERT INTO external_field(communication_id,field_group,item,field_key,value_text) VALUES(?,'CAMPO',?,?,?)",com,i,kv[i],kv[i+1]);
         return com;
     }

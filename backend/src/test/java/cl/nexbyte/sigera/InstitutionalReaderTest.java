@@ -53,7 +53,12 @@ class InstitutionalReaderTest {
 
  long scope(String code){return n(db.one("SELECT id FROM org_scope WHERE code=?",code),"id");}
  long user(String name){return n(db.one("SELECT id FROM staff WHERE username=?",name),"id");}
- Long rev(String table,Long id){return id==null||table==null?null:n(db.one("SELECT revision FROM "+table+" WHERE id=?",id),"revision");}
+ Long rev(String table,Long id){
+  if(id==null||table==null)return null;
+  // STAT_CLASSIFY (E05): la revision es la cantidad de eventos de clasificacion de la COM.
+  if(table.equals("stat_event"))return db.count("SELECT COUNT(*) FROM stat_event WHERE communication_id=?",id);
+  return n(db.one("SELECT revision FROM "+table+" WHERE id=?",id),"revision");
+ }
  String ago(long seconds){return Instant.now().minusSeconds(seconds).toString();}
  long run(String who,String type,String table,Long id,Map<String,Object> data){
   db.update("UPDATE staff SET must_change=FALSE WHERE username=?",who);
@@ -71,7 +76,7 @@ class InstitutionalReaderTest {
  long com(String subject){return com(ADMIN,subject);}
  long com(String who,String subject){return com(CENTRAL,who,subject);}
  long com(Site x,String who,String subject){
-  return run(who,"COM_CREATE","communication",null,Map.of("scope_id",scope(x.scope()),"channel","TELEFONO","received_at",ago(300),"subject",subject,"body","Relato sintetico"));
+  return run(who,"COM_CREATE","communication",null,Map.of("intake",Map.of(),"scope_id",scope(x.scope()),"channel","TELEFONO","received_at",ago(300),"subject",subject,"body","Relato sintetico"));
  }
  long route(long com){return route(CENTRAL,com);}
  /** SOL al ambito del fixture; en una sede, con su materia sugerida. */
@@ -316,13 +321,14 @@ class InstitutionalReaderTest {
   attempts.put("ATTENTION_SEND",new Attempt("requirement",f.attention(),Map.of("recipient_kind","JEFATURA","scope_id",upr,"reason","Intento")));
   attempts.put("ATTENTION_DECIDE",new Attempt("requirement",f.attention(),Map.of("handoff_id",f.handoff(),"decision","RECIBIDA","reason","Intento")));
   attempts.put("ATTENTION_RESOLVE",new Attempt("requirement",f.attention(),Map.of("result","ORIENTACION","reason","Intento","effective_at",ago(10))));
-  var newCom=Map.<String,Object>of("scope_id",upr,"channel","TELEFONO","received_at",ago(60),"subject","Intento","body","Intento");
+  var newCom=Map.<String,Object>of("intake",Map.of(),"scope_id",upr,"channel","TELEFONO","received_at",ago(60),"subject","Intento","body","Intento");
   attempts.put("COM_CREATE",new Attempt(null,null,newCom));
   attempts.put("COM_IMMEDIATE",new Attempt(null,null,newCom));
   // Ficha de ingreso (E03): una complementacion valida, para que la unica causa de rechazo sea la funcion.
   attempts.put("COM_COMPLETE",new Attempt("communication",f.comNew(),Map.of("intake",Map.of("contact_restrictions","Intento"),"reason","Intento")));
   attempts.put("COM_ROUTE",new Attempt("communication",f.comNew(),Map.of("scope_id",upr,"reason","Intento")));
   attempts.put("COM_ASSUME",new Attempt("communication",f.comNew(),Map.of("responsible_id",prof,"reason","Intento")));
+  attempts.put("STAT_CLASSIFY",new Attempt("stat_event",f.comNew(),Map.of("stat",Map.of("TIPO_SOLICITUD",Map.of("status","SIN_INFORMACION"),"reason","Intento"))));
   attempts.put("COM_LINK",new Attempt("communication",f.comNew(),Map.of("folio",s(db.one("SELECT folio FROM requirement WHERE id=?",f.req()),"folio"),"reason","Intento")));
   var solData=Map.<String,Object>of("scope_id",scope("UPD"),"responsible_id",prof,"disposition","INVALIDA","reason","Intento");
   for(String t:List.of("SOL_ROUTE","SOL_RETURN","SOL_ASSUME","SOL_DISCARD"))attempts.put(t,new Attempt("solicitation",f.solPending(),solData));

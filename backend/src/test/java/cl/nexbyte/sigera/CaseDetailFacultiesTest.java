@@ -46,7 +46,7 @@ class CaseDetailFacultiesTest {
   assertNull(db.one("SELECT solicitation_id FROM requirement WHERE id=?",direct).get("solicitation_id"));
   assertEquals("ATENCION_DIRECTA",cas(PROF,openCase(direct)).get("req_origin"));
 
-  long com=run(HEAD,"COM_CREATE","communication",null,Map.of("scope_id",scope(),"channel","TELEFONO","received_at",Instant.now().minusSeconds(60).toString(),"subject","Ingreso sintetico","body","Relato sintetico"));
+  long com=run(HEAD,"COM_CREATE","communication",null,Map.of("intake",Map.of(),"scope_id",scope(),"channel","TELEFONO","received_at",Instant.now().minusSeconds(60).toString(),"subject","Ingreso sintetico","body","Relato sintetico"));
   long assumed=run(HEAD,"COM_ASSUME","communication",com,Map.of("responsible_id",user(PROF),"reason","Ingreso propio de la jefatura"));
   assertNotNull(db.one("SELECT solicitation_id FROM requirement WHERE id=?",assumed).get("solicitation_id"),"asumir crea una SOL ASUMIDA");
   assertEquals("SOLICITUD",cas(HEAD,openCase(assumed)).get("req_origin"));

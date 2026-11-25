@@ -109,7 +109,7 @@ class OriginRegionTest {
         long completed=attend("REG-04","GENERAL",null);save("REG-04",completed,"03");
         long removed=attend("REG-04","GENERAL","03");save("REG-04",removed,"");
         // COM manual sin region, distribuida y asumida en Coquimbo; ficha NNA con region en texto libre.
-        long com=run("administrativo","COM_CREATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",Instant.now().minusSeconds(300).toString(),"subject","COM manual","body","Relato sintetico")).id();
+        long com=run("administrativo","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",Instant.now().minusSeconds(300).toString(),"subject","COM manual","body","Relato sintetico")).id();
         long sol=run("distribucion","COM_ROUTE",com,rev("communication",com),Map.of("scope_id",scope("REG-04"),"reason","Clasificacion")).id();
         long manual=run("coord.04","SOL_ASSUME",sol,rev("solicitation",sol),Map.of("responsible_id",user("coord.04"),"reason","Asume la sede")).id();
         long nnaText=attend("REG-04","NNA","Atacama");
@@ -250,7 +250,7 @@ class OriginRegionTest {
         assertEquals("02",OriginRegion.current("Atacama",List.of(Map.of("field_key","adult-region","value_text","05"),Map.of("field_key","nna-region","value_text","02"))));
     }
     long projected(String... kv){
-        long com=run("administrativo","COM_CREATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",Instant.now().minusSeconds(120).toString(),"subject","COM proyectada","body","Relato sintetico")).id();
+        long com=run("administrativo","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",Instant.now().minusSeconds(120).toString(),"subject","COM proyectada","body","Relato sintetico")).id();
         for(int i=0;i<kv.length;i+=2)db.update("INSERT INTO external_field(communication_id,field_group,item,field_key,value_text) VALUES(?,'CAMPO',?,?,?)",com,i,kv[i],kv[i+1]);
         return com;
     }

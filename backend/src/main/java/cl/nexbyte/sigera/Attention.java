@@ -25,10 +25,11 @@ public class Attention {
     private final Lifecycle life;
     private final PersonIndex index;
     private final OriginRegion regions;
+    private final StatValues stats;
     private final TransactionTemplate tx;
     private final JsonMapper json=JsonMapper.builder().build();
-    public Attention(Db db,Access access,Documents documents,Lifecycle life,PersonIndex index,OriginRegion regions,PlatformTransactionManager manager){
-        this.db=db;this.access=access;this.documents=documents;this.life=life;this.index=index;this.regions=regions;this.tx=new TransactionTemplate(manager);
+    public Attention(Db db,Access access,Documents documents,Lifecycle life,PersonIndex index,OriginRegion regions,StatValues stats,PlatformTransactionManager manager){
+        this.db=db;this.access=access;this.documents=documents;this.life=life;this.index=index;this.regions=regions;this.stats=stats;this.tx=new TransactionTemplate(manager);
     }
     private long now(){return System.currentTimeMillis();}
     public boolean exists(long req){return db.count("SELECT COUNT(*) FROM attention_record WHERE requirement_id=?",req)>0;}
@@ -197,6 +198,8 @@ public class Attention {
         db.audit(a.id(),"COM_REGISTRADA_ATENCION","COM",com,scope,"Atencion directa. REQ "+req);
         db.audit(a.id(),"ATENCION_INICIADA","REQ",req,principal,"COM "+com+". Sin SOL ni Caso automatico.");
         if(follow)access.notifyHeads(principal,"Una primera atencion requiere un Caso de seguimiento.","REQ",req);
+        // Clasificacion estadistica opcional de la COM (E05), antes de resolver en el acto.
+        stats.inline(a,com,in.values().get("stat"));
         if(in.flag("resolve_now"))return resolve(a,req(req),in);
         return new Workflow.Result("REQ",req,"Atencion registrada. COM y REQ creados; puedes completar la ficha o entregarla.");
     }

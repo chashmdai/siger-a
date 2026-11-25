@@ -113,5 +113,39 @@ class MySql84Upgrade070Test {
         }
         assertEquals(migrated,counts(unchanged),"el arranque normal tras migrate-only no cambia nada");
         assertEquals(prints,fingerprints());
+
+        // 3. E05 (V19): con los catalogos de referencia vigentes, la via y las propuestas de las COM del Formulario
+        // anteriores a 0.8.0 se calculan (Java = SQL) sin escribir eventos ni tocar los originales.
+        if(latest>=19)try(var ctx=MySql84IntegrationTest.app(SCHEMA,List.of())){
+            var db=ctx.getBean(Db.class);var flow=ctx.getBean(Workflow.class);var stats=ctx.getBean(StatValues.class);var proposals=ctx.getBean(StatProposals.class);
+            assertEquals(0,db.count("SELECT COUNT(*) FROM stat_event"),"ninguna migracion escribe eventos de clasificacion");
+            db.update("UPDATE staff SET must_change=FALSE WHERE username='ti'");
+            for(String file:List.of("tipo-solicitud-v1.json","tipo-requirente-v1.json","via-ingreso-v1.json")){
+                String content=Files.readString(ReferenceCatalogsTest.DIR.resolve(file)).replace("\r\n","\n");
+                long v=flow.run("ti",new Workflow.Command(UUID.randomUUID(),"CATALOG_IMPORT",null,null,Map.of("content",content,"reason","Ensayo sintetico"))).id();
+                flow.run("ti",new Workflow.Command(UUID.randomUUID(),"CATALOG_ACTIVATE",v,0L,Map.of("reason","Ensayo sintetico")));
+            }
+            var coms=db.rows("SELECT id,channel FROM communication WHERE external_source IS NOT NULL ORDER BY id");
+            assertEquals(3,coms.size());
+            for(var c:coms){
+                long id=n(c,"id");
+                var via=stats.current(id,StatValues.VIA_INGRESO);
+                assertEquals(StatValues.INFORMED,via.state());assertEquals(StatValues.SYSTEM,via.origin());assertEquals(StatValues.CHANNEL_VIA.get(s(c,"channel")),via.code());
+                for(String variable:StatValues.SINGLE){
+                    var java=stats.current(id,variable);
+                    var sql=db.one("SELECT "+StatValues.stateSql("c",variable,null)+" AS st,"+StatValues.codeSql("c",variable,null)+" AS cd FROM communication c WHERE c.id=?",id);
+                    assertEquals(java.state(),s(sql,"st"),variable);assertEquals(java.code(),sql.get("cd")==null?null:s(sql,"cd"),variable);
+                }
+                var proposed=proposals.of(id);
+                for(String variable:List.of(StatValues.TIPO_SOLICITUD,StatValues.TIPO_REQUIRENTE)){
+                    var p=db.one("SELECT "+StatProposals.sqlCode("c",variable)+" AS p FROM communication c WHERE c.id=?",id).get("p");
+                    assertEquals(proposed.get(variable),p==null?null:p.toString(),"propuesta "+variable);
+                }
+                assertEquals(s(c,"channel").equals(StatProposals.NNA)?"NNA":"PERSONA_NATURAL_ADULTA",proposed.get(StatValues.TIPO_REQUIRENTE));
+                assertEquals(StatValues.PENDING,stats.current(id,StatValues.TIPO_REQUIRENTE).state(),"la propuesta no cuenta como informado");
+            }
+            assertEquals(0,db.count("SELECT COUNT(*) FROM stat_event"),"calcular no escribe");
+        }
+        assertEquals(prints,fingerprints(),"originales del Formulario y external_* identicos despues de calcular");
     }
 }

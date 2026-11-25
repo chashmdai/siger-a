@@ -46,7 +46,7 @@ class MilestoneTest {
     }
     long com(String subject){return com(ADMIN,subject);}
     long com(String who,String subject){
-        return run(who,"COM_CREATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",ago(300),"subject",subject,"body","Relato sintetico"));
+        return run(who,"COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",ago(300),"subject",subject,"body","Relato sintetico"));
     }
     long solOf(long com){return n(db.one("SELECT id FROM solicitation WHERE communication_id=?",com),"id");}
     long count(){return db.count("SELECT COUNT(*) FROM milestone");}
@@ -111,7 +111,7 @@ class MilestoneTest {
         run(DIST,"COM_ROUTE","communication",discarded,Map.of("scope_id",upr,"reason","Clasificacion sintetica"));
         run(HEAD,"SOL_DISCARD","solicitation",solOf(discarded),Map.of("disposition","DUPLICADA","reason","Ya ingresada"));
         // Atencion resuelta en el acto (fecha efectiva declarada anterior al registro).
-        long immediate=run(ADMIN,"COM_IMMEDIATE",null,null,Map.of("scope_id",upr,"channel","TELEFONO","received_at",ago(600),"subject","Orientacion","body","Relato sintetico",
+        long immediate=run(ADMIN,"COM_IMMEDIATE",null,null,Map.of("intake",Map.of(),"scope_id",upr,"channel","TELEFONO","received_at",ago(600),"subject","Orientacion","body","Relato sintetico",
             "reason","Orientacion entregada","effective_at",ago(300),"result","ORIENTACION"));
         // Primera atencion entregada a un profesional, recibida y resuelta.
         long attention=run(ADMIN,"ATTENTION_CREATE",null,null,Map.of("scope_id",upr,"channel","PRESENCIAL","received_at",ago(600),"form",Map.of("schema_version","1.0","modality","NNA",

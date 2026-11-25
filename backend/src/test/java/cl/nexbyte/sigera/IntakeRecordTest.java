@@ -13,8 +13,8 @@ import static cl.nexbyte.sigera.Db.*;
 
 /**
  * Ficha de ingreso de la COM manual (0.8.0, D33, gate E03b; DISENO 3.5): unica fuente de la COM que la tiene (columnas
- * de resumen derivadas, sin filas en communication_person, todos los lectores la toman), formato anterior intacto
- * mientras la pantalla no cambie, ingreso institucional sin persona natural, mismas reglas del Formulario (escenario
+ * de resumen derivadas, sin filas en communication_person, todos los lectores la toman), formato anterior
+ * retirado en E05 con las COM anteriores legibles, ingreso institucional sin persona natural, mismas reglas del Formulario (escenario
  * 11), COM_COMPLETE con motivo solo con la cadena abierta (completar no es corregir), auditoria sin valores, version
  * anterior legible y region de origen de la COM manual igual en Java, en SQL y en Access.suggestedRegion.
  */
@@ -24,7 +24,7 @@ import static cl.nexbyte.sigera.Db.*;
 @ActiveProfiles("test")
 class IntakeRecordTest {
     static final JsonMapper JSON=JsonMapper.builder().build();
-    @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired Queries queries;@Autowired IntakeRecord records;@Autowired OriginRegion regions;
+    @Autowired Workflow flow;@Autowired Db db;@Autowired Access access;@Autowired Queries queries;@Autowired IntakeRecord records;@Autowired OriginRegion regions;@Autowired PersonIndex index;
 
     @BeforeEach void ready(){db.update("UPDATE staff SET must_change=FALSE");}
     long scope(String code){return n(db.one("SELECT id FROM org_scope WHERE code=?",code),"id");}
@@ -77,9 +77,17 @@ class IntakeRecordTest {
         assertEquals(before,db.count("SELECT COUNT(*) FROM communication"));
     }
 
-    @Test void formatoAnteriorSigueIgualSinFichaDeIngreso(){
-        long com=run("administrativo","COM_CREATE",null,null,com("presenter","Nombre libre","identity_document","RUN 12.345.678-5","contact_phone","22 123 4567",
-            "persons",List.of(map("role","NNA","name","NNA sintetico","location","Talca")))).id();
+    @Test void formatoAnteriorRetiradoYComAnteriorLegible(){
+        // E05: el formato anterior (sin el bloque intake) se rechaza con 400 y sin escrituras, en ambos comandos.
+        long before=db.count("SELECT COUNT(*) FROM communication");
+        assertEquals(400,refused("administrativo","COM_CREATE",null,null,com("presenter","Nombre libre","identity_document","RUN 12.345.678-5","contact_phone","22 123 4567",
+            "persons",List.of(map("role","NNA","name","NNA sintetico","location","Talca")))).status);
+        assertEquals(400,refused("administrativo","COM_CREATE",null,null,com()).status);
+        assertEquals(400,refused("administrativo","COM_IMMEDIATE",null,null,com("reason","Orientacion entregada","result","ORIENTACION","effective_at",Instant.now().minusSeconds(60).toString())).status);
+        assertEquals(before,db.count("SELECT COUNT(*) FROM communication"));
+        // Una COM registrada con el formato anterior (datos historicos por SQL) conserva su lectura.
+        long com=LegacyCom.create(flow,db,index,"administrativo",com(),map("presenter","Nombre libre","identity_document","RUN 12.345.678-5","contact_phone","22 123 4567",
+            "persons",List.of(map("role","NNA","name","NNA sintetico","location","Talca"))));
         assertEquals(1,db.count("SELECT COUNT(*) FROM communication_person WHERE communication_id=?",com));
         assertEquals(0,db.count("SELECT COUNT(*) FROM intake_record WHERE communication_id=?",com));
         assertEquals("22 123 4567",s(db.one("SELECT contact_phone FROM communication WHERE id=?",com),"contact_phone"));
@@ -182,7 +190,7 @@ class IntakeRecordTest {
         coms.add(create(map("presenter",presenter("region_code","07","commune","Talca"))));
         long fixed=create(map("presenter",presenter("region_code","07")));complete(fixed,map("presenter",presenter("region_code","05")),"Rectifica");coms.add(fixed);
         long removed=create(map("presenter",presenter("region_code","13")));complete(removed,map("presenter",presenter()),"Quita la region");coms.add(removed);
-        long legacy=run("administrativo","COM_CREATE",null,null,com("presenter","Libre")).id();coms.add(legacy);
+        long legacy=LegacyCom.create(flow,db,index,"administrativo",com(),map("presenter","Libre"));coms.add(legacy);
         var expected=Map.of(coms.get(0),Arrays.asList(null,null,false),coms.get(1),Arrays.asList("07","07",false),fixed,Arrays.asList("07","05",true),
             removed,Arrays.asList("13",null,true),legacy,Arrays.asList(null,null,false));
         for(long com:coms){

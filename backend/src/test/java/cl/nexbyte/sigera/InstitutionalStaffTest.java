@@ -68,7 +68,7 @@ class InstitutionalStaffTest {
         assertEquals(0,db.count("SELECT COUNT(*) FROM territorial_coverage WHERE scope_id=(SELECT id FROM org_scope WHERE code='UGI')"));
         // Flujo real con datos ficticios: la distribuidora registra una COM y la jefatura la recibe (reglas existentes).
         db.update("UPDATE staff SET must_change=FALSE WHERE technical=FALSE");
-        long com=flow.run("distribuidora",new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("scope_id",scope,"channel","TELEFONO",
+        long com=flow.run("distribuidora",new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",scope,"channel","TELEFONO",
             "received_at",java.time.Instant.now().minusSeconds(60).toString(),"subject","Consulta ficticia de validacion","body","Datos ficticios"))).id();
         assertTrue(s(db.one("SELECT folio FROM communication WHERE id=?",com),"folio").endsWith("-000001"));
     }

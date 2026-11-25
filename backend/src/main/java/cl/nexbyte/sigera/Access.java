@@ -292,6 +292,22 @@ public class Access {
         }
         return false;
     }
+    /**
+     * Clasificacion estadistica de la COM (0.8.0, D34-D35, gate E05; DISENO 4.3): quien hoy puede actuar sobre la cadena.
+     * Distribucion de la COM NUEVA (o de su SOL devuelta), receptor de la SOL pendiente, y jefatura principal o encargado
+     * del REQ abierto (incluye a quien edita la ficha, attentionWritable). Nunca la consulta institucional, la lectura
+     * por materia, LECTURA, AUDITORIA, REPORTES ni TI. La inmutabilidad (COM descartada o vinculada, REQ cerrado) la
+     * decide StatValues.blocked antes que esta facultad.
+     */
+    public boolean statWritable(Actor a,Map<String,Object> com) {
+        long id=n(com,"id");
+        if(s(com,"state").equals("NUEVA")&&canDistribute(a,com))return true;
+        for(var sol:db.rows("SELECT state,destination_scope FROM solicitation WHERE communication_id=?",id)){
+            if(s(sol,"state").equals("PENDIENTE")&&solReceiver(a,n(sol,"destination_scope")))return true;
+            if(s(sol,"state").equals("DEVUELTA")&&canDistribute(a,com))return true;
+        }
+        return db.rows("SELECT * FROM requirement WHERE communication_id=?",id).stream().anyMatch(r->s(r,"state").equals("ABIERTO")&&reqMain(a,r));
+    }
     public void head(Actor a,long scope) { scope(scope);if(!a.head(scope))Problem.denied(); }
     public void assignable(long user,long scope) { if(!this.user(user).professional(scope))throw new Problem(400,"Responsable sin funcion profesional o jefatura en el destino."); }
     public Map<String,Object> caseForRead(Actor a,long id) { var r=db.one("SELECT * FROM case_record WHERE id=?",id);if(!caseRead(a,r))Problem.denied();return r; }

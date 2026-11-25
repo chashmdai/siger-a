@@ -255,7 +255,7 @@ class StatCatalogsTest {
         assertEquals(200,read(()->catalogs.administration(access.actor("ti"))));
 
         // D2: administrar catalogos no da a TI lectura de expedientes ni reportes.
-        long com=run("administrativo","COM_CREATE",null,null,Map.of("scope_id",n(db.one("SELECT id FROM org_scope WHERE code='UPR-REQ'"),"id"),"channel","TELEFONO",
+        long com=run("administrativo","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",n(db.one("SELECT id FROM org_scope WHERE code='UPR-REQ'"),"id"),"channel","TELEFONO",
             "received_at",java.time.Instant.now().minusSeconds(60).toString(),"subject","Ingreso sintetico","body","Relato sintetico")).id();
         activate(v);
         var ti=access.actor("ti");

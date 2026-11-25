@@ -226,9 +226,9 @@ class LoginPasswordTest {
         assertEquals(200,first.password(temporary(user),fresh).statusCode());
         db.update("UPDATE staff SET must_change=FALSE WHERE username IN (?,'profesional.regional')",user);
         long scope=n(db.one("SELECT id FROM org_scope WHERE code='UPR-REQ'"),"id");
-        var mine=flow.run(user,new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("scope_id",scope,"channel","TELEFONO","received_at",java.time.Instant.now().minusSeconds(60).toString(),"subject","Asunto exportable","body","Relato exportable")));
+        var mine=flow.run(user,new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",scope,"channel","TELEFONO","received_at",java.time.Instant.now().minusSeconds(60).toString(),"subject","Asunto exportable","body","Relato exportable")));
         long site=n(db.one("SELECT id FROM org_scope WHERE code='REG-DEMO'"),"id");
-        var foreign=flow.run("profesional.regional",new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("scope_id",site,"channel","TELEFONO","received_at",java.time.Instant.now().minusSeconds(60).toString(),"subject","Asunto ajeno","body","Relato ajeno")));
+        var foreign=flow.run("profesional.regional",new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",site,"channel","TELEFONO","received_at",java.time.Instant.now().minusSeconds(60).toString(),"subject","Asunto ajeno","body","Relato ajeno")));
         var browser=new Browser();
         assertEquals(204,browser.login(user,fresh));
         assertTrue(browser.session().contains("\"can_export\":false"));

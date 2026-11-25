@@ -13,7 +13,8 @@ import static cl.nexbyte.sigera.Problem.require;
  */
 @Component
 public class Lifecycle {
-    static final String[] CHANNELS={"PRESENCIAL","TELEFONO","CORREO","OFICIO","OTRO"};
+    /** Canales del registro manual y de la atencion directa (0.8.0, D31: REDES_SOCIALES e INTEGRANTE_DEFENSORIA). */
+    static final String[] CHANNELS={"PRESENCIAL","TELEFONO","CORREO","OFICIO","REDES_SOCIALES","INTEGRANTE_DEFENSORIA","OTRO"};
     static final String[] MATTERS={"UPR","UPD","UEP","OTRA"};
     /** Materia sugerida de una SOL a una sede y materia del REQ regional (D9): las de las Direcciones nacionales. */
     static final String[] REGIONAL_MATTERS={"UPR","UPD","UEP"};

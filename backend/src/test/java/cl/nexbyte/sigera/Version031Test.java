@@ -17,12 +17,12 @@ import static cl.nexbyte.sigera.Db.*;
 @ActiveProfiles("test")
 class Version031Test {
     @Autowired Workflow flow; @Autowired Access access; @Autowired Db db;
-    @Autowired Documents docs; @Autowired BoardQueries boards; @Autowired Bootstrap bootstrap;
+    @Autowired Documents docs; @Autowired BoardQueries boards; @Autowired Bootstrap bootstrap; @Autowired IntakeRecord records;
     long scope(String code){return n(db.one("SELECT id FROM org_scope WHERE code=?",code),"id");}
     long user(String name){return n(db.one("SELECT id FROM staff WHERE username=?",name),"id");}
     long revision(String table,long id){return n(db.one("SELECT revision FROM "+table+" WHERE id=?",id),"revision");}
     Workflow.Result run(String who,String type,Long id,Long rev,Map<String,Object> data){db.update("UPDATE staff SET must_change=FALSE WHERE username=?",who);return flow.run(who,new Workflow.Command(UUID.randomUUID(),type,id,rev,data));}
-    Map<String,Object> intake(long scope,String subject){var m=new LinkedHashMap<String,Object>();m.put("scope_id",scope);m.put("subject",subject);m.put("body","Solo datos sinteticos");m.put("channel","TELEFONO");m.put("received_at",Instant.now().minusSeconds(60).toString());return m;}
+    Map<String,Object> intake(long scope,String subject){var m=new LinkedHashMap<String,Object>();m.put("scope_id",scope);m.put("subject",subject);m.put("body","Solo datos sinteticos");m.put("channel","TELEFONO");m.put("received_at",Instant.now().minusSeconds(60).toString());m.put("intake",new LinkedHashMap<String,Object>());return m;}
     long ownReq(String head,long root,long professional,String subject){long com=run(head,"COM_CREATE",null,null,intake(root,subject)).id();return run(head,"COM_ASSUME",com,revision("communication",com),Map.of("responsible_id",professional,"reason","Gestion propia de unidad")).id();}
     @Test void subroganciaDireccionRecibeSolYConservaCarteraTitular(){
         long root=scope("UPD"),area=scope("UPD-DIF"),titular=user("direccion.upd"),sub=user("profesional.upd");
@@ -47,9 +47,9 @@ class Version031Test {
     @Test void inSituConAdjuntoYAntecedenteRechazadoVuelveSinDuplicar()throws Exception{
         long sc=scope("UPR-REQ");db.update("UPDATE staff SET must_change=FALSE WHERE username='administrativo'");
         UUID token=UUID.randomUUID();docs.stage("administrativo",sc,token,new MockMultipartFile("file","constancia.txt","text/plain","Sintetico".getBytes()));
-        var data=intake(sc,"Atencion resuelta con evidencia");data.put("attachment_tokens",List.of(token.toString()));data.put("effective_at",Instant.now().minusSeconds(5).toString());data.put("result","ORIENTACION");data.put("reason","Orientacion concluida");data.put("persons",List.of(Map.of("role","NNA","name","NNA sintetico","location","Localizacion declarada")));data.put("contact_restrictions","No llamar");
+        var data=intake(sc,"Atencion resuelta con evidencia");data.put("attachment_tokens",List.of(token.toString()));data.put("effective_at",Instant.now().minusSeconds(5).toString());data.put("result","ORIENTACION");data.put("reason","Orientacion concluida");data.put("intake",Map.of("persons",List.of(Map.of("role","NNA","first_name","NNA sintetico","location_text","Localizacion declarada")),"contact_restrictions","No llamar"));
         long req=run("administrativo","COM_IMMEDIATE",null,null,data).id();long com=n(db.one("SELECT communication_id FROM requirement WHERE id=?",req),"communication_id");
-        assertEquals(1,db.count("SELECT COUNT(*) FROM document_item WHERE communication_id=? AND quarantined=TRUE",com));assertEquals(1,db.count("SELECT COUNT(*) FROM communication_person WHERE communication_id=?",com));assertEquals(0,db.count("SELECT COUNT(*) FROM case_record WHERE requirement_id=?",req));
+        assertEquals(1,db.count("SELECT COUNT(*) FROM document_item WHERE communication_id=? AND quarantined=TRUE",com));assertEquals(1,records.persons(com).size(),"persona relacionada en la ficha de ingreso (E05: communication_person ya no recibe filas)");assertEquals(0,db.count("SELECT COUNT(*) FROM case_record WHERE requirement_id=?",req));
         long child=run("distribucion","COM_CREATE",null,null,intake(sc,"Otro ingreso")).id();
         run("distribucion","COM_LINK",child,revision("communication",child),Map.of("folio",s(db.one("SELECT folio FROM requirement WHERE id=?",req),"folio"),"reason","Posible relacion"));
         long link=n(db.one("SELECT id FROM communication_link WHERE communication_id=?",child),"id");

@@ -83,7 +83,7 @@ class ExternalComIntegrationTest {
 
         // COM_CREATE manual sigue igual (limite y tabla propios).
         long manual=flow.run("receptor.exc",new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("scope_id",scope,"channel","PRESENCIAL",
-            "received_at",Instant.now().minusSeconds(30).toString(),"subject","Ingreso manual","body","Relato manual","presenter","Ana Pérez"))).id();
+            "received_at",Instant.now().minusSeconds(30).toString(),"subject","Ingreso manual","body","Relato manual","intake",Map.of("presenter",Map.of("first_name","Ana","last_name","Pérez"))))).id();
         assertEquals("Ana Pérez",s(db.one("SELECT presenter FROM communication WHERE id=?",manual),"presenter"));
         assertNull(queries.detail(access.actor("receptor.exc"),"COM",manual).get("external"));
     }

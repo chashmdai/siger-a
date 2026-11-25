@@ -48,7 +48,7 @@ class TiAdministrationTest {
         long reqScope=scope("UPR-REQ"),upd=scope("UPD"),ti=user("ti");
 
         // Expedientes sinteticos: COM -> SOL -> REQ -> Caso -> derivacion pendiente.
-        long com=run("distribucion","COM_CREATE",null,null,Map.of("scope_id",reqScope,"channel","TELEFONO","received_at",ago(60),"subject","Ingreso para UPR","body","Relato sintetico")).id();
+        long com=run("distribucion","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",reqScope,"channel","TELEFONO","received_at",ago(60),"subject","Ingreso para UPR","body","Relato sintetico")).id();
         long sol=run("distribucion","COM_ROUTE",com,rev("communication",com),Map.of("scope_id",scope("UPR"),"reason","Competencia UPR")).id();
         long req=run("direccion.upr","SOL_ASSUME",sol,rev("solicitation",sol),Map.of("responsible_id",user("profesional.proteccion"),"reason","Asuncion sintetica")).id();
         run("direccion.upr","REQ_CLASSIFY",req,rev("requirement",req),Map.of("complexity","BAJA","reason","Clasificacion sintetica"));
@@ -138,7 +138,7 @@ class TiAdministrationTest {
         assertFalse(access.actor("multi.funcion").at("ADMINISTRATIVO",reqScope));
 
         // Varios distribuidores vigentes reciben el aviso de una COM por clasificar.
-        long pending=run("administrativo","COM_CREATE",null,null,Map.of("scope_id",reqScope,"channel","CORREO","received_at",ago(30),"subject","Por clasificar","body","Relato sintetico")).id();
+        long pending=run("administrativo","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",reqScope,"channel","CORREO","received_at",ago(30),"subject","Por clasificar","body","Relato sintetico")).id();
         for(long d:List.of(user("distribucion"),multi))
             assertEquals(1,db.count("SELECT COUNT(*) FROM inbox_notice WHERE user_id=? AND resource_type='COM' AND resource_id=?",d,pending));
 

@@ -72,12 +72,13 @@ class PersonIndexTest {
 
         // COM manual: quien presenta y las personas relacionadas; una persona sin nombre ni documento no genera referencia
         // y "otra persona" no se indexa (D5).
-        long manual=run("distribucion","COM_CREATE",null,null,Map.of("scope_id",upr,"channel","TELEFONO","received_at",ago(60),"subject","Ingreso sintetico","body","Relato sintetico",
+        // COM anterior a 0.8.0 (formato retirado en E05): sus datos historicos se insertan por SQL (LegacyCom).
+        long manual=LegacyCom.create(flow,db,index,"distribucion",Map.of("scope_id",upr,"channel","TELEFONO","received_at",ago(60),"subject","Ingreso sintetico","body","Relato sintetico"),Map.of(
             "presenter","Ana Pérez Soto","identity_document","RUN 12.345.678-5","persons",List.of(
                 Map.of("role","NNA","name","Benjamín Rojas"),
                 Map.of("role","ACOMPANANTE","location","Calle Sintética 1"),
                 Map.of("role","ACOMPANANTE","name","Luisa Vera"),
-                Map.of("role","OTRA_PERSONA","name","Hugo Lagos","identity_document","Pasaporte AB-123.456")))).id();
+                Map.of("role","OTRA_PERSONA","name","Hugo Lagos","identity_document","Pasaporte AB-123.456"))));
         assertEquals(4,db.count("SELECT COUNT(*) FROM communication_person WHERE communication_id=?",manual));
         assertEquals(List.of(
             "COM|REQUIRENTE|Ana Pérez Soto|ana perez soto|12345678|5||false|",

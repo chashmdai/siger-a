@@ -19,8 +19,9 @@ public class IntakeCommands {
     private final FormularioKeys formularioKeys;
     private final PersonIndex index;
     private final IntakeRecord records;
+    private final StatValues stats;
 
-    public IntakeCommands(Db db,Access access,Lifecycle life,Documents documents,FormularioKeys formularioKeys,PersonIndex index,IntakeRecord records){
+    public IntakeCommands(Db db,Access access,Lifecycle life,Documents documents,FormularioKeys formularioKeys,PersonIndex index,IntakeRecord records,StatValues stats){
         this.db=db;
         this.access=access;
         this.life=life;
@@ -28,6 +29,7 @@ public class IntakeCommands {
         this.formularioKeys=formularioKeys;
         this.index=index;
         this.records=records;
+        this.stats=stats;
     }
 
     Result run(Actor a,String type,long id,Long expected,Input in){
@@ -41,6 +43,7 @@ public class IntakeCommands {
             case "COM_LINK" -> link(a,id,expected,in);
             case "LINK_DECIDE" -> decideLink(a,id,expected,in);
             case "LINK_RETURN" -> returnLink(a,id,expected,in);
+            case "STAT_CLASSIFY" -> stats.classify(a,id,expected,in);
             default -> throw new Problem(400,"Comando desconocido.");
         };
     }
@@ -53,11 +56,12 @@ public class IntakeCommands {
         long received=in.instant("received_at",true);
         require(received<=now(),"La fecha de recepcion no puede ser futura.");
         String subject=in.text("subject",240,true),body=in.text("body",20000,true);
-        // 0.8.0 (E03): con el bloque intake, la ficha de ingreso es la unica fuente (columnas de resumen derivadas y sin
-        // filas en communication_person). Sin el, el formato anterior sigue igual mientras la pantalla no cambie (E04);
-        // E05 lo retira.
+        // 0.8.0 (E03, E05): la ficha de ingreso es la unica fuente (columnas de resumen derivadas y sin filas en
+        // communication_person). El formato anterior, sin el bloque intake, se retiro en E05 (400); las COM anteriores
+        // conservan sus datos en communication_person y siguen legibles.
         Object intake=in.values().get("intake");
-        if(intake!=null)for(String key:IntakeRecord.LEGACY_FIELDS){
+        if(!(intake instanceof Map<?,?>))throw new Problem(400,"Falta la ficha de ingreso.");
+        for(String key:IntakeRecord.LEGACY_FIELDS){
             Object value=in.values().get(key);
             require(value==null||value instanceof List<?> l&&l.isEmpty()||value instanceof String text&&text.isBlank(),"Registra los datos de las personas solo en la ficha de ingreso.");
         }
@@ -66,15 +70,12 @@ public class IntakeCommands {
             channel,received,t,a.id(),scope,in.text("presenter",200,false),in.text("contact",300,false),in.text("identity_document",100,false),subject,body);
         life.comFolio(com);
         life.milestone("COM_REGISTRADA","COM",com,com,null,null,a.id(),null,scope,t,null);
-        if(intake!=null)records.create(a,com,intake);
-        else{
-            db.update("UPDATE communication SET contact_email=?,contact_phone=?,contact_restrictions=?,presenter_domicile=? WHERE id=?",
-                in.text("contact_email",200,false),in.text("contact_phone",80,false),in.text("contact_restrictions",1000,false),in.text("presenter_domicile",500,false),com);
-            persons(com,in.values().get("persons"));
-        }
+        records.create(a,com,intake);
         index.refresh(com);
         documents.attachIntake(a,scope,com,in.values().get("attachment_tokens"));
         life.changed(a,"COM_REGISTRADA","COM",com,scope,"Canal "+channel);
+        // Clasificacion estadistica opcional del ingreso (E05), antes de resolver en el acto.
+        stats.inline(a,com,in.values().get("stat"));
         if(!immediate){
             access.notifyDistributors(db.one("SELECT * FROM communication WHERE id=?",com),"Hay un ingreso pendiente de clasificacion.");
             return done("COM",com);
@@ -146,29 +147,13 @@ public class IntakeCommands {
         return done("COM",com);
     }
 
-    /** Antecedentes declarados de personas del ingreso; no es un registro maestro de personas. */
-    private void persons(long com,Object persons){
-        if(persons==null)return;
-        if(!(persons instanceof List<?> people)||people.size()>12)throw new Problem(400,"Maximo 12 personas relacionadas por ingreso.");
-        for(Object item:people){
-            if(!(item instanceof Map<?,?> raw))throw new Problem(400,"Persona relacionada invalida.");
-            Map<String,Object> values=new LinkedHashMap<>();
-            raw.forEach((k,v)->values.put(k.toString(),v));
-            var person=new Input(values);
-            String role=person.choice("role","NNA","ACOMPANANTE","OTRA_PERSONA");
-            String name=person.text("name",200,false),location=person.text("location",500,false),identity=person.text("identity_document",100,false);
-            require(!name.isBlank()||!location.isBlank()||!identity.isBlank(),"Registra algun antecedente disponible de la persona, sin inventar identidad.");
-            db.update("INSERT INTO communication_person(communication_id,person_role,name,identity_document,relationship,location_text) VALUES(?,?,?,?,?,?)",
-                com,role,name,identity,person.text("relationship",200,false),location);
-        }
-    }
-
     private Result assumeOwn(Actor a,long comId,Long expected,Input in){
         var com=access.comForRead(a,comId);
         revision(com,expected);
         long scope=n(com,"origin_scope");
         access.head(a,scope);
         require(s(com,"state").equals("NUEVA")&&db.count("SELECT COUNT(*) FROM solicitation WHERE communication_id=?",comId)==0,"La COM ya fue encaminada.");
+        stats.inline(a,comId,in.values().get("stat"));
         long user=in.id("responsible_id");
         long attention=access.solAttentionScope(a,user,scope,in.optionalId("area_scope_id"));
         long sol=db.insert("INSERT INTO solicitation(communication_id,destination_scope,state,classification,created_by,created_ms) VALUES(?,?,'ASUMIDA',?,?,?)",comId,scope,in.reason(),a.id(),now());
@@ -190,6 +175,7 @@ public class IntakeCommands {
         long scope=destination.scope();
         if(access.regional(n(com,"origin_scope")))require(scope==n(com,"origin_scope"),"La distribucion regional se limita a su sede; usa redireccion de SOL posteriormente.");
         String matter=suggestedMatter(in,scope);
+        stats.inline(a,id,in.values().get("stat"));
         long sol=db.insert("INSERT INTO solicitation(communication_id,destination_scope,requested_area_scope,classification,created_by,created_ms,suggested_matter) VALUES(?,?,?,?,?,?,?)",id,scope,destination.area(),in.reason(),a.id(),now(),matter);
         db.update("UPDATE communication SET state='ENVIADA',revision=revision+1 WHERE id=?",id);
         long at=life.changed(a,"SOL_DISTRIBUIDA","SOL",sol,scope,matterNote(matter)+in.reason());
@@ -247,6 +233,8 @@ public class IntakeCommands {
             }
             case "SOL_DISCARD" -> {
                 String disposition=in.choice("disposition","INVALIDA","DUPLICADA");
+                // La clasificacion se registra antes del descarte: despues queda como se registro (D35).
+                stats.inline(a,comId,in.values().get("stat"));
                 db.update("UPDATE solicitation SET state='DESCARTADA',revision=revision+1 WHERE id=?",id);
                 db.update("UPDATE communication SET state=?,revision=revision+1 WHERE id=?",disposition,comId);
                 long at=life.changed(a,"SOL_"+disposition,"SOL",id,oldScope,reason);
@@ -257,6 +245,7 @@ public class IntakeCommands {
                 // SOL_ASSUME: al asumir nace el REQ, aun sin Caso.
                 long user=in.id("responsible_id");
                 long attentionScope=access.solAttentionScope(a,user,oldScope,nullableId(r,"requested_area_scope"));
+                stats.inline(a,comId,in.values().get("stat"));
                 long req=life.newReq(a,comId,id,oldScope,user,attentionScope);
                 // El REQ hereda la materia sugerida (solo existe en SOL a una sede); la Coordinacion la rectifica con REQ_MATTER.
                 if(r.get("suggested_matter")!=null&&access.regional(oldScope))db.update("UPDATE requirement SET matter=? WHERE id=?",s(r,"suggested_matter"),req);

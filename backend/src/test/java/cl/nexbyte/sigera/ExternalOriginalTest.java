@@ -126,7 +126,7 @@ class ExternalOriginalTest {
         for(String role:List.of("DISTRIBUIDOR","TI","AUDITORIA"))grant(broad,role,null);
 
         // Quien puede registrar COM manualmente (COM_CREATE) no puede ingresar un original externo.
-        long manual=run("registro.ext","COM_CREATE",Map.of("scope_id",scope,"channel","TELEFONO","received_at",Instant.now().minusSeconds(60).toString(),"subject","Ingreso manual","body","Relato sintetico")).id();
+        long manual=run("registro.ext","COM_CREATE",Map.of("intake",Map.of(),"scope_id",scope,"channel","TELEFONO","received_at",Instant.now().minusSeconds(60).toString(),"subject","Ingreso manual","body","Relato sintetico")).id();
         String manualFolio=s(db.one("SELECT folio FROM communication WHERE id=?",manual),"folio");
         String document=fixture("1.1");
         rejectedAsCommand("registro.ext",scope,document);

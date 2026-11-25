@@ -17,7 +17,8 @@ export const SITE_ROLE_LABELS: Record<string, string> = {DIRECCION: 'Coordinaci�
 export const SCOPE_STATE_LABELS: Record<string, string> = {ACTIVA: 'Activa', PROYECTADA: 'Proyectada', CERRADA: 'Cerrada'};
 export const LEVEL_LABELS: Record<string, string> = {CENTRAL: 'Nivel central', REGIONAL: 'Sedes regionales'};
 
-export const CHANNEL_LABELS: Record<string, string> = {PRESENCIAL: 'Presencial', TELEFONO: 'Teléfono', CORREO: 'Correo', OFICIO: 'Oficio', OTRO: 'Otro',
+export const CHANNEL_LABELS: Record<string, string> = {PRESENCIAL: 'Presencial', TELEFONO: 'Teléfono', CORREO: 'Correo', OFICIO: 'Oficio',
+  REDES_SOCIALES: 'Redes sociales', INTEGRANTE_DEFENSORIA: 'Integrante de la Defensoría', OTRO: 'Otro',
   FORMULARIO_WEB_PUBLICO: 'Formulario Público', FORMULARIO_WEB_NNA: 'Formulario Público NNA'};
 export const RESULT_LABELS: Record<string, string> = {ORIENTACION: 'Orientación', RESPUESTA_DIRECTA: 'Respuesta directa', REMISION_CONCLUIDA: 'Remisión concluida'};
 export const DOCUMENT_LABELS: Record<string, string> = {OFICIO: 'Oficio', INFORME: 'Informe', CORREO: 'Correo', CONSTANCIA: 'Constancia', OTRO: 'Otro', INGRESO: 'Ingreso'};

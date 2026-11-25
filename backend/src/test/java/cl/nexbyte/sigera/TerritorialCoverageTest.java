@@ -163,7 +163,7 @@ class TerritorialCoverageTest {
         long coquimbo=scope("REG-04");
         // REQ de Coquimbo (antes de la sede propia de Atacama).
         long coord=account("coord.04",coquimbo,List.of(Map.of("role","DIRECCION","scope_id",coquimbo),Map.of("role","PROFESIONAL","scope_id",coquimbo)));
-        long com=run("distribucion","COM_CREATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",ago(60),"subject","COM para Coquimbo","body","Relato sintetico")).id();
+        long com=run("distribucion","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",scope("UPR-REQ"),"channel","TELEFONO","received_at",ago(60),"subject","COM para Coquimbo","body","Relato sintetico")).id();
         long sol=run("distribucion","COM_ROUTE",com,rev("communication",com),Map.of("scope_id",coquimbo,"reason",BASIS)).id();
         long req=run("coord.04","SOL_ASSUME",sol,rev("solicitation",sol),Map.of("responsible_id",coord,"reason","Asume la sede")).id();
 

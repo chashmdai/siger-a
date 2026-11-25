@@ -9,7 +9,8 @@ import {destinations, REGIONAL_MATTERS} from './destination';
 
 // Campos reutilizados por los dialogos de comandos. El servidor valida nuevamente cada valor.
 
-export const CHANNELS = ['PRESENCIAL', 'TELEFONO', 'CORREO', 'OFICIO', 'OTRO'];
+/** Canales del registro manual y de la atencion directa (igual a Lifecycle.CHANNELS; 0.8.0, D31). */
+export const CHANNELS = ['PRESENCIAL', 'TELEFONO', 'CORREO', 'OFICIO', 'REDES_SOCIALES', 'INTEGRANTE_DEFENSORIA', 'OTRO'];
 export const IMMEDIATE_RESULTS = ['ORIENTACION', 'RESPUESTA_DIRECTA', 'REMISION_CONCLUIDA'];
 export const DOCUMENT_TYPES = ['OFICIO', 'INFORME', 'CORREO', 'CONSTANCIA', 'OTRO'];
 export const REMINDERS = [{value: '0', label: 'Avisar una sola vez'}, {value: '24', label: 'Cada 24 horas'}, {value: '48', label: 'Cada 48 horas'}, {value: '168', label: 'Cada 7 días'}];

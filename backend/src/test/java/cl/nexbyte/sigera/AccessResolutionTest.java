@@ -25,7 +25,7 @@ class AccessResolutionTest {
         db.update("UPDATE staff SET must_change=FALSE");
         long root=scope("UPD"),titular=user("direccion.upd"),sub=user("profesional.upd");
         // Cartera personal del titular: al subrogarse conserva PROFESIONAL en ese ambito.
-        long com=run("direccion.upd","COM_CREATE",null,null,Map.of("scope_id",root,"channel","TELEFONO","received_at",Instant.now().minusSeconds(60).toString(),"subject","Propio","body","Sintetico")).id();
+        long com=run("direccion.upd","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",root,"channel","TELEFONO","received_at",Instant.now().minusSeconds(60).toString(),"subject","Propio","body","Sintetico")).id();
         long req=run("direccion.upd","COM_ASSUME",com,revision("communication",com),Map.of("responsible_id",titular,"reason","Propio")).id();
         run("direccion.upd","REQ_CASE_CREATE",req,revision("requirement",req),Map.of("scope_id",root,"responsible_id",titular,"objective","Cartera","matter","UPD"));
         long designation=run("ti","DESIGNATE",null,null,Map.of("scope_id",root,"titular_id",titular,"substitute_id",sub,"reason","Predesignacion")).id();
@@ -44,7 +44,7 @@ class AccessResolutionTest {
         var away=batch.stream().filter(x->x.id()==titular).findFirst().orElseThrow();
         assertTrue(acting.at("DIRECCION",root));assertFalse(away.head(root));assertTrue(away.professional(root));
 
-        long incoming=run("distribucion","COM_CREATE",null,null,Map.of("scope_id",scope("UPR-REQ"),"channel","CORREO","received_at",Instant.now().minusSeconds(30).toString(),"subject","Para UPD","body","Sintetico")).id();
+        long incoming=run("distribucion","COM_CREATE",null,null,Map.of("intake",Map.of(),"scope_id",scope("UPR-REQ"),"channel","CORREO","received_at",Instant.now().minusSeconds(30).toString(),"subject","Para UPD","body","Sintetico")).id();
         long sol=run("distribucion","COM_ROUTE",incoming,revision("communication",incoming),Map.of("scope_id",root,"reason","Competencia UPD")).id();
         String notice="SELECT COUNT(*) FROM inbox_notice WHERE user_id=? AND resource_type='SOL' AND resource_id=?";
         assertEquals(1,db.count(notice,sub,sol));
