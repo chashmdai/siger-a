@@ -215,8 +215,7 @@ GO del responsable (2026-11-25), con estas respuestas y condiciones:
 - B. Si a (a): la region del requirente no bloquea el cierre en 0.8.0; solo aparece como indicador de calidad. Se
   registra como diferencia de referencia con DISENO 4.5 (D28: no inventar datos; las COM del Formulario no se pueden
   modificar).
-- C. Si, con `Rights.java` solo para exponer el conjunto consolidado de derechos y contexto a la completitud, sin
-  cambiar su comportamiento.
+- C. Sí a la propuesta (corrige la respuesta anterior, dada sobre un texto truncado): bloque opcional stat (StatValues.inline) en REQ_CLOSE y ATTENTION_RESOLVE, y un Rights.inline mínimo en COM_IMMEDIATE y en ATTENTION_CREATE con resolve_now. Rights.inline usa la misma función interna y las mismas validaciones que RIGHTS_CLASSIFY: catálogo vigente, solo ítems seleccionables y origen asignado por el servidor. No cambia el comportamiento de RIGHTS_CLASSIFY. Rights expone además el conjunto consolidado a StatCompleteness. Prueba exigida: una vulneración se resuelve en el acto si informa derecho (o estado especial) y contexto; sin ellos, responde 409 con texto llano.
 - D. Si a la regla de sede activa en una fecha, cobertura por periodos y prioridad (sede de la region fisica, sede que
   la cubre, NIVEL_CENTRAL, SIN_ATENCION; sin region, SIN_INFORMACION). El estado de la sede se lee del codigo de accion
   de la auditoria, nunca del texto. El cambio de region fisica de una sede no se reconstruye y se registra como
