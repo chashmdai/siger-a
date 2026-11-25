@@ -2,7 +2,7 @@
   "format": "siger-catalogo-1",
   "catalog": "DERECHO",
   "label": "Modelo de derechos versión 2.0 (2022)",
-  "source": "Defensoría de la Niñez, \"Modelo de conceptualización y categorización de derechos de la niñez y adolescencia\", versión 2.0, 2022 (Observatorio de Derechos). Transcripción de la Tabla 2 (págs. 9-10); sujeta a validación institucional (DI-04).",
+  "source": "Defensoría de la Niñez, \"Modelo de conceptualización y categorización de derechos de la niñez y adolescencia\", versión 2.0, 2022 (Observatorio de Derechos). Transcripción de la Tabla 2 (págs. 9-10); sin el eje VII (catálogo Rol del Estado); DI-04: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional.",
   "items": [
     {
       "code": "3",
@@ -489,47 +489,6 @@
       "label": "Derecho a ser escuchados a nivel familiar y social",
       "parent": "6.4",
       "source_ref": "Tabla 2, p. 10; tabla 6.4.2, p. 85"
-    },
-    {
-      "code": "7",
-      "label": "Rol del Estado como garante principal",
-      "selectable": false,
-      "source_ref": "Tabla 2, p. 10; VII, p. 86"
-    },
-    {
-      "code": "7.01",
-      "label": "Estrategia y coordinación efectiva para la aplicación de la Convención",
-      "parent": "7",
-      "selectable": false,
-      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
-    },
-    {
-      "code": "7.02",
-      "label": "Enfoque de derechos en las políticas públicas",
-      "parent": "7",
-      "selectable": false,
-      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
-    },
-    {
-      "code": "7.03",
-      "label": "Presupuesto con enfoque de derechos de la niñez y la adolescencia",
-      "parent": "7",
-      "selectable": false,
-      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
-    },
-    {
-      "code": "7.04",
-      "label": "Vigilancia independiente de derechos humanos de la niñez y adolescencia",
-      "parent": "7",
-      "selectable": false,
-      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
-    },
-    {
-      "code": "7.05",
-      "label": "Participación de la sociedad civil, sector empresarial y cooperación internacional",
-      "parent": "7",
-      "selectable": false,
-      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
     }
   ]
 }

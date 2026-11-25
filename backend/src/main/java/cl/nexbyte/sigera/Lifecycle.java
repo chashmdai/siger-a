@@ -135,18 +135,67 @@ public class Lifecycle {
     }
 
     // --- Constancias -----------------------------------------------------------------------
-    /** Registra una actuacion de REQ o Caso; una rectificacion crea una nueva constancia. */
+    /**
+     * Registra una actuacion de REQ o Caso; una rectificacion crea una nueva constancia. Desde 0.8.0 (D36, E06) acepta
+     * action_type (TIPO_ACTUACION vigente) e institutions (reglas de institutions_list de la ficha 1.2). En una
+     * rectificacion, una clave ausente conserva el tipo y las instituciones de la constancia rectificada; un valor vacio
+     * explicito los quita. La constancia del resultado de la primera atencion no pasa por aqui y no se tipifica.
+     */
     long note(Actor a,long req,Long cas,long scope,Input in,Long rectifies){
         long effective=in.instant("effective_at",true);
         require(effective<=now(),"La gestion no puede estar fechada en el futuro.");
         String body=in.text("body",20000,true);
         boolean reserved=in.flag("reserved");
         if(reserved&&!a.head(scope)&&cas!=null&&n(db.one("SELECT responsible_id FROM case_record WHERE id=?",cas),"responsible_id")!=a.id())Problem.denied();
-        long id=db.insert("INSERT INTO management_note(requirement_id,case_id,author_id,effective_ms,registered_ms,body,reserved,rectifies_id,correction_reason) VALUES(?,?,?,?,?,?,?,?,?)",
-            req,cas,a.id(),effective,now(),body,reserved,rectifies,rectifies==null?null:in.reason());
+        var old=rectifies==null?null:db.one("SELECT * FROM management_note WHERE id=?",rectifies);
+        var typed=actionType(in,old==null?null:(String)old.get("action_type"),old==null?null:nullableId(old,"action_catalog_version"));
+        var previousInstitutions=rectifies==null?List.<Map<String,Object>>of():institutions(rectifies);
+        List<Map<String,Object>> institutions=previousInstitutions;
+        if(in.values().containsKey("institutions")){
+            var errors=new ArrayList<String>();
+            institutions=DeclaredPerson.institutions(in.values().get("institutions"),previousInstitutions,DeclaredPerson.Codes.load(db),errors);
+            if(!errors.isEmpty())throw new Problem(400,String.join(" ",errors));
+        }
+        long id=db.insert("INSERT INTO management_note(requirement_id,case_id,author_id,effective_ms,registered_ms,body,reserved,rectifies_id,correction_reason,action_type,action_catalog_version) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            req,cas,a.id(),effective,now(),body,reserved,rectifies,rectifies==null?null:in.reason(),typed.code(),typed.version());
+        int sort=0;
+        for(var i:institutions){
+            Object version=i.get("type_version");
+            db.update("INSERT INTO note_institution(note_id,sort,name,type_code,catalog_version_id,role,region_code,commune) VALUES(?,?,?,?,?,?,?,?)",
+                id,++sort,s(i,"name"),blank(s(i,"type_code")),version==null||version.toString().isEmpty()?null:Long.valueOf(version.toString()),blank(s(i,"role")),blank(s(i,"region_code")),blank(s(i,"commune")));
+        }
         String action=rectifies==null?"ACTUACION_REGISTRADA":"ACTUACION_RECTIFICADA";
         String detail=rectifies==null?"Constancia "+id:"Nueva constancia "+id+" corrige "+rectifies+". "+(reserved?"Motivo protegido en la constancia.":in.reason());
         changed(a,action,cas==null?"REQ":"CAS",cas==null?req:cas,scope,detail);
         return id;
     }
+
+    // --- Actuaciones tipificadas (0.8.0, D36, E06; DISENO 3.3) -----------------------------------------------------
+    static final String ACTION_CATALOG="TIPO_ACTUACION";
+    record ActionType(String code,Long version){}
+    /**
+     * Tipo de actuacion de una constancia o de una tarea (compromiso). Clave ausente: conserva el anterior (nulo si no
+     * hay). Vacio: sin tipo. Un codigo igual al anterior se conserva con su version (aunque el listado se haya retirado);
+     * uno nuevo debe ser un item seleccionable del catalogo VIGENTE.
+     */
+    ActionType actionType(Input in,String previous,Long previousVersion){
+        if(!in.values().containsKey("action_type"))return new ActionType(previous,previous==null?null:previousVersion);
+        String code=in.text("action_type",40,false);
+        if(code.isEmpty())return new ActionType(null,null);
+        if(code.equals(previous)&&previousVersion!=null)return new ActionType(code,previousVersion);
+        Long version=StatValues.currentVersion(db,ACTION_CATALOG);
+        require(version!=null,"Tipo de actuación: no hay un listado vigente; registra la actuación sin tipo.");
+        require(StatValues.selectableCurrent(db,ACTION_CATALOG,code),"Tipo de actuación: selecciona una opción del listado vigente.");
+        return new ActionType(code,version);
+    }
+    /** Instituciones de una constancia, con las claves de institutions_list (type_version = version del tipo). */
+    List<Map<String,Object>> institutions(long note){
+        return db.rows("SELECT name,type_code,catalog_version_id,role,region_code,commune FROM note_institution WHERE note_id=? ORDER BY sort",note).stream().map(r->{
+            var m=new LinkedHashMap<String,Object>();
+            m.put("name",s(r,"name"));m.put("type_code",s(r,"type_code"));m.put("type_version",r.get("catalog_version_id")==null?"":n(r,"catalog_version_id"));
+            m.put("role",s(r,"role"));m.put("region_code",s(r,"region_code"));m.put("commune",s(r,"commune"));
+            return (Map<String,Object>)m;
+        }).toList();
+    }
+    private static String blank(String v){return v==null||v.isEmpty()?null:v;}
 }

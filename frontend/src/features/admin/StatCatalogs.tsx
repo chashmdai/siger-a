@@ -85,7 +85,7 @@ export default function StatCatalogs({ctx, initial}: {ctx: Context; initial?: Ro
       onChange={e => {const f = e.target.files?.[0]; e.target.value = ''; void mappingChosen(f);}}/>
     {problem && <Callout tone="warn" role="alert" title="No se puede usar ese archivo">{problem}</Callout>}
     <Callout tone="info" title="Archivos de referencia">
-      El paquete de SIGER trae en <span className="nowrap">config-ejemplo\catalogos</span> la propuesta versión 1 y el modelo de derechos 2.0 (2022), con su fuente y huella en LEEME.txt. Las plantillas de contexto, caracterización y tramos de edad se completan con los valores que defina la institución.
+      El paquete de SIGER trae en <span className="nowrap">config-ejemplo\catalogos</span> la propuesta versión 1 de cada catálogo y el modelo de derechos 2.0 (2022), con su fuente y huella en LEEME.txt. Actívalos solo cuando la institución los haya validado.
     </Callout>
     {groups.map(g => <Panel key={g.catalog} title={g.label} icon="layers" count={g.versions.length} description={groupSummary(g)}>
       <Table rows={g.versions as unknown as Row[]} empty="Aún no se importa ninguna versión de este catálogo." emptyIcon="layers" columns={[

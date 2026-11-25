@@ -10,8 +10,8 @@ import static cl.nexbyte.sigera.Db.*;
 public class Queries {
     final Db db;final Access access;final Attention attention;
     private final Integrations integrations;
-    private final Documents documents;private final OriginRelease origin;private final StatCatalogs catalogs;private final IntakeRecord intake;private final StatValues stats;
-    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs,IntakeRecord intake,StatValues stats){this.intake=intake;this.stats=stats;this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
+    private final Documents documents;private final OriginRelease origin;private final StatCatalogs catalogs;private final IntakeRecord intake;private final StatValues stats;private final Rights rights;private final Lifecycle life;
+    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs,IntakeRecord intake,StatValues stats,Rights rights,Lifecycle life){this.intake=intake;this.stats=stats;this.rights=rights;this.life=life;this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
     public Map<String,Object> workspace(Actor a){
         // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales:
         // TI administra todas las subrogancias (D1); titular y subrogante ven las propias.
@@ -113,7 +113,11 @@ public class Queries {
                 // Misma facultad que COM_LINK (distribucion o jefatura de origen); la consulta institucional no la tiene.
                 out.put("can_link",(access.canDistribute(a,c)||a.head(scope))&&s(c,"state").equals("NUEVA")&&db.count("SELECT COUNT(*) FROM communication_link WHERE communication_id=?",id)==0);
                 // Ficha de ingreso (0.8.0, E03) cuando existe: unica fuente de sus personas; si no, communication_person.
-                if(IntakeRecord.exists(db,id)){out.put("intake",intake.view(a,c));out.put("persons",intake.persons(id));}
+                if(IntakeRecord.exists(db,id)){
+                    var view=intake.view(a,c);out.put("intake",view);out.put("persons",intake.persons(id));
+                    // Rotulos de RELACION y TIPO_INSTITUCION segun la version con que se registraron (E06, pendiente de E04).
+                    out.put("code_labels",StatValues.codeLabels(db,view));
+                }
                 else out.put("persons",db.rows("SELECT * FROM communication_person WHERE communication_id=? ORDER BY id",id));
                 out.put("can_route",access.canDistribute(a,c)&&s(c,"state").equals("NUEVA")&&db.count("SELECT COUNT(*) FROM solicitation WHERE communication_id=?",id)==0);
                 out.put("can_assume",a.head(scope)&&s(c,"state").equals("NUEVA"));out.put("attention_scopes",access.managementScopes(a,scope));
@@ -148,7 +152,9 @@ public class Queries {
                     if(a.head(scope)){var v=pick(c,"id","folio","state","scope_id");v.put("readable",false);return v;}return null;
                 }).filter(Objects::nonNull).toList());
                 // Constancias del REQ: completas para quien lo gestiona; la consulta institucional no ve las reservadas (D4).
-                out.put("notes",access.reqRecords(a,r)?db.rows("SELECT n.*,u.name AS author FROM management_note n JOIN staff u ON u.id=n.author_id WHERE n.requirement_id=? AND n.case_id IS NULL ORDER BY n.id",id).stream().filter(n->!b(n,"reserved")||access.reqMain(a,r)).toList():List.of());
+                out.put("notes",access.reqRecords(a,r)?notes(db.rows("SELECT n.*,u.name AS author FROM management_note n JOIN staff u ON u.id=n.author_id WHERE n.requirement_id=? AND n.case_id IS NULL ORDER BY n.id",id).stream().filter(n->!b(n,"reserved")||access.reqMain(a,r)).toList()):List.of());
+                // Derechos, contexto, caracterizacion, rol del Estado y grupos prioritarios (E06): solo de lo legible.
+                out.put("rights",rights.view(a,Rights.REQ,r,access.reqRecords(a,r)));
                 out.put("documents",documents(a,"REQ",id));out.put("citizen_documents",access.comRead(a,com)?db.rows("SELECT d.id,d.name,d.size_bytes,d.quarantined,d.document_type,d.created_ms,cm.folio AS source_folio,"+OriginRelease.BASIS_SQL+" FROM document_item d JOIN communication cm ON cm.id=d.communication_id WHERE cm.id=? ORDER BY d.id",n(r,"communication_id")):List.of());out.put("closures",access.reqRecords(a,r)?db.rows("SELECT * FROM closure_record WHERE requirement_id=? AND case_id IS NULL ORDER BY id",id):List.of());
                 boolean wide=access.reqWideRead(a,r);
                 out.put("links",db.rows("SELECT l.*,c.folio AS com_folio FROM communication_link l JOIN communication c ON c.id=l.communication_id WHERE l.requirement_id=? ORDER BY l.id",id).stream().filter(l->wide||a.head(scope)||s(l,"state").equals("ADMITIDA")&&(l.get("target_case_id")==null?access.reqMain(a,r):access.caseRead(a,db.one("SELECT * FROM case_record WHERE id=?",n(l,"target_case_id"))))).toList());
@@ -157,8 +163,9 @@ public class Queries {
             }
             case "CAS" -> {
                 var c=access.caseForRead(a,id);scope=n(c,"scope_id");out=caseSummary(a,c);
-                out.put("notes",db.rows("SELECT n.*,u.name AS author FROM management_note n JOIN staff u ON u.id=n.author_id WHERE n.case_id=? ORDER BY n.id",id).stream().filter(n->!b(n,"reserved")||access.reserved(a,c)).toList());
-                out.put("tasks",db.rows("SELECT * FROM task_item WHERE case_id=? ORDER BY id",id));
+                out.put("notes",notes(db.rows("SELECT n.*,u.name AS author FROM management_note n JOIN staff u ON u.id=n.author_id WHERE n.case_id=? ORDER BY n.id",id).stream().filter(n->!b(n,"reserved")||access.reserved(a,c)).toList()));
+                out.put("tasks",db.rows("SELECT * FROM task_item WHERE case_id=? ORDER BY id",id).stream().map(t->{var row=new LinkedHashMap<String,Object>(t);row.put("action_label",StatValues.itemLabel(db,nullableId(t,"action_catalog_version"),(String)t.get("action_type")));return (Map<String,Object>)row;}).toList());
+                out.put("rights",rights.view(a,Rights.CAS,c,true));
                 out.put("members",db.rows("SELECT m.*,u.name FROM case_member m JOIN staff u ON u.id=m.user_id WHERE m.case_id=?",id));
                 out.put("assignments",db.rows("SELECT x.*,u.name FROM case_assignment x JOIN staff u ON u.id=x.user_id WHERE x.case_id=? ORDER BY x.id",id));
                 out.put("documents",documents(a,"CAS",id));out.put("citizen_documents",access.caseSourceDocuments(a,c)?incomingDocuments(id):List.of());out.put("closures",db.rows("SELECT * FROM closure_record WHERE case_id=? ORDER BY id",id));
@@ -175,6 +182,18 @@ public class Queries {
         // Lectura nacional por materia (D9): la Direccion la lee solo por su materia en la sede.
         out.put("matter_read",!institutional&&!a.matters().isEmpty()&&!readable(a.withoutInstitutionalReader().withoutMatters(),kind,id));
         db.audit(a.id(),"CONSULTA",""+kind,id,scope,"");return out;
+    }
+    /**
+     * Constancias ya filtradas por su lectura (reservadas incluidas solo para quien las ve): agrega el rotulo del tipo de
+     * actuacion segun su version y sus instituciones (D36, E06). Nada de una constancia oculta sale de aqui.
+     */
+    private List<Map<String,Object>> notes(List<Map<String,Object>> visible){
+        return visible.stream().map(x->{
+            var row=new LinkedHashMap<String,Object>(x);
+            row.put("action_label",StatValues.itemLabel(db,nullableId(x,"action_catalog_version"),(String)x.get("action_type")));
+            row.put("institutions",life.institutions(n(x,"id")));
+            return (Map<String,Object>)row;
+        }).toList();
     }
     /** Mismos predicados de lectura que detail, sin auditar ni armar la ficha. */
     boolean readable(Actor a,String kind,long id){

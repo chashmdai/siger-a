@@ -1,0 +1,33 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "ROL_ESTADO",
+  "label": "Rol del Estado como garante principal, versión 1",
+  "source": "Defensoría de la Niñez, \"Modelo de conceptualización y categorización de derechos de la niñez y adolescencia\", versión 2.0, 2022: eje VII \"Rol del Estado como garante principal\" (Tabla 2, p. 10; tabla 7.2, p. 91), transcrito en E02. Caracterización transversal, no es un derecho adicional; DI-02: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional.",
+  "items": [
+    {
+      "code": "7.01",
+      "label": "Estrategia y coordinación efectiva para la aplicación de la Convención",
+      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
+    },
+    {
+      "code": "7.02",
+      "label": "Enfoque de derechos en las políticas públicas",
+      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
+    },
+    {
+      "code": "7.03",
+      "label": "Presupuesto con enfoque de derechos de la niñez y la adolescencia",
+      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
+    },
+    {
+      "code": "7.04",
+      "label": "Vigilancia independiente de derechos humanos de la niñez y adolescencia",
+      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
+    },
+    {
+      "code": "7.05",
+      "label": "Participación de la sociedad civil, sector empresarial y cooperación internacional",
+      "source_ref": "Tabla 2, p. 10; tabla 7.2, p. 91"
+    }
+  ]
+}

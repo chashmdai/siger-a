@@ -2,7 +2,7 @@
   "format": "siger-catalogo-1",
   "catalog": "TIPO_ACTUACION",
   "label": "Tipo de actuación, propuesta versión 1",
-  "source": "Propuesta SIGER 0.8.0, versión 1 (D36, plan 0.8.0); sujeta a validación institucional (DI-03).",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D36, plan 0.8.0); DI-03: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional. Una actuación tiene un solo tipo y se clasifica por su propósito; solo cuentan las actuaciones efectivamente realizadas.",
   "items": [
     {
       "code": "ORIENTACION",
@@ -22,7 +22,8 @@
     {
       "code": "OFICIO",
       "label": "Oficio",
-      "source_ref": "D36"
+      "source_ref": "D36",
+      "descripcion": "Oficio cuyo propósito no corresponde a otro tipo de actuación."
     },
     {
       "code": "DENUNCIA_ADMINISTRATIVA",
@@ -36,8 +37,9 @@
     },
     {
       "code": "MEDIDA_PROTECCION",
-      "label": "Medida de protección",
-      "source_ref": "D36"
+      "label": "Solicitud de medida de protección",
+      "source_ref": "D36; DI-03",
+      "descripcion": "Distingue la actuación de la Defensoría de una medida decretada por un tribunal."
     },
     {
       "code": "QUERELLA",
@@ -53,6 +55,22 @@
       "code": "AMICUS_CURIAE",
       "label": "Amicus curiae",
       "source_ref": "D36"
+    },
+    {
+      "code": "SOLICITUD_ANTECEDENTES",
+      "label": "Solicitud de antecedentes",
+      "source_ref": "DI-03",
+      "descripcion": "Una solicitud de antecedentes realizada mediante oficio no se cuenta como dos actuaciones por el solo hecho de usar ese medio."
+    },
+    {
+      "code": "COORDINACION_INTERINSTITUCIONAL",
+      "label": "Coordinación interinstitucional",
+      "source_ref": "DI-03"
+    },
+    {
+      "code": "SEGUIMIENTO_REQUERIMIENTO",
+      "label": "Seguimiento de requerimiento",
+      "source_ref": "DI-03"
     },
     {
       "code": "OTRA",

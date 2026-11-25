@@ -40,8 +40,8 @@ liberacion-origen.json (0.6.0, D17)
   en SIGER siguen en cuarentena. Incompatible con antivirus.json. Rige desde el siguiente inicio.
 
 catalogos\ (desde 0.8.0, D27)
-  Catalogos estadisticos de referencia (propuesta version 1 y modelo de derechos 2.0 de 2022) y plantillas para la
-  institucion. No se copian a config\: TI los importa desde Administracion > Catalogos estadisticos y los activa solo
+  Catalogos estadisticos de referencia (propuesta version 1 de los 12 catalogos y modelo de derechos 2.0 de 2022),
+  pendientes de validacion institucional. No se copian a config\: TI los importa desde Administracion > Catalogos estadisticos y los activa solo
   despues de su validacion institucional. Fuentes, huellas y pendientes en catalogos\LEEME.txt.
 
 Los archivos formulario-pull.json y los secretos del Formulario (*.clixml) los crea Import-SecretPackage.ps1 en la VM.

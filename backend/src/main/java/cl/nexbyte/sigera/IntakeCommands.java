@@ -87,7 +87,8 @@ public class IntakeCommands {
         String result=in.choice("result",Lifecycle.IMMEDIATE_RESULTS);
         long req=life.newReq(a,com,null,scope,a.id(),scope);
         db.update("INSERT INTO management_note(requirement_id,author_id,effective_ms,registered_ms,body) VALUES(?,?,?,?,?)",req,a.id(),effective,now(),result+": "+response);
-        db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,revision=1 WHERE id=?",effective,a.id(),response,req);
+        // Resultado de la primera atencion (D36, E06): una sola fuente estructurada; la constancia no se tipifica.
+        db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,immediate_result=?,immediate_result_reconstructed=FALSE,revision=1 WHERE id=?",effective,a.id(),response,result,req);
         db.update("UPDATE communication SET state='ATENDIDA',revision=1 WHERE id=?",com);
         db.update("INSERT INTO closure_record(requirement_id,actor_id,closed_ms,mode,reason) VALUES(?,?,?,'PRIMERA_ATENCION',?)",req,a.id(),effective,response);
         life.reqClosed(a,req,effective,"PRIMERA_ATENCION");

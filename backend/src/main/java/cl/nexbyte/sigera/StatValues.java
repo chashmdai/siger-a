@@ -30,7 +30,8 @@ import static cl.nexbyte.sigera.Problem.require;
 public class StatValues {
     static final String TIPO_SOLICITUD="TIPO_SOLICITUD",TIPO_REQUIRENTE="TIPO_REQUIRENTE",VIA_INGRESO="VIA_INGRESO";
     static final List<String> SINGLE=List.of(TIPO_SOLICITUD,TIPO_REQUIRENTE,VIA_INGRESO);
-    static final List<String> MULTIPLE=List.of("DERECHO","CONTEXTO","CARACTERIZACION");
+    /** Variables multiples por REQ o Caso (E06; ROL_ESTADO y GRUPO_PRIORITARIO por decision del 2026-11-24). */
+    static final List<String> MULTIPLE=List.of("DERECHO","CONTEXTO","CARACTERIZACION","ROL_ESTADO","GRUPO_PRIORITARIO");
     static final String COM="COM",PENDING="PENDIENTE",INFORMED="INFORMADO";
     static final List<String> SPECIAL=List.of("SIN_INFORMACION","NO_DECLARADO","NO_APLICA");
     static final String OFFICIAL="FUNCIONARIO",SYSTEM="SISTEMA",RETROSPECTIVE="RETROSPECTIVA";
@@ -95,6 +96,10 @@ public class StatValues {
         if(code==null)return false;
         return db.rows("SELECT i.code FROM stat_catalog_item i JOIN stat_catalog_version v ON v.id=i.version_id WHERE v.`current_catalog`=? AND i.selectable=TRUE",catalog)
             .stream().anyMatch(r->s(r,"code").equals(code));
+    }
+    static Long currentVersion(Db db,String catalog){
+        var rows=db.rows("SELECT id FROM stat_catalog_version WHERE `current_catalog`=?",catalog);
+        return rows.isEmpty()?null:n(rows.getFirst(),"id");
     }
     private Long currentVersion(String catalog){
         var rows=db.rows("SELECT id FROM stat_catalog_version WHERE `current_catalog`=?",catalog);
@@ -241,12 +246,25 @@ public class StatValues {
      */
     private Optional<Long> reopened(long com){
         for(var r:db.rows("SELECT id FROM requirement WHERE communication_id=? AND state='ABIERTO' ORDER BY id",com)){
-            long req=n(r,"id");
-            if(db.count("SELECT COUNT(*) FROM closure_record WHERE requirement_id=? AND case_id IS NULL",req)==0)continue;
-            var p=db.rows("SELECT MAX(id) AS id FROM reopening WHERE requirement_id=? AND state='ACEPTADA'",req);
-            return Optional.ofNullable(p.isEmpty()?null:nullableId(p.getFirst(),"id"));
+            var p=reopenedRecord(db,"REQ",n(r,"id"),n(r,"id"));
+            if(p!=null)return p;
         }
         return null;
+    }
+    /**
+     * Regla unica de RETROSPECTIVA (DISENO 3.2, DI-07) para un registro abierto: un REQ que ya tuvo un cierre propio
+     * (closure_record del REQ), o un Caso que ya tuvo un cierre propio o cuyo REQ lo tuvo (E06: tambien el Caso
+     * reabierto). Devuelve la reapertura vigente (la ultima ACEPTADA del Caso, o del REQ; vacia si no hay) o null si el
+     * registro nunca se cerro.
+     */
+    static Optional<Long> reopenedRecord(Db db,String type,long record,long req){
+        if(type.equals("CAS")&&db.count("SELECT COUNT(*) FROM closure_record WHERE case_id=?",record)>0){
+            var p=db.rows("SELECT MAX(id) AS id FROM reopening WHERE case_id=? AND state='ACEPTADA'",record);
+            return Optional.ofNullable(p.isEmpty()?null:nullableId(p.getFirst(),"id"));
+        }
+        if(db.count("SELECT COUNT(*) FROM closure_record WHERE requirement_id=? AND case_id IS NULL",req)==0)return null;
+        var p=db.rows("SELECT MAX(id) AS id FROM reopening WHERE requirement_id=? AND state='ACEPTADA'",req);
+        return Optional.ofNullable(p.isEmpty()?null:nullableId(p.getFirst(),"id"));
     }
 
     // --- Vista para las fichas de COM y REQ --------------------------------------------------------------------------
@@ -274,6 +292,35 @@ public class StatValues {
         }
         out.put("variables",list);
         return out;
+    }
+    /**
+     * Rotulos de los codigos de RELACION y TIPO_INSTITUCION de una ficha (relationship_code/relationship_version y
+     * type_code/type_version, a cualquier profundidad) segun la version con que se registraron: "version:codigo" ->
+     * rotulo (E06; la interfaz lo usa para un codigo de un listado retirado). Solo para fichas ya autorizadas.
+     */
+    static Map<String,String> codeLabels(Db db,Object data){
+        var pairs=new TreeSet<String>();collect(data,pairs);
+        var out=new TreeMap<String,String>();
+        for(String pair:pairs){
+            int i=pair.indexOf(':');
+            String label=itemLabel(db,Long.valueOf(pair.substring(0,i)),pair.substring(i+1));
+            if(label!=null)out.put(pair,label);
+        }
+        return out;
+    }
+    private static void collect(Object value,Set<String> out){
+        if(value instanceof Map<?,?> m){
+            for(String key:List.of("relationship","type")){
+                Object code=m.get(key+"_code"),version=m.get(key+"_version");
+                if(code instanceof String c&&!c.isEmpty()&&version!=null&&version.toString().matches("[0-9]{1,18}"))out.add(version+":"+c);
+            }
+            m.values().forEach(v->collect(v,out));
+        }else if(value instanceof Collection<?> c)c.forEach(v->collect(v,out));
+    }
+    /** Rotulo de un codigo segun la version del catalogo con que se registro (null si no hay version o codigo). */
+    static String itemLabel(Db db,Long version,String code){
+        if(version==null||code==null)return null;
+        return db.rows("SELECT code,label FROM stat_catalog_item WHERE version_id=?",version).stream().filter(r->s(r,"code").equals(code)).map(r->s(r,"label")).findFirst().orElse(null);
     }
     private String itemLabel(Long version,String code){
         if(version==null||code==null)return null;

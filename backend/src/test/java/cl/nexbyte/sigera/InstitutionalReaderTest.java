@@ -57,6 +57,8 @@ class InstitutionalReaderTest {
   if(id==null||table==null)return null;
   // STAT_CLASSIFY (E05): la revision es la cantidad de eventos de clasificacion de la COM.
   if(table.equals("stat_event"))return db.count("SELECT COUNT(*) FROM stat_event WHERE communication_id=?",id);
+  // RIGHTS_CLASSIFY (E06): la revision es la cantidad de eventos de clasificacion del REQ.
+  if(table.equals("stat_event_req"))return db.count("SELECT COUNT(*) FROM stat_event WHERE record_type='REQ' AND record_id=?",id);
   return n(db.one("SELECT revision FROM "+table+" WHERE id=?",id),"revision");
  }
  String ago(long seconds){return Instant.now().minusSeconds(seconds).toString();}
@@ -329,6 +331,7 @@ class InstitutionalReaderTest {
   attempts.put("COM_ROUTE",new Attempt("communication",f.comNew(),Map.of("scope_id",upr,"reason","Intento")));
   attempts.put("COM_ASSUME",new Attempt("communication",f.comNew(),Map.of("responsible_id",prof,"reason","Intento")));
   attempts.put("STAT_CLASSIFY",new Attempt("stat_event",f.comNew(),Map.of("stat",Map.of("TIPO_SOLICITUD",Map.of("status","SIN_INFORMACION"),"reason","Intento"))));
+  attempts.put("RIGHTS_CLASSIFY",new Attempt("stat_event_req",f.req(),Map.of("record","REQ","variables",Map.of("DERECHO",Map.of("status","SIN_INFORMACION")),"reason","Intento")));
   attempts.put("COM_LINK",new Attempt("communication",f.comNew(),Map.of("folio",s(db.one("SELECT folio FROM requirement WHERE id=?",f.req()),"folio"),"reason","Intento")));
   var solData=Map.<String,Object>of("scope_id",scope("UPD"),"responsible_id",prof,"disposition","INVALIDA","reason","Intento");
   for(String t:List.of("SOL_ROUTE","SOL_RETURN","SOL_ASSUME","SOL_DISCARD"))attempts.put(t,new Attempt("solicitation",f.solPending(),solData));

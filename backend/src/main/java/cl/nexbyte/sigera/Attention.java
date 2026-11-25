@@ -17,7 +17,7 @@ import static cl.nexbyte.sigera.Problem.require;
 public class Attention {
     private static final Logger LOG=LoggerFactory.getLogger(Attention.class);
     /** Carga del resumen de cambios de las versiones anteriores a 0.8.0 (V18). */
-    static final String SUMMARY_MARKER="RESUMEN_CAMBIOS_V18";
+    static final String SUMMARY_MARKER="RESUMEN_CAMBIOS_V18",RESULT_MARKER="RESULTADO_INMEDIATO_V20";
     static final int BATCH=500;
     private final Db db;
     private final Access access;
@@ -270,7 +270,8 @@ public class Attention {
         long effective=in.instant("effective_at",true);long received=n(db.one("SELECT received_ms FROM communication WHERE id=?",n(r,"communication_id")),"received_ms");require(effective>=received&&effective<=now(),"La fecha del resultado debe estar entre recepcion y ahora.");
         db.update("INSERT INTO management_note(requirement_id,author_id,effective_ms,registered_ms,body,reserved) VALUES(?,?,?,?,?,FALSE)",id,a.id(),effective,now(),result+": "+reason);
         long t=now();
-        db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,revision=revision+1 WHERE id=?",t,a.id(),reason,id);
+        // Resultado de la primera atencion (D36, E06): una sola fuente estructurada; la constancia no se tipifica.
+        db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,immediate_result=?,immediate_result_reconstructed=FALSE,revision=revision+1 WHERE id=?",t,a.id(),reason,result,id);
         db.update("INSERT INTO closure_record(requirement_id,case_id,actor_id,closed_ms,mode,reason) VALUES(?,NULL,?,?,?,?)",id,a.id(),t,"PRIMERA_ATENCION",reason);
         life.reqClosed(a,id,t,"PRIMERA_ATENCION");
         db.audit(a.id(),"ATENCION_RESUELTA","REQ",id,n(r,"principal_scope"),result+". Resultado registrado por quien atendio.");
@@ -287,6 +288,7 @@ public class Attention {
             var original=db.one("SELECT folio,channel,received_ms,created_ms,created_by FROM communication WHERE id=?",n(r,"communication_id"));
             out.put("origin",original);
             var form=decode(s(record,"data_json"));out.put("form",form);
+            out.put("code_labels",StatValues.codeLabels(db,form)); // Rotulos por version de relacion y tipo de institucion (E06).
             out.put("suggested_region",access.suggestedRegion(n(r,"communication_id"),form.get("region") instanceof String region?region:null));
             out.put("origin_region",regions.ofRequirement(id)); // D21: registrada, vigente y si fue corregida (solo con la ficha legible).
             out.put("versions",db.rows("SELECT v.id,v.requirement_revision,v.author_id,v.registered_ms,v.reason,v.change_summary,u.name AS author FROM attention_revision v JOIN staff u ON u.id=v.author_id WHERE v.requirement_id=? ORDER BY v.id DESC LIMIT 50",id));
@@ -328,6 +330,51 @@ public class Attention {
             return null;
         });
         if(versions>0)LOG.info("Resumen de cambios de la ficha: {} versiones revisadas, {} omitidas.",versions,omitted);
+    }
+    /**
+     * Carga historica del resultado de la primera atencion (V20, E06, hallazgo S4 de E00; marcador RESULTADO_INMEDIATO_V20
+     * con amount = omitidos): para cada REQ con un cierre PRIMERA_ATENCION y sin immediate_result, el ultimo de esos
+     * cierres cuya constancia del REQ es exactamente "<RESULTADO>: <motivo del cierre>" (prefijo real del codigo, igualdad
+     * decidida en Java porque MySQL compara sin mayusculas ni tildes). Marca immediate_result_reconstructed. Lo que no
+     * coincide se omite y se cuenta (solo cifras en el log). Por lotes con el lock global; corre tambien con migrate-only.
+     */
+    void rebuildImmediateResults(){
+        if(Boolean.TRUE.equals(tx.execute(st->db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",RESULT_MARKER)>0)))return;
+        long last=0,found=0,omitted=0;
+        while(true){
+            final long from=last;
+            long[] result=tx.execute(st->{
+                db.lock();
+                var batch=db.rows("SELECT r.id FROM requirement r WHERE r.id>? AND r.immediate_result IS NULL AND EXISTS(SELECT 1 FROM closure_record c WHERE c.requirement_id=r.id AND c.case_id IS NULL AND c.mode='PRIMERA_ATENCION') ORDER BY r.id LIMIT "+BATCH,from);
+                long set=0,skipped=0;
+                for(var r:batch){
+                    String value=immediateResult(n(r,"id"));
+                    if(value==null){skipped++;continue;}
+                    db.update("UPDATE requirement SET immediate_result=?,immediate_result_reconstructed=TRUE WHERE id=? AND immediate_result IS NULL",value,n(r,"id"));
+                    set++;
+                }
+                return new long[]{batch.isEmpty()?0:n(batch.getLast(),"id"),batch.size(),set,skipped};
+            });
+            if(result==null||result[1]==0)break;
+            last=result[0];found+=result[2];omitted+=result[3];
+        }
+        final long skippedTotal=omitted;
+        tx.execute(st->{
+            db.lock();
+            if(db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",RESULT_MARKER)==0)
+                db.update("INSERT INTO application_marker(code,applied_ms,amount) VALUES(?,?,?)",RESULT_MARKER,System.currentTimeMillis(),skippedTotal);
+            return null;
+        });
+        if(found+omitted>0)LOG.info("Resultado de la primera atencion: {} reconstruidos, {} omitidos.",found,omitted);
+    }
+    /** Resultado del ultimo cierre PRIMERA_ATENCION del REQ con su constancia exacta, o null si no hay evidencia. */
+    String immediateResult(long req){
+        var notes=db.rows("SELECT body FROM management_note WHERE requirement_id=? AND case_id IS NULL ORDER BY id",req).stream().map(x->s(x,"body")).toList();
+        for(var c:db.rows("SELECT reason FROM closure_record WHERE requirement_id=? AND case_id IS NULL AND mode='PRIMERA_ATENCION' ORDER BY id DESC",req)){
+            String reason=s(c,"reason");
+            for(String value:Lifecycle.IMMEDIATE_RESULTS)if(notes.contains(value+": "+reason))return value;
+        }
+        return null;
     }
     public Map<String,Object> version(Actor a,long reqId,long version){
         var r=req(reqId);if(!mayRead(a,r))Problem.denied();var v=db.one("SELECT * FROM attention_revision WHERE requirement_id=? AND id=?",reqId,version);

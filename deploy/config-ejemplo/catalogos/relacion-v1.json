@@ -2,7 +2,7 @@
   "format": "siger-catalogo-1",
   "catalog": "RELACION",
   "label": "Relación con el NNA, propuesta versión 1",
-  "source": "Propuesta SIGER 0.8.0, versión 1 (DISEÑO 2.2): valores del campo relacion del Formulario Público (formulario-web 6f886eb) y sus rótulos; sujeta a validación institucional (DI-03).",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (DISEÑO 2.2): valores del campo relacion del Formulario Público (formulario-web 6f886eb) y sus rótulos, más dos valores exclusivos de SIGER; DI-03: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional.",
   "items": [
     {
       "code": "MADRE",
@@ -43,6 +43,16 @@
       "code": "ORGANIZACION",
       "label": "Representante de una organización",
       "source_ref": "organizacion"
+    },
+    {
+      "code": "PROPIO_NNA",
+      "label": "El propio NNA",
+      "source_ref": "exclusivo de SIGER (DI-03)"
+    },
+    {
+      "code": "REPRESENTANTE_LEGAL",
+      "label": "Representante legal",
+      "source_ref": "exclusivo de SIGER (DI-03)"
     },
     {
       "code": "OTRO",

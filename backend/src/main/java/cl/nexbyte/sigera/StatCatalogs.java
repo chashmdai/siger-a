@@ -35,18 +35,21 @@ public class StatCatalogs {
     static final String KIND="CATALOGO_ESTADISTICO",IMPORTED="CATALOGO_IMPORTADO",ACTIVATED="CATALOGO_ACTIVADO",MAPPED="CATALOGO_CORRESPONDENCIA_IMPORTADA";
     static final String PROPOSED="PROPUESTA",CURRENT="VIGENTE",RETIRED="RETIRADA";
     static final String FORMAT="siger-catalogo-1",MAPPING_FORMAT="siger-correspondencia-1",AGE="TRAMO_EDAD";
-    static final int MAX_CONTENT=400_000,MAX_ITEMS=2000,MAX_PAIRS=5000,MAX_DEPTH=5,MAX_ERRORS=20,AGE_MIN=0,AGE_MAX=130;
-    /** Catalogos de DISENO 3.1 con su rotulo visible (lista cerrada). */
+    static final int MAX_DESCRIPTION=1000,MAX_CONTENT=400_000,MAX_ITEMS=2000,MAX_PAIRS=5000,MAX_DEPTH=5,MAX_ERRORS=20,AGE_MIN=0,AGE_MAX=130;
+    /**
+     * Catalogos de DISENO 3.1 con su rotulo visible (lista cerrada). Desde E06 (decision del responsable del 2026-11-24)
+     * agrega ROL_ESTADO (eje VII del modelo 2.0, que sale del catalogo de derechos) y GRUPO_PRIORITARIO (seccion VIII).
+     */
     static final Map<String,String> CATALOGS=ordered(
         "TIPO_SOLICITUD","Tipo de solicitud","TIPO_REQUIRENTE","Tipo de requirente","VIA_INGRESO","Vía de ingreso",
         "CONTEXTO","Contexto","CARACTERIZACION","Caracterización de la vulneración","DERECHO","Derechos",
-        "TIPO_ACTUACION","Tipo de actuación","TIPO_INSTITUCION","Tipo de institución","RELACION","Relación con el NNA",
+        "ROL_ESTADO","Rol del Estado","GRUPO_PRIORITARIO","Grupos prioritarios","TIPO_ACTUACION","Tipo de actuación","TIPO_INSTITUCION","Tipo de institución","RELACION","Relación con el NNA",
         AGE,"Tramos de edad");
     /** Valores especiales de una variable estadistica (D28), fijos en Java y fuera de los catalogos. */
     static final Map<String,String> SPECIAL=ordered("PENDIENTE","Pendiente","SIN_INFORMACION","Sin información","NO_DECLARADO","No declarado","NO_APLICA","No aplica");
     static final Pattern CODE=Pattern.compile("[A-Z0-9][A-Z0-9._-]{0,39}");
     private static final Set<String> ROOT_FIELDS=Set.of("format","catalog","label","source","items");
-    private static final Set<String> ITEM_FIELDS=Set.of("code","label","parent","selectable","range_from","range_to","source_ref");
+    private static final Set<String> ITEM_FIELDS=Set.of("code","label","parent","selectable","range_from","range_to","source_ref","descripcion");
     private static final Set<String> MAPPING_FIELDS=Set.of("format","pairs"),PAIR_FIELDS=Set.of("from","to");
     private static final JsonMapper READER=JsonMapper.builder(JsonFactory.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -55,7 +58,7 @@ public class StatCatalogs {
     private final Db db;
     public StatCatalogs(Db db){this.db=db;}
 
-    record Item(String code,String label,String parent,int level,int sort,boolean selectable,Integer from,Integer to,String ref){}
+    record Item(String code,String label,String parent,int level,int sort,boolean selectable,Integer from,Integer to,String ref,String description){}
     record Parsed(String catalog,String label,String source,List<Item> items,String sha){}
     record Pair(String from,String to){}
 
@@ -77,8 +80,8 @@ public class StatCatalogs {
         long now=Lifecycle.now();
         long version=db.insert("INSERT INTO stat_catalog_version(catalog,label,state,source,file_sha256,loaded_by,loaded_ms,basis) VALUES(?,?,?,?,?,?,?,?)",
             p.catalog(),p.label(),PROPOSED,p.source(),p.sha(),a.id(),now,reason);
-        for(var i:p.items())db.update("INSERT INTO stat_catalog_item(version_id,code,label,parent_code,level,sort,selectable,range_from,range_to,source_ref) VALUES(?,?,?,?,?,?,?,?,?,?)",
-            version,i.code(),i.label(),i.parent(),i.level(),i.sort(),i.selectable(),i.from(),i.to(),i.ref());
+        for(var i:p.items())db.update("INSERT INTO stat_catalog_item(version_id,code,label,parent_code,level,sort,selectable,range_from,range_to,source_ref,description) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            version,i.code(),i.label(),i.parent(),i.level(),i.sort(),i.selectable(),i.from(),i.to(),i.ref(),i.description());
         db.audit(a.id(),IMPORTED,KIND,version,null,p.catalog()+" versión "+version+" propuesta: "+p.items().size()+" ítems, huella "+p.sha().substring(0,12)+". "+reason);
         return new Workflow.Result(KIND,version,"Se importó la versión "+version+" de "+CATALOGS.get(p.catalog())+" como propuesta ("+count(p.items().size(),"ítem","ítems")+").");
     }
@@ -169,7 +172,9 @@ public class StatCatalogs {
             }else if(node.has("range_from")||node.has("range_to")){errors.add(at+"solo los tramos de edad tienen rango.");continue;}
             String ref=null;
             if(node.has("source_ref")&&!node.path("source_ref").isNull()){ref=text(node.path("source_ref"),80);if(ref==null){errors.add(at+"source_ref admite hasta 80 caracteres.");continue;}}
-            levels.put(code,level);out.add(new Item(code,itemLabel,parent,level,out.size()+1,selectable,from,to,ref));
+            String description=null;
+            if(node.has("descripcion")&&!node.path("descripcion").isNull()){description=text(node.path("descripcion"),MAX_DESCRIPTION);if(description==null){errors.add(at+"descripcion admite texto de hasta "+MAX_DESCRIPTION+" caracteres.");continue;}}
+            levels.put(code,level);out.add(new Item(code,itemLabel,parent,level,out.size()+1,selectable,from,to,ref,description));
         }
         if(errors.isEmpty()&&out.stream().noneMatch(Item::selectable))errors.add("El catálogo no tiene ningún ítem seleccionable.");
         if(errors.isEmpty()&&age)errors.addAll(ageGaps(out));
@@ -236,7 +241,7 @@ public class StatCatalogs {
         var current=new HashMap<String,Map<String,Object>>();
         for(var v:db.rows("SELECT id,catalog,label,source,activated_ms FROM stat_catalog_version WHERE state=? ORDER BY id",CURRENT))current.put(s(v,"catalog"),v);
         var items=new HashMap<Long,List<Map<String,Object>>>();
-        if(!current.isEmpty())for(var i:db.rows("SELECT i.version_id,i.code,i.label,i.parent_code,i.level,i.sort,i.selectable,i.range_from,i.range_to,i.source_ref FROM stat_catalog_item i "
+        if(!current.isEmpty())for(var i:db.rows("SELECT i.version_id,i.code,i.label,i.parent_code,i.level,i.sort,i.selectable,i.range_from,i.range_to,i.source_ref,i.description FROM stat_catalog_item i "
             +"JOIN stat_catalog_version v ON v.id=i.version_id WHERE v.state=? ORDER BY i.version_id,i.sort",CURRENT))
             items.computeIfAbsent(n(i,"version_id"),k->new ArrayList<>()).add(item(i));
         var catalogs=new ArrayList<Map<String,Object>>();
@@ -269,7 +274,7 @@ public class StatCatalogs {
             +"LEFT JOIN staff x ON x.id=v.activated_by LEFT JOIN staff r ON r.id=v.retired_by WHERE v.id=?",id);
         var out=new LinkedHashMap<String,Object>(v);out.remove("current_catalog");
         out.put("catalog_label",CATALOGS.get(s(v,"catalog")));
-        out.put("items",db.rows("SELECT code,label,parent_code,level,sort,selectable,range_from,range_to,source_ref FROM stat_catalog_item WHERE version_id=? ORDER BY sort",id).stream().map(StatCatalogs::item).toList());
+        out.put("items",db.rows("SELECT code,label,parent_code,level,sort,selectable,range_from,range_to,source_ref,description FROM stat_catalog_item WHERE version_id=? ORDER BY sort",id).stream().map(StatCatalogs::item).toList());
         out.put("mappings",db.rows("SELECT m.from_version,m.from_code,m.to_version,m.to_code FROM stat_catalog_mapping m WHERE m.from_version=? OR m.to_version=? ORDER BY m.from_version,m.to_version,m.id",id,id));
         return out;
     }
@@ -280,7 +285,7 @@ public class StatCatalogs {
     private static Map<String,Object> item(Map<String,Object> i){
         var row=new LinkedHashMap<String,Object>();
         for(String k:List.of("code","label","parent_code","level","sort"))row.put(k,i.get(k));
-        row.put("selectable",b(i,"selectable"));row.put("range_from",i.get("range_from"));row.put("range_to",i.get("range_to"));row.put("source_ref",i.get("source_ref"));
+        row.put("selectable",b(i,"selectable"));row.put("range_from",i.get("range_from"));row.put("range_to",i.get("range_to"));row.put("source_ref",i.get("source_ref"));row.put("description",i.get("description"));
         return row;
     }
     private static List<Map<String,Object>> specials(){return SPECIAL.entrySet().stream().map(e->Map.<String,Object>of("code",e.getKey(),"label",e.getValue())).toList();}

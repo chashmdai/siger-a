@@ -102,6 +102,8 @@ class StatClassificationTest {
         var items=JSON.readTree(reference("via-ingreso-v1.json")).path("items");
         var fromFile=new LinkedHashMap<String,String>();
         for(JsonNode i:items){
+            // E06 (decision del responsable del 2026-11-25): las agrupaciones son items padre no seleccionables, sin canal.
+            if(i.has("selectable")&&!i.path("selectable").booleanValue())continue;
             String ref=i.path("source_ref").asString();
             assertTrue(ref.startsWith("D31; canal "),ref);
             fromFile.put(ref.substring("D31; canal ".length()),i.path("code").asString());

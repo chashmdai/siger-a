@@ -27,7 +27,7 @@ class MySql84Upgrade070Test {
      * Marcadores de las rutinas de arranque agregadas despues de 0.7.0: es lo unico que cambia la cantidad de filas de
      * una tabla existente (application_marker) al actualizar (E03: resumen de cambios de la ficha, V18).
      */
-    static final List<String> NEW_MARKERS=List.of(Attention.SUMMARY_MARKER);
+    static final List<String> NEW_MARKERS=List.of(Attention.SUMMARY_MARKER,Attention.RESULT_MARKER);
     @BeforeAll static void requireIsolatedMySql(){MySql84IntegrationTest.requireIsolatedMySql();}
 
     /** Mayor version de las migraciones del codigo (Vn__*.sql). */
@@ -103,6 +103,13 @@ class MySql84Upgrade070Test {
                     db.count("SELECT COUNT(*) FROM attention_revision WHERE change_summary IS NOT NULL"));
                 assertTrue(db.count("SELECT COUNT(*) FROM attention_revision WHERE change_summary IS NOT NULL")>0,"el volcado trae una ficha complementada");
                 assertEquals(0,db.count("SELECT COUNT(*) FROM intake_record"),"ninguna COM anterior recibe ficha de ingreso");
+            }
+            // V20 (E06): el resultado de las dos primeras atenciones resueltas del volcado, desde su constancia exacta.
+            if(latest>=20){
+                assertEquals(2,db.count("SELECT COUNT(*) FROM requirement r WHERE EXISTS(SELECT 1 FROM closure_record c WHERE c.requirement_id=r.id AND c.case_id IS NULL AND c.mode='PRIMERA_ATENCION')"));
+                assertEquals(2,db.count("SELECT COUNT(*) FROM requirement WHERE immediate_result='ORIENTACION' AND immediate_result_reconstructed=TRUE"));
+                assertEquals(0,n(db.one("SELECT amount FROM application_marker WHERE code=?",Attention.RESULT_MARKER),"amount"),"nada omitido");
+                assertEquals(0,db.count("SELECT COUNT(*) FROM management_note WHERE action_type IS NOT NULL"),"la historia queda sin tipificar");
             }
             // Cada original conserva su SHA-256 recalculado sobre el texto guardado.
             for(var o:db.rows("SELECT document,document_sha256 FROM communication_original"))

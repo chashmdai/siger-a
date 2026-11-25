@@ -45,6 +45,7 @@ public class Bootstrap implements ApplicationRunner {
         milestones.rebuild(); // Carga historica de hitos (V14), una sola vez; cuenta lo que no reconoce.
         regions.rebuild(); // Region de cada version de la ficha (V16, D21), una sola vez.
         attention.rebuildSummaries(); // Resumen de cambios de las versiones existentes de la ficha (V18, E03), una sola vez.
+        attention.rebuildImmediateResults(); // Resultado de la primera atencion desde su constancia exacta (V20, E06), una sola vez.
         // D17: auditoria del modo de emergencia y liberacion de originales del Formulario pendientes (no en migrate-only,
         // la prueba de Graph, la sonda ni la recuperacion de TI).
         if(origin!=null)origin.startup();

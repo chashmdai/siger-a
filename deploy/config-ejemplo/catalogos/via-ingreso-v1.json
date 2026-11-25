@@ -2,51 +2,97 @@
   "format": "siger-catalogo-1",
   "catalog": "VIA_INGRESO",
   "label": "Vía de ingreso, propuesta versión 1",
-  "source": "Propuesta SIGER 0.8.0, versión 1 (D31, plan 0.8.0); sujeta a validación institucional (DI-01).",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D31, plan 0.8.0); DI-01: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional. Agrupaciones estadísticas como ítems padre no seleccionables; se conserva la vía original.",
   "items": [
+    {
+      "code": "GRUPO_DIGITAL",
+      "label": "Digital",
+      "selectable": false,
+      "source_ref": "DI-01; agrupación"
+    },
     {
       "code": "FORMULARIO_PUBLICO_ADULTO",
       "label": "Formulario Público adulto",
+      "parent": "GRUPO_DIGITAL",
       "source_ref": "D31; canal FORMULARIO_WEB_PUBLICO"
     },
     {
       "code": "FORMULARIO_PUBLICO_NNA",
       "label": "Formulario Público NNA",
+      "parent": "GRUPO_DIGITAL",
       "source_ref": "D31; canal FORMULARIO_WEB_NNA"
-    },
-    {
-      "code": "PRESENCIAL",
-      "label": "Presencial",
-      "source_ref": "D31; canal PRESENCIAL"
     },
     {
       "code": "CORREO",
       "label": "Correo",
+      "parent": "GRUPO_DIGITAL",
       "source_ref": "D31; canal CORREO"
-    },
-    {
-      "code": "TELEFONO",
-      "label": "Teléfono",
-      "source_ref": "D31; canal TELEFONO"
-    },
-    {
-      "code": "OFICIO",
-      "label": "Oficio",
-      "source_ref": "D31; canal OFICIO"
     },
     {
       "code": "REDES_SOCIALES",
       "label": "Redes sociales",
+      "parent": "GRUPO_DIGITAL",
       "source_ref": "D31; canal REDES_SOCIALES"
+    },
+    {
+      "code": "GRUPO_PRESENCIAL",
+      "label": "Presencial",
+      "selectable": false,
+      "source_ref": "DI-01; agrupación"
+    },
+    {
+      "code": "PRESENCIAL",
+      "label": "Presencial",
+      "parent": "GRUPO_PRESENCIAL",
+      "source_ref": "D31; canal PRESENCIAL"
+    },
+    {
+      "code": "GRUPO_TELEFONICA",
+      "label": "Telefónica",
+      "selectable": false,
+      "source_ref": "DI-01; agrupación"
+    },
+    {
+      "code": "TELEFONO",
+      "label": "Teléfono",
+      "parent": "GRUPO_TELEFONICA",
+      "source_ref": "D31; canal TELEFONO"
+    },
+    {
+      "code": "GRUPO_DOCUMENTAL",
+      "label": "Documental",
+      "selectable": false,
+      "source_ref": "DI-01; agrupación"
+    },
+    {
+      "code": "OFICIO",
+      "label": "Oficio",
+      "parent": "GRUPO_DOCUMENTAL",
+      "source_ref": "D31; canal OFICIO"
+    },
+    {
+      "code": "GRUPO_INTERNA",
+      "label": "Interna",
+      "selectable": false,
+      "source_ref": "DI-01; agrupación"
     },
     {
       "code": "INTEGRANTE_DEFENSORIA",
       "label": "Integrante de la Defensoría",
-      "source_ref": "D31; canal INTEGRANTE_DEFENSORIA"
+      "parent": "GRUPO_INTERNA",
+      "source_ref": "D31; canal INTEGRANTE_DEFENSORIA",
+      "descripcion": "Categoría de ingreso interno, solo cuando representa el origen efectivo de la comunicación. No se usa por el solo hecho de que un funcionario registre un requerimiento recibido por correo, teléfono u otra vía."
+    },
+    {
+      "code": "GRUPO_OTRA",
+      "label": "Otra",
+      "selectable": false,
+      "source_ref": "DI-01; agrupación"
     },
     {
       "code": "OTRO",
       "label": "Otro",
+      "parent": "GRUPO_OTRA",
       "source_ref": "D31; canal OTRO"
     }
   ]

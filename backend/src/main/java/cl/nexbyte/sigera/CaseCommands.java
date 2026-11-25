@@ -164,9 +164,11 @@ public class CaseCommands {
         if(!access.member(target,c))Problem.denied();
         long due=in.instant("due_at",false);
         int hours=reminderHours(in);
+        // Compromiso (D36, E06): el tipo de actuacion de una tarea no la convierte en actuacion, ni al completarla.
+        var action=life.actionType(in,null,null);
         long t=now();
-        long task=db.insert("INSERT INTO task_item(case_id,title,executor_id,created_by,created_ms,due_ms,mandatory,reminder_interval_hours,next_reminder_ms) VALUES(?,?,?,?,?,?,?,?,?)",
-            cas,in.text("title",300,true),user,a.id(),t,due==0?null:due,false,hours,due==0?null:due);
+        long task=db.insert("INSERT INTO task_item(case_id,title,executor_id,created_by,created_ms,due_ms,mandatory,reminder_interval_hours,next_reminder_ms,action_type,action_catalog_version) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            cas,in.text("title",300,true),user,a.id(),t,due==0?null:due,false,hours,due==0?null:due,action.code(),action.version());
         life.caseMilestone("TAREA_CREADA","TAREA",task,cas,a.id(),user,t,null);
         life.changed(a,"TAREA_CREADA","CAS",cas,n(c,"scope_id"),"Agenda independiente de actuaciones.");
         access.notice(user,"Tienes una tarea asignada en un Caso.","CAS",cas);
@@ -205,7 +207,8 @@ public class CaseCommands {
                 if(!access.member(u,c))Problem.denied();
                 long due=in.instant("due_at",false);
                 int hours=reminderHours(in);
-                db.update("UPDATE task_item SET executor_id=?,due_ms=?,reminder_interval_hours=?,next_reminder_ms=?,revision=revision+1 WHERE id=?",target,due==0?null:due,hours,due==0?null:due,id);
+                var action=life.actionType(in,(String)t.get("action_type"),nullableId(t,"action_catalog_version"));
+                db.update("UPDATE task_item SET executor_id=?,due_ms=?,reminder_interval_hours=?,next_reminder_ms=?,action_type=?,action_catalog_version=?,revision=revision+1 WHERE id=?",target,due==0?null:due,hours,due==0?null:due,action.code(),action.version(),id);
                 access.notice(target,"Una tarea fue actualizada o reasignada.","CAS",cas);
             }
         }

@@ -2,32 +2,37 @@
   "format": "siger-catalogo-1",
   "catalog": "TIPO_SOLICITUD",
   "label": "Tipo de solicitud, propuesta versión 1",
-  "source": "Propuesta SIGER 0.8.0, versión 1 (D29, plan 0.8.0); sujeta a validación institucional (DI-01).",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D29, plan 0.8.0); DI-01: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional.",
   "items": [
     {
       "code": "VULNERACION",
       "label": "Vulneración de derechos",
-      "source_ref": "D29"
+      "source_ref": "D29",
+      "descripcion": "Incluye presuntas vulneraciones, sin exigir acreditación previa. Si existen antecedentes que permitan identificar una posible afectación de los derechos de un NNA, se clasifica como vulneración de derechos, aunque originalmente se haya presentado como reclamo."
     },
     {
       "code": "CONSULTA_ORIENTACION",
       "label": "Consulta u orientación",
-      "source_ref": "D29"
+      "source_ref": "D29",
+      "descripcion": "Incluye solicitudes de información, asesoría u orientación."
     },
     {
       "code": "PROMOCION",
       "label": "Promoción",
-      "source_ref": "D29"
+      "source_ref": "D29",
+      "descripcion": "Incluye actividades de promoción y difusión de derechos."
     },
     {
       "code": "RECLAMO_OTRA_INSTITUCION",
       "label": "Reclamo sobre otra institución",
-      "source_ref": "D29"
+      "source_ref": "D29",
+      "descripcion": "Reclamos que, según los antecedentes disponibles, no constituyen una posible vulneración de derechos."
     },
     {
       "code": "OTRO",
       "label": "Otro",
-      "source_ref": "D29"
+      "source_ref": "D29",
+      "descripcion": "Categoría residual, distinta de Sin información."
     }
   ]
 }

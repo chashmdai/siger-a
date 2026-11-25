@@ -2,27 +2,31 @@
   "format": "siger-catalogo-1",
   "catalog": "TIPO_REQUIRENTE",
   "label": "Tipo de requirente, propuesta versión 1",
-  "source": "Propuesta SIGER 0.8.0, versión 1 (D30, plan 0.8.0); sujeta a validación institucional (DI-01).",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D30, plan 0.8.0); DI-01: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional.",
   "items": [
     {
       "code": "PERSONA_NATURAL_ADULTA",
       "label": "Persona natural adulta",
-      "source_ref": "D30"
+      "source_ref": "D30",
+      "descripcion": "Independiente de su relación con el NNA."
     },
     {
       "code": "NNA",
       "label": "Niño, niña o adolescente",
-      "source_ref": "D30"
+      "source_ref": "D30",
+      "descripcion": "Cuando el propio NNA formula el requerimiento."
     },
     {
       "code": "PERSONA_JURIDICA_ORGANISMO",
       "label": "Persona jurídica u organismo",
-      "source_ref": "D30"
+      "source_ref": "D30",
+      "descripcion": "Incluye instituciones públicas, privadas y organizaciones."
     },
     {
       "code": "ACTUACION_DE_OFICIO",
       "label": "Actuación de oficio",
-      "source_ref": "D30"
+      "source_ref": "D30",
+      "descripcion": "Categoría estadística especial para requerimientos iniciados institucionalmente, sin solicitante externo."
     }
   ]
 }

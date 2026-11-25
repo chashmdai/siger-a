@@ -1,0 +1,64 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "TRAMO_EDAD",
+  "label": "Tramos de edad, propuesta versión 1",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D38, DISEÑO 4.8); DI-02: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional; deben coincidir con los tramos de uso institucional (Informe Anual), lo que el responsable confirma antes de la activación.",
+  "items": [
+    {
+      "code": "T000-005",
+      "label": "Primera infancia",
+      "range_from": 0,
+      "range_to": 5,
+      "source_ref": "DI-02"
+    },
+    {
+      "code": "T006-009",
+      "label": "Niñez",
+      "range_from": 6,
+      "range_to": 9,
+      "source_ref": "DI-02"
+    },
+    {
+      "code": "T010-013",
+      "label": "Adolescencia temprana",
+      "range_from": 10,
+      "range_to": 13,
+      "source_ref": "DI-02"
+    },
+    {
+      "code": "T014-017",
+      "label": "Adolescencia",
+      "range_from": 14,
+      "range_to": 17,
+      "source_ref": "DI-02"
+    },
+    {
+      "code": "T018-029",
+      "label": "18 a 29 años",
+      "range_from": 18,
+      "range_to": 29,
+      "source_ref": "DI-02"
+    },
+    {
+      "code": "T030-044",
+      "label": "30 a 44 años",
+      "range_from": 30,
+      "range_to": 44,
+      "source_ref": "DI-02"
+    },
+    {
+      "code": "T045-059",
+      "label": "45 a 59 años",
+      "range_from": 45,
+      "range_to": 59,
+      "source_ref": "DI-02"
+    },
+    {
+      "code": "T060-130",
+      "label": "60 años o más",
+      "range_from": 60,
+      "range_to": 130,
+      "source_ref": "DI-02"
+    }
+  ]
+}

@@ -27,9 +27,10 @@ public class Workflow {
     private final CaseCommands cases;
     private final Attention attention;
     private final Personnel personnel;
+    private final Rights rights;
     private final JsonMapper json=JsonMapper.builder().build();
 
-    public Workflow(Db db,Access access,IntakeCommands intake,RequirementCommands requirements,CaseCommands cases,Attention attention,Personnel personnel){
+    public Workflow(Db db,Access access,IntakeCommands intake,RequirementCommands requirements,CaseCommands cases,Attention attention,Personnel personnel,Rights rights){
         this.db=db;
         this.access=access;
         this.intake=intake;
@@ -37,6 +38,7 @@ public class Workflow {
         this.cases=cases;
         this.attention=attention;
         this.personnel=personnel;
+        this.rights=rights;
     }
 
     @Transactional
@@ -62,6 +64,7 @@ public class Workflow {
             case "REQ_CLASSIFY","REQ_CASE_CREATE","REQ_CLOSE","REQ_NOTE","REQ_MATTER","FLOW_REQUEST","FLOW_DECIDE","REOPEN_REQUEST","REOPEN_AUTHORIZE","REOPEN_DECIDE" -> requirements.run(a,type,id,expected,in);
             case "CASE_NOTE","CASE_ASSIGN","CASE_ACK","CASE_MEMBER_ADD","CASE_MEMBER_REMOVE","CASE_REQUEST_CLOSE","CASE_WITHDRAW_CLOSE","CASE_CLOSE","CASE_RETURN","CASE_WAIT","CASE_RESUME","CASE_MATTER",
                  "NOTE_RECTIFY","TASK_CREATE","TASK_EDIT","TASK_COMPLETE","TASK_CANCEL","TASK_ATTEMPT" -> cases.run(a,type,id,expected,in);
+            case "RIGHTS_CLASSIFY" -> rights.classify(a,id,expected,in);
             case "NOTICE_READ" -> readNotice(a,id);
             case "STAFF_CREATE","STAFF_UPDATE","STAFF_RESET","GRANT_CREATE","GRANT_REVOKE","PROFILE_SET","SCOPE_CREATE","SCOPE_UPDATE","SCOPE_ACTIVATE","SCOPE_CLOSE","SCOPE_COVERAGE","CENTRAL_COVERAGE","DESIGNATE","SUBSTITUTE_ACTIVATE","SUBSTITUTE_END","DOC_RELEASE","INTEGRATION_PAUSE","INTEGRATION_RESUME","MAIL_RESOLVE",
                  "HOLIDAY_ADD","HOLIDAY_IMPORT","HOLIDAY_REMOVE","CATALOG_IMPORT","CATALOG_ACTIVATE","CATALOG_MAPPING_IMPORT" -> personnel.run(a,type,id,expected,in);

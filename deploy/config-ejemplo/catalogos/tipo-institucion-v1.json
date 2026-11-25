@@ -2,7 +2,7 @@
   "format": "siger-catalogo-1",
   "catalog": "TIPO_INSTITUCION",
   "label": "Tipo de institución, propuesta versión 1",
-  "source": "Propuesta SIGER 0.8.0, versión 1 (DISEÑO 2.2): valores de instituciones[].tipo del Formulario Público (formulario-web 6f886eb); sujeta a validación institucional (DI-03).",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (DISEÑO 2.2): valores de instituciones[].tipo del Formulario Público (formulario-web 6f886eb); DI-03: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional.",
   "items": [
     {
       "code": "ESTABLECIMIENTO_EDUCATIVO",

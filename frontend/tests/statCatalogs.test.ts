@@ -21,17 +21,18 @@ test('el modelo de derechos se reconoce: catálogo, ítems, seleccionables y niv
   assert.ok(p.ok);
   if (!p.ok) return;
   assert.equal(p.catalogLabel, 'Derechos');
-  assert.deepEqual([p.items, p.selectable, p.levels], [87, 77, 3]);
+  assert.deepEqual([p.items, p.selectable, p.levels], [81, 77, 3]); // E06: sin el eje VII (catálogo Rol del Estado)
   assert.match(p.source, /versión 2\.0, 2022/);
   assert.deepEqual(previewLines(p).map(([label]) => label), ['Catálogo', 'Nombre de la versión', 'Fuente', 'Ítems']);
-  assert.equal(previewLines(p)[3][1], '87 ítems, 77 seleccionables, en 3 niveles');
+  assert.equal(previewLines(p)[3][1], '81 ítems, 77 seleccionables, en 3 niveles');
   // Un archivo plano no informa niveles ni seleccionables de mas.
   const flat = previewCatalog(file('tipo-solicitud-v1.json'), CATALOGS);
   assert.ok(flat.ok && previewLines(flat)[3][1] === '5 ítems');
 });
 
 test('rechazos legibles antes de enviar: plantilla, otro catálogo, correspondencia, JSON inválido y tamaño', () => {
-  const template = previewCatalog(file('plantillas/tramo-edad.json'), CATALOGS);
+  // Desde E06 el paquete trae los catálogos completos; una plantilla sin ítems se sigue reconociendo como tal.
+  const template = previewCatalog(JSON.stringify({format: 'siger-catalogo-1', catalog: 'TRAMO_EDAD', label: 'Tramos de edad', source: 'Por definir', items: []}), CATALOGS);
   assert.ok(!template.ok && /no tiene ítems: es una plantilla/.test(template.problem));
   const unknown = previewCatalog(file('relacion-v1.json'), CATALOGS);
   assert.ok(!unknown.ok && /ninguno de los catálogos/.test(unknown.problem));

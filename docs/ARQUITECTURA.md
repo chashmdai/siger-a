@@ -47,6 +47,12 @@ sobre MySQL 8.4 con `MySqlSuite`).
   la regla version 1 desde los datos estructurados del Formulario, que nunca cuentan como informadas. `STAT_CLASSIFY` y
   el bloque `stat` de los comandos de ingreso y distribucion; facultad `Access.statWritable`, inmutabilidad de lo
   descartado, vinculado o cerrado (D35) y origen RETROSPECTIVA tras la reapertura existente (DI-07).
+- `Rights` (0.8.0, E06): derechos, contexto, caracterizacion, rol del Estado y grupos prioritarios de cada REQ y Caso
+  (`RIGHTS_CLASSIFY`, eventos ADD/REMOVE/STATUS en `stat_event`), con facultad de gestion (`reqMain` o `caseWrite`),
+  inmutabilidad del registro cerrado (D35) y consolidado del requerimiento solo con lo que la cuenta lee. Las
+  actuaciones se tipifican en las constancias existentes (`Lifecycle.note`: tipo de actuacion e instituciones), las
+  tareas registran el compromiso sin volverse actuaciones y el resultado de la primera atencion tiene una sola fuente
+  (`requirement.immediate_result`, con carga historica desde su constancia).
 - `PersonIndex` / `PersonSearch`: indice de coincidencias de personas (derivado, reconstruible) y busqueda por RUN,
   documento, nombre o folio con auditoria HMAC opcional del termino.
 - `Milestones` / `BusinessCalendar` / `Reports` / `Csv`: hitos de cada transicion (y su carga historica), dias
@@ -91,15 +97,18 @@ el lock global y marcador `REGION_FICHA_V16`, tambien con `migrate-only`).
 `stat_catalog_mapping`; una sola version VIGENTE por catalogo garantizada por el UNIQUE de `current_catalog`, que solo
 tiene valor mientras la version esta VIGENTE). TI los importa y activa con fundamento; ninguna migracion los siembra.
 Desde E02 TI lo hace en la pantalla `#catalogos` (Administracion > Catalogos estadisticos) con los archivos de
-referencia de `deploy/config-ejemplo/catalogos/` (propuesta version 1, modelo de derechos 2.0 de 2022 y plantillas para
-la institucion, con fuentes y huellas en su `LEEME.txt`), que viajan en el paquete dentro de `config-ejemplo\`. La
+referencia de `deploy/config-ejemplo/catalogos/` (propuesta version 1 de los 12 catalogos y modelo de derechos 2.0 de
+2022, completados en E06 con la respuesta propuesta a DI-01 a DI-04, con fuentes y huellas en su `LEEME.txt`), que viajan en el paquete dentro de `config-ejemplo\`. La
 funcion `GESTION_ESTADISTICA` (ambito opcional, exige REPORTES en el mismo alcance, incompatible con TI; D43) se concede
 desde E02 y habilita cortes, series y vistas compartidas a partir de E10 y E11.
 V18 (E03): `attention_revision.change_summary` (resumen de cambios de cada version de la ficha; carga de las versiones
 existentes con el marcador `RESUMEN_CAMBIOS_V18`, tambien con `migrate-only`) e `intake_record`/`intake_revision`
 (ficha de ingreso de la COM manual con sus versiones, region del presentador y resumen de cambios).
 V19 (E05): `stat_event` (eventos de clasificacion estadistica; ninguna migracion los escribe).
-V1 a V19 no se modifican nunca; un cambio nuevo se agrega como `V20__...` aditivo, compatible con H2 y MySQL. Ninguna
+V20 (E06): `stat_catalog_item.description`, `management_note.action_type`/`action_catalog_version`, `note_institution`,
+`task_item.action_type`/`action_catalog_version` y `requirement.immediate_result`/`immediate_result_reconstructed`
+(carga historica con el marcador `RESULTADO_INMEDIATO_V20`, tambien con `migrate-only`).
+V1 a V20 no se modifican nunca; un cambio nuevo se agrega como `V21__...` aditivo, compatible con H2 y MySQL. Ninguna
 migracion siembra sedes, regiones, feriados, catalogos ni personas reales. La actualizacion desde 0.4.0 y desde 0.7.0
 se prueba sobre MySQL 8.4 con volcados sinteticos (`MySql84UpgradeTest`, `MySql84Upgrade070Test`).
 

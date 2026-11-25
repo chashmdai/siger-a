@@ -1,0 +1,63 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "GRUPO_PRIORITARIO",
+  "label": "Grupos prioritarios, versión 1",
+  "source": "Defensoría de la Niñez, \"Modelo de conceptualización y categorización de derechos de la niñez y adolescencia\", versión 2.0, 2022: sección VIII \"Grupos prioritarios\" (págs. 92-95), columna Grupo. Caracterización de la población afectada: pertenecer a un grupo prioritario no constituye por sí mismo una vulneración; DI-02: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional.",
+  "items": [
+    {
+      "code": "CUIDADO_ALTERNATIVO",
+      "label": "Niños, niñas y adolescentes bajo cuidado alternativo y privación de libertad del Estado",
+      "source_ref": "VIII, p. 93"
+    },
+    {
+      "code": "MEDIDAS_ADMIN_JUDICIALES",
+      "label": "Niños, niñas y adolescentes bajo medidas administrativas o judiciales",
+      "source_ref": "VIII, p. 93"
+    },
+    {
+      "code": "DISCAPACIDAD",
+      "label": "Niños, niñas y adolescentes con discapacidad",
+      "source_ref": "VIII, p. 93"
+    },
+    {
+      "code": "PUEBLOS_ORIGINARIOS",
+      "label": "Niños, niñas y adolescentes de pueblos originarios y tribales",
+      "source_ref": "VIII, p. 93"
+    },
+    {
+      "code": "MIGRANTES",
+      "label": "Niños, niñas y adolescentes migrantes",
+      "source_ref": "VIII, p. 93"
+    },
+    {
+      "code": "SITUACION_CALLE",
+      "label": "Niños, niñas y adolescentes en situación de calle",
+      "source_ref": "VIII, p. 94"
+    },
+    {
+      "code": "NINAS_ADOLESCENTES_MUJERES",
+      "label": "Niñas y adolescentes (mujeres)",
+      "source_ref": "VIII, p. 94"
+    },
+    {
+      "code": "HOSPITALIZACION",
+      "label": "Niños, niñas y adolescentes en unidades de hospitalización",
+      "source_ref": "VIII, p. 94"
+    },
+    {
+      "code": "NANEAS",
+      "label": "Niños, niñas y adolescentes con necesidades especiales de atención de salud (Naneas)",
+      "source_ref": "VIII, p. 94"
+    },
+    {
+      "code": "DIVERSIDAD_SEXUAL",
+      "label": "Niños, niñas y adolescentes diversos en su sexualidad",
+      "source_ref": "VIII, p. 95"
+    },
+    {
+      "code": "ZONAS_AISLADAS",
+      "label": "Niños, niñas y adolescentes de zonas aisladas e insulares",
+      "source_ref": "VIII, p. 95"
+    }
+  ]
+}

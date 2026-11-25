@@ -1,0 +1,85 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "CONTEXTO",
+  "label": "Contexto, propuesta versión 1",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D34); DI-02: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional, incluidas sus definiciones operativas.",
+  "items": [
+    {
+      "code": "FAMILIAR",
+      "label": "Familiar",
+      "source_ref": "DI-02",
+      "descripcion": "Entorno familiar o de cuidado doméstico."
+    },
+    {
+      "code": "ESCOLAR",
+      "label": "Escolar",
+      "source_ref": "DI-02",
+      "descripcion": "Entorno educativo y convivencia escolar."
+    },
+    {
+      "code": "INSTITUCIONAL",
+      "label": "Institucional",
+      "source_ref": "DI-02",
+      "descripcion": "Atención o intervención de instituciones."
+    },
+    {
+      "code": "SALUD",
+      "label": "Salud",
+      "parent": "INSTITUCIONAL",
+      "source_ref": "DI-02",
+      "descripcion": "Prestaciones y establecimientos sanitarios."
+    },
+    {
+      "code": "PROTECCION_ESPECIALIZADA",
+      "label": "Protección especializada",
+      "parent": "INSTITUCIONAL",
+      "source_ref": "DI-02",
+      "descripcion": "Residencias, familias de acogida y programas especializados."
+    },
+    {
+      "code": "JUSTICIA_JUVENIL",
+      "label": "Justicia juvenil",
+      "parent": "INSTITUCIONAL",
+      "source_ref": "DI-02",
+      "descripcion": "Sistema de responsabilidad penal adolescente."
+    },
+    {
+      "code": "JUDICIAL",
+      "label": "Judicial",
+      "parent": "INSTITUCIONAL",
+      "source_ref": "DI-02",
+      "descripcion": "Procedimientos e intervenciones judiciales."
+    },
+    {
+      "code": "POLICIAL",
+      "label": "Policial",
+      "parent": "INSTITUCIONAL",
+      "source_ref": "DI-02",
+      "descripcion": "Intervenciones de instituciones policiales."
+    },
+    {
+      "code": "COMUNITARIO",
+      "label": "Comunitario",
+      "source_ref": "DI-02",
+      "descripcion": "Barrio, comunidad y espacios públicos."
+    },
+    {
+      "code": "DIGITAL",
+      "label": "Digital",
+      "source_ref": "DI-02",
+      "descripcion": "Internet, redes sociales y plataformas digitales."
+    },
+    {
+      "code": "LABORAL",
+      "label": "Laboral",
+      "source_ref": "DI-02",
+      "descripcion": "Actividades laborales y relaciones de trabajo."
+    },
+    {
+      "code": "OTRO",
+      "label": "Otro contexto",
+      "source_ref": "DI-02",
+      "descripcion": "Entornos no comprendidos en las categorías anteriores."
+    }
+  ]
+}

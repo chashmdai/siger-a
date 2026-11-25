@@ -1,0 +1,131 @@
+{
+  "format": "siger-catalogo-1",
+  "catalog": "CARACTERIZACION",
+  "label": "Caracterización de la vulneración, propuesta versión 1",
+  "source": "Propuesta SIGER 0.8.0, versión 1 (D34); DI-02: respuesta propuesta del responsable del 2026-11-24 (docs/VALIDACION_CATALOGOS_0_8_0.md), pendiente de conformidad institucional, incluidas sus definiciones operativas. Elegir una subcategoría implica su categoría superior, sin duplicar el conteo.",
+  "items": [
+    {
+      "code": "VIOLENCIA",
+      "label": "Violencia",
+      "source_ref": "DI-02",
+      "descripcion": "Situaciones de violencia contra NNA."
+    },
+    {
+      "code": "VIOLENCIA_FISICA",
+      "label": "Violencia física",
+      "parent": "VIOLENCIA",
+      "source_ref": "DI-02",
+      "descripcion": "Agresiones físicas."
+    },
+    {
+      "code": "VIOLENCIA_PSICOLOGICA",
+      "label": "Violencia psicológica",
+      "parent": "VIOLENCIA",
+      "source_ref": "DI-02",
+      "descripcion": "Maltrato emocional o psicológico."
+    },
+    {
+      "code": "VIOLENCIA_SEXUAL",
+      "label": "Violencia sexual",
+      "parent": "VIOLENCIA",
+      "source_ref": "DI-02",
+      "descripcion": "Agresiones y vulneraciones de carácter sexual."
+    },
+    {
+      "code": "VIOLENCIA_ENTRE_PARES",
+      "label": "Violencia entre pares",
+      "parent": "VIOLENCIA",
+      "source_ref": "DI-02",
+      "descripcion": "Agresiones entre NNA."
+    },
+    {
+      "code": "VIOLENCIA_DIGITAL",
+      "label": "Violencia digital",
+      "parent": "VIOLENCIA",
+      "source_ref": "DI-02",
+      "descripcion": "Agresiones mediante medios digitales."
+    },
+    {
+      "code": "NEGLIGENCIA",
+      "label": "Negligencia o descuido",
+      "source_ref": "DI-02",
+      "descripcion": "Incumplimiento de deberes de cuidado."
+    },
+    {
+      "code": "DISCRIMINACION",
+      "label": "Discriminación",
+      "source_ref": "DI-02",
+      "descripcion": "Trato discriminatorio o exclusión."
+    },
+    {
+      "code": "EXPLOTACION",
+      "label": "Explotación",
+      "source_ref": "DI-02",
+      "descripcion": "Aprovechamiento abusivo de NNA."
+    },
+    {
+      "code": "EXPLOTACION_SEXUAL",
+      "label": "Explotación sexual",
+      "parent": "EXPLOTACION",
+      "source_ref": "DI-02",
+      "descripcion": "Situaciones de explotación de carácter sexual."
+    },
+    {
+      "code": "EXPLOTACION_LABORAL",
+      "label": "Explotación laboral",
+      "parent": "EXPLOTACION",
+      "source_ref": "DI-02",
+      "descripcion": "Situaciones de explotación mediante el trabajo."
+    },
+    {
+      "code": "BARRERAS_ACCESO",
+      "label": "Barreras de acceso",
+      "source_ref": "DI-02",
+      "descripcion": "Obstáculos para acceder a prestaciones o servicios."
+    },
+    {
+      "code": "OBLIGACIONES_FAMILIARES",
+      "label": "Incumplimiento de obligaciones familiares",
+      "source_ref": "DI-02",
+      "descripcion": "Incumplimiento de deberes familiares."
+    },
+    {
+      "code": "PENSION_ALIMENTOS",
+      "label": "Pensión de alimentos",
+      "parent": "OBLIGACIONES_FAMILIARES",
+      "source_ref": "DI-02",
+      "descripcion": "Incumplimiento de obligaciones alimentarias."
+    },
+    {
+      "code": "RELACION_DIRECTA_REGULAR",
+      "label": "Relación directa y regular",
+      "parent": "OBLIGACIONES_FAMILIARES",
+      "source_ref": "DI-02",
+      "descripcion": "Incumplimientos que afectan el régimen de relación directa y regular."
+    },
+    {
+      "code": "OMISION_INSTITUCIONAL",
+      "label": "Omisión institucional",
+      "source_ref": "DI-02",
+      "descripcion": "Falta de intervención o respuesta pertinente."
+    },
+    {
+      "code": "TRATO_DEGRADANTE",
+      "label": "Trato degradante",
+      "source_ref": "DI-02",
+      "descripcion": "Trato contrario a la dignidad del NNA."
+    },
+    {
+      "code": "AMENAZAS",
+      "label": "Amenazas",
+      "source_ref": "DI-02",
+      "descripcion": "Situaciones de intimidación o amenaza."
+    },
+    {
+      "code": "OTRA",
+      "label": "Otra vulneración",
+      "source_ref": "DI-02",
+      "descripcion": "Situaciones no comprendidas en las categorías anteriores."
+    }
+  ]
+}
