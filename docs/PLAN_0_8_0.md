@@ -413,6 +413,7 @@ detalle de cada gate va despues de la tabla.
 | E06 | Derechos, contexto, caracterizacion y actuaciones tipificadas (servidor) | E05 | 3.2, 3.3, 4.3, 4.4, 11 |
 | E07 | Dimensiones territoriales y demograficas, completitud y reglas de cierre (servidor) | E03, E06 | 4.5-4.8 |
 | E08 | Motor estadistico: fuente unica, agregacion, series temporales y comparaciones (servidor) | E07 | 4.4, 4.7, 5 |
+| E08b | Motor estadístico: confinamiento, límites de ejecución y concurrencia (servidor) | E08 | 5.7, 16 |
 | E09 | Captura estadistica en el flujo (interfaz): caracterizacion, derechos, actuaciones y cierre | E04, E07 | 10.1, 10.2 |
 | E10 | Cortes estadisticos y configuraciones guardadas (servidor) | E02, E08 | 3.7, 6 |
 | E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | E10 | 7, 8, 12 |
@@ -607,6 +608,27 @@ reducir pruebas ni criterios.
 - Pruebas y mutacion: escenarios 1 (agregado), 2, 3 y 15 (agregado); la fuente no multiplica filas; alcance por sede y
   por materia; sin REPORTES 403; TI 403; CSRF; GET 405; MySQL.
 - Cierre: commit `gate E08: motor estadistico`.
+
+**E08b - Motor estadístico: confinamiento, límites de ejecución y concurrencia (servidor)**
+- Alcance:
+  1. Límite de concurrencia de consultas estadísticas: 2 en total y 1 por cuenta, configurables. Rechazo inmediato
+     con 429 y texto llano, sin cola, liberado también ante error.
+  2. Tiempo máximo por consulta, configurable, con 30 s iniciales, cancelando la sentencia en MySQL. Respuesta en
+     texto llano, auditada solo con nombres.
+  3. Evaluación con medición de los límites por sesión de MySQL (`max_join_size` y temporales en memoria), calibrados
+     con 50.005 COM. Se adoptan o se registra por qué no.
+  4. Al arrancar sobre MySQL, comprobación de que `@@datadir`, `@@tmpdir` y `@@innodb_temp_tablespaces_dir` están en
+     la unidad de la instancia. Si no, el motor estadístico queda deshabilitado con aviso técnico, sin afectar la
+     operación.
+  5. Procedimiento del MySQL desechable con `datadir` y `tmpdir` en D:, documentado en `CLAUDE.md`.
+  6. Las guardas 1 y 2 serán reutilizables por E10 (cortes) y E11 (exportaciones).
+- Archivos autorizados: `StatEngine.java`, una clase nueva de guardas, `Api.java`, `application.properties` (solo
+  propiedades nuevas comentadas), `CLAUDE.md`, `docs/ARQUITECTURA.md`, `docs/CONTRATO_STATS_0_8_0.md`, pruebas y la
+  bitácora.
+- Restricciones: la sección 2 completa; sin cambios en `scripts/`, `.mvn/` ni `my.ini`; sin migración.
+- Pruebas: concurrencia con hilos; cancelación por tiempo en H2 y MySQL; temporales mal ubicados; liberación ante
+  error; una mutación por guarda.
+- Cierre: commit `gate E08b: limites del motor estadistico`.
 
 **E09 - Captura estadistica en el flujo (interfaz): caracterizacion, derechos, actuaciones y cierre**
 - Alcance (`DISENO` 10.1 y 10.2): bloque "Caracterizacion del ingreso" en el ingreso manual, la distribucion, la

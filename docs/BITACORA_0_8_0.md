@@ -22,6 +22,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E06 | Derechos, contexto, caracterizacion y actuaciones tipificadas (servidor) | CERRADO |
 | E07 | Dimensiones territoriales y demograficas, completitud y reglas de cierre (servidor) | CERRADO |
 | E08 | Motor estadistico: fuente unica, agregacion, series temporales y comparaciones (servidor) | CERRADO |
+| E08b | Motor estadístico: confinamiento, límites de ejecución y concurrencia (servidor) | ABIERTO |
 | E09 | Captura estadistica en el flujo (interfaz): caracterizacion, derechos, actuaciones y cierre | ABIERTO |
 | E10 | Cortes estadisticos y configuraciones guardadas (servidor) | ABIERTO |
 | E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | ABIERTO |
@@ -65,6 +66,7 @@ del plan). Los pendientes operacionales postergados no tienen gate en 0.8.0 (sec
 | Correspondencia de categorias historicas en el asistente de series | E11, E13 | 2026-11-24: aprobada. Al importar una serie se puede indicar a que valor o agrupacion de SIGER corresponde cada categoria historica, sin combinarlas automaticamente. |
 | Archivos de referencia segun DI-01 a DI-04 | E06 | 2026-11-24: aprobado. E06 actualiza `deploy/config-ejemplo/catalogos/` desde `docs/VALIDACION_CATALOGOS_0_8_0.md`: completa contexto, caracterizacion y tramos de edad; ajusta tipo de actuacion, relacion y via (agrupaciones como items padre no seleccionables); crea rol del Estado (desde el eje VII ya transcrito) y grupos prioritarios (denominaciones verificadas contra el PDF); agrega las descripciones; ajusta `ReferenceCatalogsTest` y `LEEME.txt`. Todo queda en estado PROPUESTA. |
 | Verificación de la transcripción de derechos y grupos prioritarios | Activación | 2026-11-25: el responsable acepta la transcripción tal como está (verificada por programa contra el PDF de huella registrada en E02 y E06), sin revisión manual adicional. |
+| Incidente de E08 (temporales de MySQL llenaron C: en el equipo de pruebas) | E08b | 2026-11-25: se agrega E08b para confinamiento, límites de ejecución y concurrencia del motor. E16 revisa el incidente, el cambio en Workflow.java, la forma de evitar el error 1112 de MySQL y las guardas de E08b. E17 y el paso U verifican @@tmpdir y @@innodb_temp_tablespaces_dir en D:. |
 
 ## Definiciones pendientes
 
