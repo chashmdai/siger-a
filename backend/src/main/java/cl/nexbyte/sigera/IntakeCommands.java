@@ -20,8 +20,10 @@ public class IntakeCommands {
     private final PersonIndex index;
     private final IntakeRecord records;
     private final StatValues stats;
+    private final Rights rights;
+    private final StatCompleteness completeness;
 
-    public IntakeCommands(Db db,Access access,Lifecycle life,Documents documents,FormularioKeys formularioKeys,PersonIndex index,IntakeRecord records,StatValues stats){
+    public IntakeCommands(Db db,Access access,Lifecycle life,Documents documents,FormularioKeys formularioKeys,PersonIndex index,IntakeRecord records,StatValues stats,Rights rights,StatCompleteness completeness){
         this.db=db;
         this.access=access;
         this.life=life;
@@ -30,6 +32,8 @@ public class IntakeCommands {
         this.index=index;
         this.records=records;
         this.stats=stats;
+        this.rights=rights;
+        this.completeness=completeness;
     }
 
     Result run(Actor a,String type,long id,Long expected,Input in){
@@ -86,6 +90,8 @@ public class IntakeCommands {
         require(effective>=received&&effective<=now(),"Revisa la fecha efectiva de la atencion.");
         String result=in.choice("result",Lifecycle.IMMEDIATE_RESULTS);
         long req=life.newReq(a,com,null,scope,a.id(),scope);
+        rights.inline(a,req,in.values().get("rights"));
+        completeness.require(StatCompleteness.Closing.IMMEDIATE,com,req);
         db.update("INSERT INTO management_note(requirement_id,author_id,effective_ms,registered_ms,body) VALUES(?,?,?,?,?)",req,a.id(),effective,now(),result+": "+response);
         // Resultado de la primera atencion (D36, E06): una sola fuente estructurada; la constancia no se tipifica.
         db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,immediate_result=?,immediate_result_reconstructed=FALSE,revision=1 WHERE id=?",effective,a.id(),response,result,req);
@@ -236,6 +242,7 @@ public class IntakeCommands {
                 String disposition=in.choice("disposition","INVALIDA","DUPLICADA");
                 // La clasificacion se registra antes del descarte: despues queda como se registro (D35).
                 stats.inline(a,comId,in.values().get("stat"));
+                if(disposition.equals("DUPLICADA"))completeness.require(StatCompleteness.Closing.DUPLICATE,comId,null);
                 db.update("UPDATE solicitation SET state='DESCARTADA',revision=revision+1 WHERE id=?",id);
                 db.update("UPDATE communication SET state=?,revision=revision+1 WHERE id=?",disposition,comId);
                 long at=life.changed(a,"SOL_"+disposition,"SOL",id,oldScope,reason);

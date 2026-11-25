@@ -20,7 +20,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E04 | Normalizacion integral (interfaz): componentes compartidos, ficha 1.2 y COM manual | CERRADO |
 | E05 | Clasificacion estadistica de la COM: modelo, via, propuestas y trazabilidad (servidor) | CERRADO |
 | E06 | Derechos, contexto, caracterizacion y actuaciones tipificadas (servidor) | CERRADO |
-| E07 | Dimensiones territoriales y demograficas, completitud y reglas de cierre (servidor) | ABIERTO |
+| E07 | Dimensiones territoriales y demograficas, completitud y reglas de cierre (servidor) | CERRADO |
 | E08 | Motor estadistico: fuente unica, agregacion, series temporales y comparaciones (servidor) | ABIERTO |
 | E09 | Captura estadistica en el flujo (interfaz): caracterizacion, derechos, actuaciones y cierre | ABIERTO |
 | E10 | Cortes estadisticos y configuraciones guardadas (servidor) | ABIERTO |
@@ -130,7 +130,7 @@ Plan presentado por el ejecutor y GO del responsable para un gate que se ejecuta
 gate no cambia (sigue ABIERTO) hasta su registro de cierre; la sesion que lo ejecute toma de aqui el plan y las
 condiciones del GO, verifica que la base no haya cambiado y no necesita volver a pedir el GO.
 
-### E07 - plan y GO del 2026-11-25
+### E07 - plan y GO del 2026-11-25 (ejecutado)
 
 Plan presentado (Claude Code, DDN-TEST-SIGER, base `8a297ae` = cierre de E06; sin cambios en archivos):
 
@@ -355,3 +355,24 @@ GO del responsable (2026-11-25), con estas respuestas y condiciones:
 - Hallazgos para gates siguientes: E07 resuelve los bloqueos de cierre con `StatValues.setStateSql`/`set` por REQ y Caso (STATUS especial con conjunto vacio) y la union REQ+Casos de `Rights.consolidated` (ese consolidado filtra por lectura de la cuenta: los agregados de E08 usan el alcance de REPORTES, no `caseRead`); E08 cuenta actuaciones por `management_note.action_type` de la constancia vigente (sin rectificacion posterior) y el resultado de primera atencion solo desde `requirement.immediate_result` (origen = primera atencion, gestion de REQ si `case_id` nulo, gestion de Caso); una subcategoria implica su derecho en el conteo, no en `stat_event`; E09 usa `rights` (`revision`, `can_classify`, `blocked`, `values`, `consolidated`), `action_label`/`institutions` de las constancias y `code_labels` para un codigo de un listado retirado (reemplaza `RETIRED_CODE_TEXT` cuando hay rotulo); el barrido `ImmutabilityTest` exige categorizar todo comando nuevo.
 - Pendientes: DI-01 a DI-04 (conformidad institucional y verificacion de la transcripcion de derechos y de los grupos prioritarios contra el PDF) -> activacion; adopcion de `code_labels` en la interfaz -> E09.
 - Verificacion manual sugerida al usuario: `.\mvnw.cmd -B -ntp -f backend\pom.xml test -Dtest=RightsTest,ActionTypesTest,ImmutabilityTest,ReferenceCatalogsTest`; con el MySQL aislado, `-Dtest=MySql84UpgradeTest,MySql84Upgrade070Test` con las propiedades `siger.mysql.*`; en local, Administracion > Catalogos estadisticos > Importar `deploy\config-ejemplo\catalogos\grupos-prioritarios-v1.json`.
+
+### E07 - Dimensiones territoriales y demograficas, completitud y reglas de cierre (servidor)   (CERRADO)
+- Fecha: 2026-11-25 (commit `gate E07: dimensiones y completitud`), DDN-TEST-SIGER, Codex (GPT 6.2 Sol). Base `085d7e6`, igual a `origin/main` y limpia antes de editar. Último cierre E06, `8a297ae`.
+- GO del responsable: respuestas A–E registradas arriba y confirmadas en esta sesión. Textos históricos de edad sin interpretar aun si son enteros. `Check-Scripts.ps1` con Windows PowerShell 5.1 fuera de Maven y npm. MySQL desechable detenido y eliminado al terminar.
+- Hecho: reglas territoriales al ingreso, al constituirse el REQ, vigentes y a una fecha. Sede inicial y vigente con hitos, cobertura con períodos y acciones de auditoría. Datos del Formulario desde `external_*`, con la recepción firmada como límite de disponibilidad histórica.
+- Hecho: proyección demográfica declarada por versión, edad cumplida a la recepción en Chile, tramos del catálogo vigente y nacionalidad estructurada. Edades de requirente condicionadas a su tipo informado.
+- Hecho: regla de completitud compartida para REQ, primera atención y descarte duplicado. Bloqueos visibles, clasificación en el acto, derechos y contexto del REQ y Casos, requisitos en `/api/catalog` e indicadores por variable, ámbito y período.
+- Archivos clave: `TerritorialDims.java`, `PersonDims.java`, `StatCompleteness.java`, `Rights.java`, `RequirementCommands.java`, `Attention.java`, `IntakeCommands.java`, `Queries.java`, `IntakeRecord.java` y `Bootstrap.java`. Pruebas nuevas de territorio, demografía y completitud. Se clasificaron previamente los registros de `ImmutabilityTest` y `StatClassificationTest` que cierran con catálogos vigentes, conservando sus comprobaciones.
+- Migraciones: V21 aditiva con `stat_declared_version` y `stat_declared_person`. Carga idempotente `DIMENSIONES_V21` también con `migrate-only`. La prueba compara la proyección con el recálculo desde la ficha, y guarda años y procedencia de la edad.
+- Verificación: JUnit H2 259 ok (antes 251). MySQL 8.4.13, 263 ok (antes 255), con los dos volcados de 0.4.0 y 0.7.0 hasta V21 y huellas y filas de originales y `external_*` iguales. Ambas suites con 0 omitidas. Frontend 154 ok, typecheck y build conformes. JAR empaquetado y humo HTTP conforme con catálogo y vulneración en el acto, sin y con derecho y contexto.
+- Verificación: `Check-Scripts.ps1` conforme (40 scripts, 73 órdenes en 60 procesos) en Windows PowerShell 5.1, sin Maven ni npm. Al quitar la variable heredada el primer intento dejó vacía la ruta de módulos y falló el control de CimCmdlets. Se repitió con solo rutas nativas de 5.1. MySQL aislado en 127.0.0.1:3417 detenido, puerto libre, carpeta de datos y copia de verificación eliminadas. MySQL80 siguió en ejecución.
+- Evidencia de mutación: propuesta como resuelta, bloqueo sin catálogo y omitir bloqueo visible → `StatCompletenessTest.escenario7CierraConEstadosEspecialesYNoConUnaPropuesta`. Omitir derecho u omitir contexto → `resuelveEnElActoConDerechoYContextoYRevierteUnRechazo`. Exigir variables a una inválida → `soloDuplicadaTieneBloqueosDeDescarte`.
+- Evidencia de mutación: zona UTC, interpretar edad histórica o aceptar nacionalidad libre histórica → `PersonDimsTest.escenario14CumpleanosEnChileYTextoHistoricoSinInterpretar`. Cambiar la sede inicial tras transferir u omitir término de cobertura → `TerritorialDimsTest.escenario5OrigenCoberturaYSedeConTransferencia`.
+- Evidencia de mutación: edad de SQL distinta de Java u omitir reconstrucción V21 → `PersonDimsTest.proyeccionRecalculadaYTramoSql`. Aceptar nacionalidad no exacta u omitir el límite de recepción → `formularioConservaRolesYExigeNacionalidadExacta`. Las 15 mutaciones fallaron en copias temporales eliminadas al terminar.
+- Condiciones de la sección 2: `git diff` confirmó integridad de la recepción y `conserveExternal`, scripts, `.mvn/` y V1–V20. `Reports`, `REQ_TOTAL`, `REOPEN_*`, `OriginRegion`, `Access` y `Territory` conservados. Barridos de permisos e inmutabilidad conformes, sin dependencias nuevas ni archivos sensibles en el alcance.
+- Facilidad de uso: mensajes HTTP en lenguaje llano, comprobados mediante humo. El diálogo se incorpora en E09.
+- Definiciones usadas: ninguna DI pendiente para E07. Tramos del catálogo de referencia aprobado en DI-02 y mecanismo de reapertura según DI-07.
+- Desvíos del plan: diferencias acordadas con diseño 4.5 y 4.8. Región del requirente como indicador y sin bloqueo. Los textos históricos de edad quedan sin interpretar incluso si contienen un entero. La región física de una sede se toma del registro actual porque sus cambios no se reconstruyen.
+- Hallazgos para gates siguientes: E08 puede consumir las expresiones SQL de dimensiones y los indicadores. El estado consolidado de calidad de derechos y contexto prioriza INFORMADO, luego el estado especial del REQ y después el del primer Caso con uno. E09 dispone de `stat_completeness`, `closure_blockers`, `resolve_blockers` y `discard_blockers`.
+- Pendientes: consumo estadístico en E08, captura y diálogos en E09, panel de calidad en E13 y medición de rendimiento en E14.
+- Verificación manual sugerida al usuario: en una instancia de ensayo con catálogos vigentes, resolver una vulneración con y sin derecho y contexto. El segundo intento puede completar la clasificación y cerrar en el mismo acto.

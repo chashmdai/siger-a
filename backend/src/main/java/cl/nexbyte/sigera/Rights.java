@@ -113,6 +113,33 @@ public class Rights {
         if(!corrected.isEmpty())db.audit(a.id(),StatValues.CORRECTED,type,id,t.scope(),"Variables: "+String.join(", ",corrected)+"."+retro);
         return Lifecycle.done(type,id);
     }
+    /** Bloque de derechos del REQ que nace en el mismo comando de resolución. */
+    void inline(Actor actor,long req,Object raw){
+        if(raw==null)return;
+        if(!(raw instanceof Map<?,?> map)||!Set.of("variables","reason").containsAll(map.keySet()))
+            throw new Problem(400,"Revisa la clasificación de derechos.");
+        var fields=new LinkedHashMap<String,Object>();
+        map.forEach((key,value)->fields.put(String.valueOf(key),value));
+        fields.put("record",REQ);
+        classify(actor,req,revision(REQ,req),new Input(fields));
+    }
+
+    /** Estado del expediente para completitud, sin devolver códigos ni referencias de los Casos. */
+    boolean resolved(long req,String variable){
+        if(!stats.setState(REQ,req,variable,null).equals(StatValues.PENDING))return true;
+        return db.rows("SELECT id FROM case_record WHERE requirement_id=?",req).stream()
+            .anyMatch(c->!stats.setState(CAS,n(c,"id"),variable,null).equals(StatValues.PENDING));
+    }
+
+    static String consolidatedStateSql(String req,String variable){
+        String direct=StatValues.setStateSql(REQ,req+".id",variable,null);
+        String child=StatValues.setStateSql(CAS,"cc.id",variable,null);
+        return "CASE WHEN "+direct+"='INFORMADO' OR EXISTS(SELECT 1 FROM case_record cc WHERE cc.requirement_id="+req+".id"
+            +" AND "+child+"='INFORMADO') THEN 'INFORMADO' WHEN "+direct+"<>'PENDIENTE' THEN "+direct
+            +" ELSE COALESCE((SELECT "+child+" FROM case_record cc WHERE cc.requirement_id="+req+".id AND "
+            +child+"<>'PENDIENTE' ORDER BY cc.id LIMIT 1),'PENDIENTE') END";
+    }
+
     private static List<String> codes(Input in,String key){
         Object raw=in.values().get(key);
         if(raw==null)return List.of();

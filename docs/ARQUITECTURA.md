@@ -53,6 +53,13 @@ sobre MySQL 8.4 con `MySqlSuite`).
   actuaciones se tipifican en las constancias existentes (`Lifecycle.note`: tipo de actuacion e instituciones), las
   tareas registran el compromiso sin volverse actuaciones y el resultado de la primera atencion tiene una sola fuente
   (`requirement.immediate_result`, con carga historica desde su constancia).
+- `TerritorialDims` / `PersonDims` (0.8.0, E07): territorio al ingreso, al constituirse el REQ, vigente y a una
+  fecha. Consulta hitos, cobertura histórica y estado de sede según auditoría. Región y comuna por fuente, edad
+  cumplida en Chile, tramo del catálogo vigente y nacionalidad estructurada. La proyección por versión conserva
+  solo los datos estadísticos. El Formulario se consulta desde sus tablas normalizadas.
+- `StatCompleteness` (E07): una regla alimenta bloqueos visibles y valida el cierre del REQ, la resolución de primera
+  atención y el descarte duplicado. Suma la clasificación del REQ y sus Casos para saber si una vulneración está
+  completa. La región del requirente se mide como calidad y la propuesta sigue pendiente hasta su confirmación.
 - `PersonIndex` / `PersonSearch`: indice de coincidencias de personas (derivado, reconstruible) y busqueda por RUN,
   documento, nombre o folio con auditoria HMAC opcional del termino.
 - `Milestones` / `BusinessCalendar` / `Reports` / `Csv`: hitos de cada transicion (y su carga historica), dias
@@ -108,7 +115,9 @@ V19 (E05): `stat_event` (eventos de clasificacion estadistica; ninguna migracion
 V20 (E06): `stat_catalog_item.description`, `management_note.action_type`/`action_catalog_version`, `note_institution`,
 `task_item.action_type`/`action_catalog_version` y `requirement.immediate_result`/`immediate_result_reconstructed`
 (carga historica con el marcador `RESULTADO_INMEDIATO_V20`, tambien con `migrate-only`).
-V1 a V20 no se modifican nunca; un cambio nuevo se agrega como `V21__...` aditivo, compatible con H2 y MySQL. Ninguna
+V21 (E07): `stat_declared_version` y `stat_declared_person` proyectan las fichas originales sin guardar las fechas de
+nacimiento. `DIMENSIONES_V21` identifica la carga histórica idempotente, que también corre con `migrate-only`.
+V1 a V21 no se modifican nunca; un cambio nuevo se agrega como `V22__...` aditivo, compatible con H2 y MySQL. Ninguna
 migracion siembra sedes, regiones, feriados, catalogos ni personas reales. La actualizacion desde 0.4.0 y desde 0.7.0
 se prueba sobre MySQL 8.4 con volcados sinteticos (`MySql84UpgradeTest`, `MySql84Upgrade070Test`).
 

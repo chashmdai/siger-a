@@ -26,9 +26,14 @@ public class Attention {
     private final PersonIndex index;
     private final OriginRegion regions;
     private final StatValues stats;
+    private final Rights rights;
+    private final StatCompleteness completeness;
+    private final PersonDims personDims;
     private final TransactionTemplate tx;
     private final JsonMapper json=JsonMapper.builder().build();
-    public Attention(Db db,Access access,Documents documents,Lifecycle life,PersonIndex index,OriginRegion regions,StatValues stats,PlatformTransactionManager manager){
+    public Attention(Db db,Access access,Documents documents,Lifecycle life,PersonIndex index,OriginRegion regions,StatValues stats,PlatformTransactionManager manager,
+                     Rights rights,StatCompleteness completeness,PersonDims personDims){
+        this.rights=rights;this.completeness=completeness;this.personDims=personDims;
         this.db=db;this.access=access;this.documents=documents;this.life=life;this.index=index;this.regions=regions;this.stats=stats;this.tx=new TransactionTemplate(manager);
     }
     private long now(){return System.currentTimeMillis();}
@@ -174,7 +179,7 @@ public class Attention {
         return switch(type){
             case "ATTENTION_SAVE" -> save(a,r,in);
             case "ATTENTION_SEND" -> send(a,r,in);
-            case "ATTENTION_RESOLVE" -> resolve(a,r,in);
+            case "ATTENTION_RESOLVE" -> resolve(a,r,in,false);
             default -> throw new Problem(400,"Operacion de atencion desconocida.");
         };
     }
@@ -200,7 +205,7 @@ public class Attention {
         if(follow)access.notifyHeads(principal,"Una primera atencion requiere un Caso de seguimiento.","REQ",req);
         // Clasificacion estadistica opcional de la COM (E05), antes de resolver en el acto.
         stats.inline(a,com,in.values().get("stat"));
-        if(in.flag("resolve_now"))return resolve(a,req(req),in);
+        if(in.flag("resolve_now"))return resolve(a,req(req),in,true);
         return new Workflow.Result("REQ",req,"Atencion registrada. COM y REQ creados; puedes completar la ficha o entregarla.");
     }
     /**
@@ -209,8 +214,11 @@ public class Attention {
      */
     private Map<String,List<String>> snapshot(Actor a,long req,long revision,String reason,String data,Map<String,Object> form,Map<String,Object> previous){
         var changes=DeclaredPerson.changes(previous,form,derived(form));
-        db.update("INSERT INTO attention_revision(requirement_id,requirement_revision,author_id,registered_ms,reason,data_json,region_code,change_summary) VALUES(?,?,?,?,?,?,?,?)",
-            req,revision,a.id(),now(),reason,data,OriginRegion.ofForm(form),changes==null?null:json.writeValueAsString(changes));
+        long at=now();
+        long version=db.insert("INSERT INTO attention_revision(requirement_id,requirement_revision,author_id,registered_ms,reason,data_json,region_code,change_summary) VALUES(?,?,?,?,?,?,?,?)",
+            req,revision,a.id(),at,reason,data,OriginRegion.ofForm(form),changes==null?null:json.writeValueAsString(changes));
+        var origin=db.one("SELECT c.id,c.received_ms FROM communication c JOIN requirement r ON r.communication_id=c.id WHERE r.id=?",req);
+        personDims.save("FICHA",version,n(origin,"id"),at,n(origin,"received_ms"),form);
         return changes;
     }
     private Workflow.Result save(Actor a,Map<String,Object> r,Input in){
@@ -261,13 +269,17 @@ public class Attention {
         if(decision.equals("RECIBIDA"))access.notifyHeads(n(r,"principal_scope"),"Se registro continuidad de primera atencion; el principal del REQ no cambia.","REQ",id);
         return new Workflow.Result("REQ",id,"Entrega registrada. El mismo REQ conserva su folio y antecedentes.");
     }
-    private Workflow.Result resolve(Actor a,Map<String,Object> r,Input in){
+    private Workflow.Result resolve(Actor a,Map<String,Object> r,Input in,boolean createdNow){
         writable(a,r);long id=n(r,"id");
         var record=db.one("SELECT * FROM attention_record WHERE requirement_id=?",id);
         require(!b(record,"followup_required"),"La ficha indica seguimiento. Documenta primero su cambio si ya no corresponde, o solicita apertura de Caso.");
         require(db.count("SELECT COUNT(*) FROM flow_request WHERE requirement_id=? AND state='PENDIENTE'",id)==0&&db.count("SELECT COUNT(*) FROM reopening WHERE requirement_id=? AND state='PENDIENTE'",id)==0,"Existen decisiones pendientes.");
         String result=in.choice("result",Lifecycle.IMMEDIATE_RESULTS);String reason=in.text("reason",12000,true);
         long effective=in.instant("effective_at",true);long received=n(db.one("SELECT received_ms FROM communication WHERE id=?",n(r,"communication_id")),"received_ms");require(effective>=received&&effective<=now(),"La fecha del resultado debe estar entre recepcion y ahora.");
+        long com=n(r,"communication_id");
+        if(createdNow)rights.inline(a,id,in.values().get("rights"));
+        else stats.inline(a,com,in.values().get("stat"));
+        completeness.require(StatCompleteness.Closing.IMMEDIATE,com,id);
         db.update("INSERT INTO management_note(requirement_id,author_id,effective_ms,registered_ms,body,reserved) VALUES(?,?,?,?,?,FALSE)",id,a.id(),effective,now(),result+": "+reason);
         long t=now();
         // Resultado de la primera atencion (D36, E06): una sola fuente estructurada; la constancia no se tipifica.
@@ -284,6 +296,8 @@ public class Attention {
         var out=new LinkedHashMap<String,Object>();out.put("modality",record.get("modality"));out.put("can_read",readable);out.put("can_edit",mayEdit(a,r));
         out.put("state",db.one("SELECT "+stateSql("r","t")+" AS state FROM requirement r JOIN attention_record t ON t.requirement_id=r.id WHERE r.id=?",id).get("state"));
         out.put("updated_ms",record.get("updated_ms"));out.put("updated_by",record.get("updated_by"));out.put("followup_required",record.get("followup_required"));
+        if(mayEdit(a,r))
+            out.put("resolve_blockers",completeness.blockers(StatCompleteness.Closing.IMMEDIATE,n(r,"communication_id"),id));
         if(readable){
             var original=db.one("SELECT folio,channel,received_ms,created_ms,created_by FROM communication WHERE id=?",n(r,"communication_id"));
             out.put("origin",original);

@@ -29,7 +29,10 @@ public class IntakeRecord {
     private final Access access;
     private final PersonIndex index;
     private final JsonMapper json=JsonMapper.builder().build();
-    public IntakeRecord(Db db,Access access,PersonIndex index){this.db=db;this.access=access;this.index=index;}
+    private final PersonDims personDims;
+    public IntakeRecord(Db db,Access access,PersonIndex index,PersonDims personDims){
+        this.db=db;this.access=access;this.index=index;this.personDims=personDims;
+    }
 
     static boolean exists(Db db,long com){return db.count("SELECT COUNT(*) FROM intake_record WHERE communication_id=?",com)>0;}
     @SuppressWarnings("unchecked")
@@ -78,8 +81,11 @@ public class IntakeRecord {
             cut(DeclaredPerson.name(p),200),cut(document,100),s(p,"email"),s(p,"mobile"),s(p,"other_contact"),s(p,"address"),s(data,"contact_restrictions"),com);
     }
     private void addVersion(Actor a,long com,long revision,String reason,Map<String,Object> data,Map<String,List<String>> changes){
-        db.update("INSERT INTO intake_revision(communication_id,revision,author_id,registered_ms,reason,data_json,region_code,change_summary) VALUES(?,?,?,?,?,?,?,?)",
-            com,revision,a.id(),System.currentTimeMillis(),reason,json.writeValueAsString(data),region(data),changes==null?null:json.writeValueAsString(changes));
+        long at=Lifecycle.now();
+        long version=db.insert("INSERT INTO intake_revision(communication_id,revision,author_id,registered_ms,reason,data_json,region_code,change_summary) VALUES(?,?,?,?,?,?,?,?)",
+            com,revision,a.id(),at,reason,json.writeValueAsString(data),region(data),changes==null?null:json.writeValueAsString(changes));
+        long received=n(db.one("SELECT received_ms FROM communication WHERE id=?",com),"received_ms");
+        personDims.save("INGRESO",version,com,at,received,data);
     }
 
     /** Registro de la ficha de ingreso al crear la COM manual (COM_CREATE o COM_IMMEDIATE con el bloque intake). */

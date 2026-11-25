@@ -271,7 +271,7 @@ class StatClassificationTest {
         long req=on(HEAD,"COM_ASSUME","communication",com,Map.of("responsible_id",user(PROF),"reason","Gestion propia")).id();
         classify(HEAD,com,Map.of(TS,code("VULNERACION")));
         assertEquals(StatValues.OFFICIAL,s(db.one("SELECT origin FROM stat_event WHERE communication_id=? ORDER BY id DESC LIMIT 1",com),"origin"),"REQ sin cierre anterior");
-        on(HEAD,"REQ_CLOSE","requirement",req,Map.of("reason","Cierre sintetico"));
+        on(HEAD,"REQ_CLOSE","requirement",req,Map.of("reason","Cierre sintetico","stat",Map.of(TR,status("SIN_INFORMACION"))));
         long events=stats.revision(com);
         var p=refused(()->classify(HEAD,com,Map.of(TR,code("NNA"))));
         assertEquals(409,p.status,"sin excepcion de funcion");assertTrue(p.getMessage().contains("reapertura formal"),p.getMessage());
@@ -280,13 +280,14 @@ class StatClassificationTest {
         on(HEAD,"REOPEN_REQUEST","requirement",req,Map.of("reason","Clasificacion retrospectiva"));
         long reopening=n(db.one("SELECT id FROM reopening WHERE requirement_id=?",req),"id");
         on(HEAD,"REOPEN_DECIDE","reopening",reopening,Map.of("decision","ACEPTADA","reason","Aceptada"));
-        classify(HEAD,com,Map.of(TR,code("NNA")));
+        classify(HEAD,com,Map.of(TR,code("NNA"),"reason","Antecedentes nuevos"));
         var e=db.one("SELECT origin,reopening_id FROM stat_event WHERE communication_id=? ORDER BY id DESC LIMIT 1",com);
         assertEquals(StatValues.RETROSPECTIVE,s(e,"origin"));assertEquals(reopening,n(e,"reopening_id"));
         assertTrue(s(db.one("SELECT note FROM audit_event WHERE action=? AND resource_id=? ORDER BY id DESC LIMIT 1",StatValues.REGISTERED,com),"note").endsWith("Retrospectiva."));
         // Atencion resuelta en el acto: REQ cerrado en el mismo comando, COM ATENDIDA congelada.
         long immediate=n(db.one("SELECT communication_id FROM requirement WHERE id=?",run(ADMIN,"COM_IMMEDIATE",null,null,map("scope_id",upr,"channel","PRESENCIAL","received_at",ago(600),
-            "subject","Orientacion","body","Relato sintetico","intake",Map.of(),"reason","Orientacion entregada","effective_at",ago(300),"result","ORIENTACION")).id()),"communication_id");
+            "subject","Orientacion","body","Relato sintetico","intake",Map.of(),"reason","Orientacion entregada","effective_at",ago(300),"result","ORIENTACION",
+                "stat",Map.of(TS,code("CONSULTA_ORIENTACION"),TR,status("SIN_INFORMACION")))).id()),"communication_id");
         assertEquals(409,refused(()->classify(ADMIN,immediate,Map.of(TS,code("CONSULTA_ORIENTACION")))).status);
         // COM vinculada como antecedente: 409; con el vinculo devuelto vuelve a NUEVA y se clasifica.
         long child=manual(ADMIN,"CORREO");
@@ -381,12 +382,12 @@ class StatClassificationTest {
         assertEquals("CORREO",value(viaFixed,VIA).code());
         // COM_IMMEDIATE: se clasifica antes del cierre en el acto.
         long req=run(ADMIN,"COM_IMMEDIATE",null,null,map("scope_id",upr,"channel","PRESENCIAL","received_at",ago(600),"subject","Orientacion","body","Relato sintetico","intake",Map.of(),
-            "reason","Orientacion entregada","effective_at",ago(300),"result","ORIENTACION","stat",Map.of(TS,code("CONSULTA_ORIENTACION")))).id();
+            "reason","Orientacion entregada","effective_at",ago(300),"result","ORIENTACION","stat",Map.of(TS,code("CONSULTA_ORIENTACION"),TR,status("SIN_INFORMACION")))).id();
         long immediate=n(db.one("SELECT communication_id FROM requirement WHERE id=?",req),"communication_id");
         assertEquals("CONSULTA_ORIENTACION",value(immediate,TS).code());assertEquals("CERRADO",s(db.one("SELECT state FROM requirement WHERE id=?",req),"state"));
         // ATTENTION_CREATE (con resolucion en el acto).
         long attention=run(ADMIN,"ATTENTION_CREATE",null,null,map("scope_id",upr,"channel","PRESENCIAL","received_at",ago(60),
-            "form",Map.of("schema_version","1.0","modality","GENERAL","course","EN_ATENCION","motive","Consulta sintetica"),"stat",Map.of(TR,code("PERSONA_NATURAL_ADULTA")),
+            "form",Map.of("schema_version","1.0","modality","GENERAL","course","EN_ATENCION","motive","Consulta sintetica"),"stat",Map.of(TR,code("PERSONA_NATURAL_ADULTA"),TS,code("CONSULTA_ORIENTACION")),
             "resolve_now",true,"result","ORIENTACION","reason","Orientacion","effective_at",ago(30))).id();
         long attentionCom=n(db.one("SELECT communication_id FROM requirement WHERE id=?",attention),"communication_id");
         assertEquals("PERSONA_NATURAL_ADULTA",value(attentionCom,TR).code());
@@ -443,7 +444,7 @@ class StatClassificationTest {
         @SuppressWarnings("unchecked") var headHistory=(List<Map<String,Object>>)variables(headDetail).get(TS).get("history");
         assertEquals("Motivo sintetico de la correccion",headHistory.getFirst().get("basis"));
         // Cerrado: requiere reapertura formal, sin boton.
-        on(HEAD,"REQ_CLOSE","requirement",req,Map.of("reason","Cierre sintetico"));
+        on(HEAD,"REQ_CLOSE","requirement",req,Map.of("reason","Cierre sintetico","stat",Map.of(TR,status("SIN_INFORMACION"))));
         @SuppressWarnings("unchecked") var closed=(Map<String,Object>)queries.detail(access.actor(HEAD),"REQ",req).get("characterization");
         assertEquals(false,closed.get("can_classify"));assertTrue(s(closed,"blocked").contains("reapertura formal"));
     }

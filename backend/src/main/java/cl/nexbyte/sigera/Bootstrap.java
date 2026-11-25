@@ -21,9 +21,11 @@ public class Bootstrap implements ApplicationRunner {
     private static final Logger LOG=LoggerFactory.getLogger(Bootstrap.class);
     final Db db;final PasswordEncoder passwords;final TransactionTemplate tx;final ConfigurableApplicationContext ctx;
     final Path data;final boolean seed,migrate;final String institutional;final PersonIndex persons;final Milestones milestones;final OriginRelease origin;final OriginRegion regions;final Attention attention;
+    private final PersonDims personDims;
     public Bootstrap(Db db,PasswordEncoder passwords,PlatformTransactionManager manager,ConfigurableApplicationContext ctx,
                      @Value("${siger.data}")String data,@Value("${siger.seed-demo:false}")boolean seed,@Value("${siger.migrate-only:false}")boolean migrate,
-                     @Value("${siger.bootstrap-file:}")String institutional,PersonIndex persons,Milestones milestones,OriginRelease origin,OriginRegion regions,Attention attention){
+                     @Value("${siger.bootstrap-file:}")String institutional,PersonIndex persons,Milestones milestones,OriginRelease origin,OriginRegion regions,Attention attention,PersonDims personDims){
+        this.personDims=personDims;
         this.db=db;this.passwords=passwords;this.tx=new TransactionTemplate(manager);this.ctx=ctx;this.data=Path.of(data).toAbsolutePath().normalize();this.seed=seed;this.migrate=migrate;
         this.institutional=institutional.strip();this.persons=persons;this.milestones=milestones;this.origin=origin;this.regions=regions;this.attention=attention;
     }
@@ -45,6 +47,7 @@ public class Bootstrap implements ApplicationRunner {
         milestones.rebuild(); // Carga historica de hitos (V14), una sola vez; cuenta lo que no reconoce.
         regions.rebuild(); // Region de cada version de la ficha (V16, D21), una sola vez.
         attention.rebuildSummaries(); // Resumen de cambios de las versiones existentes de la ficha (V18, E03), una sola vez.
+        personDims.rebuild();
         attention.rebuildImmediateResults(); // Resultado de la primera atencion desde su constancia exacta (V20, E06), una sola vez.
         // D17: auditoria del modo de emergencia y liberacion de originales del Formulario pendientes (no en migrate-only,
         // la prueba de Graph, la sonda ni la recuperacion de TI).

@@ -11,7 +11,8 @@ public class Queries {
     final Db db;final Access access;final Attention attention;
     private final Integrations integrations;
     private final Documents documents;private final OriginRelease origin;private final StatCatalogs catalogs;private final IntakeRecord intake;private final StatValues stats;private final Rights rights;private final Lifecycle life;
-    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs,IntakeRecord intake,StatValues stats,Rights rights,Lifecycle life){this.intake=intake;this.stats=stats;this.rights=rights;this.life=life;this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
+    private final StatCompleteness completeness;
+    public Queries(Db db,Access access,Attention attention,Integrations integrations,Documents documents,OriginRelease origin,StatCatalogs catalogs,IntakeRecord intake,StatValues stats,Rights rights,Lifecycle life,StatCompleteness completeness){this.completeness=completeness;this.intake=intake;this.stats=stats;this.rights=rights;this.life=life;this.db=db;this.access=access;this.attention=attention;this.integrations=integrations;this.documents=documents;this.origin=origin;this.catalogs=catalogs;}
     public Map<String,Object> workspace(Actor a){
         // Las carteras se consultan por /worklist. Aqui solo contexto acotado de funciones temporales:
         // TI administra todas las subrogancias (D1); titular y subrogante ven las propias.
@@ -39,6 +40,7 @@ public class Queries {
         result.put("regions",AdultIdentity.REGIONS.entrySet().stream().map(e->Map.of("code",e.getKey(),"name",e.getValue())).toList());result.put("units",db.rows("SELECT * FROM org_unit ORDER BY code"));result.put("roles",Roles.json());result.put("reports",Reports.catalog());
         // Catalogos estadisticos (0.8.0, D27): solo la version VIGENTE de cada catalogo y los valores especiales.
         result.put("stat_catalogs",catalogs.published());
+        result.put("stat_completeness",completeness.requirements());
         var enabledScopes=catalogScopes.stream().filter(x->b(x,"enabled")).map(x->n(x,"id")).toList();
         boolean registrar=a.grants().stream().anyMatch(g->g.scope()!=null&&a.registrar(g.scope()));
         Map<Long,Actor> actors=new HashMap<>();for(var candidate:access.enabledActors())actors.put(candidate.id(),candidate);
@@ -82,6 +84,8 @@ public class Queries {
             if(db.count("SELECT COUNT(*) FROM attention_record ar WHERE ar.requirement_id=? AND ar.followup_required=TRUE AND NOT EXISTS(SELECT 1 FROM case_record ac WHERE ac.requirement_id=ar.requirement_id)",id)>0)blockers.add("Primera atencion pendiente de apertura de Caso para seguimiento.");
             if(pending>0)blockers.add(pending+" decisiones de continuidad pendientes.");
             if(tasks>0)blockers.add(tasks+" tareas pendientes.");
+            if(s(r,"state").equals("ABIERTO"))
+                blockers.addAll(completeness.blockers(StatCompleteness.Closing.REQUIREMENT,n(r,"communication_id"),id));
             out.put("closure_blockers",blockers);out.put("can_close",blockers.isEmpty());
         }
         return out;
@@ -134,6 +138,8 @@ public class Queries {
             case "SOL" -> {
                 var s=db.one("SELECT * FROM solicitation WHERE id=?",id);if(!solVisible(a,s))Problem.denied();scope=n(s,"destination_scope");out=new LinkedHashMap<>(s);
                 var com=new LinkedHashMap<>(access.comForRead(a,n(s,"communication_id")));com.put("suggested_region",access.suggestedRegion(n(s,"communication_id"),null));out.put("communication",com);out.put("can_decide",access.solReceiver(a,scope)&&s(s,"state").equals("PENDIENTE"));
+                if(b(out,"can_decide"))out.put("discard_blockers",
+                    completeness.blockers(StatCompleteness.Closing.DUPLICATE,n(s,"communication_id"),null));
                 out.put("receiving_authority",access.solReceiverLabel(scope));
                 // La consulta institucional tambien ve SOL devueltas: redistribuir sigue siendo de Distribucion.
                 out.put("can_redistribute",s(s,"state").equals("DEVUELTA")&&access.canDistribute(a,com));

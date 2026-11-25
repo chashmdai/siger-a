@@ -56,7 +56,7 @@ class MySql84UpgradeTest {
     static Map<String,Long> state()throws SQLException{
         var out=new TreeMap<String,Long>();
         try(var c=connect(SCHEMA)){
-            for(String t:List.of("milestone","person_reference","audit_event","role_assignment","application_marker","substitution_scope","staff","flyway_schema_history"))
+            for(String t:List.of("milestone","person_reference","audit_event","role_assignment","application_marker","substitution_scope","staff","flyway_schema_history","stat_declared_version","stat_declared_person"))
                 out.put(t,count(c,"SELECT COUNT(*) FROM "+t));
             out.put("role_assignment.revocadas",count(c,"SELECT COUNT(*) FROM role_assignment WHERE revoked_at IS NOT NULL"));
             out.put("staff.security_version",count(c,"SELECT COALESCE(SUM(security_version),0) FROM staff"));
@@ -79,6 +79,7 @@ class MySql84UpgradeTest {
             assertEquals(0,count(c,"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='"+SCHEMA+"' AND table_name IN ('person_reference','milestone','business_holiday')"));
         }
 
+        var prints=MySql84Upgrade070Test.fingerprints(SCHEMA);
         // 1. Como Migrate.ps1: sin web, migra y ejecuta las rutinas de arranque; Bootstrap cierra el contexto.
         try(var migrate=MySql84IntegrationTest.app(SCHEMA,List.of("siger.migrate-only=true"))){assertFalse(migrate.isActive(),"migrate-only cierra el proceso");}
         var migrated=state();
@@ -87,13 +88,16 @@ class MySql84UpgradeTest {
         try(var ctx=MySql84IntegrationTest.app(SCHEMA,List.of())){
             assertEquals(migrated,state(),"el arranque normal tras migrate-only no cambia nada");
             var db=ctx.getBean(Db.class);var access=ctx.getBean(Access.class);
-            assertEquals("20",ctx.getBean(Api.class).health().getBody().get("schema"));
-            for(int v=11;v<=20;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
+            assertEquals("21",ctx.getBean(Api.class).health().getBody().get("schema"));
+            for(int v=11;v<=21;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
             for(String marker:List.of(Bootstrap.AUTHORITY_MARKER,Bootstrap.REGIONAL_HEAD_MARKER,PersonIndex.MARKER,Milestones.MARKER,OriginRegion.MARKER))
                 assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",marker),marker);
             // Resultado de la primera atencion (V20, E06): las dos del volcado, desde su constancia exacta.
             assertEquals(List.of("ORIENTACION","RESPUESTA_DIRECTA"),db.rows("SELECT immediate_result FROM requirement WHERE immediate_result_reconstructed=TRUE ORDER BY id").stream().map(r->s(r,"immediate_result")).toList());
             assertEquals(0,n(db.one("SELECT amount FROM application_marker WHERE code=?",Attention.RESULT_MARKER),"amount"));
+            assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",PersonDims.MARKER));
+            assertEquals(db.count("SELECT COUNT(*) FROM attention_revision"),db.count("SELECT COUNT(*) FROM stat_declared_version"));
+            assertEquals(prints,MySql84Upgrade070Test.fingerprints(SCHEMA));
             // Region de cada version de la ficha (V16, D21): la GENERAL con region 13 y la NNA sin region.
             assertEquals("13",s(db.one("SELECT region_code FROM attention_revision WHERE id=1"),"region_code"));
             assertNull(db.one("SELECT region_code FROM attention_revision WHERE id=2").get("region_code"));

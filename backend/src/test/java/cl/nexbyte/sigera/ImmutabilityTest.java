@@ -88,7 +88,7 @@ class ImmutabilityTest {
         long flowId=n(db.one("SELECT MAX(id) AS id FROM flow_request WHERE requirement_id=?",req),"id");
         run(UPD,"FLOW_DECIDE","flow_request",flowId,Map.of("decision","RECHAZADA","reason","Sin capacidad"));
         run(PROF,"CASE_CLOSE","case_record",cas,Map.of("reason","Cierre del Caso"));
-        run(HEAD,"REQ_CLOSE","requirement",req,Map.of("reason","Cierre del REQ"));
+        run(HEAD,"REQ_CLOSE","requirement",req,Map.of("reason","Cierre del REQ","stat",Map.of("TIPO_SOLICITUD",Map.of("status","SIN_INFORMACION"))));
         // Primera atencion con una constancia del REQ y una entrega decidida, resuelta.
         long att=run(ADMIN,"ATTENTION_CREATE",null,null,map("scope_id",upr,"channel","PRESENCIAL","received_at",ago(900),"form",ActionTypesTest.form()));
         run(ADMIN,"REQ_NOTE","requirement",att,Map.of("effective_at",ago(60),"body","Constancia de la atencion","no_followup",true));
@@ -96,7 +96,7 @@ class ImmutabilityTest {
         run(ADMIN,"ATTENTION_SEND","requirement",att,Map.of("recipient_kind","JEFATURA","scope_id",upr,"reason","Entrega sintetica"));
         long handoff=n(db.one("SELECT id FROM attention_handoff WHERE requirement_id=?",att),"id");
         run(ADMIN,"ATTENTION_DECIDE","requirement",att,Map.of("handoff_id",handoff,"decision","RETIRADA","reason","Retiro"));
-        run(ADMIN,"ATTENTION_RESOLVE","requirement",att,Map.of("result","ORIENTACION","reason","Orientacion entregada","effective_at",ago(10)));
+        run(ADMIN,"ATTENTION_RESOLVE","requirement",att,Map.of("result","ORIENTACION","reason","Orientacion entregada","effective_at",ago(10),"stat",Map.of("TIPO_SOLICITUD",Map.of("status","SIN_INFORMACION"))));
         long attCom=n(db.one("SELECT communication_id FROM requirement WHERE id=?",att),"communication_id");
         assertEquals(List.of("CERRADO","CERRADO","CERRADO"),List.of(s(db.one("SELECT state FROM requirement WHERE id=?",req),"state"),s(db.one("SELECT state FROM case_record WHERE id=?",cas),"state"),s(db.one("SELECT state FROM requirement WHERE id=?",att),"state")));
 
@@ -162,6 +162,7 @@ class ImmutabilityTest {
         assertEquals(Map.of(),changes,"ningun intento escribe");
 
         // Excepciones documentadas (S2): no modifican el expediente cerrado.
+        var classifications=db.rows("SELECT * FROM stat_event WHERE communication_id IN (?,?) ORDER BY id",com,attCom);
         var closedReq=db.one("SELECT state,closed_ms,closed_by,close_reason,principal_scope,complexity,revision FROM requirement WHERE id=?",req);
         var closedCase=db.one("SELECT state,closed_ms,closed_by,closure_mode,close_reason,responsible_id FROM case_record WHERE id=?",cas);
         run(PROF,"CASE_ACK","case_record",cas,Map.of());
@@ -172,6 +173,6 @@ class ImmutabilityTest {
         run(HEAD,"LINK_RETURN","communication_link",link,Map.of("reason","Vuelve a clasificacion"));
         assertEquals(closedReq,db.one("SELECT state,closed_ms,closed_by,close_reason,principal_scope,complexity,revision FROM requirement WHERE id=?",req));
         assertEquals(closedCase,db.one("SELECT state,closed_ms,closed_by,closure_mode,close_reason,responsible_id FROM case_record WHERE id=?",cas));
-        assertEquals(0,db.count("SELECT COUNT(*) FROM stat_event WHERE communication_id IN (?,?)",com,attCom));
+        assertEquals(classifications,db.rows("SELECT * FROM stat_event WHERE communication_id IN (?,?) ORDER BY id",com,attCom));
     }
 }

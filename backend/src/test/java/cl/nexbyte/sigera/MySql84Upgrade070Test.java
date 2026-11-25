@@ -27,7 +27,7 @@ class MySql84Upgrade070Test {
      * Marcadores de las rutinas de arranque agregadas despues de 0.7.0: es lo unico que cambia la cantidad de filas de
      * una tabla existente (application_marker) al actualizar (E03: resumen de cambios de la ficha, V18).
      */
-    static final List<String> NEW_MARKERS=List.of(Attention.SUMMARY_MARKER,Attention.RESULT_MARKER);
+    static final List<String> NEW_MARKERS=List.of(Attention.SUMMARY_MARKER,Attention.RESULT_MARKER,PersonDims.MARKER);
     @BeforeAll static void requireIsolatedMySql(){MySql84IntegrationTest.requireIsolatedMySql();}
 
     /** Mayor version de las migraciones del codigo (Vn__*.sql). */
@@ -50,9 +50,10 @@ class MySql84Upgrade070Test {
         return out;
     }
     /** SHA-256 de todas las columnas de todas las filas, en orden de id, de cada tabla de los originales. */
-    static Map<String,String> fingerprints()throws Exception{
+    static Map<String,String> fingerprints()throws Exception{return fingerprints(SCHEMA);}
+    static Map<String,String> fingerprints(String schema)throws Exception{
         var out=new TreeMap<String,String>();
-        try(var c=MySql84UpgradeTest.connect(SCHEMA)){
+        try(var c=MySql84UpgradeTest.connect(schema)){
             for(String t:ORIGINALS){
                 var digest=MessageDigest.getInstance("SHA-256");
                 try(var st=c.createStatement();var rs=st.executeQuery("SELECT * FROM "+t+" ORDER BY id")){
@@ -88,6 +89,9 @@ class MySql84Upgrade070Test {
         assertEquals(markers+NEW_MARKERS.size(),counts(List.of("application_marker")).get("application_marker"),"solo los marcadores nuevos");
         assertEquals(prints,fingerprints(),"originales del Formulario y external_* identicos");
         var migrated=counts(unchanged);
+        var projected=counts(List.of("stat_declared_version","stat_declared_person"));
+        assertEquals(loaded.get("attention_revision"),projected.get("stat_declared_version"));
+        assertTrue(projected.get("stat_declared_person")>0);
 
         // 2. Arranque normal (sin semillas, como la VM): nada cambia.
         try(var ctx=MySql84IntegrationTest.app(SCHEMA,List.of())){
@@ -119,6 +123,7 @@ class MySql84Upgrade070Test {
             assertEquals(0,Milestones.omitted(db));
         }
         assertEquals(migrated,counts(unchanged),"el arranque normal tras migrate-only no cambia nada");
+        assertEquals(projected,counts(List.of("stat_declared_version","stat_declared_person")));
         assertEquals(prints,fingerprints());
 
         // 3. E05 (V19): con los catalogos de referencia vigentes, la via y las propuestas de las COM del Formulario

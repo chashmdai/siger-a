@@ -16,7 +16,12 @@ public class RequirementCommands {
     private final Access access;
     private final Lifecycle life;
 
-    public RequirementCommands(Db db,Access access,Lifecycle life){
+    private final StatValues stats;
+    private final StatCompleteness completeness;
+
+    public RequirementCommands(Db db,Access access,Lifecycle life,StatValues stats,StatCompleteness completeness){
+        this.stats=stats;
+        this.completeness=completeness;
         this.db=db;
         this.access=access;
         this.life=life;
@@ -75,6 +80,9 @@ public class RequirementCommands {
         Rules.requirementClosable((int)db.count("SELECT COUNT(*) FROM case_record WHERE requirement_id=? AND state<>'CERRADO'",id),(int)life.pendingReq(id),a.head(scope));
         require(db.count("SELECT COUNT(*) FROM task_item t JOIN case_record c ON c.id=t.case_id WHERE c.requirement_id=? AND t.state IN "+Lifecycle.OPEN_TASK,id)==0,"El REQ todavia tiene tareas pendientes de sus Casos.");
         String reason=in.reason();
+        long com=n(r,"communication_id");
+        stats.inline(a,com,in.values().get("stat"));
+        completeness.require(StatCompleteness.Closing.REQUIREMENT,com,id);
         long t=now();
         db.update("UPDATE requirement SET state='CERRADO',closed_ms=?,closed_by=?,close_reason=?,revision=revision+1 WHERE id=?",t,a.id(),reason,id);
         db.update("INSERT INTO closure_record(requirement_id,actor_id,closed_ms,mode,reason) SELECT id,closed_by,closed_ms,'JEFATURA_PRINCIPAL',close_reason FROM requirement WHERE id=?",id);
