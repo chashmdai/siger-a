@@ -124,6 +124,116 @@ Padre propone su gate y el responsable lo agrega a la tabla de estado.
 | Id | Fecha | Origen (funcion y ambito, sin nombres) | Observacion | Validacion del responsable | Gate |
 |---|---|---|---|---|---|
 
+## GO aprobados pendientes de ejecucion
+
+Plan presentado por el ejecutor y GO del responsable para un gate que se ejecuta en una sesion posterior. El estado del
+gate no cambia (sigue ABIERTO) hasta su registro de cierre; la sesion que lo ejecute toma de aqui el plan y las
+condiciones del GO, verifica que la base no haya cambiado y no necesita volver a pedir el GO.
+
+### E07 - plan y GO del 2026-11-25
+
+Plan presentado (Claude Code, DDN-TEST-SIGER, base `8a297ae` = cierre de E06; sin cambios en archivos):
+
+- Precondiciones: `git status` limpio, `main` al dia con `origin`; E00, E03 y E06 CERRADO; ninguna DI exigida (los
+  catalogos de referencia PROPUESTA sirven a las pruebas: `VULNERACION` en TIPO_SOLICITUD, `PERSONA_NATURAL_ADULTA` y
+  `NNA` en TIPO_REQUIRENTE); base 251 JUnit H2, 255 MySQL, 154 frontend.
+- Inventario: los bloqueos de cierre se calculan dos veces (S3): `Queries.reqSummary` (`closure_blockers`/`can_close`,
+  solo jefatura) y REQ_CLOSE en `RequirementCommands` (`Rules.requirementClosable` y `require`); `Attention.resolve`
+  sin bloqueos visibles; COM_IMMEDIATE y ATTENTION_CREATE con `resolve_now` crean y cierran el REQ en el mismo comando;
+  SOL_DISCARD (INVALIDA/DUPLICADA) aplica `stats.inline` antes de descartar. Territorio: `OriginRegion` ya tiene en SQL
+  la region registrada y vigente (ficha, Formulario, ficha de ingreso); sede inicial y vigente desde los hitos
+  `REQ_CREADO`/`FLUJO_DECIDIDO`, `principal_scope` y `solicitation`; la cobertura tiene historia en
+  `territorial_coverage`; el estado de las sedes en el tiempo solo esta en `audit_event` (`AMBITO_ACTIVADO`,
+  `AMBITO_CERRADO`). Edad y nacionalidad: el Formulario es relacional (`external_person.age_at_intake`/`declared_age`,
+  `external_attribute`, `external_field` PERSONA); la ficha y la ficha de ingreso solo en JSON (`data_json`). Pruebas
+  que cierran registros: 12 clases (entre ellas `ImmutabilityTest`, `RightsTest`, `StatClassificationTest`,
+  `ActionTypesTest`); las que activan catalogos deben clasificar antes de cerrar.
+- Decisiones planteadas:
+  - A (bloqueante). Las reglas "en Java y SQL" no pueden leer el JSON de las fichas de forma portable en H2, y los
+    archivos autorizados de E07 no incluyen migracion. Recomendacion (precedente de V16): V21 con tablas derivadas
+    `stat_declared_version` (una fila por version de ficha o ficha de ingreso: fuente, instante, region y comuna del
+    requirente y de los hechos) y `stat_declared_person` (una por persona: rol, region, comuna, edad a la recepcion
+    calculada en Java y su origen, nacionalidad; sin fecha de nacimiento), escritas en `Attention.snapshot` e
+    `IntakeRecord.create`/`complete`, con carga desde `Bootstrap` (marcador `DIMENSIONES_V21`, tambien con
+    `migrate-only`). Amplia a `V21__*.sql`, `IntakeRecord.java`, `Bootstrap.java` y `Attention.snapshot`.
+  - B. Region del requirente en la completitud (DISENO 4.5): no tiene catalogo versionado ni estado especial; exigirla
+    obligaria a inventar datos (D28) y podria ser irresoluble en una COM del Formulario (inmutable). Opciones: (a,
+    recomendada) no bloquea en 0.8.0, solo indicador de calidad, diferencia de referencia; (b) variable
+    `REGION_REQUIRENTE` de solo estados especiales en `StatValues`, exigible con TIPO_REQUIRENTE vigente y persona
+    natural (amplia `StatValues.java` y E09).
+  - C. Resolver en el mismo acto: bloque opcional `stat` (`StatValues.inline`) en REQ_CLOSE y ATTENTION_RESOLVE; en
+    COM_IMMEDIATE y ATTENTION_CREATE con `resolve_now` el REQ nace en el comando, por lo que una vulneracion no podria
+    cerrarse en el acto sin un bloque de derechos: se propuso un `Rights.inline` minimo (amplia `Rights.java`).
+  - D. Territorio por cobertura a la fecha de recepcion: region de origen registrada; sede activa en t = sin
+    `AMBITO_ACTIVADO` posterior a t, sin `AMBITO_CERRADO` hasta t y no PROYECTADA (por codigo de accion, nunca el texto
+    de la nota); region fisica actual (su cambio no se reconstruye, diferencia); periodos de `territorial_coverage`
+    vigentes en t; valor unico por prioridad: sede de la region fisica, sede que la cubre (menor id), NIVEL_CENTRAL,
+    SIN_ATENCION; sin region, SIN_INFORMACION.
+  - E. Edad y nacionalidad del requirente solo si el tipo de requirente (en el modo temporal) esta INFORMADO como
+    `PERSONA_NATURAL_ADULTA` o `NNA`; en otro caso NO_APLICA.
+- Plan, con punto de control:
+  - E07a: `TerritorialDims` (Java y SQL: region y comuna del requirente al ingreso y vigente; del NNA afectado,
+    multiple, con el detalle `afectado-N` del Formulario; de los hechos; sede inicial y vigente, que tambien da el
+    ambito de referencia del alcance de DISENO 5.6; territorio por cobertura; modos vigente, al ingreso, al REQ y a una
+    fecha t); `PersonDims` (edad desde el nacimiento a la recepcion en hora de Chile, si no la edad entera declarada, un
+    texto historico solo si es exactamente un entero en el rango del rol, si no SIN_INFORMACION; nacionalidad pais y
+    agrupacion Chile/extranjera/sin informacion; tramo segun TRAMO_EDAD vigente); V21 y su carga (si A).
+  - E07b: `StatCompleteness`, regla unica: variables por cierre de DISENO 4.5 (REQ_CLOSE, ATTENTION_RESOLVE,
+    COM_IMMEDIATE y ATTENTION_CREATE con `resolve_now`, SOL_DISCARD DUPLICADA), solo con catalogo VIGENTE; una
+    propuesta no resuelve; con `VULNERACION`, derecho (o estado especial) en el REQ o sus Casos y contexto. Valida en
+    los comandos (409, texto llano) y alimenta `closure_blockers` (Queries, REQ), `resolve_blockers` (vista de la
+    atencion), `discard_blockers` (ficha de la SOL) y las variables exigibles por cierre en `/api/catalog` (para E09).
+    Indicadores de calidad: `indicators(alcance, desde, hasta)` con conteos por variable, estado y ambito de referencia
+    sobre las COM computables (D25), sin endpoint (lo expone E08).
+- Archivos propuestos: `TerritorialDims.java`, `PersonDims.java` y `StatCompleteness.java` (nuevos),
+  `RequirementCommands.java` (cierre), `Attention.java` (resolucion y `snapshot`), `IntakeCommands.java` (cierre en el
+  acto y descarte; nunca `conserveExternal`), `Queries.java`; segun A y C: `V21__*.sql`, `IntakeRecord.java`,
+  `Bootstrap.java`, `Rights.java`; pruebas, `CLAUDE.md`, `docs/ARQUITECTURA.md`, bitacora.
+- Pruebas previstas: `TerritorialDimsTest` (escenario 5; coberturas que cambian en el tiempo; NNA de dos regiones; COM
+  sin REQ), `PersonDimsTest` (escenario 14; cumpleanos en hora de Chile; dos nacionalidades; texto 1.0 no convertido;
+  la fecha de nacimiento nunca sale), `StatCompletenessTest` (escenario 7; vulneracion sin derecho; descarte duplicado
+  e invalido libre; sin catalogo vigente nada bloquea; bloqueos mostrados = validados); equivalencia Java/SQL en H2 y
+  MySQL 8.4 (`siger.mysql.suite=true`, procedimiento de E00); `MySql84Upgrade070Test` y `MySql84UpgradeTest` con la
+  carga V21 y `communication_original`/`external_*` identicos; pruebas existentes que cierran con catalogos vigentes
+  adaptadas clasificando antes, sin quitar aserciones. Mutaciones (unas 12): propuesta como resuelta; sin catalogo
+  vigente bloquea; vulneracion sin derecho; INVALIDA exige variables; bloqueo mostrado distinto del validado; edad sin
+  hora de Chile; texto historico interpretado; nacionalidad libre convertida; transferencia cambia la sede inicial;
+  cobertura sin su periodo; SQL distinto de Java; carga V21 omitida.
+- Riesgos: rendimiento de las subconsultas correlacionadas (medicion en E14); historia de sedes basada en la auditoria
+  y sin cambios de region fisica; con catalogos vigentes los cierres pasan a bloquearse (en produccion solo tras
+  activarlos); si E07b no cabe con todas sus verificaciones, cierre de E07a y E07b ABIERTO. Sin cambios en
+  `OriginRegion.current`, `Access.suggestedRegion`, `Territory`, `Reports` ni `REOPEN_*`.
+
+GO del responsable (2026-11-25), con estas respuestas y condiciones:
+
+- A. Si: tablas derivadas `stat_declared_version` y `stat_declared_person` en V21, escritas al guardar la ficha y la
+  ficha de ingreso, mas la carga historica con el marcador `DIMENSIONES_V21` (tambien con `migrate-only`). Se
+  autorizan V21, `IntakeRecord.java`, `Bootstrap.java` y `Attention.snapshot`. Condiciones: son datos derivados, nunca
+  fuente de verdad, y una prueba recalcula desde las fichas y compara con lo guardado; la carga historica es
+  idempotente; la fecha de nacimiento no se guarda; las dimensiones del Formulario se leen de `external_*` sin
+  escribir.
+- B. Si a (a): la region del requirente no bloquea el cierre en 0.8.0; solo aparece como indicador de calidad. Se
+  registra como diferencia de referencia con DISENO 4.5 (D28: no inventar datos; las COM del Formulario no se pueden
+  modificar).
+- C. Si, con `Rights.java` solo para exponer el conjunto consolidado de derechos y contexto a la completitud, sin
+  cambiar su comportamiento.
+- D. Si a la regla de sede activa en una fecha, cobertura por periodos y prioridad (sede de la region fisica, sede que
+  la cubre, NIVEL_CENTRAL, SIN_ATENCION; sin region, SIN_INFORMACION). El estado de la sede se lee del codigo de accion
+  de la auditoria, nunca del texto. El cambio de region fisica de una sede no se reconstruye y se registra como
+  diferencia.
+- E. Si a la recomendacion, respetando DISENO 4.8: la edad y la nacionalidad del requirente solo se calculan cuando el
+  tipo de requirente esta informado como persona natural adulta o NNA; en otro caso no aplica. Nunca se usan adultos
+  relacionados ni la persona senalada. Nunca se interpreta un texto historico.
+- Generales: sin division salvo que sea imposible cerrar con todas las verificaciones; `OriginRegion.current`,
+  `Access.suggestedRegion`, `Territory`, `Reports` y `REOPEN_*` sin cambios; las pruebas que cierran registros con
+  catalogos vigentes se adaptan clasificando antes de cerrar, sin eliminar aserciones, y se registran. Corridas
+  finales: H2 completo; MySQL 8.4 con actualizacion desde 0.4.0 y desde 0.7.0 hasta V21, con `communication_original`
+  y `external_*` identicos; frontend si cambia `/api/catalog`; `Check-Scripts.ps1` una vez si se toca `CLAUDE.md`, sin
+  procesos en paralelo. Mutaciones autorizadas: las listadas, temporales y revertidas. Commit final
+  `gate E07: dimensiones y completitud`, revision de que no viajen archivos sensibles, push y detenerse.
+- Estado de E07: sigue ABIERTO. El GO se registro en el commit `docs: plan y GO de E07`; la implementacion queda para
+  una sesion posterior.
+
 ## Registros de cierre
 
 ### E00 - Linea base, decisiones, AGENTS.md y contrato del Formulario   (CERRADO)
