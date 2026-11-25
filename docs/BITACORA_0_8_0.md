@@ -233,6 +233,274 @@ GO del responsable (2026-11-25), con estas respuestas y condiciones:
 - Estado de E07: sigue ABIERTO. El GO se registro en el commit `docs: plan y GO de E07`; la implementacion queda para
   una sesion posterior.
 
+Ejecutado en c9abb9a (gate E07: dimensiones y completitud).
+
+### E08 - plan y GO del 2026-11-25
+
+Plan presentado por Codex. Base comprobada `c9abb9a`, cierre de E07, con `main`, `origin/main` y la rama remota en
+el mismo commit y árbol de trabajo limpio. E07, sus dependencias y E00 están CERRADOS. El contrato del Formulario
+quedó conforme en E00. La conformidad institucional de DI-01 a DI-04 y la decisión DI-07 están registradas.
+DI-13 se requiere en E15. La Figura 1 sintética se desglosa por región del requirente.
+
+La base acreditada es de 259 pruebas H2, 263 MySQL y 154 frontend. Se comprobó contra `v0.7.0` la integridad de
+los archivos protegidos de recepción, `conserveExternal`, `Reports.java`, `scripts/`, `.mvn/` y V1–V16.
+
+#### Inventario y definiciones planteadas
+
+| Componente | Hallazgo y uso en E08 |
+|---|---|
+| `communication`, `solicitation`, `requirement`, `communication_link`, `milestone` | SOL y REQ tienen una relación única con la COM. Casos, hitos y eventos son relaciones de uno a muchos. La fuente principal parte de COM. Para D25 histórico se pueden fechar el descarte y el vínculo con el hito de descarte y con `proposed_ms`/`returned_ms`. |
+| `Reports.reach`, `TerritorialDims.referenceScopeSql`, `Access` | Reutilizar la resolución de concesiones efectivas. El alcance se aplica en SQL sobre el principal vigente del REQ, el destino vigente de la SOL o el origen de la COM, en ese orden. La dimensión territorial seleccionada cambia el desglose. El predicado de acceso usa las concesiones vigentes. |
+| `TerritorialDims`, `OriginRegion`, `PersonDims`, V21, `external_*` | Reutilizar las expresiones de E07 para ficha, cobertura, sedes y Formulario, el corte `registered_ms <= requirement.created_ms`, la edad a recepción y la validación de nacionalidad estructurada. La región física de la sede usa el valor actual según E07. |
+| `StatValues`, `Rights`, `StatCatalogs`, `StatProposals`, `StatCompleteness` | Reutilizar las reglas de SET/STATUS y ADD/REMOVE, la vía derivada, las versiones y jerarquías de catálogo y la precedencia de completitud de E07. Consolidar por conjuntos en SQL y entregar las propuestas en un agregado separado. |
+| `management_note`, `note_institution`, `requirement.immediate_result` | Una constancia tipificada entra mientras sea la versión vigente al corte. El resultado de primera atención se toma de su columna estructurada. El origen de la actuación distingue primera atención, gestión de REQ y gestión de Caso. |
+| `Api`, `SecurityConfig`, `ApiErrors`, `Queries.catalog`, `Db.audit` | POST autenticado con el CSRF existente y 405 para GET autenticado. El catálogo publica dimensiones y medidas para REPORTES. La nota de `STAT_CONSULTA` contiene únicamente nombres validados de medidas, dimensiones y filtros. |
+
+1. **Concordancia con Reports.** `Reports` cuenta todas las COM por fecha de registro (`created_ms`) y ámbito de
+   origen. `INGRESOS` aplica D25 y usa por defecto recepción y ámbito de referencia. Se propuso exigir igualdad en
+   el universo común y, para el volumen administrativo institucional, conciliar por canal
+   `INGRESOS + EXCLUIDOS + ANTECEDENTES` con fecha de registro. Para REQ, exigir igualdad por estado con fecha de
+   constitución y alcance principal vigente.
+2. **Casos fuera de alcance y reserva.** Se propuso exigir alcance REPORTES sobre la COM y sobre el Caso cuando
+   el dato procede de ese Caso, por ámbito o materia. Primero se determina qué constancia está vigente y luego se
+   excluyen las reservadas. `TIPO_INSTITUCION` se alimentaría de `note_institution`. La ficha y el ingreso manual
+   guardan las instituciones declaradas en JSON y V21 carece de una proyección relacional de ese dato. Incorporarlas
+   requiere acordar la semántica y ampliar el alcance técnico. Se propuso agregar `REMISION_CONCLUIDA` al total de
+   actuaciones de primera atención y conservar su código de resultado en el desglose hasta que exista una equivalencia
+   institucional con `DERIVACION_EXTERNA`.
+3. **Historia con evidencia parcial.** Se propuso devolver `PENDIENTE` y `HISTORIA_INCOMPLETA` cuando falte
+   evidencia estructurada para el instante solicitado. El campo vigente de complejidad o materia por sí solo no
+   acredita su valor anterior. En `AL_REQ`, una primera ficha guardada un milisegundo después de crear el REQ queda
+   fuera, incluso si ambos actos ocurrieron en la misma transacción. Se comprueba con una prueba de borde de E07.
+
+#### Contrato propuesto de POST /api/stats/query
+
+Entrada de ejemplo. `period.date_basis` distingue las fechas de análisis y `mention_dimension` indica qué se suma
+al cruzar varias dimensiones multivaluadas.
+
+```json
+{
+  "measure": "REQUERIMIENTOS_CON_VALOR",
+  "rows": ["DERECHO"],
+  "columns": [],
+  "filters": {
+    "CANAL": ["FORMULARIO_WEB_PUBLICO", "TELEFONO"]
+  },
+  "period": {
+    "type": "CUENTA_PUBLICA",
+    "from": "2025-07-01",
+    "to": "2026-06-30",
+    "date_basis": "RECEPCION"
+  },
+  "time_mode": "VIGENTE",
+  "as_of": null,
+  "cut_id": null,
+  "compare": null,
+  "percent": "TOTAL",
+  "include_proposals": false,
+  "mention_dimension": null
+}
+```
+
+- Medidas `INGRESOS`, `EXCLUIDOS`, `ANTECEDENTES`, `REQ_CONSTITUIDOS`, `CASOS`, `ACTUACIONES`,
+  `REQUERIMIENTOS_CON_ACTUACION`, `CLASIFICACIONES_DERECHO`, `REQUERIMIENTOS_CON_DERECHO`,
+  `REQUERIMIENTOS_CON_VALOR`, `MENCIONES` y `COMPLETITUD`. Las frecuencias cuentan su propia unidad. La respuesta
+  informa por separado las COM únicas. `COMPLETITUD` usa el par COM–variable con su estado. `MENCIONES` requiere
+  `mention_dimension` si hay más de una dimensión múltiple candidata.
+- `rows` y `columns` son listas ordenadas. `filters` acepta listas de códigos, números o estados especiales según
+  la dimensión. Combina los valores de una lista con OR y los filtros de distintas dimensiones con AND.
+  `GET /api/catalog` publica `stats` con identificadores, rótulos, tipos, cardinalidad y combinaciones admitidas.
+  El catálogo cubre período, tardanza, estados COM/SOL/REQ, canal, mecanismo, vía y agrupación, solicitud, requirente,
+  modalidad, territorio, unidad, materia, complejidad, origen del REQ, primera atención, derechos en sus tres niveles,
+  contexto, caracterización, rol del Estado, grupos prioritarios, actuación, institución, demografía y estados de
+  clasificación. Nombres y valores se validan contra listas y catálogos controlados.
+- Tipos de período `PERSONALIZADO`, `MES`, `TRIMESTRE`, `SEMESTRE`, `ANIO` y `CUENTA_PUBLICA`.
+  El personalizado exige `from` y `to`. En un predefinido, `from` identifica el período y `to` puede omitirse o
+  coincidir con el fin canónico. Ambos días son inclusivos en `America/Santiago`. SQL recibe el inicio y la medianoche
+  siguiente al último día como límite superior exclusivo. `date_basis` admite `RECEPCION`, `REGISTRO` y
+  `CONSTITUCION_REQ`. `CASOS` usa por defecto la creación del Caso. Las series usan ejes `PERIODO_DIA`,
+  `PERIODO_MES`, `PERIODO_TRIMESTRE`, `PERIODO_SEMESTRE`, `PERIODO_ANIO` o `PERIODO_CUENTA_PUBLICA`
+  sobre la fecha elegida. Los intervalos vacíos se representan con cero.
+- `VIGENTE` usa el último valor disponible y `AL_INGRESO` el primer valor según DISENO 4.7. `AL_REQ` toma la evidencia
+  hasta la constitución del REQ. `FECHA` exige `as_of` en ISO 8601 con zona u offset. `compare` admite `null`,
+  `{"type":"PERIODO_ANTERIOR"}`, `{"type":"MISMO_PERIODO_ANIO_ANTERIOR"}` y `{"type":"CORTE","cut_id":42}`.
+  E08 admite comparaciones temporales. La selección y comparación por corte corresponde a E10. Se alinean las
+  categorías por clave y se devuelve cifra base, diferencia absoluta y variación porcentual, `null` con base cero.
+- `percent` admite `TOTAL`, `FILA`, `COLUMNA` y `null`. Para cruces multivaluados, el numerador son las COM únicas
+  de la celda y el denominador las COM únicas del total o margen seleccionado. Los márgenes se recalculan sobre sus
+  propios conjuntos. Para derechos y demás clasificaciones una mención es una combinación COM–valor.
+  `CLASIFICACIONES_DERECHO` cuenta asignaciones por registro. Para personas, actuaciones e instituciones se cuentan
+  las ocurrencias. El resultado conserva versiones de catálogo y avisa si intervienen versiones distintas. Las
+  correspondencias requieren una regla explícita.
+- La respuesta incluye claves y rótulos de las categorías, avisos con código estable, metadatos de metodología, fecha,
+  modo y versiones utilizadas, tardíos y distribución por días calendario entre recepción y registro, cobertura de
+  edad y nacionalidad cuando se consultan y propuestas por variable y código cuando se piden. Petición inválida 400,
+  límite técnico de celdas 409, sin REPORTES o TI 403, POST sin CSRF 403 y GET autenticado 405.
+
+Respuesta de ejemplo sobre la población sintética. Los márgenes usan la estructura numérica del total general.
+Cuando se compara, `comparison` incluye período base, totales y celdas alineadas con `base_n`, `delta_n` y
+`delta_percent`.
+
+```json
+{
+  "metadata": {
+    "methodology_version": "1",
+    "measure": "REQUERIMIENTOS_CON_VALOR",
+    "rows": ["DERECHO"],
+    "columns": [],
+    "period": {
+      "type": "CUENTA_PUBLICA",
+      "from": "2025-07-01",
+      "to": "2026-06-30",
+      "date_basis": "RECEPCION"
+    },
+    "zone": "America/Santiago",
+    "time_mode": "VIGENTE",
+    "as_of": null,
+    "cut_id": null,
+    "percent": "TOTAL",
+    "catalog_versions": {"DERECHO": [1]}
+  },
+  "values": {
+    "DERECHO": [
+      {"key": "3.1", "label": "Derecho sintético 1"},
+      {"key": "3.2", "label": "Derecho sintético 2"},
+      {"key": "4.1", "label": "Derecho sintético 3"}
+    ]
+  },
+  "cells": [
+    {"row": ["3.1"], "column": [], "n": 1, "unique": 1, "mentions": 1, "percent_numerator": 1, "denominator": 2, "percent": 50},
+    {"row": ["3.2"], "column": [], "n": 2, "unique": 2, "mentions": 2, "percent_numerator": 2, "denominator": 2, "percent": 100},
+    {"row": ["4.1"], "column": [], "n": 1, "unique": 1, "mentions": 1, "percent_numerator": 1, "denominator": 2, "percent": 50}
+  ],
+  "totals": {
+    "grand": {"n": 2, "unique": 2, "mentions": 4},
+    "rows": [
+      {"key": ["3.1"], "n": 1, "unique": 1, "mentions": 1},
+      {"key": ["3.2"], "n": 2, "unique": 2, "mentions": 2},
+      {"key": ["4.1"], "n": 1, "unique": 1, "mentions": 1}
+    ],
+    "columns": []
+  },
+  "comparison": null,
+  "late_records": {"n": 0, "by_delay_days": []},
+  "data_coverage": {},
+  "proposals": [],
+  "warnings": [{"code": "PORCENTAJES_MULTIVALOR", "dimensions": ["DERECHO"]}]
+}
+```
+
+#### Población sintética y matriz de pruebas y mutaciones
+
+La población principal tiene cinco ingresos computables en la Cuenta Pública de julio de 2025 a junio de 2026.
+**A** es Formulario adulto, vulneración, región 07, con REQ reabierto y transferido de S06 a S07 y dos Casos.
+**B** es correo, consulta, persona adulta, región 13, con COM nueva.
+**C** es presencial, promoción, organismo, región sin información, duplicada.
+**D** es teléfono, consulta, NNA, región 05, con primera atención cerrada.
+**E** es correo, vulneración, persona adulta, región 07, con SOL pendiente, recibida al final del 30/06 y registrada el 02/07.
+**F** es un oficio inválido. **G** es un antecedente de canal `OTRO`.
+**H** se recibe al comenzar el 01/07 siguiente. S06 tiene B, C, D y E en su alcance vigente. A y E son de materia UPD y C de UPR.
+
+La Cuenta Pública anterior tiene dos ingresos, el 01/07/2024 y el 30/06/2025. Los bloques adicionales de territorio,
+historia, demografía y horario tendrán poblaciones fijas aisladas. Las cifras de la tabla serán datos de prueba escritos
+a mano. Las cadenas se crearán con comandos, los Formularios con vectores sintéticos firmados y los instantes de borde
+se fijarán explícitamente en la base de prueba.
+
+| Regla | Escenario | Dato sintético | Cifra esperada | Mutación y prueba que debe fallar |
+|---|---|---|---|---|
+| Figura 1, solicitud | 1 | A/E vulneración, B/D consulta, C promoción | `2 + 2 + 1 = 5` | Agrupar por propuesta en vez del valor confirmado → `figuraSolicitud`. |
+| Figura 1, requirente | 1 | A/B/E adultos, D NNA, C organismo | `3 + 1 + 1 = 5` | Derivar el requirente del canal → `figuraRequirente`. |
+| Figura 1, vía | 1 | Formulario adulto A, correo B/E, presencial C, teléfono D | Vías `1 + 2 + 1 + 1 = 5`. Digital 3, presencial 1, telefónica 1 | Usar canal como clave de vía o perder la agrupación padre → `figuraVia`. |
+| Figura 1, región | 1 | A/E en 07, B en 13, D en 05, C sin dato | `07=2`, `13=1`, `05=1`, `SIN_INFORMACION=1`. Total 5 | Sustituir región del requirente por región de sede u omitir el valor especial → `figuraRegion`. |
+| Inválida y duplicada | 2 | F inválida, C duplicada | Ingresos 5, excluidos 1. C cuenta 1 y F cuenta 0 en ingresos | Incluir inválidas o excluir duplicadas, en mutaciones separadas → `descarteD25`. |
+| Antecedente y devolución | 2 | G propuesta, rechazada y luego devuelta por `LINK_RETURN` | Vinculada o rechazada sin devolver, ingresos 5 y antecedentes 1. Desde la devolución, 6 y 0 | Usar `RECHAZADA` como devolución o ignorar `returned_ms` → `antecedenteD25`. |
+| Pendientes y primera atención | 2 | B COM nueva, E SOL pendiente, D directa cerrada | B=1, E=1 y D=1. Subtotal 3 | Exigir REQ o exigir SOL para contar → `pendientesYDirectaD25`. |
+| Reapertura, transferencia y Casos | 2 | A con una reapertura, una transferencia y dos Casos | A aporta una COM, un REQ y dos Casos. El conteo de A sigue en 1 en cada hito | Contar hijos o hitos como filas de ingreso → `cadenaUnicaD25`. |
+| D25 a fecha histórica | 2, 37 | F antes y después del descarte. G antes del vínculo, vinculado y tras devolución | F `1→0`. G `1→0→1` en ingresos | Aplicar `communication.state` vigente a todos los cortes → `estadoHistoricoD25`. |
+| Medianoche de Cuenta Pública | 3 | E `30/06 23:59:59.999` y H `01/07 00:00`, equivalentes a `03:59:59.999Z` y `04:00Z` | E en la Cuenta Pública que termina, H en la siguiente. Una COM en cada lado del borde | Usar UTC para el día civil o incluir el límite superior → `bordeCuentaPublica`. |
+| Cambio de horario | 3 | `05/04/2026 02:30Z` y `03:30Z` son ambas `04/04 23:30` en Chile. `04:00Z` ya es `05/04 00:00` | 04/04 cuenta 2 y 05/04 cuenta 1 | Fijar un offset único o agrupar por día UTC → `horarioChile`. |
+| Registro tardío | 3 | E recibida el 30/06 y registrada el 02/07. Caso separado registrado justo a la medianoche del cierre | E aporta 1 tardío con desfase de 2 días. El caso de medianoche también aporta 1 | Usar `>` sobre el límite exclusivo o usar `created_ms` como fecha de demanda → `registroTardio`. |
+| Requerimientos únicos y menciones | 15 | A tiene R1/R2 en REQ, R1/R3 en un Caso y R1 en otro. D tiene R2. R1/R2/R3 son `3.1`/`3.2`/`4.1` | A sola, 3 valores, 3 menciones y 5 clasificaciones. A+D, celdas `1,2,1`, 4 menciones y total único 2 | Quitar la deduplicación COM–valor o equiparar menciones y clasificaciones → `mencionesDerecho`. |
+| Denominador único | 15 | A+D, cuatro pertenencias en tres categorías | `50 %, 100 %, 50 %`. Denominador 2 y aviso de multiplicidad | Dividir por 4 o suprimir el aviso → `porcentajeMultivalor`. |
+| Cruce de dos múltiples | 15 | A tiene contextos X/Y y D tiene Y | Para R1/R2/R3 por X/Y, `(1,1)`, `(1,2)`, `(1,1)`. Márgenes por derecho `1,2,1`, por contexto `1,2`, total 2. R1/Y da `100 %` por fila y `50 %` por columna | Sumar celdas para obtener márgenes o unir por Caso en vez de COM → `cruceDosMultiples`. |
+| Cruce múltiple y única | 15 | A Formulario y D teléfono | Formulario por derecho `1,1,1`, teléfono `0,1,0`. Margen de cada canal 1 y total 2 | Sumar derechos para el total por canal → `cruceUnicaYMultiple`. |
+| Sin valores y filtro múltiple | 15 | B/C/E sin derecho. Filtro R1 o R3, más canal Formulario | `PENDIENTE=3` sobre la población de 5. La consulta filtrada obtiene solo A, total 1 | Usar un `INNER JOIN` que borra pendientes o contar A dos veces con el filtro → `estadosYFiltros`. |
+| Jerarquía y retiro de código | 6, 15 | Un REQ con un derecho y su subcategoría, que se retira en un evento posterior | El derecho superior cuenta 1 en ambos cortes. La subcategoría pasa de 1 a 0 | Sumar padre e hijo como dos COM del mismo derecho u omitir `REMOVE` → `jerarquiaYRetiro`. |
+| Actuaciones, instituciones y reserva | 8, 36 | A tiene dos denuncias vigentes, una rectificación que sustituye una constancia, una constancia reservada y una tarea de querella completada. Dos instituciones tipificadas del mismo tipo. D tiene orientación y su constancia de respaldo | Denuncias 2 y REQ con denuncia 1. Querella 0. Institución, 2 menciones y 1 COM. Orientación 1. Actuaciones visibles A+D, 3 | Contar la versión rectificada, la nota reservada, la tarea o ambas fuentes de orientación → `actuacionesVigentes`. |
+| Cuatro modos temporales | 37 | Una COM recibe versiones de región `03`, `05`, `07`, `13`, con `05` vigente al REQ y `07` a `as_of` | `AL_INGRESO=03`, `AL_REQ=05`, `FECHA=07`, `VIGENTE=13`, una COM por resultado | Sustituir cualquier modo por la versión actual → `cuatroModos`. |
+| Límite de ficha al crear el REQ | 37 | Una versión a `tREQ` y otra a `tREQ+1 ms`. Otra COM tiene su primera ficha a `tREQ+1 ms` | Para la primera, 1 en la región de `tREQ`. Para la segunda, 1 en `PENDIENTE` | Usar `<` en vez de `<=` o permitir la versión posterior → `corteVersionReq`. |
+| Historia sin evidencia | 37 | Complejidad vigente ALTA registrada después de `as_of` | `ALTA=0`, `PENDIENTE=1`, aviso de historia incompleta | Leer la complejidad actual en `FECHA` → `historiaSinEvidencia`. |
+| Serie mensual | 26 | A–E en julio, agosto, octubre, enero y junio | Una COM en cada uno de esos cinco meses y cero en los otros siete | Omitir meses vacíos o usar fecha de registro → `serieMes`. |
+| Series trimestre, semestre, año y Cuenta Pública | 26 | Las mismas cinco fechas | Trimestres `2,1,1,1`. Semestres `3,2`. Años calendario `3,2`. Cuenta Pública `5` | Cambiar el inicio de cada familia de períodos, en cuatro mutaciones → `serieTrimestre`, `serieSemestre`, `serieAnio`, `serieCuentaPublica`. |
+| Período anterior y mismo período del año anterior | 26 | Junio 2026=1, mayo 2026=0, junio 2025=1. Cuenta Pública actual=5 y anterior=2 | Junio vs. mayo, `+1` y variación `null`. Junio interanual, `0` y `0 %`. Cuenta Pública vs. anterior, `+3` y `150 %` | Usar el mismo desplazamiento para ambas comparaciones o dividir por el período actual → `comparaciones`. |
+| REPORTES por sede | 43 | A originada en S06, transferida a S07. B–E de referencia S06 | S06=4, S07=1, filtro S07 desde S06=0. A sigue fuera de S06 en un corte anterior a la transferencia | Autorizar por origen, por la sede histórica o después de agregar → `alcanceSede`. |
+| REPORTES por materia y Caso | 34, 43 | UPD cubre A/E, UPR cubre C. Un derecho de A está solo en un Caso S06 | UPD=2, UPR=1. El derecho de ese Caso aporta 0 a S07 y 1 al institucional | Ignorar materia o admitir un Caso de otra sede → `alcanceMateriaYCaso`. |
+| REPORTES, TI, CSRF y método | 43 | Cuenta sin REPORTES, lector institucional, TI, POST sin token y GET con sesión | 403 en los cuatro primeros, 405 y `Allow: POST` en GET. Cero eventos `STAT_CONSULTA` por esas solicitudes | Quitar la guarda de REPORTES, la de TI, el requisito CSRF o añadir GET. Una prueba HTTP por mutación. |
+| Concordancia de COM por canal | E08 | Fecha administrativa y alcance institucional. A/B/C/D computables en registro, F inválida, G antecedente | `Reports=6`. E08 `4+1+1=6`. Un registro por canal Formulario adulto, correo, presencial, teléfono, oficio y otro. En el subconjunto común presencial/teléfono, ambos dan 2 | Aplicar recepción a la consulta administrativa u omitir una de las categorías informativas → `conciliaComPorCanal`. |
+| Concordancia de REQ por estado | E08 | A abierto tras reapertura y D cerrado, ambos constituidos en el período | ABIERTO=1, CERRADO=1, total 2 en ambos motores y en las tablas base | Multiplicar A por sus Casos o usar fecha de COM → `conciliaReqPorEstado`. |
+| Sede activada y cerrada | 32 | Tres COM con origen 07, antes de activar S06, durante su cobertura y justo al cerrarla | `SIN_ATENCION=2`, `S06=1`. La COM histórica cubierta sigue visible a REPORTES institucional | Ignorar `AMBITO_ACTIVADO`, ignorar `AMBITO_CERRADO` o exigir `enabled` actual para el conteo histórico → `sedeActivadaYCerrada`. |
+| Sede proyectada | 32 | S05 proyectada para región 05, con cobertura preparada para 08 | Dos COM de regiones 05/08 dan `SIN_ATENCION=2` y `S05=0` | Dar cobertura a las proyectadas → `sedeProyectada`. |
+| Cobertura de nivel central | 32 | Tres recepciones de región 13, antes, al inicio y al término de un período central | `NIVEL_CENTRAL=1`, `SIN_ATENCION=2` | Omitir `scope_id IS NULL` o incluir el instante de término → `coberturaCentral`. |
+| Formulario, requirente y hechos | 32 | Formulario adulto `adult-commune=Talca`, `hechos-region=06`, `hechos-commune=Rancagua`. Formulario NNA `nna-commune=Viña del Mar` | Talca=1, Viña del Mar=1, hechos 06/Rancagua=1. El NNA queda sin dato de hechos en este vector | Leer la clave adulta para el NNA o usar la comuna de quien presenta como comuna de hechos → `formularioTerritorio`. |
+| Demografía estructurada | 14 | Un NNA cumple 10 años el día chileno de recepción, otro declara 8 y un tercero solo tiene el texto histórico `12`. Dos países estructurados y uno en texto libre histórico | Edades 10=1, 8=1, sin dato=1. Nacionalidad con dato `2/3`. Cero fechas de nacimiento en la respuesta | Calcular edad en UTC, interpretar el texto histórico o serializar la fecha de nacimiento → `demografiaEstadistica`. |
+| Completitud y propuestas | 4, 7, 28 | Tres COM en una sede. Una informada, otra pendiente con propuesta y otra `SIN_INFORMACION` | `INFORMADO=1`, `PENDIENTE=1`, `SIN_INFORMACION=1`. La propuesta aparece aparte y suma 1 | Elevar la propuesta a informada o perder el estado especial → `calidadYPropuesta`. |
+| Auditoría y validación | D41, §2.9 | Consulta `INGRESOS` por `CANAL` con filtro `REGION_REQUIRENTE=07`. Petición aparte con clave ajena al contrato | Un `STAT_CONSULTA` con los tres nombres. Cero valores de filtro, fechas, cifras o resultados en la nota. Petición inválida 400 | Serializar el cuerpo o el total en auditoría, o aceptar una clave sin validar → `auditoriaSoloNombres` y `contratoCerrado`. |
+| Límite y consultas por conjunto | §5.7 | Misma consulta con 5 y 500 COM. Prueba del límite configurado a 2 y consulta que produce 3 celdas | Igual número de sentencias JDBC para la misma forma de consulta. Con 3 celdas se obtiene 409 y cero resultados parciales | Introducir una lectura JDBC por COM o truncar la tabla en lugar de rechazar → `consultasPorConjunto` y `limiteDeCeldas`. |
+
+#### Implementación, archivos, verificaciones y riesgos
+
+1. `StatSource.java` construirá una relación base de una fila por COM y relaciones separadas para valores
+   multivaluados y medidas con otra unidad. Aplicará alcance e intervalo al conjunto base antes de expandir valores.
+   Las relaciones múltiples se reducirán por COM y código antes del cruce. La fuente tendrá columnas y claves estables
+   que E10 podrá obtener también de un corte.
+2. `StatEngine.java` validará la petición, compondrá SQL parametrizado, obtendrá celdas y márgenes por agregación
+   en SQL y calculará porcentajes y comparaciones en Java. Usará una lectura consistente durante toda la consulta,
+   incluida la comparación. Solo proyectará dimensiones solicitadas o necesarias para filtros. Los intervalos se
+   calculan una vez en Java y SQL compara milisegundos. Las búsquedas de evidencia reutilizarán los índices de hitos,
+   eventos y versiones. Se revisarán los caminos críticos con `EXPLAIN` en MySQL. La medición formal de 50.000 COM
+   y el objetivo de menos de 3 s corresponden a E14.
+3. `Api.java` y `Queries.java` conectarán el POST y el catálogo de medidas y dimensiones. Se propone
+   `siger.stats.max-cells` con valor inicial 20.000, sobre la consulta y su comparación, comprobado antes de
+   devolver resultados. La propuesta parte sin migración. La V22 aditiva para índices queda sujeta a la condición
+   de `EXPLAIN` del GO.
+4. Pruebas nuevas en `StatEngineTest.java`, `StatQueryHttpTest.java` y recursos CSV sintéticos fijos en
+   `backend/src/test/resources/stats/`. El contrato aprobado se fijará en `docs/CONTRATO_STATS_0_8_0.md`.
+   Documentación de arquitectura en `CLAUDE.md` y `docs/ARQUITECTURA.md`, y cierre en esta bitácora con el
+   formato de la sección 7.
+5. Verificación final con H2 y MySQL 8.4 completos, `siger.mysql.suite=true` y ambos recorridos de actualización
+   desde 0.4.0 y 0.7.0, en MySQL desechable ligado a `127.0.0.1`. Los binarios portables están disponibles.
+   Typecheck, pruebas y build del frontend por la ampliación de `/api/catalog`, humo HTTP con datos sintéticos
+   en `target/humo-*` y `Check-Scripts.ps1` en PowerShell 5.1 por el cambio en `CLAUDE.md`. Ejecutar cada
+   mutación en una copia temporal, registrar la aserción que falla y correr las suites sobre el código final.
+   Verificar la sección 2 con `git diff` y revisar el alcance y los archivos sensibles antes del push.
+6. Riesgos: multiplicación silenciosa al unir relaciones, fuga de datos a través de Casos o filtros, cambios de
+   significado entre versiones de catálogo y costo de cruces con muchas celdas. La matriz fija las cifras y los
+   controles de alcance. En E08 se revisarán los planes SQL y el número de sentencias. Se conservan cifras exactas,
+   incluidas las celdas de valor 1, según D41.
+
+#### Respuestas y condiciones del GO del responsable
+
+- Se autoriza `docs/CONTRATO_STATS_0_8_0.md`. E10 a E13 lo usarán sin cambios. Cualquier cambio posterior se
+  registra como desvío.
+- `siger.stats.max-cells` tiene un valor inicial de 20.000 y se aplica a la consulta más su comparación. Al
+  superarlo se devuelve 409 en lenguaje llano, sugiriendo reducir dimensiones o período, sin resultados parciales.
+  Es una salvaguarda técnica para la respuesta completa. D41 excluye la supresión estadística y exige cifras
+  exactas en todas las consultas admitidas. Documentarlo así en `CLAUDE.md` y en el contrato.
+- V22 solo si `EXPLAIN` en MySQL muestra un recorrido completo en un camino crítico. Será aditiva y la evidencia
+  se registrará antes de incorporarla. Sin evidencia, no hay migración.
+- Las constancias reservadas se excluyen de los agregados de actuaciones (D41). Incluir la regla en el contrato y
+  en el diccionario de la exportación de E11.
+- Corridas una vez al final: H2 completo, MySQL 8.4 completo con `siger.mysql.suite=true` y actualizaciones
+  desde 0.4.0 y 0.7.0, frontend completo, humo en `target/humo-*` con borrado al final y `Check-Scripts.ps1`
+  con `powershell.exe` 5.1 sin Maven ni npm en paralelo. Detener el MySQL desechable y borrar su entorno.
+  Conservar MySQL80 intacto.
+- Ejecutar todas las mutaciones de la matriz de forma temporal y revertirlas. Registrar la tabla
+  «regla → prueba que falló» con el nombre real de cada prueba.
+- Commit final `gate E08: motor estadistico`. Revisar que no viajen archivos sensibles, hacer push a
+  `origin/main` y detenerse. El ejecutor anota su propio nombre en el cierre, Claude Code o Codex.
+- E08 sigue ABIERTO. El GO se registra con el commit de solo documentación `docs: plan y GO de E08`.
+  La implementación se realizará en una sesión posterior.
+
 ## Registros de cierre
 
 ### E00 - Linea base, decisiones, AGENTS.md y contrato del Formulario   (CERRADO)
