@@ -50,8 +50,9 @@ mientras corre un ZIP.
 
 `siger.stats.export.max-rows` (variable `SIGER_STATS_EXPORT_MAX_ROWS`) es el máximo de folios de un ZIP: 30.000. Por
 sobre él la descarga responde 409 «El paquete supera el máximo de 30.000 folios. Acota el periodo o los filtros.», sin
-archivo. Fundamento: el volumen real es de unos 200 requerimientos al mes (unos 2.400 al año, con picos estacionales),
-de modo que 30.000 folios cubren más de diez años y la Cuenta Pública cabe con holgura; se fijó sin calibrar 40.000.
+archivo. Fundamento: el volumen real es de unos 30 requerimientos por día hábil (unos 600 al mes y 7.200 al año; menos
+de 15.000 al año con picos estacionales), de modo que 30.000 folios cubren unos 4 años, más de 2 con picos, y la
+Cuenta Pública cabe con holgura; se fijó sin calibrar 40.000.
 CSV y XLSX agregados no tienen ese límite. `siger.stats.export.max-relations` (500.000) limita las filas del archivo
 relacionado y también responde 409.
 
