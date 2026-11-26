@@ -38,6 +38,8 @@ export function menuFor(user: User, unread: number): MenuGroup[] {
     ['Reportes', [
       // REPORTES vigente (can_report lo decide el servidor): cifras agregadas, sin datos de personas.
       [{path: 'reportes', label: 'Reportes de gestión', icon: 'chart', hint: 'Volumen, tiempos y antigüedad en horas y días hábiles'}, user.can_report === true],
+      // Explorador estadistico (E12): la misma regla (REPORTES vigente); TI nunca la tiene.
+      [{path: 'estadisticas', label: 'Explorador estadístico', icon: 'layers', hint: 'Panorama, Figura 1 y cruces de cifras'}, user.can_report === true],
     ]],
     ['Administración', [
       [{path: 'subrogancias', label: 'Subrogancias', icon: 'swap'}, has(user, 'PROFESIONAL', 'JEFATURA', 'DIRECCION', 'TI')],

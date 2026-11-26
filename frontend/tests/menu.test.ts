@@ -78,7 +78,8 @@ test('buscador: nunca para TI ni para una cuenta solo con Auditoría (ni sin fun
 
 test('Reportes de gestión: solo con can_report (lo decide el servidor), también para una cuenta sin otras funciones', () => {
   const reporter: User = {...user({role: 'REPORTES', scope: null}), can_report: true};
-  assert.deepEqual(paths(reporter), ['inicio', 'avisos', 'reportes']);
+  // E12 agrega el Explorador estadistico con la misma regla.
+  assert.deepEqual(paths(reporter), ['inicio', 'avisos', 'reportes', 'estadisticas']);
   assert.ok(menuFor(reporter, 0).some(g => g.title === 'Reportes'));
   // Una concesion que no rige (can_report falso) no muestra la entrada; TI nunca la tiene.
   assert.ok(!paths(user({role: 'REPORTES', scope: null})).includes('reportes'));
@@ -86,6 +87,16 @@ test('Reportes de gestión: solo con can_report (lo decide el servidor), tambié
   // Con otras funciones, se suma al final de su menú, antes de Administración.
   const mixed = paths({...user({role: 'PROFESIONAL', scope: UPR_REQ}), can_report: true});
   assert.ok(mixed.indexOf('reportes') > mixed.indexOf('cas') && mixed.indexOf('reportes') < mixed.indexOf('subrogancias'));
+});
+
+test('Explorador estadístico (E12): solo con can_report, junto a Reportes de gestión; TI y los lectores no lo ven', () => {
+  const reporter: User = {...user({role: 'REPORTES', scope: 6}), can_report: true};
+  const menu = paths(reporter);
+  assert.ok(menu.includes('estadisticas'));
+  assert.equal(menu.indexOf('estadisticas'), menu.indexOf('reportes') + 1);
+  assert.equal(menuItems(menuFor(reporter, 0)).find(i => i.path === 'estadisticas')?.label, 'Explorador estadístico');
+  for (const grants of [[{role: 'TI', scope: null}], [{role: 'REPORTES', scope: null}], [{role: 'GESTION_ESTADISTICA', scope: null}], [READER], [{role: 'AUDITORIA', scope: UPR_REQ}],
+    [{role: 'DIRECCION', scope: UPD}]] as Grant[][]) assert.ok(!paths(user(...grants)).includes('estadisticas'), grants.map(g => g.role).join('+'));
 });
 
 test('Catálogos estadísticos: solo TI (E02); ni Reportes, Gestión estadística, Auditoría ni lectores', () => {

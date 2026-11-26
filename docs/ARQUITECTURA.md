@@ -181,6 +181,16 @@ salen siempre del servidor (`stat_catalogs`, `stat_completeness`, `characterizat
 Formulario solo se envia si la persona la elige. `ActionDialog` admite el campo propio `custom` (valor listo para enviar,
 validacion y dibujo propios) y el dialogo ancho, sin cambiar los demas dialogos.
 
+Desde 0.8.0 (E12, D38), el explorador estadistico (`#estadisticas`, `features/stats/`, menu con `can_report`) consume
+`POST /api/stats/query` sin cambios de servidor: Panorama (seis indicadores con variacion y linea mensual), Informes
+(Figura 1 de la Cuenta Publica con sus cuatro desgloses, CSV y XLSX con Exportacion) y Explorar (campos por familia, filas,
+columnas y filtros por boton o arrastre, cifra, modos, comparaciones, jerarquia de derechos por nivel, "Como leer esta
+cifra" y vistas guardadas). La logica pura esta en `statsModel.ts`; los margenes, totales y porcentajes vienen del servidor
+y nunca se suman en el cliente. La consulta vive en la direccion (solo codigos); una fila de consultas, una a la vez, con
+cache de cinco minutos (`statQuery.ts`). Los graficos son SVG propios (`components/charts/`, logica en `chartModel.ts`):
+sugerencia segun la forma de los datos, circular solo cuando corresponde, escala desde 0, paleta `--chart-*` con contraste
+probado y descarga en PNG y SVG con titulo, notas y pie de fuente.
+
 Presentacion: sistema visual propio sin dependencias nuevas (tokens CSS, iconos propios, Cabin OFL y escudo
 institucional servidos desde el JAR), con barra lateral por tipo de trabajo, paleta Ctrl+K, fichas con cadena
 COM->SOL->REQ->Caso y version movil. Decisiones en `docs/DISENO_0_4_0.md`.

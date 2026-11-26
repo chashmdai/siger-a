@@ -26,7 +26,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E09 | Captura estadistica en el flujo (interfaz): caracterizacion, derechos, actuaciones y cierre | CERRADO |
 | E10 | Cortes estadisticos y configuraciones guardadas (servidor) | CERRADO |
 | E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | CERRADO |
-| E12 | Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz) | ABIERTO |
+| E12 | Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz) | CERRADO |
 | E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | ABIERTO |
 | E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | ABIERTO |
 | E15 | Validacion de uso con la Direccion de UEP | POSTERGADO |
@@ -73,6 +73,7 @@ plan). Los pendientes operacionales postergados no tienen gate en 0.8.0 (seccion
 | Detención de E10: generación del corte con el lock global (10,6 s con 50.005 COM y 25.084 congeladas, sobre el umbral de 5 s del GO) | E10 | 2026-11-26: opción A. STAT_CUT_CREATE sigue dentro de Workflow.run, con el lock global, como dice el GO. Se admiten optimizaciones que no cambien el resultado (lotes de inserción más grandes) y se registra el tiempo final. Exigido: un comando que llega durante la generación espera y termina bien, probado en MySQL; innodb_lock_wait_timeout mayor que el plazo de StatGuard (si no, detenerse); plazo vencido con rollback completo, 503, nada parcial y la cancelación auditada. Documentación en CLAUDE.md y en el contrato: generar un corte detiene las operaciones unos segundos y se recomienda hacerlo fuera del horario de atención, con la proyección del tiempo según el volumen frente al plazo de 30 s. Hoja de ruta 0.9.0 (sección 9 del plan): corte sin lock global (opción D). El resto del GO de E10 sigue igual. |
 | Detención de E11: con 50.005 COM y -Xmx1024m, ZIP vigente de 2 años en 28,1 s (> 25 s), ZIP desde un corte y dos ZIP simultáneos con 503 por plazo, memoria después de recolectar 956 MiB (93 %) con dos ZIP | E11 | 2026-11-26: aplicar 1, 2 y 3; la 4 (ZIP escrito por flujo a un temporal) pasa a 0.9.0 (sección 9 del plan). (1) Un ZIP a la vez en la instancia: el segundo recibe 429 de inmediato, sin cola, con un cupo propio además del de StatGuard, liberado en finally; un CSV o una consulta siguen funcionando mientras corre un ZIP. (2) Corregir la consulta de microdatos sobre el corte (StatSource, índices en V24 o ambos), con el diagnóstico de EXPLAIN y su causa registrados, sin cambiar el resultado (equivalencias y matriz sin tocar aserciones). (3) `siger.stats.export.max-rows` = 30.000, ajustable con `SIGER_STATS_EXPORT_MAX_ROWS`; por sobre el límite, 409 «Acota el periodo o los filtros». Ajuste del mismo día: el volumen real es de unos 200 requerimientos al mes (unos 2.400 al año, con picos estacionales), de modo que se fija 30.000 sin calibrar 40.000; el fundamento va en el contrato y en CLAUDE.md. (4) Nueva medición con el código final, -Xmx1024m y 50.005 COM: ZIP de la Cuenta Pública vigente y desde un corte en 25 s o menos cada uno, memoria después de recolectar en 75 % o menos, el segundo ZIP con 429 y STAT_CUT_CREATE en 13 s o menos; si no, detenerse y consultar. (5) El registro de fases de StatExport se conserva solo si está inactivo fuera de la medición y no escribe en el log ni en la auditoría. (6) Repetir las 46 mutaciones sobre el código final y agregar las del ZIP exclusivo, el límite y la consulta sobre el corte. (7) Corridas finales una vez y sin paralelo: H2, MySQL desechable en una ruta nueva de D: (actualizaciones desde 0.4.0 y 0.7.0 hasta V24), humo con el JAR nuevo y Check-Scripts.ps1 con powershell.exe 5.1. (8) Hoja de ruta: «Paquete ZIP escrito por flujo a un temporal». (9) Cierre como el encargo anterior. |
 | Explorador estadístico de nivel profesional | E12 | 2026-11-26: la interfaz estadística debe ser profesional, útil y clara, y aprovechar todo lo que entrega el motor. Se amplían DISENO 10.3 a 10.5 y el alcance de E12 y E13, sin cambios de servidor ni dependencias nuevas. E12 se divide solo si es indispensable. |
+| GO de E12 | E12 | 2026-11-26: A (caracterización completa «X de Y ingresos (Z %)», una sola división, variación en puntos porcentuales, filtros sin PENDIENTE armados desde `/api/catalog`), B (1 de julio: Cuenta Pública recién terminada, rotulada), C (Explorar: solo las categorías del servidor; Figura 1: todas las de `/api/catalog` con 0), D (cuatro descargas CSV y XLSX; Figura 1 en un solo libro a 0.9.0), E (U por número máximo de acciones) y condiciones 1 a 10. Tras el corte por memoria, autorización para retomar del mismo día: resguardo en `wip/e12-claude`, validez de las mutaciones por archivo, mutaciones en primer plano con 2 GB libres como mínimo, navegadores cerrados por PID y squash en `main`. |
 | Precisiones del explorador | E12 | 2026-11-26: periodo y comparación del Panorama; definición de caracterización completa (seis variables de E07); jerarquía de derechos por nivel; reparto de la exportación entre E12 y E13; filtro de pendientes en bandejas autorizado en E13 (BoardQueries.java); se reponen las preguntas guiadas y la regla de no agrupar categorías. |
 
 ## Definiciones pendientes
@@ -1285,3 +1286,77 @@ Mutaciones de E11 sobre el código final (regla -> prueba que falló):
 | 54 (h) el manifiesto declara cada archivo | StatExportTest#archivoAlteradoDentroDelZipNoCoincideConSha256Sums |
 | 55 barrido: encabezados de las hojas XLSX | StatExportTest#barridoDeDatosCiudadanosEnTodosLosArchivosYHojas |
 | 56 barrido: fecha de nacimiento compacta | StatExportTest#barridoDeDatosCiudadanosEnTodosLosArchivosYHojas |
+
+### E12 - Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz)   (CERRADO)
+- Fecha: 2026-11-26 (commit `gate E12: explorador`, `git merge --squash` de `wip/e12-claude`, rama conservada), DDN-TEST-SIGER (Windows), Claude Code; base `ef12cf4` (E11 `251ac09` más los documentos del explorador).
+- GO del responsable: A-E y condiciones 1-10 (tabla de decisiones, «GO de E12»), más la autorización para retomar tras el corte por memoria (resguardo, validez de las mutaciones, primer plano, navegadores por PID).
+- Hecho: `#estadisticas` (`features/stats/`, menú «Explorador estadístico» con `can_report`): Panorama (seis indicadores con variación con flecha y texto, base 0 = «sin base de comparación», línea mensual y clic a Explorar; Cuenta Pública en curso hasta ayer en hora de Chile, el 1 de julio la recién terminada), Informes (Figura 1 con todas las categorías de `/api/catalog` con 0, CSV y XLSX por desglose), Explorar (preguntas guiadas, campos por familia con buscador y marcas «valores múltiples» y «no aditiva», filas y columnas por botón o arrastre, filtros como chips, cifra, modos, comparaciones, propuestas aparte, jerarquía de derechos con una consulta por nivel y vistas guardadas). Resultado con gráfico sugerido, tabla, «Datos de las HH:MM», Actualizar, «Cómo leer esta cifra» y pie de fuente. Fila de consultas una a la vez con caché de 5 min; gráficos SVG propios con descarga PNG y SVG; paleta `--chart-*` validada.
+- Archivos clave: `frontend/src/features/stats/{Stats,Panorama,Informes,Explore,FieldPicker,ResultView,ResultTable,SavedViews}.tsx`, `statsModel.ts`, `statQuery.ts`, `components/charts/{Chart.tsx,chartModel.ts,chartExport.ts}`, `App.tsx`, `app/menu.ts`, `styles/{tokens,screens}.css`; pruebas `tests/{stats,charts}.test.ts`, `stats-render.test.mjs`, `stats-fixture.mjs`, `menu.test.ts`; `CLAUDE.md`, `docs/ARQUITECTURA.md`, PLAN sección 9 («Figura 1 en un solo libro XLSX (cuatro hojas)»).
+- Migraciones: no aplica (esquema 24).
+- Verificación: JUnit H2 y MySQL no aplican (`git diff ef12cf4 -- backend` vacío; base 378 H2 y 382 MySQL de E11); frontend typecheck ok, 215 ok (antes 183), build ok; humo 74/74 con el JAR nuevo (perfil local, H2 en `backend/target/humo-e12` nueva, puerto 18643; catálogos de referencia activados por TI, 10 COM sintéticas, consultas armadas con `statsModel.ts`; carpeta borrada y proceso detenido); `Check-Scripts.ps1` (powershell.exe 5.1, rutas nativas de módulos, sin Maven ni npm en paralelo): 40 scripts, 73 órdenes en 60 procesos.
+- Capturas (fuera del repositorio): `D:\Ensayo-E12\capturas`, escritorio (1366×900) y móvil (390×844) de Panorama, Informes y Explorar (inicio, cruce con % por fila, vía, derechos y meses comparados), U7/U13 (`descargas\` con el PNG y el SVG, ambos con título y fuente) y el PNG descargado visto en el navegador; 18 archivos.
+- Evidencia de mutación: 38 de 38 detectadas (tabla abajo), cada archivo restaurado y comprobado por SHA-256; recorridos U abajo.
+- Condiciones de la sección 2: `git diff v0.7.0` vacío para `scripts/`, `.mvn/` y la recepción del Formulario; `backend/` (también V1-V24 y `Reports`) sin cambios respecto de `ef12cf4`; `package.json` y `package-lock.json` sin cambios (sin dependencias nuevas); la dirección solo lleva códigos (sin `q`, sin el texto del buscador ni datos personales); nada en `localStorage`; humo con datos sintéticos.
+- Facilidad de uso: recorridos U medidos en acciones (abajo); barridos de render sin códigos ni SQL (texto, `aria-label` y `title`), botones con nombre, tablas con título y encabezados, gráficos con nombre y la tabla como alternativa; el estado nunca solo por color; móvil en una columna con Explorar simplificado (consulta y resultado antes que los campos); `prefers-reduced-motion`; contraste probado (gráficos ≥ 3:1 y texto ≥ 4,5:1).
+- Definiciones usadas: DI-13 (adscripción institucional en la Figura 1); DI-01 a DI-04 (catálogos de referencia en pruebas y humo).
+- Desvíos del plan: (1) Corte por memoria: el sistema detuvo la corrida de mutaciones en segundo plano durante la 28. Causas: 8 procesos de Chrome sin ventana colgados de la captura de vista previa (el lanzador termina antes que el navegador y `kill` no alcanzó su árbol) y la mutación 28, cuya prueba esperaba sin fin. `statsModel.ts` quedó mutado y se restauró; resguardo en `wip/e12-claude` (`wip:`, sin cierre). (2) El ejecutor de mutaciones no aplicaba las de varias líneas por los saltos CRLF de la copia de trabajo: ahora sigue el salto de línea del archivo. (3) Se repitieron las 14 mutaciones de `statsModel.ts` (04, 06, 09-14, 20 y 23-27), porque ese archivo se restauró a mano después del corte; las otras 7 de la primera corrida (03, 05, 15, 18, 19 y 21a-22b) valen, porque sus archivos solo los escribió el ejecutor al restaurarlos con el SHA-256 comprobado. (4) Pruebas reforzadas después de mutar, sin cambiar código: tope de 1 s en la cancelación (la 28 fallaba quedando en espera) y la marca «valores múltiples» exigida en cada campo del selector (la 30 no se detectaba; repetida y detectada). (5) `menu.test.ts`: la lista esperada de la cuenta con Reportes agrega `estadisticas` (reemplazada, no borrada). (6) El script de capturas dejó 9 procesos colgados en su primera corrida final; se cerraron por PID (solo los del perfil `D:\Ensayo-E12\chrome-perfil`), el script ahora cierra en `finally` su PID con su árbol y los `chrome.exe` de su perfil, y se repitió sin procesos colgados.
+- Diferencias de referencia: DISENO 10.3: la comparación se grafica con barras pareadas (sin barras de diferencia; la diferencia va en la tabla); compartir una vista es directo, sin otro diálogo (U8 en 4 acciones); la adscripción de la Figura 1 lista las sedes regionales no proyectadas de `/api/catalog`; el circular también se niega para un eje de periodo y para porcentajes; con más de 8 columnas no se ofrecen barras agrupadas ni líneas (solo 8 colores distinguibles: pasar el campo a filas o usar la tabla).
+- Hallazgos para gates siguientes: `statQuery.queue.run` sirve a E13 para que las descargas (ZIP) esperen su turno en la fila de la pestaña; `errorText` ya muestra en lenguaje llano el 429 del ZIP y el 409 del límite; `stats.compares` publica `CORTE`, que E12 no ofrece (E13); `completeFilters` y `howToRead` sirven al panel de Calidad. Chrome sin ventana en Windows: el lanzador termina y el navegador queda con otro padre; se cierra por PID y por el perfil propio. Una mutación que deja una promesa sin resolver cuelga `node --test`: las pruebas de cancelación llevan un tope.
+- Pendientes: borrar `D:\Ensayo-E12` (capturas, descargas y perfil de Chrome sintéticos) -> responsable, después de revisar las capturas; E13 (ZIP, cortes, series, Calidad y filtro de pendientes); Figura 1 en un libro XLSX -> 0.9.0.
+- Verificación manual sugerida al usuario: `cd frontend; node --test tests/stats.test.ts tests/charts.test.ts tests/stats-render.test.mjs`; en local, con Reportes: menú «Explorador estadístico», Informes y, en Explorar, «Por vía de ingreso» > «Descargar PNG».
+
+Recorridos U de E12 (acciones desde la entrada al explorador; elegir una opción de un selector cuenta como una acción):
+
+| U | Máximo | Recorrido | Acciones |
+|---|---|---|---|
+| U1 Figura 1 | 3 | 1. pestaña Informes: la Figura 1 de la última Cuenta Pública completa con sus cuatro desgloses | 1 |
+| U2 Comparar | 2 desde un resultado | 1. «Comparar con» > «Periodo anterior» | 1 |
+| U3 Cruce con % por fila | 6 | 1. Explorar; 2. «Consulta vacía»; 3. «Filas» de Tipo de solicitud; 4. abrir la familia Territorio; 5. «Columnas» de Región del requirente; 6. Cifra > «% por fila» | 6 |
+| U7 Gráfico y PNG | 3 | 1. Explorar; 2. «Por vía de ingreso» (gráfico sugerido a la vista); 3. «Descargar PNG» | 3 |
+| U8 Guardar y compartir | 4 | 1. «Guardar vista»; 2. nombre; 3. Confirmar; 4. «Compartir» en la lista | 4 |
+| U11 Indicador a % por fila | 4 | 1. clic en un indicador del Panorama (abre Explorar con su consulta); 2. Cifra > «% por fila» | 2 |
+| U12 Por qué no suma | 0 | la nota «Los niveles inferiores no suman el superior» está a la vista bajo el gráfico y en «Cómo leer esta cifra» | 0 |
+| U13 Gráfico para el informe | 2 | 1. «Descargar PNG» (o SVG), con título, subtítulo, notas y fuente | 1 |
+
+Mutaciones de E12 (regla -> prueba que falló; R = repetida sobre el código final; «render» = `stats-render.test.mjs`):
+
+| Regla | Prueba que falló |
+|---|---|
+| 01 circular para una dimensión múltiple (R) | charts.test: circular: una dimensión de valor único, sin columnas... |
+| 02 circular con columnas (R) | charts.test: circular |
+| 03 circular con más de 6 categorías | charts.test: circular |
+| 04 márgenes sumados en el cliente (R) | stats.test: tabla: categorías del servidor, 0 en la celda vacía...; render: resultado de un cruce |
+| 05 niveles de derechos tomados de una sola consulta | render: U12: la jerarquía de derechos explica a la vista |
+| 06 «Sin subcategoría» omitida (R) | stats.test: jerarquía de derechos; render: U12 |
+| 07 dos consultas a la vez (R) | stats.test: fila de consultas: una a la vez, caché de 5 minutos... |
+| 08 caché que confunde cuerpos (R) | stats.test: fila de consultas |
+| 09 aviso sin traducir (R) | stats.test: cada aviso del servidor en una frase, sin su código |
+| 10 pie de fuente sin alcance (R) | stats.test: pie de fuente: institución, fecha y hora de Chile, alcance... |
+| 11 código visible en la tabla (R) | stats.test: tabla; jerarquía de derechos |
+| 12 caracterización completa sin la región (R) | stats.test: caracterización completa: cada filtro sale de las opciones de /api/catalog... |
+| 13 la dirección pierde los filtros (R) | stats.test: dirección: ida y vuelta solo con códigos... |
+| 14 separador de miles incorrecto (R) | stats.test: formato chileno; cada aviso del servidor en una frase |
+| 15 gráfico sin nombre accesible | render: resultado de un cruce; una dimensión de valor único |
+| 16 mensaje genérico ante 429 (R) | stats.test: mensajes de 429 y 503 en lenguaje llano |
+| 17 circular cuyas partes no suman el total (R) | charts.test: circular |
+| 18 apiladas con columnas múltiples | charts.test: apiladas solo si las columnas son de valor único... |
+| 19 periodo sugerido como barras | charts.test: sugerencia según la forma |
+| 20 variación con base 0 como 100 % (R) | stats.test: variación: ... con base 0 dice «sin base de comparación» |
+| 21a barras que no parten en 0 (escala) | charts.test: las barras siempre parten en 0 |
+| 21b barras que no parten en 0 (dibujo) | render: una dimensión de valor único: barras desde 0 |
+| 22 contraste insuficiente en la paleta | charts.test: paleta de tokens.css: contraste 3:1 y 4,5:1 |
+| 22b paleta del modelo distinta de tokens.css | charts.test: paleta de tokens.css |
+| 23 caché vencida servida (R) | stats.test: fila de consultas |
+| 24 «hoy» y «ayer» en la zona del navegador (R) | stats.test: «hoy» y «ayer» en hora de Chile aunque el navegador esté en otra zona |
+| 25 región de los NNA sin «no aditiva» (R) | stats.test: «Cómo leer esta cifra»; render: Explorar: campos por familia con sus marcas |
+| 26 Figura 1 sin las categorías en 0 (R) | stats.test: Figura 1: todas las categorías del catálogo vigente con 0 |
+| 27 1 de julio sin la Cuenta Pública recién terminada (R) | stats.test: periodo del Panorama |
+| 28 cancelar no cancela las pendientes | stats.test: fila de consultas (con el tope de 1 s) |
+| 29 celda vacía del cruce como raya | stats.test: tabla |
+| 30 sin la marca «valores múltiples» en los campos (R) | render: Explorar: campos por familia con sus marcas (prueba reforzada) |
+| 31 «Cómo leer» sin la nota de valores múltiples | stats.test: «Cómo leer esta cifra» |
+| 32 explorador visible sin can_report | menu.test: Explorador estadístico (E12): solo con can_report...; TI: solo administración |
+| 33 la misma consulta pendiente se repite | stats.test: fila de consultas |
+| 34 porcentaje de caracterización completa mal dividido | stats.test: caracterización completa |
+| 35 «Cómo leer» sin la región no aditiva | stats.test: «Cómo leer esta cifra»; render: resultado de un cruce |
+| 36 dirección que acepta valores alterados | stats.test: dirección |
