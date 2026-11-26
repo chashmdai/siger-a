@@ -7,8 +7,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Transactional;
 import cl.nexbyte.sigera.StatSource.*;
 import static cl.nexbyte.sigera.Db.*;
 
@@ -16,7 +14,8 @@ import static cl.nexbyte.sigera.Db.*;
  * Motor estadistico (0.8.0, D25-D41, gate E08; contrato en docs/CONTRATO_STATS_0_8_0.md). POST /api/stats/query: valida
  * la peticion contra listas cerradas, agrega en SQL sobre StatSource y calcula en Java porcentajes y comparaciones. Solo
  * cuentas con REPORTES, en su alcance vigente (Reports.reach); TI nunca (D2). Una consulta, con su comparacion, se lee en
- * una sola transaccion REPEATABLE READ.
+ * una sola transaccion REPEATABLE READ, dentro de las guardas de StatGuard (E08b: concurrencia, tiempo maximo comun y
+ * confinamiento de los archivos de MySQL).
  *
  * Cifras exactas (D41): sin supresion ni redondeo de conteos. siger.stats.max-cells es solo una salvaguarda tecnica de la
  * respuesta: si la consulta y su comparacion la superan se responde 409, nunca un resultado parcial. La auditoria
@@ -36,13 +35,15 @@ public class StatEngine {
 
     private final Db db;
     private final Reports reports;
+    private final StatGuard guard;
     /** Celdas de la consulta mas las de su comparacion. */
     private final int maxCells;
 
-    public StatEngine(Db db,Reports reports,@Value("${siger.stats.max-cells:20000}")int maxCells){
+    public StatEngine(Db db,Reports reports,StatGuard guard,@Value("${siger.stats.max-cells:20000}")int maxCells){
         if(maxCells<1)throw new IllegalArgumentException("siger.stats.max-cells debe ser positivo.");
         this.db=db;
         this.reports=reports;
+        this.guard=guard;
         this.maxCells=maxCells;
     }
 
@@ -51,7 +52,7 @@ public class StatEngine {
     // --- Catalogo publicado (GET /api/catalog, solo con REPORTES) -----------------------------------------------------
     public Map<String,Object> catalog(){
         var out=new LinkedHashMap<String,Object>();
-        out.put("methodology_version",METHODOLOGY);out.put("max_cells",maxCells);
+        out.put("methodology_version",METHODOLOGY);out.put("max_cells",maxCells);out.put("enabled",guard.enabled());
         out.put("measures",StatSource.MEASURES.values().stream().map(m->{
             var row=new LinkedHashMap<String,Object>();
             row.put("code",m.code());row.put("label",m.label());row.put("unit",m.unit().name());
@@ -75,11 +76,22 @@ public class StatEngine {
     private static String percentUnit(Measure m){return m.own()?m.unit().name():Unit.COM.name();}
 
     // --- Consulta -----------------------------------------------------------------------------------------------------
-    @Transactional(isolation=Isolation.REPEATABLE_READ)
+    /**
+     * Permiso (403), motor habilitado (503), cupos de concurrencia (429, antes de pedir conexion) y una sola transaccion
+     * REPEATABLE READ con el plazo comun de StatGuard para la consulta, su comparacion y las lecturas auxiliares.
+     */
     public Map<String,Object> query(Access.Actor a,Map<String,Object> body){
         if(!allowed(a))Problem.denied();
+        guard.requireEnabled();
+        var names=new java.util.concurrent.atomic.AtomicReference<String>();
+        return guard.run(a.id(),()->guard.read(a.id(),names::get,()->execute(a,body,names)));
+    }
+    private Map<String,Object> execute(Access.Actor a,Map<String,Object> body,java.util.concurrent.atomic.AtomicReference<String> names){
         var r=parse(a,body==null?Map.of():body);
         var q=r.query();
+        var dims=q.axesDims().stream().map(Dim::code).toList();
+        names.set("Medida "+q.measure().code()+"; modo "+q.mode().name()+(dims.isEmpty()?"":"; dimensiones: "+String.join(", ",dims))
+            +(q.filters().isEmpty()?"":"; filtros: "+q.filters().keySet().stream().map(Dim::code).collect(Collectors.joining(", ")))+(r.compare()==null?"":"; comparacion "+r.compare()));
         var main=read(q,q.axes(),0,extras(q));
         Result base=null;Span baseSpan=null;
         if(r.compare()!=null){
@@ -87,9 +99,7 @@ public class StatEngine {
             base=read(q.over(baseSpan,axes(q.axesDims(),baseSpan)),q.axes(),main.cells().size(),null);
         }
         var out=response(r,main,base,baseSpan);
-        var dims=q.axesDims().stream().map(Dim::code).toList();
-        db.audit(a.id(),AUDIT,"SISTEMA",0,null,"Medida "+q.measure().code()+"; modo "+q.mode().name()+(dims.isEmpty()?"":"; dimensiones: "+String.join(", ",dims))
-            +(q.filters().isEmpty()?"":"; filtros: "+q.filters().keySet().stream().map(Dim::code).collect(Collectors.joining(", ")))+(r.compare()==null?"":"; comparacion "+r.compare()));
+        db.audit(a.id(),AUDIT,"SISTEMA",0,null,names.get());
         return out;
     }
     private Problem tooMany(){

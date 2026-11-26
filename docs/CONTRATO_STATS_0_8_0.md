@@ -9,6 +9,14 @@ cualquier cambio posterior se registra como desvío. Código: `StatEngine` (vali
 - Solo cuentas con REPORTES vigente, en su alcance. TI nunca (D2), ni con una concesión inconsistente. Sin facultad: 403.
 - CSRF como todo POST (403 sin token), `application/json` (415 con otro tipo), GET 405 con `Allow: POST`.
 - Petición inválida 400; límite técnico de celdas 409. Un rechazo no consulta ni audita `STAT_CONSULTA`.
+- Límites de ejecución (E08b, `StatGuard`): orden de controles 403 (facultad), 503 (motor deshabilitado), 429 (sin cupo) y
+  luego la consulta. Sin cupo (`siger.stats.max-concurrent`, 2 en total, y `max-concurrent-per-account`, 1 por cuenta) responde
+  429 de inmediato en texto llano, sin cola, sin pedir conexión y sin auditar. Una consulta, su comparación y sus lecturas
+  auxiliares comparten un plazo (`siger.stats.timeout-seconds`, 30 s) en una sola transacción REPEATABLE READ; al vencer se
+  cancela la sentencia en el servidor, se revierte, responde 503 en texto llano sin resultados parciales y audita
+  `STAT_CONSULTA_CANCELADA` con los mismos nombres de `STAT_CONSULTA` (o "Consulta cancelada antes de validarse") más
+  "cancelada por tiempo (N s)". Si los archivos de MySQL (`@@datadir`, `@@tmpdir`, `@@innodb_temp_tablespaces_dir`) no están en
+  la unidad de la instancia, el motor queda deshabilitado: 503 en texto llano y `stats.enabled` falso en `/api/catalog`.
 - Alcance en SQL antes de contar (`Reports.reach`): una COM está en el alcance si su ámbito de referencia **vigente**
   (principal del REQ; sin REQ, destino de la SOL; sin SOL, ámbito de origen) está en él o, para UPR, UPD y UEP, si es una
   sede con esa materia (la del REQ; sin REQ, la sugerida de la SOL). El modo temporal cambia los valores, nunca el alcance.
@@ -136,6 +144,9 @@ Valores de la lista o del catálogo de la dimensión (cualquier versión activad
 
 ## 8. Respuesta
 
+`GET /api/catalog` publica en `stats` además `enabled` (E08b, cambio aditivo autorizado): falso si el motor está
+deshabilitado por el confinamiento de los archivos de MySQL.
+
 `metadata` (metodología, medida, dimensiones, nombres de filtros, periodo canónico, zona, modo, `percent_unit`, menciones,
 versiones de catálogo y hora del cálculo), `values` (claves y rótulos en orden), `cells`, `totals`, `comparison`,
 `late_records`, `data_coverage`, `proposals` y `warnings`.
@@ -162,5 +173,7 @@ superarla responde 409 en lenguaje llano, sin resultados parciales.
 ## 10. Auditoría y conciliación
 
 - `STAT_CONSULTA` (`SISTEMA`/0): medida, modo, nombres de dimensiones y de filtros y comparación. Nunca valores, fechas ni cifras.
+- `STAT_CONSULTA_CANCELADA` (`SISTEMA`/0, E08b): los mismos nombres y el plazo, registrada después del rollback en otra
+  transacción. Un fallo de esa auditoría queda en el log (solo el tipo de error) y no cambia la respuesta 503.
 - `Reports` cuenta las COM por fecha de registro y ámbito de origen. Con fecha de registro y alcance institucional,
   `INGRESOS + EXCLUIDOS + ANTECEDENTES` por canal coincide con su volumen; `REQ_CONSTITUIDOS` por estado coincide con sus REQ.

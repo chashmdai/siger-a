@@ -22,7 +22,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E06 | Derechos, contexto, caracterizacion y actuaciones tipificadas (servidor) | CERRADO |
 | E07 | Dimensiones territoriales y demograficas, completitud y reglas de cierre (servidor) | CERRADO |
 | E08 | Motor estadistico: fuente unica, agregacion, series temporales y comparaciones (servidor) | CERRADO |
-| E08b | Motor estadístico: confinamiento, límites de ejecución y concurrencia (servidor) | ABIERTO |
+| E08b | Motor estadístico: confinamiento, límites de ejecución y concurrencia (servidor) | CERRADO |
 | E09 | Captura estadistica en el flujo (interfaz): caracterizacion, derechos, actuaciones y cierre | ABIERTO |
 | E10 | Cortes estadisticos y configuraciones guardadas (servidor) | ABIERTO |
 | E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | ABIERTO |
@@ -800,3 +800,52 @@ Mutaciones de E08 (regla -> prueba que falló):
 | 39 cambiar una expresion de E05 | StatExpressionsTest.expresionesIgualesALasDeE07:63 |
 | 40 rotulo de las instituciones | StatEngineTest.actuacionesVigentes:361 |
 | 41 unir un CTE por su columna (clave automatica de MySQL) | StatEngineTest.barridoDeCruces:414 (MySQL, EXPLAIN) |
+
+### E08b - Motor estadístico: confinamiento, límites de ejecución y concurrencia (servidor)   (CERRADO)
+- Fecha: 2026-11-25 (commit `gate E08b: limites del motor estadistico`), DDN-TEST-SIGER (Windows), Claude Code; base `9f86d25` (cierre de E08 `4c32436` más el commit de documentación que agrega E08b).
+- GO del responsable: A (503 al vencer el plazo), B (log + 503 + `stats.enabled`; sin tocar `Personnel.java`), C (unidad = raíz de `siger.data`; `instance-drive` solo para ensayos), D (generador versionado y desactivado por defecto) y E (auditar la cancelación, no el 429), más las precisiones 2-10: cupos antes de abrir la transacción y liberados tras ella (también con rollback), contador por cuenta atómico y sin carreras, plazo común a todas las sentencias en REPEATABLE READ, auditoría después del rollback y sin ocultar el error, límites de sesión solo con evidencia, ajuste de unidad sin efecto en una instancia institucional, vigilancia del espacio de D: y un comando con los cupos ocupados.
+- Hecho: `StatGuard` (nueva, reutilizable por E10 y E11). (1) Concurrencia: 2 en total y 1 por cuenta (`siger.stats.max-concurrent`, `max-concurrent-per-account`), `tryAcquire` sin cola, 429 en texto llano antes de pedir conexión, contador con `ConcurrentHashMap.compute` (la cuenta sale del mapa en cero) y liberación en `finally`. (2) Plazo: `TransactionTemplate` REPEATABLE READ con `siger.stats.timeout-seconds` (30), común a consulta, comparación y lecturas auxiliares; KILL QUERY de Connector/J en MySQL; al vencer, rollback, 503 sin resultados parciales y `STAT_CONSULTA_CANCELADA` en otra transacción con los nombres validados (su fallo va al log). (3) Confinamiento: al crearse, sobre MySQL, `@@datadir`, cada ruta de `@@tmpdir` y `@@innodb_temp_tablespaces_dir` (relativas contra el datadir, sin distinguir mayúsculas) en la unidad de `siger.data`; si no, `MOTOR_ESTADISTICO_DESHABILITADO` en el log, 503 y `stats.enabled=false`. `siger.stats.instance-drive` solo rige con el perfil test sin el perfil mysql (si no, `UNIDAD_DE_INSTANCIA_IGNORADA`). `StatEngine.query`: 403, 503, cupos y transacción con plazo; ya no es `@Transactional`.
+- Archivos clave: `StatGuard.java` (nuevo), `StatEngine.java`, `application.properties` (4 propiedades comentadas); `StatGuardTest` (12), `StatTimeoutHttpTest` (1, vista lenta en su propia base), `StatQueryHttpTest` (+2), `StatLoadMeasureTest` (1, desactivada por defecto), `StatEngineTest` y `StatFixture` (constructor); `CLAUDE.md` (guardas y procedimiento del MySQL desechable en D:), `docs/ARQUITECTURA.md`, `docs/CONTRATO_STATS_0_8_0.md`.
+- Migraciones: no aplica (esquema 22). `Api.java` y `Workflow.java` sin cambios.
+- Verificación: JUnit H2 328 ok, 1 omitida (la medición) (antes 313, corrida de base sin cambios: 313 ok). MySQL 8.4.13 (suite completa con `siger.mysql.suite=true` y `-Dsiger.stats.instance-drive=D:\`, actualizaciones desde 0.4.0 y 0.7.0 hasta V22): 332 ok, 1 omitida (la medición, ejecutada aparte con `-Dsiger.stats.measure=true`: 1 ok) (antes 317), con `MySql84UpgradeTest` y `MySql84Upgrade070Test` conformes. MySQL desechable con el procedimiento nuevo en `D:\Ensayo-E08b\mysql` (`datadir`, `tmpdir` y `#innodb_temp` en D:, TempTable, `127.0.0.1:3417`), detenido con `mysqladmin shutdown`, puerto 3417 libre y sin procesos propios; `MySQL80` y la instancia ajena de `D:\sigervalidacion` intactos. La carpeta `D:\Ensayo-E08b` (datos sintéticos y la clave del usuario desechable) no se pudo borrar: la protección de Claude Code exige que una persona apruebe ese borrado (ver Pendientes). Frontend no aplica (sin cambios). `Check-Scripts.ps1`: conforme con `powershell.exe` 5.1 y solo las rutas nativas de módulos, sin Maven ni npm en paralelo (40 scripts, 73 órdenes en 60 procesos). Humo no aplica (sin interfaz; 429, 503 y cancelación por HTTP real en las pruebas).
+- Medición (50.005 COM deterministas, MySQL 8.4.13 en D:, 10 consultas pesadas): entre 0,2 y 2,8 s (completitud 2,8 s); temporales en disco solo en completitud (2 tablas, 28 MiB máximos de temporales de sesión de InnoDB); `tmpdir` sin archivos; D: nunca bajo 52 GiB libres (no empieza con menos de 20 GiB; cancela con menos de 15 GiB); `max_join_size` mínimo con que pasan: 1e6 (5 consultas) y 1e7 (5). Generación 9,4 s.
+- Decisión sobre límites de sesión (con esa evidencia): no se adoptan. `max_join_size` compara estimaciones del optimizador que ya exigen 1e6-1e7 con 50.005 COM y crecen con el volumen: un umbral fijo rechazaría consultas legítimas o no protegería; `tmp_table_size` y `max_heap_table_size` limitan memoria, no disco; `max_execution_time` sería redundante: KILL QUERY resultó efectivo (sentencia ausente de `PROCESSLIST` y conexión reutilizada sana). Sin variables de sesión no hay configuración que restaurar.
+- Evidencia de mutación: 25 mutaciones temporales, todas fallaron en la prueba prevista (tabla abajo); archivos restaurados y comprobados por SHA-256.
+- Condiciones de la sección 2: `git diff v0.7.0` vacío para `scripts/`, `.mvn/`, los 7 archivos de recepción del Formulario, `Reports.java` y `Territory.java`; V1-V22 sin cambios; ningún `my.ini` tocado; `IntakeCommands`, `Workflow`, `Access` y `REOPEN_*` sin cambios; sin dependencias nuevas; auditoría solo con nombres.
+- Facilidad de uso: no aplica (servidor); 429, 503 y el plazo se explican en texto llano, que el frontend muestra tal cual (`lib/api.ts`).
+- Definiciones usadas: ninguna.
+- Desvíos del plan: `stats.enabled` en `/api/catalog` (cambio aditivo del contrato autorizado en el GO). M23 (lock global dentro de la consulta) falló al tomar el segundo cupo, que ya queda bloqueado, antes del paso del comando.
+- Limitaciones residuales: las guardas no son una cuota de disco (MySQL 8.4 no limita por sesión sus temporales en disco): una consulta puede escribir temporales hasta que vence su plazo (30 s más hasta 1 s por el redondeo de `setQueryTimeout`); H2 revisa la cancelación cada 128 filas; los cupos son por proceso (un servicio); la unidad no distingue un MySQL remoto; KILL QUERY usa una conexión adicional del servidor.
+- Hallazgos para gates siguientes: E10 y E11 usan `StatGuard.run` (cupos) y `StatGuard.read` (plazo y auditoría de la cancelación) con su propia nota de nombres; `StatLoadMeasureTest` sirve a E14 (`-Dsiger.stats.measure=true`, resultado en `target/medicion-e08b.txt`); en este equipo la suite MySQL necesita `-Dsiger.stats.instance-drive=D:\`; E17 y el paso U verifican `@@tmpdir` y `@@innodb_temp_tablespaces_dir` en D: (si no, el motor queda deshabilitado).
+- Pendientes: borrar `D:\Ensayo-E08b` (MySQL desechable ya detenido) -> responsable; medición formal de rendimiento -> E14; rutas de MySQL en la VM -> E17 y paso U.
+- Verificación manual sugerida al usuario: `.\mvnw.cmd -B -ntp -f backend\pom.xml test -Dtest=StatGuardTest,StatTimeoutHttpTest,StatQueryHttpTest`.
+
+Mutaciones de E08b (regla -> prueba que falló):
+
+| Regla | Prueba que falló |
+|---|---|
+| 01 sin limite total | StatGuardTest.concurrenciaTotalYPorCuenta:78 |
+| 02 sin limite por cuenta | StatGuardTest.concurrenciaTotalYPorCuenta:78, StatGuardTest.contadorAtomicoSinCarreras:129, StatQueryHttpTest.sinCupoResponde429:133 |
+| 03 liberar solo al terminar bien | StatGuardTest.liberacionAnteErrorYRollback:137 |
+| 04 esperar en vez de rechazar | StatGuardTest.concurrenciaTotalYPorCuenta:80 |
+| 05 contador sin limpieza | StatGuardTest.concurrenciaTotalYPorCuenta:97, StatGuardTest.contadorAtomicoSinCarreras:131 |
+| 06 sin plazo | StatGuardTest.tiempoAgotadoCancelaYAuditaSoloNombres:188, StatTimeoutHttpTest.consultaQueSuperaElPlazoSeCancelaYAudita:81 |
+| 07 plazo por sentencia, no comun | StatGuardTest.presupuestoComunEntreSentenciasSinResultadosParciales:206 |
+| 08 sin auditoria de la cancelacion | StatGuardTest.tiempoAgotadoCancelaYAuditaSoloNombres:193 |
+| 09 auditoria antes del rollback | StatGuardTest.tiempoAgotadoCancelaYAuditaSoloNombres:193 |
+| 10 auditoria con contenido de la peticion | StatTimeoutHttpTest.consultaQueSuperaElPlazoSeCancelaYAudita:91 |
+| 11 el fallo de la auditoria oculta el rechazo | StatGuardTest.elFalloDeLaAuditoriaNoOcultaElRechazo:252 |
+| 12 ignorar innodb_temp_tablespaces_dir | StatGuardTest.confinamientoDeRutas:262 |
+| 13 no resolver rutas relativas | StatGuardTest.confinamientoDeRutas:260 |
+| 14 revisar solo el primer tmpdir | StatGuardTest.confinamientoDeRutas:264 |
+| 15 distinguir mayusculas | StatGuardTest.confinamientoDeRutas:261 |
+| 16 el ajuste de unidad rige en la VM | StatGuardTest.unidadDeLaInstanciaSoloAjustableEnEnsayos:278 |
+| 17 motor deshabilitado que responde | StatQueryHttpTest.motorDeshabilitadoSinAfectarLaOperacion:147 |
+| 18 StatEngine sin la guarda de concurrencia | StatGuardTest.rechazadasNoPidenConexion:157, StatQueryHttpTest.sinCupoResponde429:133 |
+| 19 transaccion antes del cupo | StatGuardTest.rechazadasNoPidenConexion:157 |
+| 20 sin stats.enabled en el catalogo | StatQueryHttpTest.motorDeshabilitadoSinAfectarLaOperacion:149, StatQueryHttpTest.respuestaErroresYCatalogo:118 |
+| 21 rechazo por cuenta que no devuelve el cupo total | StatGuardTest.concurrenciaTotalYPorCuenta:72 |
+| 22 no reconocer el plazo vencido | StatGuardTest.tiempoAgotadoCancelaYAuditaSoloNombres:188 |
+| 23 lock global dentro de la consulta | StatGuardTest.comandoDeExpedienteConLosCuposOcupados:72 |
+| 24 confinamiento que ignora MySQL | StatGuardTest.confinamientoAlArrancar:293 |
+| 25 sin plazo (MySQL) | StatGuardTest.cancelacionEfectivaYConexionReutilizable:230 |

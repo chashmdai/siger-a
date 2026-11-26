@@ -308,7 +308,7 @@ class StatEngineTest extends StatFixture {
     }
     @Test @Order(1) void limiteDeCeldas(){
         long before=db.count("SELECT COUNT(*) FROM audit_event WHERE action='STAT_CONSULTA'");
-        var two=new StatEngine(db,reports,2);var three=new StatEngine(db,reports,3);
+        var two=new StatEngine(db,reports,guard,2);var three=new StatEngine(db,reports,guard,3);
         var body=map("measure","INGRESOS","rows",List.of("TIPO_SOLICITUD"),"period",cp());
         var p=assertThrows(Problem.class,()->two.query(access.actor(INST),body));
         assertEquals(409,p.status);assertTrue(p.getMessage().contains("2 celdas")&&p.getMessage().contains("acorta el periodo"),p.getMessage());
@@ -324,7 +324,7 @@ class StatEngineTest extends StatFixture {
             @Override public List<Map<String,Object>> queryForList(String sql,Object... args){counted[0]++;return super.queryForList(sql,args);}
         };
         var counting=new Db(jdbc);
-        var local=new StatEngine(counting,new Reports(counting),20000);
+        var local=new StatEngine(counting,new Reports(counting),guard,20000);
         var body=map("measure","REQUERIMIENTOS_CON_VALOR","rows",List.of("DERECHO"),"columns",List.of("REGION_NNA"),"period",period("MES","2022-03-01"),"percent","TOTAL","include_proposals",true,
             "filters",Map.of("TIPO_SOLICITUD",List.of("PENDIENTE")));
         for(int i=0;i<5;i++)com(P06,"S06","CORREO","2022-03-0"+(i+1)+"T15:00:00Z",form("06"),null);
@@ -382,7 +382,7 @@ class StatEngineTest extends StatFixture {
             }
         };
         var explaining=new Db(jdbc);
-        return new StatEngine(explaining,new Reports(explaining),20000);
+        return new StatEngine(explaining,new Reports(explaining),guard,20000);
     }
     Map<String,Object> sweep(StatEngine engine,String measure,List<String> rows,List<String> columns,Map<String,Object> period,Object... extra){
         var body=map("measure",measure,"rows",rows,"columns",columns,"period",period);

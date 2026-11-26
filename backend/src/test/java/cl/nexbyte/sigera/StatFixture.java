@@ -23,6 +23,7 @@ abstract class StatFixture extends E07Fixture {
         "rol-estado-v1.json","grupos-prioritarios-v1.json","tipo-actuacion-v1.json","tipo-institucion-v1.json","tramo-edad-v1.json"};
     @Autowired StatEngine engine;
     @Autowired Reports reports;
+    @Autowired StatGuard guard;
 
     // --- Organizacion ---------------------------------------------------------------------------------------------
     long site(String code,String region,String state){

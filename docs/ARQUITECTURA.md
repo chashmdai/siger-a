@@ -64,6 +64,11 @@ sobre MySQL 8.4 con `MySqlSuite`).
   `CONTRATO_STATS_0_8_0.md`). Una fila por COM y relaciones aparte para lo multivaluado, agregadas en SQL dentro del
   alcance de REPORTES; porcentajes, comparaciones, rótulos y avisos en Java. Corte "al constituirse el REQ" al fin del
   comando que lo creó; `Workflow` espera a que el reloj supere el fin del comando anterior y evita empates.
+- `StatGuard` (E08b): límites del motor, reutilizables por cortes (E10) y exportaciones (E11). Concurrencia sin cola (2 en
+  total, 1 por cuenta; 429 antes de pedir conexión), plazo común de 30 s para todas las sentencias de una consulta en una
+  transacción REPEATABLE READ (cancelación en el servidor, 503 y auditoría `STAT_CONSULTA_CANCELADA` después del rollback)
+  y confinamiento: sobre MySQL, `datadir`, `tmpdir` e `innodb_temp_tablespaces_dir` en la unidad de la instancia o el motor
+  queda deshabilitado (503) sin afectar la operación. No es una cuota de disco.
 - `PersonIndex` / `PersonSearch`: indice de coincidencias de personas (derivado, reconstruible) y busqueda por RUN,
   documento, nombre o folio con auditoria HMAC opcional del termino.
 - `Milestones` / `BusinessCalendar` / `Reports` / `Csv`: hitos de cada transicion (y su carga historica), dias

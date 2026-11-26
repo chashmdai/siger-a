@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * POST /api/stats/query por HTTP real (0.8.0, gate E08): solo cuentas con REPORTES (nunca TI, ni con una concesion
  * inconsistente), CSRF como todo POST, GET 405 con Allow, 400 y 409 legibles, y ninguna consulta auditada en un rechazo.
- * El catalogo publica las medidas y dimensiones solo a quien puede consultar.
+ * El catalogo publica las medidas y dimensiones solo a quien puede consultar. E08b: sin cupo 429 y motor deshabilitado 503.
  */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
     "spring.datasource.url=jdbc:h2:mem:sigera_motor_http;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
@@ -30,6 +30,8 @@ class StatQueryHttpTest {
     @LocalServerPort int port;
     @Autowired Db db;
     @Autowired PasswordEncoder passwords;
+    @Autowired StatGuard guard;
+    @Autowired Workflow flow;
     final JsonMapper mapper=JsonMapper.builder().build();
 
     final class Browser {
@@ -113,6 +115,44 @@ class StatQueryHttpTest {
         var stats=mapper.readTree(browser.send("GET","/catalog",null,null,false).body()).path("stats");
         assertEquals(StatSource.MEASURES.size(),stats.path("measures").size());assertEquals(StatSource.DIMS.size(),stats.path("dimensions").size());
         assertEquals(20000,stats.path("max_cells").asInt());
+        assertTrue(stats.path("enabled").asBoolean());
         assertFalse(mapper.readTree(new Browser(account("sin.catalogo","DISTRIBUIDOR")).send("GET","/catalog",null,null,false).body()).has("stats"));
+    }
+
+    /** E08b: sin cupo de la cuenta, 429 en texto llano, sin auditar ni consultar; al liberarse, la consulta responde. */
+    @Test void sinCupoResponde429()throws Exception{
+        var browser=new Browser(account("rep.cupo","REPORTES"));
+        long id=n(db.one("SELECT id FROM staff WHERE username='rep.cupo'"),"id");
+        var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+        var holder=new Thread(()->guard.run(id,()->{entered.countDown();try{release.await(60,java.util.concurrent.TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}return null;}));
+        holder.start();
+        assertTrue(entered.await(30,java.util.concurrent.TimeUnit.SECONDS));
+        long before=consulted();
+        try{
+            var busy=browser.query(QUERY);
+            assertEquals(429,busy.statusCode(),busy.body());
+            assertEquals(StatGuard.BUSY,mapper.readTree(busy.body()).path("message").asString());
+            assertEquals(before,consulted());
+        }finally{release.countDown();holder.join(30_000);}
+        assertEquals(200,browser.query(QUERY).statusCode());
+        assertEquals(before+1,consulted());
+    }
+    /** E08b: con los archivos de MySQL fuera de la unidad de la instancia, 503 legible y aviso en el catalogo; los expedientes siguen. */
+    @Test void motorDeshabilitadoSinAfectarLaOperacion()throws Exception{
+        var browser=new Browser(account("rep.apagado","REPORTES"));
+        long before=consulted();
+        guard.confined(List.of("tmpdir"));
+        try{
+            var off=browser.query(QUERY);
+            assertEquals(503,off.statusCode(),off.body());
+            assertEquals(StatGuard.DISABLED,mapper.readTree(off.body()).path("message").asString());
+            assertFalse(mapper.readTree(browser.send("GET","/catalog",null,null,false).body()).path("stats").path("enabled").asBoolean(true));
+            assertEquals(before,consulted());
+            db.update("UPDATE staff SET must_change=FALSE");
+            long com=flow.run("administrativo",new Workflow.Command(UUID.randomUUID(),"COM_CREATE",null,null,Map.of("scope_id",n(db.one("SELECT id FROM org_scope WHERE code='UPR-REQ'"),"id"),
+                "received_at",java.time.Instant.now().minusSeconds(300).toString(),"channel","PRESENCIAL","subject","Ingreso sintetico","body","Antecedentes sinteticos","intake",Map.of()))).id();
+            assertEquals("NUEVA",s(db.one("SELECT state FROM communication WHERE id=?",com),"state"));
+        }finally{guard.confined(List.of());}
+        assertEquals(200,browser.query(QUERY).statusCode());
     }
 }
