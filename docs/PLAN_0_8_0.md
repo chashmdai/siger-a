@@ -237,7 +237,7 @@ Escenarios de aceptacion (pruebas automatizadas y humo de los gates correspondie
 11. Ficha 1.2 y COM manual: un nombre historico no se divide; completar una region no es correccion; RUN, documento,
     nacionalidad, correo y celular con las mismas reglas del Formulario.
 12. Contrato: las entregas NNA con RUN de fuente SRCeI se registran sin autenticacion y sin elevar la procedencia.
-13. Facilidad de uso: escenarios U1-U10 de DISENO 10.5, acreditados por el ejecutor en el humo y revisados en E16 (E15 postergado el 2026-11-25).
+13. Facilidad de uso: escenarios U1-U13 de DISENO 10.5, acreditados por el ejecutor en el humo y revisados en E16 (E15 postergado el 2026-11-25).
 14. Edad y nacionalidad: un NNA con fecha de nacimiento tiene su edad a la fecha de recepcion; uno con edad declarada
     entera la conserva; un texto historico de edad no se interpreta y queda "sin informacion"; una nacionalidad libre
     de una ficha 1.0 no se convierte en pais; la fecha de nacimiento nunca se exporta.
@@ -392,7 +392,7 @@ los incorpora a mano. Con un escenario no logrado en E15, el responsable deja E1
 correccion) y luego `E15c` (EXTERNO, repeticion de los escenarios afectados), y asi sucesivamente; el ciclo de E15 esta
 cerrado cuando E15 o su ultima repeticion esta CERRADO. E16 empieza solo con el ciclo de E15 cerrado y audita tambien
 todas sus correcciones. Con hallazgos en E16, el responsable deja E16 BLOQUEADO y agrega `E16b` (ABIERTO, correccion) y
-luego `E16c` (EXTERNO, repeticion), y asi sucesivamente; una correccion de E16 que toque un escenario U1-U10 se verifica
+luego `E16c` (EXTERNO, repeticion), y asi sucesivamente; una correccion de E16 que toque un escenario U1-U13 se verifica
 en su repeticion con ese escenario. E17 exige el ciclo de E15 cerrado, la ultima auditoria CERRADO sobre el commit que
 contiene todas las correcciones de E15 y de E16, y ningun gate de correccion ABIERTO. Un gate que resulte mayor se
 divide (`ENNa` cerrado con lo verificado y `ENNb` ABIERTO). Un gate BLOQUEADO por una definicion pendiente pasa a
@@ -689,7 +689,8 @@ reducir pruebas ni criterios.
 
 **E12 - Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz)**
 - Alcance: el `DISENO` 10.3 completo ("Explorador estadístico": `#estadisticas` con Panorama, Informes y Explorar);
-  logica en `statsModel.ts`. Sin cambios de servidor ni dependencias nuevas. Se divide solo si es indispensable.
+  logica en `statsModel.ts`. Exporta CSV y XLSX solo en Informes. Sin cambios de servidor ni dependencias nuevas. Se
+  divide solo si es indispensable.
 - Archivos autorizados: `features/stats/*` y `components/charts/*` (nuevos), `app/menu.ts`, `App.tsx`,
   `app/routes.ts`, `lib/labels.ts`, estilos (`styles/tokens.css` solo con agregados), pruebas de frontend.
 - Pruebas:
@@ -705,14 +706,22 @@ reducir pruebas ni criterios.
 - Cierre: commit `gate E12: explorador`.
 
 **E13 - Explorador: exportacion, cortes, series historicas y calidad (interfaz)**
-- Alcance: exportacion CSV, XLSX y ZIP desde la vista; pantallas de `DISENO` 10.4 (cortes: generar, ver, verificar,
-  comparar y anular; asistente de series; panel de calidad con enlace a los registros pendientes que la cuenta puede
-  leer). Ademas: "Congelar estas cifras" desde cualquier vista (tambien el boton de Informes), que abre el asistente de
-  corte prellenado y advierte "Generar el corte detiene brevemente las operaciones de todos. Hazlo fuera del horario de
-  atención"; la comparacion con un corte resalta las diferencias celda a celda; una serie historica en el mismo grafico
-  que SIGER, con la discontinuidad marcada y la nota de ambito, sin sumarlas salvo que se pida; y Calidad con barras de
-  completitud por variable y ambito, tendencia mensual y enlace a los pendientes.
-- Archivos autorizados: `features/stats/*`, estilos, pruebas de frontend.
+- Alcance: exportacion CSV, XLSX y ZIP desde cualquier vista y desde cortes, con los mensajes de las restricciones del
+  ZIP (limite de folios, solo medidas de requerimientos, grupos prioritarios y cortes anteriores a V24); pantallas de
+  `DISENO` 10.4 (cortes: generar, ver, verificar, comparar y anular; asistente de series; panel de calidad con enlace a
+  los registros pendientes que la cuenta puede leer). Ademas: "Congelar estas cifras" desde cualquier vista (tambien el
+  boton de Informes), que abre el asistente de corte prellenado y advierte "Generar el corte detiene brevemente las
+  operaciones de todos. Hazlo fuera del horario de atención"; la comparacion con un corte resalta las diferencias celda
+  a celda; una serie historica en el mismo grafico que SIGER, con la discontinuidad marcada y la nota de ambito, sin
+  sumarlas salvo que se pida; y Calidad con barras de completitud por variable y ambito, tendencia mensual y enlace a
+  los pendientes. Las bandejas existentes agregan el filtro "Con clasificación pendiente" en `BoardQueries.filter`, con
+  las mismas reglas de lectura de la bandeja y sin ruta nueva; el panel de Calidad enlaza a ese filtro.
+- Archivos autorizados: `features/stats/*`, estilos, pruebas de frontend, `BoardQueries.java` y pruebas de backend.
+- Pruebas:
+  - barrido de que el filtro "Con clasificación pendiente" solo muestra lo que la cuenta puede leer;
+  - las cifras del filtro iguales a `PENDIENTE` de la completitud de su alcance;
+  - mutacion;
+  - suites H2 y MySQL completas.
 - Aceptacion: U4, U5, U6 y U9, mas el aviso de espera del corte; el asistente de series se completa sin conocer el
   formato interno.
 - Cierre: commit `gate E13: exportacion, cortes, series y calidad`.
@@ -721,7 +730,7 @@ reducir pruebas ni criterios.
 - Alcance: suite completa sobre MySQL 8.4 con los dos volcados; medicion de rendimiento con 50.000 COM sinteticas
   (`DISENO` 5.7); escenario 1 completo (pantalla, exportación y corte) con `ADSCRIPCION_INICIAL`; barrido final de
   inmutabilidad y de permisos; version 0.8.0; documentacion de la seccion 4; `PRUEBAS_MANUALES_0_8_0.md` con escenarios
-  1-15 y U1-U10; humo y paso U de `DESPLIEGUE_VM.md` con los scripts existentes y las siguientes compensaciones:
+  1-15 y U1-U13; humo y paso U de `DESPLIEGUE_VM.md` con los scripts existentes y las siguientes compensaciones:
   - (a) Consultas previas de solo lectura. Confirmar versión 0.7.0 y esquema 16 (DI-15), diario de `Update.ps1` en
     `COMPLETE`, rutas de `SELECT @@datadir, @@tmpdir, @@innodb_temp_tablespaces_dir` en D: y espacio libre en D: según
     la medición.
@@ -746,7 +755,7 @@ reducir pruebas ni criterios.
 POSTERGADO por decisión del responsable (2026-11-25); ver bitácora.
 
 **E16 - Auditoria independiente** (EXTERNO): Claude Padre audita sobre un clon limpio del cierre de E14 o de su última
-corrección. Revisa la evidencia del humo U1-U10 de E09, E12, E13 y E14, el diff completo contra
+corrección. Revisa la evidencia del humo U1-U13 de E09, E12, E13 y E14, el diff completo contra
 `v0.7.0`, las condiciones de la seccion 2,
 trazabilidad de D25-D51 (las vigentes) y de los escenarios, compatibilidad con el Formulario, migraciones y
 actualizacion, evidencia de mutacion, re-ejecucion de la suite por el responsable en un clon limpio; procedimiento de

@@ -491,9 +491,13 @@ dependencias nuevas.
 (E13).
 
 **Panorama**
-- Periodo elegible; por defecto, la Cuenta Pública en curso.
+- Periodo elegible. Por defecto, la Cuenta Pública en curso, como `PERSONALIZADO` desde el 1 de julio hasta el día
+  anterior a la consulta, comparado con `MISMO_PERIODO_ANIO_ANTERIOR`. El rótulo muestra las fechas exactas.
 - Indicadores: ingresos, REQ constituidos, Casos, actuaciones, porcentaje de ingresos con caracterización completa y
   registros tardíos.
+- "Caracterización completa" = ingresos computables sin ninguna de las seis variables de completitud de E07 en estado
+  `PENDIENTE`, sobre el total de ingresos. Lo calcula el servidor con filtros de los `ESTADO_*`; el cliente no calcula
+  ni suma.
 - Cada indicador con su variación respecto del periodo anterior (cifra, porcentaje, flecha y texto, nunca solo color)
   y una línea mensual pequeña.
 - Un clic abre la consulta en Explorar.
@@ -501,10 +505,12 @@ dependencias nuevas.
 **Informes**
 - Figura 1 (tipo de solicitud, requirente, vía y adscripción institucional, DI-13), de julio a junio, con rótulos y
   orden institucionales.
-- Exportación.
+- Exportación CSV y XLSX.
 - El botón "Congelar estas cifras" se agrega en E13.
 
 **Explorar**
+- Estado inicial con preguntas guiadas: "¿Cuántos ingresos hubo?", "Por vía de ingreso", "Comparar con el periodo
+  anterior" y "Figura 1 de la Cuenta Pública".
 - Campos agrupados por familia (Periodo, Ingreso, Territorio, Derechos, Actuaciones, Personas, Estado de la cadena y
   Calidad), con buscador, descripción breve y la marca "valores múltiples".
 - Filas y columnas por selección o arrastre, también con teclado.
@@ -515,6 +521,15 @@ dependencias nuevas.
 - "Cómo leer esta cifra", siempre visible: qué cuenta la medida y su unidad, fecha de análisis, modo temporal,
   alcance, periodo, versiones de catálogo, cobertura de edad y nacionalidad, y cada aviso del servidor traducido a una
   frase. La región de los NNA se rotula como no aditiva.
+- Todas las categorías se muestran; no se agrupan automáticamente.
+- Jerarquía de derechos: una consulta por nivel (eje, derecho y subcategoría), anidadas con el catálogo; cada cifra
+  viene del servidor y nunca se suma en el cliente. Nota "los niveles inferiores no suman el superior" y "Sin
+  desglose" como fila propia.
+
+**Exportación**
+- E12 exporta CSV y XLSX solo en Informes.
+- E13 exporta CSV, XLSX y ZIP desde cualquier vista y desde cortes, con los mensajes de las restricciones del ZIP:
+  límite de folios, solo medidas de requerimientos, grupos prioritarios y cortes anteriores a V24.
 
 **Pie de fuente**: en toda tabla y gráfico, incluido en PNG y SVG: "Fuente: SIGER, Defensoría de la Niñez. Consulta del
 <fecha y hora>; <alcance>; <fecha de análisis>; <modo>", más el código del corte si corresponde.
@@ -564,6 +579,8 @@ periodo, con enlace a los registros pendientes que la cuenta puede leer.
 - Una serie histórica se muestra en el mismo gráfico que SIGER, con la discontinuidad marcada y la nota de ámbito, sin
   sumarlas salvo que se pida.
 - Calidad: barras de completitud por variable y ámbito, tendencia mensual y enlace a los pendientes.
+- Las bandejas existentes agregan el filtro "Con clasificación pendiente" en `BoardQueries.filter`, con las mismas
+  reglas de lectura de la bandeja y sin ruta nueva. El panel de Calidad enlaza a ese filtro.
 
 ### 10.5 Criterios de facilidad de uso
 Los acredita el ejecutor en el humo y los revisa Claude Padre en E16, porque E15 está postergado.
@@ -639,7 +656,7 @@ No se usa Apache POI ni librerias de graficos o de tablas.
 10. Rendimiento en MySQL con 50.000 COM sinteticas (E14).
 11. Frontend: logica pura en `<nombre>Model.ts` con `node --test`; render SSR como `territory-render`; modelo del
     grafico circular.
-12. Facilidad de uso: escenarios U1-U10 (E15).
+12. Facilidad de uso: escenarios U1-U13.
 
 ## 14. Migraciones y actualizacion
 - Aditivas desde V17, portables, sin CHECK que H2 y MySQL traten distinto, con indices para cada consulta nueva.
