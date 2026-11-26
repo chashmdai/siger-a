@@ -119,8 +119,44 @@ public class StatLoadMeasureTest extends StatFixture {
             }
             Files.writeString(Path.of("target","medicion-e08b.txt"),out.toString());
             System.out.println(out);
+            Files.writeString(Path.of("target","medicion-e10.txt"),cuts(actor));
         }
     }
+    /**
+     * E10: generacion de un corte institucional de la Cuenta Publica dentro de STAT_CUT_CREATE (el comando completo, con el
+     * lock global tomado de principio a fin), su verificacion y las consultas sobre el corte (las que admite un corte: modo
+     * vigente y sin comparacion temporal), cada una con las mismas celdas que la consulta vigente.
+     */
+    String cuts(Access.Actor actor){
+        String gest=staff("gest.medicion","REPORTES","GESTION_ESTADISTICA");
+        var out=new StringBuilder("Medicion E10 - corte de la Cuenta Publica sobre "+TOTAL+" COM\n");
+        long s=System.currentTimeMillis();
+        long cut=cut(gest,null,cp());
+        long create=System.currentTimeMillis()-s;
+        out.append("STAT_CUT_CREATE (lock global);").append(create).append(" ms;");
+        for(var t:StatCuts.TABLES)out.append(' ').append(t.name()).append('=').append(db.count("SELECT COUNT(*) FROM "+t.name()+" WHERE cut_id=?",cut));
+        out.append('\n');
+        s=System.currentTimeMillis();
+        assertEquals(true,cutsService().verify(actor,cut).get("ok"));
+        out.append("verificacion;").append(System.currentTimeMillis()-s).append(" ms\n");
+        out.append("consulta sobre el corte;ms;celdas;ms de la misma consulta vigente\n");
+        for(var q:consultas()){
+            if(q.body().containsKey("compare")||q.body().containsKey("time_mode"))continue;
+            var frozen=new LinkedHashMap<>(q.body());frozen.put("cut_id",cut);
+            s=System.currentTimeMillis();
+            var r=engine.query(actor,frozen);
+            long ms=System.currentTimeMillis()-s;
+            s=System.currentTimeMillis();
+            var live=engine.query(actor,q.body());
+            long liveMs=System.currentTimeMillis()-s;
+            assertEquals(live.get("cells"),r.get("cells"),q.name());
+            out.append(q.name()).append(';').append(ms).append(';').append(((List<?>)r.get("cells")).size()).append(';').append(liveMs).append('\n');
+        }
+        System.out.println(out);
+        return out.toString();
+    }
+    @org.springframework.beans.factory.annotation.Autowired StatCuts cutService;
+    StatCuts cutsService(){return cutService;}
     /** Created_tmp_disk_tables, Created_tmp_tables y Created_tmp_files del servidor (solo esta prueba lo usa). */
     static long[] status(Connection c)throws Exception{
         return new long[]{c.number("SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Created_tmp_disk_tables'"),

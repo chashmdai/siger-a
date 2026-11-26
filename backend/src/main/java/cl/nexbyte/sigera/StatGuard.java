@@ -16,6 +16,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionTimedOutException;
+import org.springframework.jdbc.datasource.ConnectionHolder;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -113,6 +116,8 @@ public class StatGuard {
     /** Consultas en curso por cuenta (pruebas); una cuenta sin consultas no queda en el mapa. */
     Map<Long,Integer> active(){return Map.copyOf(running);}
     int maxConcurrent(){return maxConcurrent;}
+    /** Plazo comun de las consultas y del congelado de un corte (siger.stats.timeout-seconds). */
+    int timeoutSeconds(){return timeoutSeconds;}
 
     // --- 2. Tiempo maximo ---------------------------------------------------------------------------------------------
     /**
@@ -121,6 +126,7 @@ public class StatGuard {
      * y responde 503.
      */
     public <T> T read(long actor,Supplier<String> note,Supplier<T> work){
+        if(TransactionSynchronizationManager.isActualTransactionActive())return within(actor,note,work);
         var t=new TransactionTemplate(transactions);
         t.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
         t.setTimeout(timeoutSeconds);
@@ -133,6 +139,30 @@ public class StatGuard {
             throw new Problem(503,timeoutMessage());
         }
     }
+    /**
+     * Dentro de una transaccion ya abierta (STAT_CUT_CREATE, E10, con el lock global de Workflow.run): el mismo plazo, como
+     * fecha limite de la conexion de esa transaccion (Spring aplica a cada sentencia lo que queda y rechaza la siguiente si
+     * vencio). Al vencer: 503 sin resultados parciales (el comando revierte todo) y la auditoria de la cancelacion despues
+     * del rollback, en otra transaccion. Al terminar, el resto del comando ya no queda acotado por este plazo.
+     */
+    private <T> T within(long actor,Supplier<String> note,Supplier<T> work){
+        var holder=(ConnectionHolder)TransactionSynchronizationManager.getResource(db.dataSource());
+        if(holder==null)throw new IllegalStateException("Transaccion sin conexion asociada.");
+        holder.setTimeoutInSeconds(timeoutSeconds);
+        try{
+            return work.get();
+        }catch(RuntimeException e){
+            if(!timedOut(e))throw e;
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){
+                @Override public void afterCompletion(int status){cancelled(actor,note);}
+            });
+            throw new Problem(503,timeoutMessage());
+        }finally{
+            holder.setTimeoutInMillis(LIFTED_MS);
+        }
+    }
+    /** Fecha limite que deja el plazo propio sin efecto en lo que sigue de la transaccion (un dia). */
+    private static final long LIFTED_MS=86_400_000L;
     String timeoutMessage(){
         return "La consulta superó el tiempo máximo de "+timeoutSeconds+" s y se canceló, sin resultados parciales. Agrega un filtro, quita una dimensión o acorta el periodo.";
     }
@@ -140,7 +170,10 @@ public class StatGuard {
         try{
             String names=note==null?null:note.get();
             String text=(names==null||names.isBlank()?"Consulta cancelada antes de validarse":names)+"; cancelada por tiempo ("+timeoutSeconds+" s)";
-            new TransactionTemplate(transactions).executeWithoutResult(s->db.audit(actor,CANCELLED,"SISTEMA",0,null,text));
+            // Siempre en una transaccion nueva: tambien despues del rollback de un comando (afterCompletion).
+            var t=new TransactionTemplate(transactions);
+            t.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            t.executeWithoutResult(s->db.audit(actor,CANCELLED,"SISTEMA",0,null,text));
         }catch(RuntimeException e){
             LOG.error("Auditoria {} no registrada ({}).",CANCELLED,e.getClass().getSimpleName());
         }

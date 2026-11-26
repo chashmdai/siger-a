@@ -88,7 +88,7 @@ class MySql84UpgradeTest {
         try(var ctx=MySql84IntegrationTest.app(SCHEMA,List.of())){
             assertEquals(migrated,state(),"el arranque normal tras migrate-only no cambia nada");
             var db=ctx.getBean(Db.class);var access=ctx.getBean(Access.class);
-            assertEquals("22",ctx.getBean(Api.class).health().getBody().get("schema"));
+            assertEquals("23",ctx.getBean(Api.class).health().getBody().get("schema"));
             for(int v=11;v<=21;v++)assertEquals(1,db.count("SELECT COUNT(*) FROM flyway_schema_history WHERE version=? AND success=TRUE",String.valueOf(v)),"V"+v);
             for(String marker:List.of(Bootstrap.AUTHORITY_MARKER,Bootstrap.REGIONAL_HEAD_MARKER,PersonIndex.MARKER,Milestones.MARKER,OriginRegion.MARKER))
                 assertEquals(1,db.count("SELECT COUNT(*) FROM application_marker WHERE code=?",marker),marker);

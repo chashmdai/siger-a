@@ -107,6 +107,20 @@ abstract class StatFixture extends E07Fixture {
         db.update("UPDATE milestone SET at_ms=? WHERE communication_id=? AND event='COM_REGISTRADA'",ms(iso),com);
     }
 
+    // --- Cortes (E10) ------------------------------------------------------------------------------------------------
+    /** Corte del periodo en el alcance indicado (nulo = institucion), generado por STAT_CUT_CREATE. */
+    long cut(String who,String scopeCode,Map<String,Object> period){
+        var data=map("title","Corte sintetico","period",period,"reason","Fundamento sintetico del corte");
+        if(scopeCode!=null)data.put("scope_id",scope(scopeCode));
+        return run(who,"STAT_CUT_CREATE",null,null,data).id();
+    }
+    /** Respuesta sin lo que por definicion difiere entre la fuente vigente y su corte: el corte, su instante y la hora del calculo. */
+    static Map<String,Object> comparable(Map<String,Object> r){
+        var out=new LinkedHashMap<>(r);var m=new LinkedHashMap<>(obj(r.get("metadata")));
+        m.remove("cut_id");m.remove("as_of");m.remove("calculated_ms");out.put("metadata",m);
+        return out;
+    }
+
     // --- Consulta y respuesta ---------------------------------------------------------------------------------------
     static Map<String,Object> period(String type,String from){return map("type",type,"from",from);}
     static Map<String,Object> days(String from,String to){return map("type","PERSONALIZADO","from",from,"to",to);}

@@ -24,7 +24,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E08 | Motor estadistico: fuente unica, agregacion, series temporales y comparaciones (servidor) | CERRADO |
 | E08b | Motor estadístico: confinamiento, límites de ejecución y concurrencia (servidor) | CERRADO |
 | E09 | Captura estadistica en el flujo (interfaz): caracterizacion, derechos, actuaciones y cierre | CERRADO |
-| E10 | Cortes estadisticos y configuraciones guardadas (servidor) | ABIERTO |
+| E10 | Cortes estadisticos y configuraciones guardadas (servidor) | CERRADO |
 | E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | ABIERTO |
 | E12 | Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz) | ABIERTO |
 | E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | ABIERTO |
@@ -70,6 +70,7 @@ plan). Los pendientes operacionales postergados no tienen gate en 0.8.0 (seccion
 | E15 postergado | E16 | 2026-11-25: por la naturaleza del proyecto no habrá otra validación institucional que la ratificación pendiente de DI-13. U1-U10 los acredita el ejecutor en el humo de E09, E12, E13 y E14, y Claude Padre los revisa en E16. Las observaciones de uso posteriores siguen D47 (0.9.0). E16 depende de E14. |
 | Actualización sin ensayo en TEST-SIGER (precisión de D50) | E17 | 2026-11-25: se omite el paso 2 de E17. Fundamento: Update.ps1 y Migrate.ps1 sin cambios desde v0.6.0 y ejecutados con éxito en producción al pasar de 0.6.0 a 0.7.0; la migración desde 0.7.0 hasta la última versión se prueba sobre MySQL 8.4 con el volcado sintético en cada gate y en E14. Compensaciones obligatorias en el paso U (detalle de E14). |
 | Dimensión de adscripción institucional (DI-13) | E10 | 2026-11-25: aprobada; se agrega a E10 con StatSource.java y docs/CONTRATO_STATS_0_8_0.md (cambio aditivo registrado como desvío). |
+| Detención de E10: generación del corte con el lock global (10,6 s con 50.005 COM y 25.084 congeladas, sobre el umbral de 5 s del GO) | E10 | 2026-11-26: opción A. STAT_CUT_CREATE sigue dentro de Workflow.run, con el lock global, como dice el GO. Se admiten optimizaciones que no cambien el resultado (lotes de inserción más grandes) y se registra el tiempo final. Exigido: un comando que llega durante la generación espera y termina bien, probado en MySQL; innodb_lock_wait_timeout mayor que el plazo de StatGuard (si no, detenerse); plazo vencido con rollback completo, 503, nada parcial y la cancelación auditada. Documentación en CLAUDE.md y en el contrato: generar un corte detiene las operaciones unos segundos y se recomienda hacerlo fuera del horario de atención, con la proyección del tiempo según el volumen frente al plazo de 30 s. Hoja de ruta 0.9.0 (sección 9 del plan): corte sin lock global (opción D). El resto del GO de E10 sigue igual. |
 
 ## Definiciones pendientes
 
@@ -891,3 +892,66 @@ Mutaciones de E09 (regla -> prueba que fallo):
 | 14 codigo visible | rights-render: panel sin codigos |
 | 15 code_labels ignorados | notes.test: code_labels |
 | 16 descripcion oculta | characterization-render: la definicion del item elegido llega como ayuda |
+
+### E10 - Cortes estadisticos y configuraciones guardadas (servidor)   (CERRADO)
+- Fecha: 2026-11-26 (commit `gate E10: cortes y configuraciones`), DDN-TEST-SIGER (Windows), Claude Code; base `17ac793` (cierre de E09 `4c7164f` más el commit de documentación de DI-13).
+- GO del responsable (2026-11-25): A (stat_cut_row y relaciones de entrada en vez de stat_cut_multi), B (dentro de STAT_CUT_CREATE con lock, cupo y plazo; detenerse si el lock supera 5 s), C (solo VIGENTE, as_of = instante del comando, comparación por celdas y márgenes, vigente comparada con el alcance del corte), D (cubrir en ámbitos y materias), E (vistas), F (auditoría con CORTE_VERIFICADO), G (StatGuard.java y Javadoc de Roles.java) y H, con sus condiciones. Detención por el lock (10,6 s) y decisión A del 2026-11-26 (tabla de decisiones).
+- Hecho: (1) V23 y `StatCuts`: congelado dentro de `Workflow.run` (`StatSource.Plan.freezer`: toda COM del alcance con alguna fecha de análisis en el periodo, en todos sus estados) en `stat_cut_row` y las relaciones de entrada del motor, huellas canónicas, verificación, anulación de la cabecera, lecturas y cobertura. (2) Consulta sobre un corte con el mismo `Plan` en modo corte (lee solo `stat_cut_*` y los ítems de catálogo; rótulos, tramo y propuestas del instante) y `compare CORTE`. (3) `StatViews`. (4) `ADSCRIPCION_INICIAL` (DI-13). (5) `StatGuard.read` dentro de una transacción abierta: plazo como fecha límite de la conexión del comando, levantado al terminar; al vencer, 503 y `STAT_CONSULTA_CANCELADA` después del rollback (`REQUIRES_NEW`). (6) `Workflow.afterPreviousCommand`: duerme mientras falta más de 1 ms y deja `RELOJ_ATRASADO <ms>` al llegar al tope (una por episodio, a lo más una por minuto; condición del GO de E08). (7) Lotes de inserción de hasta 2.000 filas o 60.000 parámetros.
+- Archivos clave: `V23__cortes_y_vistas.sql`, `StatCuts.java`, `StatViews.java` (nuevos), `StatSource.java`, `StatEngine.java`, `StatGuard.java`, `Workflow.java`, `Api.java`, `Roles.java` (Javadoc); `StatCutsTest` (18), `StatAdscriptionTest` (1), `StatViewsTest` (1), `StatCutHttpTest` (1), `WorkflowClockTest` (2), `StatEngineTest` (+1, barrido de equivalencia), `StatFixture`, `StatLoadMeasureTest` (sección E10), `InstitutionalReaderTest` y `ImmutabilityTest` (comandos nuevos), pruebas de esquema 23; `docs/CONTRATO_STATS_0_8_0.md` (secciones 11 a 13), `CLAUDE.md`, `docs/ARQUITECTURA.md`, PLAN (sección 9).
+- Migraciones: V23 (`stat_cut`, `stat_cut_row`, `stat_cut_event`, `stat_cut_action`, `stat_cut_action_institution`, `stat_cut_person`, `stat_cut_case`, `stat_view`; esquema 23), sin siembra, sin claves foráneas en lo congelado ni cascadas.
+- Verificación: JUnit H2 353 ok, 1 omitida (la medición) (antes 328 y 1); MySQL 8.4.13 (suite completa con `siger.mysql.suite=true`, `-Dsiger.stats.instance-drive=D:\`, actualizaciones desde 0.4.0 y 0.7.0 hasta V23 con `communication_original` y `external_*` idénticos) 357 ok, 1 omitida (antes 332 y 1); frontend typecheck ok, 183 ok (sin cambio), build ok; humo 23/23 con el JAR (perfil local, H2 en `backend/target/humo-e10`, puerto 18643; dos arranques previos abortaron en el script, no en SIGER: clave `users` de la administración y nuevo inicio de sesión tras las concesiones; datos borrados y proceso detenido); `Check-Scripts.ps1` (powershell.exe 5.1, rutas nativas de módulos, sin Maven ni npm): 40 scripts, 73 órdenes en 60 procesos. MySQL con el procedimiento de E08b en `D:\Ensayo-E10\mysql` (datadir, tmpdir y `#innodb_temp` en D:, `127.0.0.1:3417`), detenido con `mysqladmin shutdown`, puerto libre, sin procesos propios; MySQL80 y la instancia ajena de `D:\sigervalidacion` intactos.
+- Medición (MySQL, 50.005 COM, corte institucional de la Cuenta Pública con 25.084 COM congeladas, 70.357 eventos, 11.355 actuaciones, 18.814 NNA, 9.557 Casos): `STAT_CUT_CREATE` 10,6 s con lotes de 200 filas (fila por COM 6,0 s de consulta y 1,5 s de inserción; eventos 0,8 + 0,7 s; actuaciones 0,4 s; Casos 0,3 s; NNA ≈ 1 s) y 11,0 y 10,6 s con los lotes finales (sin mejora medible: domina la consulta de la fila). Consultas sobre el corte 0,04-0,9 s (vigentes 0,1-2,7 s); verificación 0,3 s. Proyección: unos 0,4 ms por COM congelada; el plazo de 30 s se alcanzaría con unas 70.000 COM en un corte (contrato, sección 13).
+- Evidencia de mutación: 40 mutaciones temporales (23 del plan más las de los puntos 1, 2, 4, 5, 6, 8, D y la equivalencia), todas fallaron en la prueba prevista (tabla abajo); cada archivo restaurado y comprobado por SHA-256.
+- Condiciones de la sección 2: `git diff v0.7.0` vacío para `scripts/`, `.mvn/`, los 7 archivos de recepción del Formulario, `Reports.java` y `Territory.java`; `IntakeCommands` (incluido `conserveExternal`), `RequirementCommands` (`REOPEN_*`) y `Access` sin cambios; V1-V22 sin cambios; ninguna escritura en `communication_original` ni `external_*`; sin dependencias nuevas; auditoría solo con nombres y códigos de corte; TI sin acceso.
+- Facilidad de uso: no aplica (servidor); los rechazos se explican en texto llano ("El periodo consultado está fuera del periodo del corte X", "Un corte guarda los valores de su instante...", "El corte ya está anulado.").
+- Definiciones usadas: DI-13 (ADSCRIPCION_INICIAL; ratificación institucional pendiente, no bloquea); DI-01 a DI-04 (catálogos de referencia en pruebas).
+- Desvíos del plan: (1) detención por el lock y decisión A (2026-11-26). (2) `ADSCRIPCION_INICIAL` y `compares` con `CORTE` en el catálogo: cambios aditivos del contrato (DI-13 y reservado a E10). (3) `ImmutabilityTest` agrega la categoría `STATISTICS` (cambia la suma de la aserción de categorías disjuntas, no su sentido); las pruebas de esquema 22 → 23 solo cambian el número (`FormularioServiceTest`, `MySql84IntegrationTest` ×2, `MySql84UpgradeTest`); ninguna aserción se eliminó.
+- Diferencias de referencia: DISENO 6: relaciones de entrada en vez de `stat_cut_multi`; sin `filters_json` (el corte guarda toda la población del periodo y alcance; los filtros se aplican al consultarlo) y con `counts_json`, `dimensions_json`, `labels_json` y `revision`; id asignado bajo el lock y cabecera escrita al final; el tramo de edad del NNA congelado. La consulta vigente comparada con un corte usa el alcance del corte.
+- Hallazgos para gates siguientes: H2 (perfiles test y local) espera un lock 2 s: ahí un corte que tarde más hace fallar los comandos concurrentes (en MySQL rige `innodb_lock_wait_timeout`, 50 s por omisión, sin cambio en `Init-Server.ps1`). Con el pool de 6 conexiones y 10 s de espera de conexión, durante un corte largo más de 5 operaciones en espera podrían hacer fallar una solicitud adicional: otro motivo para generar los cortes fuera del horario de atención. E11 exporta desde un corte con el mismo `Plan` (modo corte) y `StatGuard`; E12/E13 leen `GET /api/stats/cuts` y `/views` y `stats.compares`; `StatLoadMeasureTest` deja `target/medicion-e10.txt` para E14.
+- Pendientes: borrar `D:\Ensayo-E10` (MySQL detenido; datos sintéticos y la clave del usuario desechable) -> responsable (la protección de Claude Code bloqueó el borrado); ratificación de DI-13 -> institución; corte sin lock global -> 0.9.0 (sección 9 del plan).
+- Verificación manual sugerida al usuario: `.\mvnw.cmd -B -ntp -f backend\pom.xml test -Dtest=StatCutsTest,StatAdscriptionTest,StatViewsTest,StatCutHttpTest,WorkflowClockTest`; en local, con REPORTES y GESTION_ESTADISTICA, `STAT_CUT_CREATE` por `/api/commands` y `POST /api/stats/query` con `cut_id`.
+
+Mutaciones de E10 (regla -> prueba que falló):
+
+| Regla | Prueba que falló |
+|---|---|
+| 01 A sin destino da una clave nula | StatAdscriptionTest.matrizDi13EnLosCuatroModosYEnUnCorte:31 |
+| 02 codigo del ambito central como categoria | StatAdscriptionTest.matrizDi13EnLosCuatroModosYEnUnCorte:69 |
+| 03 sede vigente tras la transferencia | StatAdscriptionTest.matrizDi13EnLosCuatroModosYEnUnCorte:69 |
+| 04 contar una vez por NNA en la adscripcion | StatAdscriptionTest.matrizDi13EnLosCuatroModosYEnUnCorte:99 |
+| 05 adscripcion posterior al instante | StatAdscriptionTest.matrizDi13EnLosCuatroModosYEnUnCorte:79 |
+| 06 Oficina Nacional fuera de las filas y en el total | StatAdscriptionTest.matrizDi13EnLosCuatroModosYEnUnCorte:34 |
+| 07 consulta sobre el corte que lee la fuente vigente | StatCutsTest.anulacionConservaElCorte:75, StatCutsTest.coberturaDelAlcance:75, StatCutsTest.cubrirExigeTambienLaMateria:75, StatCutsTest.elCorteSeLeeSoloASiMismo:230, StatCutsTest.escenario9CorreccionPosteriorNoCambiaElCorteYLaComparacionLaMuestra:75, StatCutsTest.rotulosDelInstanteDelCorte:315 |
+| 08 huella sin la relacion multivaluada | StatCutsTest.huellaCanonicaEstableYVerificacionQueDetectaAlteraciones:141, StatCutsTest.serializacionCanonicaDocumentada:176 |
+| 09 verificacion que no recalcula | StatCutsTest.huellaCanonicaEstableYVerificacionQueDetectaAlteraciones:141 |
+| 10 anulacion que modifica filas | StatCutsTest.anulacionConservaElCorte:354, StatCutsTest.ningunCodigoModificaUnCorte:374 |
+| 11 anulacion sin fundamento | StatCutsTest.anulacionConservaElCorte:346 |
+| 12 crear sin GESTION_ESTADISTICA | StatCutsTest.soloGestionEstadisticaEnSuAlcanceYNuncaTi:249 |
+| 13 crear en otro alcance | StatCutsTest.soloGestionEstadisticaEnSuAlcanceYNuncaTi:250 |
+| 14 corte visible fuera de cobertura | StatCutsTest.anulacionConservaElCorte:349, StatCutsTest.coberturaDelAlcance:267, StatCutsTest.cubrirExigeTambienLaMateria:294 |
+| 15 TI con acceso a la lista | StatCutsTest.coberturaDelAlcance:276 |
+| 16 COM fuera del alcance congelada | StatCutsTest.coberturaDelAlcance:279 |
+| 17 comparacion con la fuente vigente como base | StatCutsTest.escenario9CorreccionPosteriorNoCambiaElCorteYLaComparacionLaMuestra:101 |
+| 18 periodo del corte ignorado | StatCutsTest.periodoYModoDelCorte:328 |
+| 19 eventos del corte leidos de stat_event | StatCutsTest.elCorteSeLeeSoloASiMismo:240, StatCutsTest.escenario9CorreccionPosteriorNoCambiaElCorteYLaComparacionLaMuestra:108 |
+| 20 compartir sin GESTION_ESTADISTICA | StatViewsTest.vistasPersonalesYCompartidas:57 |
+| 21 editar una vista ajena | StatViewsTest.vistasPersonalesYCompartidas:51 |
+| 22 definicion no validada | StatViewsTest.vistasPersonalesYCompartidas:43 |
+| 23 revision de la vista no comprobada | StatViewsTest.vistasPersonalesYCompartidas:52 |
+| 24 sin la linea de log del reloj atrasado | WorkflowClockTest.relojAtrasadoDejaUnaLineaPorEpisodio:50 |
+| 25 espera activa en vez de dormir | WorkflowClockTest.relojAtrasadoDejaUnaLineaPorEpisodio:49 |
+| 26 una linea por comando (sin episodio ni minuto) | WorkflowClockTest.relojAtrasadoDejaUnaLineaPorEpisodio:56 |
+| 27 corte sin el cupo de StatGuard | StatCutsTest.cupoSinEsperaDentroDelComando:410 |
+| 28 corte sin el plazo de StatGuard | StatCutsTest.plazoVencidoDentroDelComando:428 |
+| 29 cancelacion del corte sin auditar | StatCutsTest.plazoVencidoDentroDelComando:432 |
+| 30 plazo del corte que sigue rigiendo despues | StatCutsTest.plazoVencidoDentroDelComando:437 |
+| 31 dato personal en lo congelado | StatCutsTest.listaCerradaDeColumnasSinDatosPersonales:188 |
+| 32 constancia reservada en el corte | StatCutsTest.reservaYRectificacionNoEntranAlCorte:200 |
+| 33 rotulos de ambito de la tabla vigente en un corte | StatCutsTest.rotulosDelInstanteDelCorte:316 |
+| 34 propuestas recalculadas en un corte | StatCutsTest.anulacionConservaElCorte:75, StatCutsTest.coberturaDelAlcance:75, StatCutsTest.cubrirExigeTambienLaMateria:75, StatCutsTest.elCorteSeLeeSoloASiMismo:230, StatCutsTest.escenario9CorreccionPosteriorNoCambiaElCorteYLaComparacionLaMuestra:75 |
+| 35 cubrir por materia una sede completa | StatCutsTest.coberturaDelAlcance:270, StatCutsTest.cubrirExigeTambienLaMateria:295 |
+| 36 cubrir sin exigir la materia | StatCutsTest.cubrirExigeTambienLaMateria:294 |
+| 37 corte solo con las computables | StatEngineTest.corteReproduceLaConsultaVigente:445 |
+| 38 metadatos sin la huella de las filas | StatCutsTest.huellaCanonicaEstableYVerificacionQueDetectaAlteraciones:158 |
+| 39 huella de filas que depende del instante | StatCutsTest.anulacionConservaElCorte:355, StatCutsTest.comandosPosterioresNoCambianElCorte:397, StatCutsTest.congeladoSinClavesAutomaticas:455, StatCutsTest.escenario9CorreccionPosteriorNoCambiaElCorteYLaComparacionLaMuestra:114, StatCutsTest.huellaCanonicaEstableYVerificacionQueDetectaAlteraciones:122, StatCutsTest.serializacionCanonicaDocumentada:176 |
+| 40 una sede anula el corte institucional | StatCutsTest.anulacionConservaElCorte:349 |

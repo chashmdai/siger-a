@@ -62,7 +62,7 @@ final class StatSource {
     record Dim(String code,String label,Kind kind,boolean multiple,String catalog,Unit unit,boolean only,Map<String,String> options){
         boolean numeric(){return kind==Kind.EDAD||kind==Kind.PERIODO;}
     }
-    static final String PENDING="PENDIENTE",NO_INFO="SIN_INFORMACION",NOT_APPLY="NO_APLICA",NO_DETAIL="SIN_DESGLOSE";
+    static final String PENDING="PENDIENTE",NO_INFO="SIN_INFORMACION",NOT_APPLY="NO_APLICA",NO_DETAIL="SIN_DESGLOSE",NATIONAL_OFFICE="OFICINA_NACIONAL";
     /** Sentinelas de las dimensiones numericas (edad): mismo significado que los codigos especiales. */
     static final Map<Long,String> NUMERIC_SPECIAL=Map.of(-1L,NO_INFO,-2L,NOT_APPLY,-3L,PENDING);
     private static final String SPECIAL_SQL="'PENDIENTE','SIN_INFORMACION','NO_DECLARADO','NO_APLICA'";
@@ -100,6 +100,9 @@ final class StatSource {
         simple(m,"COMUNA_HECHOS","Comuna de los hechos",Kind.COMUNA,false);
         simple(m,"AMBITO","Ámbito de referencia",Kind.AMBITO,false);
         simple(m,"SEDE_INICIAL","Ámbito responsable inicial",Kind.AMBITO,false);
+        // DI-13 (E10): la sede regional u Oficina Nacional a la que se adscribio primero el ingreso; todo el nivel central es una sola categoria.
+        m.put("ADSCRIPCION_INICIAL",new Dim("ADSCRIPCION_INICIAL","Adscripción institucional",Kind.AMBITO,false,null,null,false,
+            options(NATIONAL_OFFICE,"Oficina Nacional",PENDING,"Pendiente de asignación")));
         simple(m,"SEDE_VIGENTE","Ámbito responsable",Kind.AMBITO,false);
         m.put("TERRITORIO_COBERTURA",new Dim("TERRITORIO_COBERTURA","Quién atendía la región de origen al recibir",Kind.AMBITO,false,null,null,false,
             options("NIVEL_CENTRAL","Nivel central","SIN_ATENCION","Sin atención territorial")));
@@ -152,12 +155,28 @@ final class StatSource {
     /** Un intervalo del eje de periodo; to = su fin en milisegundos, excluido y recortado al periodo consultado. */
     record Interval(String key,String label,long to){}
     record Span(LocalDate fromDay,LocalDate toDay,long from,long to){}
+    /** cut: corte cuyas filas congeladas se leen (E10); nulo = la fuente vigente. */
     record Query(Measure measure,List<Dim> rows,List<Dim> columns,Map<Dim,List<Object>> filters,Span span,Basis basis,Mode mode,Long at,Dim mention,
-                 boolean proposals,Reports.Reach reach,Map<String,List<Interval>> axes){
+                 boolean proposals,Reports.Reach reach,Map<String,List<Interval>> axes,Long cut){
         List<Dim> axesDims(){var all=new ArrayList<>(rows);all.addAll(columns);return all;}
-        Query over(Span other,Map<String,List<Interval>> otherAxes){return new Query(measure,rows,columns,filters,other,basis,mode,at,mention,proposals,reach,otherAxes);}
+        Query over(Span other,Map<String,List<Interval>> otherAxes){return new Query(measure,rows,columns,filters,other,basis,mode,at,mention,proposals,reach,otherAxes,cut);}
+        /** La misma consulta sobre otro origen: un corte (con el alcance ya congelado) o la fuente vigente con el alcance dado. */
+        Query on(Long otherCut,Reports.Reach otherReach){return new Query(measure,rows,columns,filters,span,basis,mode,at,mention,proposals,otherReach,axes,otherCut);}
     }
     record Sql(String text,Object[] args){}
+
+    // --- Cortes (E10) -----------------------------------------------------------------------------------------------
+    /**
+     * Dimensiones de valor unico que un corte congela en stat_cut_row (columna d_ + codigo en minusculas). El periodo y el
+     * registro tardio se calculan de las fechas congeladas; las multivaluadas y las de unidad, de las relaciones congeladas.
+     */
+    static final List<Dim> FROZEN=DIMS.values().stream().filter(d->!d.multiple()&&d.unit()==null&&d.kind()!=Kind.PERIODO&&!d.code().equals("TARDANZA")).toList();
+    static String frozenColumn(Dim d){return "d_"+d.code().toLowerCase(Locale.ROOT);}
+    /** Variables de valor unico con version de catalogo y propuesta congeladas en la fila. */
+    static final List<String> KEYED=List.of(StatValues.VIA_INGRESO,StatValues.TIPO_SOLICITUD,StatValues.TIPO_REQUIRENTE);
+    static final List<String> PROPOSED=List.of(StatValues.TIPO_SOLICITUD,StatValues.TIPO_REQUIRENTE);
+    /** Variables de clasificacion multiple cuyos eventos vigentes congela stat_cut_event. */
+    static final List<String> CLASSIFIED=List.of("DERECHO","CONTEXTO","CARACTERIZACION","ROL_ESTADO","GRUPO_PRIORITARIO");
 
     // --- Consulta -------------------------------------------------------------------------------------------------
     /** Dia civil de Chile (dias desde 1970) de una expresion en milisegundos entre from y to: offset por tramo entre cambios de hora. */
@@ -174,22 +193,43 @@ final class StatSource {
         return "FLOOR(("+expression+"+"+shift+")/86400000)";
     }
 
-    /** Arma las sentencias de una peticion; una instancia por sentencia. */
+    /**
+     * Arma las sentencias de una peticion; una instancia por sentencia. Tres origenes: la fuente vigente; un corte (E10,
+     * q.cut() no nulo), que lee solo stat_cut_* (y los items de catalogo, inmutables) con las mismas etapas y expresiones;
+     * y el congelado de un corte (freezer), que entrega sobre la fuente vigente las filas y relaciones que el corte guarda.
+     */
     static final class Plan {
         private final Query q;
         private final Map<String,String> raw=new LinkedHashMap<>(),derived=new LinkedHashMap<>(),tables=new LinkedHashMap<>(),aliases=new HashMap<>();
         private final String at,now; // instante de corte en pre (alias q) y en las relaciones (alias b)
         private final String reqMode,solMode;
+        /** Corte leido (nulo = fuente vigente) y congelado de un corte (poblacion completa del periodo). */
+        private final Long cut;
+        private final boolean freeze;
 
-        Plan(Query q){
+        Plan(Query q){this(q,false);}
+        /** Plan del congelado de un corte: todas las COM del alcance con alguna de sus fechas de analisis en el periodo. */
+        static Plan freezer(Query q){
+            if(q.cut()!=null||q.mode()!=Mode.VIGENTE)throw new IllegalArgumentException("El congelado parte de la fuente vigente.");
+            return new Plan(q,true);
+        }
+        private Plan(Query q,boolean freeze){
             this.q=q;
+            this.cut=q.cut();
+            this.freeze=freeze;
+            if(cut!=null&&q.mode()!=Mode.VIGENTE)throw new IllegalArgumentException("Un corte se consulta solo en el modo vigente.");
             boolean date=q.mode()==Mode.FECHA;
             at=switch(q.mode()){case FECHA->String.valueOf(q.at());case AL_REQ->TerritorialDims.constitutedSql("q");default->null;};
             now=switch(q.mode()){case FECHA->String.valueOf(q.at());case AL_REQ->"b.act_ms";default->null;};
             reqMode=date?" AND q.created_ms<="+q.at():"";
             solMode=date?" AND sol.created_ms<="+q.at():"";
-            raw("id","c.id");raw("req","q.id");raw("received_ms","c.received_ms");raw("created_ms","c.created_ms");raw("req_ms","q.created_ms");
-            raw("com_state",comState());
+            if(cut!=null){
+                raw("id","r.communication_id");raw("req","r.req_id");raw("received_ms","r.received_ms");raw("created_ms","r.created_ms");raw("req_ms","r.req_ms");
+                raw("com_state","r.com_state");
+            }else{
+                raw("id","c.id");raw("req","q.id");raw("received_ms","c.received_ms");raw("created_ms","c.created_ms");raw("req_ms","q.created_ms");
+                raw("com_state",comState());
+            }
             if(q.mode()==Mode.AL_REQ)raw("act_ms",at);
             for(var d:q.filters().keySet())if(single(d))column(d);
         }
@@ -210,21 +250,37 @@ final class StatSource {
             return parts.isEmpty()?"1=0":"("+String.join(" OR ",parts)+")";
         }
         private String pre(){
-            boolean date=q.mode()==Mode.FECHA;
-            String req=date?"qr":"q",sol=date?"solr":"sol";
+            String from=String.valueOf(q.span().from()),to=String.valueOf(q.span().to());
             var sql=new StringBuilder("SELECT ");
             sql.append(raw.entrySet().stream().map(e->e.getValue()+" AS "+e.getKey()).collect(Collectors.joining(",")));
+            if(cut!=null){
+                // El corte ya esta acotado a su alcance: solo el periodo y la fecha de analisis sobre las fechas congeladas.
+                sql.append(" FROM stat_cut_row r WHERE r.cut_id=").append(cut).append(" AND ").append(switch(q.basis()){
+                    case RECEPCION -> "r.received_ms>="+from+" AND r.received_ms<"+to;
+                    case REGISTRO -> "r.created_ms>="+from+" AND r.created_ms<"+to;
+                    case CONSTITUCION_REQ -> "r.req_ms>="+from+" AND r.req_ms<"+to;
+                    case CREACION_CASO -> "EXISTS(SELECT 1 FROM stat_cut_case cx WHERE cx.cut_id=r.cut_id AND cx.communication_id=r.communication_id AND cx.created_ms>="+from+" AND cx.created_ms<"+to+")";
+                });
+                if(q.measure().population()==Population.REQUERIMIENTO)sql.append(" AND r.req_id IS NOT NULL");
+                return sql.toString();
+            }
+            boolean date=q.mode()==Mode.FECHA;
+            String req=date?"qr":"q",sol=date?"solr":"sol";
             sql.append(" FROM communication c LEFT JOIN requirement q ON q.communication_id=c.id").append(reqMode)
                 .append(" LEFT JOIN solicitation sol ON sol.communication_id=c.id").append(solMode)
                 .append(" LEFT JOIN attention_record ar ON ar.requirement_id=q.id");
             if(date)sql.append(" LEFT JOIN requirement qr ON qr.communication_id=c.id LEFT JOIN solicitation solr ON solr.communication_id=c.id");
             sql.append(" JOIN org_scope s ON s.id=").append(TerritorialDims.referenceScopeSql("c",req,sol)).append(" WHERE ");
-            String from=String.valueOf(q.span().from()),to=String.valueOf(q.span().to());
-            sql.append(switch(q.basis()){
-                case RECEPCION -> "c.received_ms>="+from+" AND c.received_ms<"+to;
-                case REGISTRO -> "c.created_ms>="+from+" AND c.created_ms<"+to;
-                case CONSTITUCION_REQ -> "q.created_ms>="+from+" AND q.created_ms<"+to;
-                case CREACION_CASO -> "EXISTS(SELECT 1 FROM case_record cx WHERE cx.requirement_id=q.id AND cx.created_ms>="+from+" AND cx.created_ms<"+to+")";
+            String received="c.received_ms>="+from+" AND c.received_ms<"+to,registered="c.created_ms>="+from+" AND c.created_ms<"+to,
+                constituted="q.created_ms>="+from+" AND q.created_ms<"+to,
+                opened="EXISTS(SELECT 1 FROM case_record cx WHERE cx.requirement_id=q.id AND cx.created_ms>="+from+" AND cx.created_ms<"+to+")";
+            // El congelado guarda toda COM que alguna fecha de analisis ubica en el periodo; la consulta del corte elige la suya.
+            if(freeze)sql.append("((").append(received).append(") OR (").append(registered).append(") OR (").append(constituted).append(") OR ").append(opened).append(')');
+            else sql.append(switch(q.basis()){
+                case RECEPCION -> received;
+                case REGISTRO -> registered;
+                case CONSTITUCION_REQ -> constituted;
+                case CREACION_CASO -> opened;
             });
             if(date)sql.append(" AND c.created_ms<=").append(q.at());
             if(q.measure().population()==Population.REQUERIMIENTO)sql.append(" AND q.id IS NOT NULL");
@@ -233,6 +289,7 @@ final class StatSource {
             return sql.toString();
         }
         private String state(){
+            if(freeze)return "1=1"; // el corte guarda toda la poblacion: computables, excluidas y antecedentes
             return switch(q.measure().population()){
                 case COMPUTABLE -> "b0.com_state NOT IN ('INVALIDA','VINCULADA')"; // D25
                 case EXCLUIDA -> text("b0.com_state")+"='INVALIDA'";
@@ -257,6 +314,11 @@ final class StatSource {
             String name="d_"+d.code();
             if(aliases.containsKey(name))return aliases.get(name);
             if(derived.containsKey(name))return name;
+            if(cut!=null&&FROZEN.contains(d)){
+                // En un corte, el valor congelado: nada se recalcula desde la fuente vigente.
+                raw(name,"r."+frozenColumn(d));aliases.put(name,name);
+                return name;
+            }
             switch(d.code()){
                 case "TARDANZA" -> derive(name,"CASE WHEN b0.created_ms>="+q.span().to()+" THEN 'SI' ELSE 'NO' END");
                 case "ESTADO_COM" -> derive(name,q.mode()==Mode.AL_INGRESO?"CASE WHEN b0.direct=1 THEN 'ATENDIDA' ELSE 'NUEVA' END"
@@ -289,11 +351,10 @@ final class StatSource {
                     derive(name,"CASE WHEN b0.o_region IS NULL AND b0.evid=0 THEN 'PENDIENTE' ELSE "+TerritorialDims.coverageSql("b0.o_region","b0.received_ms")+" END");
                 }
                 case "AMBITO" -> {raw("ref_scope","s.code");derive(name,"b0.ref_scope");}
-                case "SEDE_INICIAL" -> {
-                    String first=TerritorialDims.scopeSql("c","q","sol",q.mode()==Mode.AL_REQ?TerritorialDims.Mode.REQ:TerritorialDims.Mode.INGRESO,null);
-                    raw("sc_first",q.mode()==Mode.FECHA?"CASE WHEN "+TerritorialDims.scopeSql("c","q","sol",TerritorialDims.Mode.HISTORICO,q.at())+" IS NULL THEN NULL ELSE "+first+" END":first);
-                    derive(name,scopeColumn("sc_first","code","'PENDIENTE'"));
-                }
+                case "SEDE_INICIAL" -> {first();derive(name,scopeColumn("sc_first","code","'PENDIENTE'"));}
+                // DI-13: la primera adscripcion acreditada en el instante (misma regla temporal que SEDE_INICIAL): una sede
+                // por su codigo, el nivel central como una sola categoria y, sin destino, pendiente de asignacion.
+                case "ADSCRIPCION_INICIAL" -> {first();derive(name,"COALESCE((SELECT CASE WHEN x.regional=TRUE THEN x.code ELSE '"+NATIONAL_OFFICE+"' END FROM org_scope x WHERE x.id=b0.sc_first),'"+PENDING+"')");}
                 case "SEDE_VIGENTE" -> {current();derive(name,scopeColumn("sc","code","'PENDIENTE'"));}
                 case "UNIDAD" -> {current();derive(name,scopeColumn("sc","unit_code","'PENDIENTE'"));}
                 case "NIVEL" -> {current();derive(name,"COALESCE((SELECT CASE WHEN x.regional=TRUE THEN 'REGIONAL' ELSE 'CENTRAL' END FROM org_scope x WHERE x.id=b0.sc),'PENDIENTE')");}
@@ -390,12 +451,14 @@ final class StatSource {
         private boolean derivedVia(String variable){return q.mode()==Mode.AL_INGRESO&&variable.equals(StatValues.VIA_INGRESO);}
         /** k_: codigo de una variable de valor unico en el modo temporal o, si no esta informada, su estado. */
         private void key(String variable){
+            if(cut!=null){raw("k_"+variable,"r.d_"+variable.toLowerCase(Locale.ROOT));return;}
             String t=eventAt(variable);
             String value="COALESCE("+StatValues.codeSqlAt("c",variable,t)+","+StatValues.stateSqlAt("c",variable,t)+")";
             raw("k_"+variable,derivedVia(variable)?"CASE WHEN "+StatValues.derivedVersion("c",variable,null)+" IS NOT NULL THEN "+StatValues.derivedCode("c")+" ELSE "+value+" END":value);
         }
         /** v_: version del catalogo con que se registro. */
         private void version(String variable){
+            if(cut!=null){raw("v_"+variable,"r.v_"+variable.toLowerCase(Locale.ROOT));return;}
             String value=StatValues.versionSqlAt("c",variable,eventAt(variable));
             raw("v_"+variable,derivedVia(variable)?"COALESCE("+StatValues.derivedVersion("c",variable,null)+","+value+")":value);
         }
@@ -404,6 +467,7 @@ final class StatSource {
          * Rights.consolidatedStateSql (INFORMADO, estado especial del REQ, el del primer Caso con uno).
          */
         private void consolidated(String variable){
+            if(cut!=null){raw("z_"+variable,"r.d_estado_"+variable.toLowerCase(Locale.ROOT));return;}
             if(derived.containsKey("z_"+variable))return;
             raw("zd_"+variable,StatValues.setStateSqlAt("REQ","q.id",variable,eventAt(variable)));
             if(q.mode()==Mode.AL_INGRESO)raw("f_"+variable,firstEvent(variable));
@@ -413,6 +477,7 @@ final class StatSource {
                 +" ELSE COALESCE((SELECT "+child+cases+" AND "+child+"<>'PENDIENTE' ORDER BY cc.id LIMIT 1),'PENDIENTE') END");
         }
         private void evidence(){
+            if(cut!=null){raw("evid","1");return;} // un corte es vigente en su instante
             raw("evid",q.mode().evidence()?"CASE WHEN ("+TerritorialDims.externalEvidenceSql("c","q",q.mode().dims,q.at())+") OR "
                 +TerritorialDims.versionSql("c","q",q.mode().dims,q.at())+" IS NOT NULL THEN 1 ELSE 0 END":"1");
         }
@@ -434,6 +499,11 @@ final class StatSource {
                 +"(SELECT v.region_code FROM intake_revision v WHERE v.id=(SELECT MIN(w.id) FROM intake_revision w WHERE w.communication_id=c.id AND w.region_code IS NOT NULL"+cut+")))");
         }
         private void current(){raw("sc",TerritorialDims.scopeSql("c","q","sol",q.mode().dims,q.at()));}
+        /** Primer ambito de destino acreditado en el instante (SEDE_INICIAL y ADSCRIPCION_INICIAL). */
+        private void first(){
+            String first=TerritorialDims.scopeSql("c","q","sol",q.mode()==Mode.AL_REQ?TerritorialDims.Mode.REQ:TerritorialDims.Mode.INGRESO,null);
+            raw("sc_first",q.mode()==Mode.FECHA?"CASE WHEN "+TerritorialDims.scopeSql("c","q","sol",TerritorialDims.Mode.HISTORICO,q.at())+" IS NULL THEN NULL ELSE "+first+" END":first);
+        }
         private String scopeColumn(String column,String field,String missing){return "COALESCE((SELECT x."+field+" FROM org_scope x WHERE x.id=b0."+column+"),"+missing+")";}
         /** Posicion del intervalo (o dia civil) de una fecha que ya esta dentro del periodo. */
         private String bucket(Dim d,String expression){
@@ -467,7 +537,7 @@ final class StatSource {
                 case "ORIGEN_ACTUACION" -> {actions();values="SELECT y.com AS com,y.origin AS val,COUNT(*) AS w FROM acts y GROUP BY y.com,y.origin";missing="'NO_APLICA'";}
                 case "TIPO_INSTITUCION" -> {
                     actions();
-                    values="SELECT y.com AS com,COALESCE(ni.type_code,'SIN_INFORMACION') AS val,COUNT(*) AS w FROM acts y JOIN note_institution ni ON ni.note_id=y.note+0 GROUP BY y.com,COALESCE(ni.type_code,'SIN_INFORMACION')";
+                    values="SELECT y.com AS com,COALESCE(ni.type_code,'SIN_INFORMACION') AS val,COUNT(*) AS w FROM acts y JOIN "+institution("ni","y.note+0")+" GROUP BY y.com,COALESCE(ni.type_code,'SIN_INFORMACION')";
                     missing="'NO_APLICA'";
                 }
                 default -> {
@@ -476,7 +546,7 @@ final class StatSource {
                         case "REGION_NNA" -> "pa.region_code";
                         case "COMUNA_NNA" -> "pa.commune";
                         case "EDAD_NNA" -> "pa.age_years";
-                        case "TRAMO_EDAD_NNA" -> PersonDims.bracketSql("pa.age_years");
+                        case "TRAMO_EDAD_NNA" -> cut!=null?"pa.age_bracket":PersonDims.bracketSql("pa.age_years");
                         case "NACIONALIDAD_NNA" -> "pa.nationality";
                         case "GRUPO_NACIONALIDAD_NNA" -> "CASE WHEN pa.nationality IS NULL THEN NULL ELSE "+PersonDims.nationalityGroupSql("pa.nationality")+" END";
                         default -> throw new IllegalArgumentException(d.code());
@@ -491,6 +561,8 @@ final class StatSource {
         }
         /** PersonDims.affectedSql sobre las COM de la base, sin recorrer las demas. */
         private String affected(){
+            if(cut!=null)return "SELECT "+FIXED+"b.id AS com,p.region_code AS region_code,p.commune AS commune,p.age_years AS age_years,p.nationality AS nationality,p.age_bracket AS age_bracket"
+                +" FROM base0 b JOIN stat_cut_person p ON p.cut_id="+cut+" AND p.communication_id=b.id+0";
             String all=" FROM communication c LEFT JOIN",some=" FROM base0 b JOIN communication c ON c.id=b.id+0 LEFT JOIN";
             String sql=PersonDims.affectedSql(q.mode().dims,q.at());
             if(sql.split(java.util.regex.Pattern.quote(all),-1).length!=4)throw new IllegalStateException("Consulta de NNA afectados inesperada.");
@@ -498,6 +570,8 @@ final class StatSource {
         }
         /** Eventos que agregan un valor vigente (o en el corte) de la variable: en el REQ o en un Caso dentro del alcance. */
         private String events(String variable){
+            if(this.cut!=null)return "SELECT "+FIXED+"b.id AS com,e.event_id AS event,e.code AS val,e.catalog_version_id AS ver FROM base0 b JOIN stat_cut_event e ON e.cut_id="+this.cut
+                +" AND e.communication_id=b.id+0 AND e.variable='"+variable+"'";
             String cut=now;
             if(q.mode()==Mode.AL_INGRESO){raw("f_"+variable,firstEvent(variable));cut="b.f_"+variable;}
             return "SELECT "+FIXED+"b.id AS com,a.id AS event,a.code AS val,a.catalog_version_id AS ver FROM base0 b JOIN stat_event a ON a.communication_id=b.id+0 AND a.variable='"+variable+"'"
@@ -524,6 +598,11 @@ final class StatSource {
          */
         private void actions(){
             if(tables.containsKey("acts"))return;
+            if(this.cut!=null){
+                tables.put("acts","SELECT "+FIXED+"b.id AS com,a.unit_id AS unit,a.action_type AS action_type,a.origin AS origin,a.note_id AS note,a.catalog_version_id AS ver"
+                    +" FROM base0 b JOIN stat_cut_action a ON a.cut_id="+this.cut+" AND a.communication_id=b.id+0");
+                return;
+            }
             String cut=q.mode().evidence()?" AND mn.registered_ms<="+now:"",later=q.mode().evidence()?" AND rx.registered_ms<="+now:"";
             tables.put("acts","SELECT "+FIXED+"b.id AS com,mn.id*2 AS unit,mn.action_type AS action_type,CASE WHEN mn.case_id IS NULL THEN 'GESTION_REQ' ELSE 'GESTION_CASO' END AS origin,mn.id AS note,mn.action_catalog_version AS ver"
                 +" FROM base0 b JOIN management_note mn ON mn.requirement_id=b.req+0 LEFT JOIN case_record cc ON cc.id=mn.case_id LEFT JOIN org_scope cs ON cs.id=cc.scope_id"
@@ -536,7 +615,10 @@ final class StatSource {
             switch(q.measure().unit()){
                 case ACTUACION -> {actions();tables.put("u","SELECT y.com AS com,y.unit AS unit,y.action_type AS d_TIPO_ACTUACION,y.origin AS d_ORIGEN_ACTUACION,y.note AS note FROM acts y");}
                 case CLASIFICACION -> tables.put("u",rights("e.val",",e.event AS unit,"+level("DERECHO_EJE")+" AS d_DERECHO_EJE,"+level("DERECHO")+" AS d_DERECHO,COALESCE("+level("DERECHO_SUBCATEGORIA")+",'SIN_DESGLOSE') AS d_DERECHO_SUBCATEGORIA"));
-                case CASO -> tables.put("u","SELECT "+FIXED+"b.id AS com,cc.id AS unit,cc.created_ms AS case_ms FROM base0 b JOIN case_record cc ON cc.requirement_id=b.req+0 JOIN org_scope cs ON cs.id=cc.scope_id WHERE "+caseReach("cc.matter","cs")
+                case CASO -> tables.put("u",cut!=null
+                    ?"SELECT "+FIXED+"b.id AS com,cc.case_id AS unit,cc.created_ms AS case_ms FROM base0 b JOIN stat_cut_case cc ON cc.cut_id="+cut+" AND cc.communication_id=b.id+0 WHERE 1=1"
+                        +(q.basis()==Basis.CREACION_CASO?" AND cc.created_ms>="+q.span().from()+" AND cc.created_ms<"+q.span().to():"")
+                    :"SELECT "+FIXED+"b.id AS com,cc.id AS unit,cc.created_ms AS case_ms FROM base0 b JOIN case_record cc ON cc.requirement_id=b.req+0 JOIN org_scope cs ON cs.id=cc.scope_id WHERE "+caseReach("cc.matter","cs")
                     +(q.mode()==Mode.FECHA?" AND cc.created_ms<="+q.at():"")
                     +(q.basis()==Basis.CREACION_CASO?" AND cc.created_ms>="+q.span().from()+" AND cc.created_ms<"+q.span().to():""));
                 case VARIABLE -> {
@@ -594,7 +676,7 @@ final class StatSource {
             var select=new StringBuilder("SELECT "+FIXED+"b.id AS com,").append(com?"0":"u.unit").append(" AS unit");
             var joins=new StringBuilder(" FROM base b");
             if(!com)joins.append(" JOIN u ON u.com+0=b.id+0");
-            if(unitInstitution())joins.append(" LEFT JOIN note_institution ui ON ui.note_id=u.note+0");
+            if(unitInstitution())joins.append(" LEFT JOIN ").append(institution("ui","u.note+0"));
             var joined=new HashSet<String>();
             int i=0;
             for(var d:dims){
@@ -687,7 +769,7 @@ final class StatSource {
         Sql proposals(){
             var parts=new ArrayList<String>();
             for(String v:List.of(StatValues.TIPO_SOLICITUD,StatValues.TIPO_REQUIRENTE)){
-                key(v);raw("p_"+v,StatProposals.sqlCode("c",v));
+                key(v);proposal(v);
                 parts.add("SELECT '"+v+"' AS variable,b.p_"+v+" AS code,COUNT(*) AS n FROM pop b WHERE "+text("b.k_"+v)+"='PENDIENTE' AND b.p_"+v+" IS NOT NULL GROUP BY b.p_"+v);
             }
             var unitArgs=new ArrayList<Object>();
@@ -698,6 +780,60 @@ final class StatSource {
             args.addAll(unitArgs);
             return new Sql(with+String.join(" UNION ALL ",parts),args.toArray());
         }
+        /** p_: propuesta de una variable (regla PROPUESTA_V1); en un corte, la congelada (no se recalcula desde external_field). */
+        private void proposal(String v){raw("p_"+v,cut!=null?"r.p_"+v.toLowerCase(Locale.ROOT):StatProposals.sqlCode("c",v));}
+        /** Tipo de institucion de las actuaciones: note_institution o, en un corte, su copia congelada. */
+        private String institution(String alias,String note){
+            return cut==null?"note_institution "+alias+" ON "+alias+".note_id="+note
+                :"stat_cut_action_institution "+alias+" ON "+alias+".cut_id="+cut+" AND "+alias+".note_id="+note;
+        }
+
+        // --- Congelado de un corte (E10) ---------------------------------------------------------------------------
+        /** Una sentencia por relacion; filas ordenadas por su clave numerica (la serializacion canonica ordena en Java lo demas). */
+        Sql freezeRows(){
+            requireFreeze();
+            var select=new StringBuilder("SELECT b.id AS communication_id,b.req AS req_id,b.received_ms AS received_ms,b.created_ms AS created_ms,b.req_ms AS req_ms,b.com_state AS com_state");
+            for(String v:KEYED){key(v);version(v);select.append(",b.v_").append(v).append(" AS v_").append(v.toLowerCase(Locale.ROOT));}
+            for(String v:PROPOSED){proposal(v);select.append(",b.p_").append(v).append(" AS p_").append(v.toLowerCase(Locale.ROOT));}
+            for(var d:FROZEN)select.append(",b.").append(column(d)).append(" AS ").append(frozenColumn(d));
+            return statement(select.append(" FROM base b ORDER BY b.id").toString());
+        }
+        Sql freezeEvents(){
+            requireFreeze();
+            var parts=new ArrayList<String>();
+            for(String v:CLASSIFIED){
+                tables.putIfAbsent("ev_"+v,events(v));
+                parts.add("SELECT y.com AS com,y.event AS event,'"+v+"' AS variable,y.val AS val,y.ver AS ver FROM ev_"+v+" y");
+            }
+            return statement("SELECT z.com AS communication_id,z.event AS event_id,z.variable AS variable,z.val AS code,z.ver AS catalog_version_id FROM ("+String.join(" UNION ALL ",parts)+") z ORDER BY z.event");
+        }
+        Sql freezeActions(){
+            requireFreeze();actions();
+            return statement("SELECT y.unit AS unit_id,y.com AS communication_id,y.action_type AS action_type,y.origin AS origin,y.note AS note_id,y.ver AS catalog_version_id FROM acts y ORDER BY y.unit");
+        }
+        Sql freezeInstitutions(){
+            requireFreeze();actions();
+            return statement("SELECT ni.id AS institution_id,ni.note_id AS note_id,ni.type_code AS type_code,ni.catalog_version_id AS catalog_version_id FROM acts y JOIN "+institution("ni","y.note+0")+" ORDER BY ni.id");
+        }
+        /** NNA afectados con el tramo de edad del catalogo vigente en el instante del corte (el tramo no se recalcula despues). */
+        Sql freezePersons(){
+            requireFreeze();
+            tables.put("pa",affected());
+            return statement("SELECT pa.com AS communication_id,pa.region_code AS region_code,pa.commune AS commune,pa.age_years AS age_years,pa.nationality AS nationality,"
+                +PersonDims.bracketSql("pa.age_years")+" AS age_bracket FROM pa ORDER BY pa.com");
+        }
+        Sql freezeCases(){
+            requireFreeze();
+            return statement("SELECT "+FIXED+"cc.id AS case_id,b.id AS communication_id,cc.created_ms AS created_ms FROM base b JOIN case_record cc ON cc.requirement_id=b.req+0 JOIN org_scope cs ON cs.id=cc.scope_id WHERE "
+                +caseReach("cc.matter","cs")+" ORDER BY cc.id");
+        }
+        private void requireFreeze(){if(!freeze)throw new IllegalStateException("Sentencia de congelado fuera del congelado.");}
+        private Sql statement(String select){
+            var args=new ArrayList<Object>();
+            String with=with(args,new LinkedHashMap<>());
+            return new Sql(with+select,args.toArray());
+        }
+
         /** Versiones de catalogo con que se registraron los valores de una dimension (TRAMO_EDAD usa siempre la vigente). */
         private String versions(Dim d){
             return switch(d.code()){
@@ -707,7 +843,7 @@ final class StatSource {
                     yield "SELECT DISTINCT b.v_"+v+" AS ver FROM pop b WHERE b.k_"+v+" NOT IN ("+SPECIAL_SQL+")";
                 }
                 case "TIPO_ACTUACION" -> {actions();yield "SELECT DISTINCT y.ver AS ver FROM acts y JOIN pop b ON b.id+0=y.com+0";}
-                case "TIPO_INSTITUCION" -> {actions();yield "SELECT "+FIXED+"DISTINCT ni.catalog_version_id AS ver FROM acts y JOIN pop b ON b.id+0=y.com+0 JOIN note_institution ni ON ni.note_id=y.note+0";}
+                case "TIPO_INSTITUCION" -> {actions();yield "SELECT "+FIXED+"DISTINCT ni.catalog_version_id AS ver FROM acts y JOIN pop b ON b.id+0=y.com+0 JOIN "+institution("ni","y.note+0");}
                 default -> {
                     String v=d.catalog();
                     tables.putIfAbsent("ev_"+v,events(v));

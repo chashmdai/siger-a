@@ -3,6 +3,9 @@ package cl.nexbyte.sigera;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
+import java.util.concurrent.locks.LockSupport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
@@ -28,13 +31,19 @@ public class Workflow {
     private final Attention attention;
     private final Personnel personnel;
     private final Rights rights;
+    private final StatCuts cuts;
+    private final StatViews views;
     private final JsonMapper json=JsonMapper.builder().build();
+    private static final Logger LOG=LoggerFactory.getLogger(Workflow.class);
+    /** Codigo fijo del log tecnico cuando la espera entre comandos llega a su tope (reloj del servidor atrasado). */
+    static final String CLOCK_BEHIND="RELOJ_ATRASADO";
     /** Tope de la espera entre comandos: solo se alcanza si el reloj del servidor retrocede. */
     static final long MAX_WAIT_MS=200;
     /** Instante de fin (command_log.created_ms) del ultimo comando de este proceso. */
     static volatile long lastEnd;
 
-    public Workflow(Db db,Access access,IntakeCommands intake,RequirementCommands requirements,CaseCommands cases,Attention attention,Personnel personnel,Rights rights){
+    public Workflow(Db db,Access access,IntakeCommands intake,RequirementCommands requirements,CaseCommands cases,Attention attention,Personnel personnel,Rights rights,
+                    StatCuts cuts,StatViews views){
         this.db=db;
         this.access=access;
         this.intake=intake;
@@ -43,6 +52,8 @@ public class Workflow {
         this.attention=attention;
         this.personnel=personnel;
         this.rights=rights;
+        this.cuts=cuts;
+        this.views=views;
     }
 
     @Transactional
@@ -73,6 +84,8 @@ public class Workflow {
             case "NOTICE_READ" -> readNotice(a,id);
             case "STAFF_CREATE","STAFF_UPDATE","STAFF_RESET","GRANT_CREATE","GRANT_REVOKE","PROFILE_SET","SCOPE_CREATE","SCOPE_UPDATE","SCOPE_ACTIVATE","SCOPE_CLOSE","SCOPE_COVERAGE","CENTRAL_COVERAGE","DESIGNATE","SUBSTITUTE_ACTIVATE","SUBSTITUTE_END","DOC_RELEASE","INTEGRATION_PAUSE","INTEGRATION_RESUME","MAIL_RESOLVE",
                  "HOLIDAY_ADD","HOLIDAY_IMPORT","HOLIDAY_REMOVE","CATALOG_IMPORT","CATALOG_ACTIVATE","CATALOG_MAPPING_IMPORT" -> personnel.run(a,type,id,expected,in);
+            case "STAT_CUT_CREATE","STAT_CUT_ANNUL" -> cuts.run(a,type,id,expected,in);
+            case "STAT_VIEW_SAVE","STAT_VIEW_DELETE","STAT_VIEW_SHARE" -> views.run(a,type,id,expected,in);
             default -> throw new Problem(400,"Comando desconocido.");
         };
         long end=Lifecycle.now();
@@ -86,12 +99,31 @@ public class Workflow {
      * Todo lo que escribe un comando lleva un instante posterior al fin del comando anterior (0.8.0, E08): con el lock
      * global tomado, espera a que el reloj lo supere (normalmente menos de 1 ms). Asi el corte "al constituirse el REQ"
      * (TerritorialDims.constitutedSql) incluye todo lo escrito por el comando que creo el REQ y nada del siguiente, sin
-     * empates de milisegundo. Con el reloj atrasado la espera termina en MAX_WAIT_MS: no detiene el servicio.
+     * empates de milisegundo. Con el reloj atrasado la espera termina en MAX_WAIT_MS: no detiene el servicio y deja una
+     * linea en el log tecnico, sin datos (codigo CLOCK_BEHIND y milisegundos esperados): una al empezar cada episodio y a
+     * lo mas una por minuto. Mientras falte mas de 1 ms la espera duerme (sin consumir CPU); el ultimo tramo es activo.
      */
-    private static void afterPreviousCommand(){
-        long until=System.nanoTime()+MAX_WAIT_MS*1_000_000;
-        while(Lifecycle.now()<=lastEnd&&System.nanoTime()<until)Thread.onSpinWait();
+    static void afterPreviousCommand(){
+        long start=System.nanoTime(),until=start+MAX_WAIT_MS*1_000_000;
+        while(true){
+            long gap=lastEnd-Lifecycle.now(); // falta gap+1 ms para superar el fin del comando anterior
+            if(gap<0){behind=false;return;}
+            long left=until-System.nanoTime();
+            if(left<=0)break;
+            if(gap>=1)LockSupport.parkNanos(Math.min(gap*1_000_000,left));
+            else Thread.onSpinWait();
+        }
+        long now=System.nanoTime();
+        if(!behind&&(lastWarning==0||now-lastWarning>=WARNING_EVERY_NS)){
+            LOG.warn("{} {}",CLOCK_BEHIND,(now-start)/1_000_000);
+            lastWarning=now;
+        }
+        behind=true;
     }
+    /** Episodio de reloj atrasado en curso y ultima linea de log (System.nanoTime). */
+    private static volatile boolean behind;
+    static volatile long lastWarning;
+    private static final long WARNING_EVERY_NS=60_000_000_000L;
 
     /**
      * Entrada interna para conservar el original de una Comunicacion externa (Formulario completo via SMR).

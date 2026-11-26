@@ -5,6 +5,7 @@ import java.time.*;
 import java.time.format.*;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import cl.nexbyte.sigera.StatSource.*;
@@ -26,6 +27,8 @@ public class StatEngine {
     static final String METHODOLOGY="1",AUDIT="STAT_CONSULTA";
     static final List<String> PERIODS=List.of("PERSONALIZADO","MES","TRIMESTRE","SEMESTRE","ANIO","CUENTA_PUBLICA");
     static final List<String> COMPARES=List.of("PERIODO_ANTERIOR","MISMO_PERIODO_ANIO_ANTERIOR");
+    /** Comparacion con un corte (E10): {"type":"CORTE","cut_id":n}. */
+    static final String CUT="CORTE";
     private static final List<String> PERCENTS=List.of("TOTAL","FILA","COLUMNA");
     private static final Set<String> FIELDS=Set.of("measure","rows","columns","filters","period","time_mode","as_of","cut_id","compare","percent","include_proposals","mention_dimension");
     private static final Set<String> DEMOGRAPHIC=Set.of("EDAD_NNA","TRAMO_EDAD_NNA","NACIONALIDAD_NNA","GRUPO_NACIONALIDAD_NNA","EDAD_REQUIRENTE","TRAMO_EDAD_REQUIRENTE","NACIONALIDAD_REQUIRENTE","GRUPO_NACIONALIDAD_REQUIRENTE");
@@ -36,16 +39,22 @@ public class StatEngine {
     private final Db db;
     private final Reports reports;
     private final StatGuard guard;
+    private final StatCuts cuts;
     /** Celdas de la consulta mas las de su comparacion. */
     private final int maxCells;
 
-    public StatEngine(Db db,Reports reports,StatGuard guard,@Value("${siger.stats.max-cells:20000}")int maxCells){
+    @Autowired
+    public StatEngine(Db db,Reports reports,StatGuard guard,StatCuts cuts,@Value("${siger.stats.max-cells:20000}")int maxCells){
         if(maxCells<1)throw new IllegalArgumentException("siger.stats.max-cells debe ser positivo.");
         this.db=db;
         this.reports=reports;
         this.guard=guard;
+        this.cuts=cuts;
         this.maxCells=maxCells;
     }
+    public StatEngine(Db db,Reports reports,StatGuard guard,int maxCells){this(db,reports,guard,new StatCuts(db,reports,guard),maxCells);}
+    /** Alcance de una consulta sobre un corte: el corte ya guarda solo su alcance. */
+    private static final Reports.Reach ALL=new Reports.Reach(true,Set.of(),Set.of());
 
     static boolean allowed(Access.Actor a){return Reports.canReport(a)&&!a.role(Roles.TI);}
 
@@ -70,7 +79,7 @@ public class StatEngine {
         }).toList());
         out.put("special",StatSource.SPECIAL.entrySet().stream().map(e->Map.of("code",e.getKey(),"label",e.getValue())).toList());
         out.put("periods",PERIODS);out.put("date_basis",Arrays.stream(Basis.values()).map(Enum::name).toList());
-        out.put("time_modes",Arrays.stream(Mode.values()).map(Enum::name).toList());out.put("compares",COMPARES);out.put("percents",PERCENTS);
+        out.put("time_modes",Arrays.stream(Mode.values()).map(Enum::name).toList());out.put("compares",java.util.stream.Stream.concat(COMPARES.stream(),java.util.stream.Stream.of(CUT)).toList());out.put("percents",PERCENTS);
         return out;
     }
     private static String percentUnit(Measure m){return m.own()?m.unit().name():Unit.COM.name();}
@@ -90,11 +99,15 @@ public class StatEngine {
         var r=parse(a,body==null?Map.of():body);
         var q=r.query();
         var dims=q.axesDims().stream().map(Dim::code).toList();
-        names.set("Medida "+q.measure().code()+"; modo "+q.mode().name()+(dims.isEmpty()?"":"; dimensiones: "+String.join(", ",dims))
+        names.set("Medida "+q.measure().code()+"; modo "+q.mode().name()+(r.cut()==null?"":"; sobre un corte")+(dims.isEmpty()?"":"; dimensiones: "+String.join(", ",dims))
             +(q.filters().isEmpty()?"":"; filtros: "+q.filters().keySet().stream().map(Dim::code).collect(Collectors.joining(", ")))+(r.compare()==null?"":"; comparacion "+r.compare()));
         var main=read(q,q.axes(),0,extras(q));
         Result base=null;Span baseSpan=null;
-        if(r.compare()!=null){
+        if(r.baseCut()!=null){
+            // Con un corte: el mismo periodo y la misma consulta sobre sus filas congeladas, celda por celda.
+            baseSpan=q.span();
+            base=read(q.on(r.baseCut().id(),ALL),q.axes(),main.cells().size(),null);
+        }else if(r.compare()!=null){
             baseSpan=previous(r.compare(),r.periodType(),q.span());
             base=read(q.over(baseSpan,axes(q.axesDims(),baseSpan)),q.axes(),main.cells().size(),null);
         }
@@ -107,7 +120,21 @@ public class StatEngine {
     }
 
     // --- Validacion ---------------------------------------------------------------------------------------------------
-    record Parsed(Query query,String periodType,String compare,String percent){}
+    /** cut: corte consultado (nulo = fuente vigente); baseCut: corte con que se compara (compare CORTE). */
+    record Parsed(Query query,String periodType,String compare,String percent,StatCuts.Cut cut,StatCuts.Cut baseCut){}
+    /** Periodo de un corte (E10): sin fecha de analisis, porque el corte guarda todas. */
+    record Period(String type,Span span){}
+    static Period cutPeriod(Object raw){
+        var p=object(raw,"Periodo",Set.of("type","from","to"));
+        String type=name(p.get("type"),"Tipo de periodo",PERIODS,null);
+        if(type==null)throw bad("Indica el tipo de periodo.");
+        return new Period(type,span(type,p));
+    }
+    /** Valida una definicion guardada (vistas, E10) como la consulta que ejecutaria la cuenta, sin ejecutarla. */
+    void validate(Access.Actor a,Map<String,Object> body){
+        if(!allowed(a))Problem.denied();
+        parse(a,body==null?Map.of():body);
+    }
     private static Problem bad(String message){return new Problem(400,message);}
     private static String name(Object v,String field,Collection<String> allowed,String absent){
         if(v==null)return absent;
@@ -156,13 +183,24 @@ public class StatEngine {
         var mode=Mode.valueOf(name(b.get("time_mode"),"Modo temporal",names(Mode.values()),Mode.VIGENTE.name()));
         Long at=asOf(mode,b.get("as_of"));
         if(at!=null&&span.from()>at)throw bad("El periodo empieza después de la fecha histórica.");
-        if(b.get("cut_id")!=null)throw bad("La consulta sobre un corte no está disponible.");
-        String compare=compare(b.get("compare"));
+        var own=reports.reach(a.grants().stream().filter(g->g.role().equals(Roles.REPORTES)).toList());
+        var cut=cut(own,b.get("cut_id"),"Corte");
+        var comparison=compare(own,b.get("compare"));
+        String compare=comparison==null?null:comparison.type();
+        if(cut!=null){
+            if(mode!=Mode.VIGENTE)throw bad("Un corte guarda los valores de su instante: se consulta en el modo vigente.");
+            within(cut,span);
+            if(comparison!=null&&comparison.cut()==null)throw bad("Un corte se compara solo con otro corte.");
+        }
+        if(comparison!=null&&comparison.cut()!=null){
+            if(mode!=Mode.VIGENTE)throw bad("La comparación con un corte se hace en el modo vigente.");
+            within(comparison.cut(),span);
+        }
         String percent=name(b.get("percent"),"Porcentaje",PERCENTS,null);
         Object proposals=b.get("include_proposals");
         if(proposals!=null&&!(proposals instanceof Boolean))throw bad("Propuestas: envía sí o no.");
         var filters=new LinkedHashMap<Dim,List<Object>>();
-        if(b.get("filters")!=null)object(b.get("filters"),"Filtros",StatSource.DIMS.keySet()).forEach((k,v)->filters.put(StatSource.DIMS.get(k),filter(StatSource.DIMS.get(k),v)));
+        if(b.get("filters")!=null)object(b.get("filters"),"Filtros",StatSource.DIMS.keySet()).forEach((k,v)->filters.put(StatSource.DIMS.get(k),filter(StatSource.DIMS.get(k),v,cut)));
         var used=new ArrayList<>(all);used.addAll(filters.keySet());
         for(var d:used){
             if(d.only()&&d.unit()!=measure.unit())throw bad(d.label()+" se usa solo con la medida Completitud por variable.");
@@ -177,8 +215,22 @@ public class StatEngine {
         }else if(measure.unit()==Unit.COM&&multiple.size()==1)mention=multiple.getFirst();
         if(measure.mentions()&&mention==null)throw bad("Indica la dimensión cuyas menciones se suman.");
         if(measure.code().equals("REQUERIMIENTOS_CON_VALOR")&&multiple.isEmpty())throw bad("Requerimientos con el valor necesita una dimensión de valores múltiples en filas o columnas.");
-        var reach=reports.reach(a.grants().stream().filter(g->g.role().equals(Roles.REPORTES)).toList());
-        return new Parsed(new Query(measure,rows,columns,Collections.unmodifiableMap(filters),span,basis,mode,at,mention,Boolean.TRUE.equals(proposals),reach,axes(all,span)),type,compare,percent);
+        // Sobre un corte, sus filas (ya acotadas a su alcance); comparada con un corte, la fuente vigente con el alcance de ese corte.
+        var reach=cut!=null?ALL:comparison!=null&&comparison.cut()!=null?comparison.cut().reach():own;
+        return new Parsed(new Query(measure,rows,columns,Collections.unmodifiableMap(filters),span,basis,mode,at,mention,Boolean.TRUE.equals(proposals),reach,axes(all,span),cut==null?null:cut.id()),
+            type,compare,percent,cut,comparison==null?null:comparison.cut());
+    }
+    /** Corte de la peticion: 400 si no existe o no se indica bien; 403 si el alcance de REPORTES de la cuenta no lo cubre. */
+    private StatCuts.Cut cut(Reports.Reach own,Object raw,String field){
+        if(raw==null)return null;
+        if(!(raw instanceof Integer||raw instanceof Long)||((Number)raw).longValue()<=0)throw bad(field+": indica el corte.");
+        var c=cuts.find(((Number)raw).longValue());
+        if(c==null)throw bad("El corte indicado no existe.");
+        if(!StatCuts.covers(own,c.reach()))Problem.denied();
+        return c;
+    }
+    private static void within(StatCuts.Cut c,Span span){
+        if(span.fromDay().isBefore(c.from())||span.toDay().isAfter(c.to()))throw bad("El periodo consultado está fuera del periodo del corte "+c.code()+".");
     }
     private static Span span(String type,Map<String,Object> p){
         LocalDate from=day(p.get("from"),"Desde"),to;
@@ -202,22 +254,29 @@ public class StatEngine {
         if(at<0||at>System.currentTimeMillis())throw bad("La fecha histórica no puede ser futura.");
         return at;
     }
-    private static String compare(Object raw){
+    private record Comparison(String type,StatCuts.Cut cut){}
+    private Comparison compare(Reports.Reach own,Object raw){
         if(raw==null)return null;
         var c=object(raw,"Comparación",Set.of("type","cut_id"));
-        if("CORTE".equals(c.get("type"))||c.get("cut_id")!=null)throw bad("La comparación con un corte no está disponible.");
+        if(CUT.equals(c.get("type"))){
+            var cut=cut(own,c.get("cut_id"),"Comparación");
+            if(cut==null)throw bad("Indica el corte con que se compara.");
+            return new Comparison(CUT,cut);
+        }
+        if(c.get("cut_id")!=null)throw bad("La comparación con un corte se indica con el tipo CORTE.");
         String type=name(c.get("type"),"Comparación",COMPARES,null);
         if(type==null)throw bad("Indica la comparación.");
-        return type;
+        return new Comparison(type,null);
     }
-    private List<Object> filter(Dim d,Object v){
+    /** Valores admitidos de un filtro; sobre un corte, los ambitos y unidades de su instante. */
+    private List<Object> filter(Dim d,Object v,StatCuts.Cut cut){
         if(d.kind()==Kind.PERIODO)throw bad("El periodo se acota con las fechas de la consulta, no con un filtro.");
         if(!(v instanceof List<?> list)||list.isEmpty()||list.size()>MAX_FILTER)throw bad(d.label()+": envía una lista de valores.");
         Set<String> known=switch(d.kind()){
             case REGION -> AdultIdentity.REGIONS.keySet();
             case COMUNA -> AdultIdentity.COMMUNES.values().stream().flatMap(List::stream).collect(Collectors.toSet());
-            case AMBITO -> codes("SELECT code FROM org_scope");
-            case UNIDAD -> codes("SELECT code FROM org_unit");
+            case AMBITO -> cut!=null?cut.scopes().keySet():codes("SELECT code FROM org_scope");
+            case UNIDAD -> cut!=null?cut.units().keySet():codes("SELECT code FROM org_unit");
             case PAIS -> AdultIdentity.COUNTRIES;
             case CATALOGO -> codes("SELECT DISTINCT i.code FROM stat_catalog_item i JOIN stat_catalog_version x ON x.id=i.version_id WHERE x.activated_ms IS NOT NULL AND x.catalog=?",d.catalog());
             default -> Set.of();
@@ -389,7 +448,7 @@ public class StatEngine {
         var q=r.query();var dims=q.axesDims();int rows=q.rows().size();
         var warnings=new ArrayList<Map<String,Object>>();
         var versions=new TreeMap<String,TreeSet<Long>>();
-        var labels=labels(q,dims,main.more(),versions,warnings);
+        var labels=labels(q,r.cut(),dims,main.more(),versions,warnings);
         var values=new LinkedHashMap<String,Object>();
         var order=new HashMap<String,Map<String,Integer>>();
         for(int i=0;i<dims.size();i++){
@@ -416,7 +475,7 @@ public class StatEngine {
         out.put("comparison",base==null?null:comparison(r,main,base,baseSpan,dims,order));
         out.put("late_records",late(q,main.more()));
         out.put("data_coverage",coverage(dims,main.more()));
-        out.put("proposals",q.proposals()?proposals(q):List.of());
+        out.put("proposals",q.proposals()?proposals(q,r.cut()):List.of());
         warn(q,main,dims,warnings);
         out.put("warnings",warnings);
         return out;
@@ -461,8 +520,10 @@ public class StatEngine {
         m.put("filters",q.filters().keySet().stream().map(Dim::code).toList());
         var p=period(r.periodType(),q.span());p.put("date_basis",q.basis().name());
         m.put("period",p);m.put("zone",BusinessCalendar.ZONE.getId());m.put("time_mode",q.mode().name());
-        m.put("as_of",q.at()==null?null:Instant.ofEpochMilli(q.at()).atZone(BusinessCalendar.ZONE).toOffsetDateTime().toString());
-        m.put("cut_id",null);m.put("percent",r.percent());m.put("percent_unit",percentUnit(q.measure()));
+        // Sobre un corte, el instante es el del corte: sus valores son los vigentes en ese instante.
+        Long instant=r.cut()!=null?(Long)r.cut().asOf():q.at();
+        m.put("as_of",instant==null?null:Instant.ofEpochMilli(instant).atZone(BusinessCalendar.ZONE).toOffsetDateTime().toString());
+        m.put("cut_id",r.cut()==null?null:r.cut().id());m.put("percent",r.percent());m.put("percent_unit",percentUnit(q.measure()));
         m.put("mention_dimension",q.mention()==null?null:q.mention().code());m.put("catalog_versions",versions);
         m.put("calculated_ms",System.currentTimeMillis());
         return m;
@@ -474,6 +535,7 @@ public class StatEngine {
         int rows=r.query().rows().size();
         var out=new LinkedHashMap<String,Object>();
         out.put("type",r.compare());out.put("period",period(r.periodType(),span));
+        if(r.baseCut()!=null){out.put("cut_id",r.baseCut().id());out.put("cut_code",r.baseCut().code());}
         var totals=new LinkedHashMap<String,Object>();
         totals.put("grand",delta(main.grand().n(),base.grand().n()));
         totals.put("rows",rows==0?List.of():deltas(main.rows(),base.rows(),r.query().rows(),order));
@@ -521,10 +583,15 @@ public class StatEngine {
         }
         return out;
     }
-    private List<Map<String,Object>> proposals(Query q){
+    /** Propuestas con el rotulo del catalogo vigente (sobre un corte, el vigente en su instante). */
+    private List<Map<String,Object>> proposals(Query q,StatCuts.Cut cut){
         var sql=new Plan(q).proposals();
         var current=new HashMap<String,Map<String,String>>();
-        for(var x:db.rows("SELECT x.catalog AS catalog_code,i.code,i.label FROM stat_catalog_item i JOIN stat_catalog_version x ON x.id=i.version_id WHERE x.`current_catalog` IN ('TIPO_SOLICITUD','TIPO_REQUIRENTE')"))
+        var rows=cut==null?db.rows("SELECT x.catalog AS catalog_code,i.code,i.label FROM stat_catalog_item i JOIN stat_catalog_version x ON x.id=i.version_id WHERE x.`current_catalog` IN ('TIPO_SOLICITUD','TIPO_REQUIRENTE')")
+            :new ArrayList<Map<String,Object>>();
+        if(cut!=null)for(String v:StatSource.PROPOSED)if(cut.version(v)!=null)
+            for(var x:db.rows("SELECT i.code,i.label FROM stat_catalog_item i WHERE i.version_id=?",cut.version(v))){var y=new HashMap<>(x);y.put("catalog_code",v);rows.add(y);}
+        for(var x:rows)
             current.computeIfAbsent(s(x,"catalog_code"),k->new HashMap<>()).put(s(x,"code"),s(x,"label"));
         return db.rows(sql.text(),sql.args()).stream().map(x->{
             Map<String,Object> m=new LinkedHashMap<>();
@@ -535,7 +602,8 @@ public class StatEngine {
 
     // --- Rotulos, versiones y avisos ------------------------------------------------------------------------------------------
     private record Label(String text,long sort){}
-    private Map<String,Map<String,Label>> labels(Query q,List<Dim> dims,More more,Map<String,TreeSet<Long>> versions,List<Map<String,Object>> warnings){
+    /** Sobre un corte, los rotulos de ambito y unidad y el catalogo de tramos de edad son los de su instante (congelados). */
+    private Map<String,Map<String,Label>> labels(Query q,StatCuts.Cut cut,List<Dim> dims,More more,Map<String,TreeSet<Long>> versions,List<Map<String,Object>> warnings){
         var out=new HashMap<String,Map<String,Label>>();
         var mixed=new ArrayList<String>();var missing=new ArrayList<String>();
         for(var d:dims){
@@ -543,10 +611,10 @@ public class StatEngine {
             switch(d.kind()){
                 case PERIODO -> {long i=0;for(var x:q.axes().get(d.code()))map.put(x.key(),new Label(x.label(),i++));}
                 case REGION -> {long i=0;for(var x:AdultIdentity.REGIONS.entrySet())map.put(x.getKey(),new Label(x.getValue(),i++));}
-                case AMBITO -> {long i=0;for(var x:db.rows("SELECT code,name FROM org_scope ORDER BY code"))map.put(s(x,"code"),new Label(s(x,"name"),i++));}
-                case UNIDAD -> {long i=0;for(var x:db.rows("SELECT code,name FROM org_unit ORDER BY code"))map.put(s(x,"code"),new Label(s(x,"name"),i++));}
+                case AMBITO -> {long i=0;for(var x:(cut!=null?cut.scopes():names("SELECT code,name FROM org_scope ORDER BY code")).entrySet())map.put(x.getKey(),new Label(x.getValue(),i++));}
+                case UNIDAD -> {long i=0;for(var x:(cut!=null?cut.units():names("SELECT code,name FROM org_unit ORDER BY code")).entrySet())map.put(x.getKey(),new Label(x.getValue(),i++));}
                 case CATALOGO -> {
-                    var found=d.catalog().equals(StatCatalogs.AGE)?ageVersion():more.versions().getOrDefault(d.code(),Set.of());
+                    var found=d.catalog().equals(StatCatalogs.AGE)?(cut!=null?(cut.version(StatCatalogs.AGE)==null?Set.<Long>of():Set.of(cut.version(StatCatalogs.AGE))):ageVersion()):more.versions().getOrDefault(d.code(),Set.of());
                     if(found.isEmpty()&&d.catalog().equals(StatCatalogs.AGE))missing.add(d.code());
                     if(found.size()>1)mixed.add(d.code());
                     if(!found.isEmpty())versions.computeIfAbsent(d.catalog(),k->new TreeSet<>()).addAll(found);
@@ -565,6 +633,9 @@ public class StatEngine {
         if(!mixed.isEmpty())warnings.add(warning("VERSIONES_DISTINTAS",mixed,null));
         if(!missing.isEmpty())warnings.add(warning("SIN_CATALOGO_VIGENTE",missing,null));
         return out;
+    }
+    private Map<String,String> names(String sql){
+        var m=new LinkedHashMap<String,String>();for(var x:db.rows(sql))m.put(s(x,"code"),s(x,"name"));return m;
     }
     private Set<Long> ageVersion(){
         Long current=StatValues.currentVersion(db,StatCatalogs.AGE);

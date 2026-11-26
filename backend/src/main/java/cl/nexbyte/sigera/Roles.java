@@ -29,8 +29,8 @@ public final class Roles {
     public static final String EXPORTACION="EXPORTACION";
     /**
      * Gestion estadistica (0.8.0, D43, gate E02): generar y anular cortes, importar y anular series y compartir
-     * configuraciones dentro de su alcance; exige REPORTES en el mismo alcance y es incompatible con TI. Se concede desde
-     * E02, pero no habilita nada hasta E10 y E11 (desvio registrado en la bitacora).
+     * configuraciones dentro de su alcance; exige REPORTES en el mismo alcance y es incompatible con TI. Desde E10 genera y
+     * anula cortes (StatCuts) y comparte configuraciones (StatViews); las series historicas llegan en E11.
      */
     public static final String GESTION_ESTADISTICA="GESTION_ESTADISTICA";
     /** Funciones que solo rigen con REPORTES vigente en el mismo alcance (G11, G12, E02), en orden estable. */

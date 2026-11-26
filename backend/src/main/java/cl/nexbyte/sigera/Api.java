@@ -19,11 +19,11 @@ import static cl.nexbyte.sigera.Db.*;
 public class Api {
     final Attention attention;final BoardQueries boards;volatile boolean ready;
     final Access access;final Workflow flow;final Queries queries;final Documents documents;final Db db;final PasswordEncoder passwords;
-    final Integrations integrations;final PersonSearch search;final Holidays holidays;final Reports reports;final Personnel personnel;final StatCatalogs catalogs;final IntakeRecord intake;final StatEngine stats;final String environment;final String releaseVersion;
-    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,Reports reports,Personnel personnel,StatCatalogs catalogs,IntakeRecord intake,StatEngine stats,
+    final Integrations integrations;final PersonSearch search;final Holidays holidays;final Reports reports;final Personnel personnel;final StatCatalogs catalogs;final IntakeRecord intake;final StatEngine stats;final StatCuts cuts;final StatViews views;final String environment;final String releaseVersion;
+    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,Reports reports,Personnel personnel,StatCatalogs catalogs,IntakeRecord intake,StatEngine stats,StatCuts cuts,StatViews views,
                @org.springframework.beans.factory.annotation.Value("${siger.environment-label:}")String environment,BuildProperties buildProperties){
         this.attention=attention;this.access=access;this.flow=flow;this.queries=queries;this.documents=documents;this.db=db;this.passwords=passwords;this.boards=boards;
-        this.integrations=integrations;this.search=search;this.holidays=holidays;this.reports=reports;this.personnel=personnel;this.catalogs=catalogs;this.intake=intake;this.stats=stats;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
+        this.integrations=integrations;this.search=search;this.holidays=holidays;this.reports=reports;this.personnel=personnel;this.catalogs=catalogs;this.intake=intake;this.stats=stats;this.cuts=cuts;this.views=views;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
     }
     private String name(Authentication auth){if(auth==null||!(auth.getPrincipal() instanceof SecurityConfig.Principal))throw new Problem(401,"Inicia sesion.");return auth.getName();}
     @GetMapping("/session") public Map<String,Object> session(Authentication auth,CsrfToken csrf){
@@ -83,6 +83,11 @@ public class Api {
     @PostMapping("/reports") public Map<String,Object> reports(Authentication a,@RequestBody Reports.Request b){return reports.report(access.actor(name(a)),b);}
     /** Motor estadistico (0.8.0, E08): consulta en el cuerpo JSON, con CSRF como todo POST; GET responde 405. */
     @PostMapping("/stats/query") public Map<String,Object> statsQuery(Authentication a,@RequestBody Map<String,Object> b){return stats.query(access.actor(name(a)),b);}
+    // Cortes y vistas (E10): se crean, anulan y comparten por /api/commands; aqui solo lecturas y la verificacion de integridad.
+    @GetMapping("/stats/cuts") public List<Map<String,Object>> statCuts(Authentication a){return cuts.list(access.actor(name(a)));}
+    @GetMapping("/stats/cuts/{id}") public Map<String,Object> statCut(Authentication a,@PathVariable long id){return cuts.detail(access.actor(name(a)),id);}
+    @PostMapping("/stats/cuts/{id}/verify") public Map<String,Object> verifyCut(Authentication a,@PathVariable long id){return cuts.verify(access.actor(name(a)),id);}
+    @GetMapping("/stats/views") public List<Map<String,Object>> statViews(Authentication a){return views.list(access.actor(name(a)));}
     /** CSV de REQ o Casos (G12, EXPORTACION): filtros en el cuerpo como en /reports; CSRF; GET responde 405. */
     @PostMapping("/reports/export/{kind}") public ResponseEntity<byte[]> exportRows(Authentication a,@PathVariable String kind,@RequestBody Reports.Request b){
         var x=reports.export(access.actor(name(a)),kind,b);return csv(x.filename(),x.bytes());

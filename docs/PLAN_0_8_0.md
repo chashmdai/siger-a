@@ -828,6 +828,7 @@ archivos previstos y pruebas, esta en `DISENO_0_8_0.md` seccion 15.
 | Dimension estadistica "instituciones de los hechos" (ficha, ficha de ingreso y Formulario) | D38 | GO de E08 (2026-11-25) | 15.7 |
 | Pantallas de resolución en el acto con derechos (COM_IMMEDIATE y ATTENTION_CREATE con resolve_now) | - | GO de E09, decisión D | - |
 | Caracterización de la COM en la ficha de la SOL (evita leer la ficha de la COM en el descarte) | - | hallazgo de E09 | - |
+| Corte sin lock global: instantánea consistente con bloqueo de milisegundos (opción D de la detención de E10), si el volumen se acerca al plazo | - | detención de E10 | - |
 | Otras mejoras operacionales sin relacion directa con los objetivos de 0.8.0 | - | - | - |
 
 En 0.8.0 la seguridad de la actualizacion se mantiene con los scripts y procedimientos vigentes: respaldo con

@@ -28,6 +28,8 @@ class ImmutabilityTest {
     static final String HEAD="coordinacion.requerimientos",PROF="profesional",ADMIN="administrativo",DIST="distribucion",UPD="direccion.upd";
     static final Set<String> EXCEPTIONS=Set.of("CASE_ACK","COM_LINK","LINK_DECIDE","LINK_RETURN","REOPEN_REQUEST","REOPEN_AUTHORIZE","REOPEN_DECIDE");
     static final Set<String> CREATE=Set.of("COM_CREATE","COM_IMMEDIATE","ATTENTION_CREATE","NOTICE_READ");
+    /** Cortes y vistas del motor estadistico (E10): no actuan sobre un expediente (un corte es inmutable por si mismo: StatCutsTest). */
+    static final Set<String> STATISTICS=Set.of("STAT_CUT_CREATE","STAT_CUT_ANNUL","STAT_VIEW_SAVE","STAT_VIEW_DELETE","STAT_VIEW_SHARE");
     @Autowired Workflow flow;@Autowired Db db;
 
     long scope(String code){return n(db.one("SELECT id FROM org_scope WHERE code=?",code),"id");}
@@ -135,9 +137,9 @@ class ImmutabilityTest {
 
         // Cobertura: cada comando de Workflow.run esta en una sola categoria.
         var rejected=new TreeSet<String>();for(String k:attempts.keySet())rejected.add(k.contains("@")?k.substring(0,k.indexOf('@')):k);
-        var categorized=new TreeSet<String>(rejected);categorized.addAll(EXCEPTIONS);categorized.addAll(CREATE);categorized.addAll(administration());
+        var categorized=new TreeSet<String>(rejected);categorized.addAll(EXCEPTIONS);categorized.addAll(CREATE);categorized.addAll(administration());categorized.addAll(STATISTICS);
         assertEquals(InstitutionalReaderTest.workflowCommands(),categorized,"todo comando de Workflow.run tiene categoria de inmutabilidad");
-        assertEquals(rejected.size()+EXCEPTIONS.size()+CREATE.size()+administration().size(),categorized.size(),"categorias disjuntas");
+        assertEquals(rejected.size()+EXCEPTIONS.size()+CREATE.size()+administration().size()+STATISTICS.size(),categorized.size(),"categorias disjuntas");
 
         var outcomes=new TreeMap<String,String>();var changes=new TreeMap<String,Object>();
         for(var e:attempts.entrySet()){

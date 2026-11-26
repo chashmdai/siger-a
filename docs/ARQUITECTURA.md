@@ -69,6 +69,13 @@ sobre MySQL 8.4 con `MySqlSuite`).
   transacción REPEATABLE READ (cancelación en el servidor, 503 y auditoría `STAT_CONSULTA_CANCELADA` después del rollback)
   y confinamiento: sobre MySQL, `datadir`, `tmpdir` e `innodb_temp_tablespaces_dir` en la unidad de la instancia o el motor
   queda deshabilitado (503) sin afectar la operación. No es una cuota de disco.
+- `StatCuts` / `StatViews` (E10): cortes estadísticos inmutables y configuraciones guardadas (contrato, secciones 11 a 13).
+  `STAT_CUT_CREATE` congela dentro de `Workflow.run`, con el lock global y las guardas de `StatGuard`, una fila por COM y las
+  relaciones de entrada del motor; las huellas SHA-256 se calculan sobre una serialización canónica y la consulta sobre un
+  corte usa el mismo `StatSource.Plan` sobre lo congelado, con resultado igual a la consulta vigente del mismo instante.
+  Generar un corte detiene las operaciones unos segundos (los comandos esperan y terminan bien): se recomienda hacerlo
+  fuera del horario de atención. Solo la anulación escribe sobre un corte existente, y solo su cabecera. Dimensión
+  `ADSCRIPCION_INICIAL` (DI-13). `Workflow` deja `RELOJ_ATRASADO` en el log si la espera entre comandos llega a su tope.
 - `PersonIndex` / `PersonSearch`: indice de coincidencias de personas (derivado, reconstruible) y busqueda por RUN,
   documento, nombre o folio con auditoria HMAC opcional del termino.
 - `Milestones` / `BusinessCalendar` / `Reports` / `Csv`: hitos de cada transicion (y su carga historica), dias
@@ -127,7 +134,10 @@ V20 (E06): `stat_catalog_item.description`, `management_note.action_type`/`actio
 V21 (E07): `stat_declared_version` y `stat_declared_person` proyectan las fichas originales sin guardar las fechas de
 nacimiento. `DIMENSIONES_V21` identifica la carga histórica idempotente, que también corre con `migrate-only`.
 V22 (E08): indices de las fechas de análisis y del resultado de los comandos, con su evidencia de EXPLAIN en la bitácora.
-V1 a V22 no se modifican nunca; un cambio nuevo se agrega como `V23__...` aditivo, compatible con H2 y MySQL. Ninguna
+V23 (E10): `stat_cut` (cabecera con huellas) y las tablas congeladas `stat_cut_row`, `stat_cut_event`, `stat_cut_action`,
+`stat_cut_action_institution`, `stat_cut_person` y `stat_cut_case` (lista cerrada de columnas, sin claves foráneas ni
+cascadas), y `stat_view`.
+V1 a V23 no se modifican nunca; un cambio nuevo se agrega como `V24__...` aditivo, compatible con H2 y MySQL. Ninguna
 migracion siembra sedes, regiones, feriados, catalogos ni personas reales. La actualizacion desde 0.4.0 y desde 0.7.0
 se prueba sobre MySQL 8.4 con volcados sinteticos (`MySql84UpgradeTest`, `MySql84Upgrade070Test`).
 

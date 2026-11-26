@@ -380,6 +380,13 @@ class InstitutionalReaderTest {
   attempts.put("CATALOG_IMPORT",new Attempt(null,null,Map.of("content",StatCatalogsTest.file("TIPO_SOLICITUD","A","B"),"reason","Intento")));
   attempts.put("CATALOG_ACTIVATE",new Attempt(null,1L,anyReason));
   attempts.put("CATALOG_MAPPING_IMPORT",new Attempt(null,null,Map.of("from_version",1L,"to_version",2L,"content",StatCatalogsTest.mapping("A","A"),"reason","Intento")));
+  // Cortes y vistas (E10): solo GESTION_ESTADISTICA y REPORTES; datos validos para que la unica causa de rechazo sea la funcion.
+  var cutPeriod=Map.of("type","CUENTA_PUBLICA","from","2025-07-01");
+  attempts.put("STAT_CUT_CREATE",new Attempt(null,null,Map.of("title","Intento","period",cutPeriod,"reason","Intento")));
+  attempts.put("STAT_CUT_ANNUL",new Attempt(null,1L,anyReason));
+  attempts.put("STAT_VIEW_SAVE",new Attempt(null,null,Map.of("title","Intento","definition",Map.of("measure","INGRESOS","period",cutPeriod))));
+  attempts.put("STAT_VIEW_DELETE",new Attempt(null,1L,Map.of()));
+  attempts.put("STAT_VIEW_SHARE",new Attempt(null,1L,Map.of("shared",true)));
 
   return attempts;
  }

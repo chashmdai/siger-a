@@ -420,6 +420,75 @@ class StatEngineTest extends StatFixture {
             }
         }
     }
+    // --- E10: un corte reproduce exactamente la consulta vigente del mismo instante ------------------------------------------
+    /** La misma consulta sobre la fuente vigente (alcance de la cuenta) y sobre el corte; respuestas completas iguales salvo corte e instante. */
+    void same(StatEngine checked,String who,long cut,String measure,List<String> rows,List<String> columns,Map<String,Object> period,Object... extra){
+        var body=map("measure",measure,"rows",rows,"columns",columns,"period",period);
+        for(int i=0;i<extra.length;i+=2)body.put((String)extra[i],extra[i+1]);
+        var frozen=new LinkedHashMap<>(body);frozen.put("cut_id",cut);
+        String at=who+" "+measure+" "+rows+columns+" "+period+" "+Arrays.toString(extra);
+        Map<String,Object> live,stored;
+        try{live=checked.query(access.actor(who),body);stored=checked.query(access.actor(who),frozen);}
+        catch(RuntimeException e){throw new AssertionError(at+": "+e.getMessage()+" "+String.valueOf(e.getCause()),e);}
+        assertEquals(cut,((Number)obj(stored.get("metadata")).get("cut_id")).longValue(),at);
+        assertEquals(comparable(live),comparable(stored),at);
+    }
+    /**
+     * Barrido de equivalencia (GO de E10): todas las medidas por cada dimension (con columnas, porcentaje y propuestas),
+     * cruces de dos multiples, filtros de cada dimension, fechas de analisis y ejes de periodo, para un corte institucional
+     * y, con su propio alcance, para uno de sede y uno de materia (la consulta vigente con el alcance que el corte guarda).
+     */
+    @Test @Order(80) void corteReproduceLaConsultaVigente(){
+        String gi=staff("gest.inst","REPORTES","GESTION_ESTADISTICA"),g6=staff("gest.s06","REPORTES@S06","GESTION_ESTADISTICA@S06"),gu=staff("gest.upd","REPORTES@UPD","GESTION_ESTADISTICA@UPD");
+        long inst=cut(gi,null,cp()),s06=cut(g6,"S06",cp()),upd=cut(gu,"UPD",cp());
+        // El corte institucional guarda la poblacion de la Cuenta Publica (computables, excluidas y antecedentes) y sus relaciones.
+        assertEquals(grand(query(INST,"INGRESOS",List.of(),List.of(),cp()))+grand(query(INST,"EXCLUIDOS",List.of(),List.of(),cp()))+grand(query(INST,"ANTECEDENTES",List.of(),List.of(),cp())),
+            db.count("SELECT COUNT(*) FROM stat_cut_row WHERE cut_id=? AND received_ms>=? AND received_ms<?",inst,ms("2025-07-01T04:00:00Z"),ms("2026-07-01T04:00:00Z")));
+        for(String t:List.of("stat_cut_event","stat_cut_action","stat_cut_action_institution","stat_cut_person","stat_cut_case"))
+            assertTrue(db.count("SELECT COUNT(*) FROM "+t+" WHERE cut_id=?",inst)>0,t);
+        assertTrue(db.count("SELECT COUNT(*) FROM stat_cut_row WHERE cut_id=?",s06)<db.count("SELECT COUNT(*) FROM stat_cut_row WHERE cut_id=?",inst),"el corte de sede guarda solo su alcance");
+        var checked=explained();
+        for(var m:StatSource.MEASURES.values())for(var d:StatSource.DIMS.values()){
+            if(d.only()&&d.unit()!=m.unit()||m.code().equals("REQUERIMIENTOS_CON_VALOR")&&!d.multiple())continue;
+            if(d.code().equals("TARDANZA")&&(m.unit()==StatSource.Unit.CASO||m.code().equals("REQ_CONSTITUIDOS")))continue;
+            var extra=new ArrayList<Object>(List.of("percent","FILA","include_proposals",true));
+            if(m.mentions()&&!d.multiple())extra.addAll(List.of("mention_dimension","DERECHO"));
+            same(checked,INST,inst,m.code(),List.of(d.code()),d.code().equals("CANAL")?List.of():List.of("CANAL"),cp(),extra.toArray());
+        }
+        var multiple=StatSource.DIMS.values().stream().filter(StatSource.Dim::multiple).toList();
+        for(var x:multiple)for(var y:multiple)if(!x.equals(y))same(checked,INST,inst,"REQUERIMIENTOS_CON_VALOR",List.of(x.code()),List.of(y.code()),cp(),"mention_dimension",x.code(),"percent","COLUMNA");
+        for(var d:StatSource.DIMS.values()){
+            if(d.kind()==StatSource.Kind.PERIODO||d.only())continue;
+            for(var t:list(obj(query(INST,"INGRESOS",List.of(d.code()),List.of(),cp()).get("totals")).get("rows"))){
+                String key=keys(t.get("key")).getFirst();
+                Object value=d.kind()==StatSource.Kind.EDAD&&key.matches("[0-9]+")?(Object)Integer.valueOf(key):key;
+                same(checked,INST,inst,"INGRESOS",List.of("TIPO_SOLICITUD"),List.of(),cp(),"filters",Map.of(d.code(),List.of(value)));
+                same(checked,INST,inst,"ACTUACIONES",List.of("TIPO_ACTUACION"),List.of(),cp(),"filters",Map.of(d.code(),List.of(value)));
+            }
+        }
+        for(String basis:List.of("RECEPCION","REGISTRO","CONSTITUCION_REQ"))for(String axis:List.of("PERIODO_DIA","PERIODO_MES","PERIODO_TRIMESTRE","PERIODO_SEMESTRE","PERIODO_ANIO","PERIODO_CUENTA_PUBLICA"))
+            same(checked,INST,inst,"INGRESOS",List.of(axis),List.of("TARDANZA").subList(0,basis.equals("RECEPCION")?1:0),basis(basis));
+        same(checked,INST,inst,"CASOS",List.of("PERIODO_MES"),List.of("SEDE_VIGENTE"),basis("CREACION_CASO"));
+        same(checked,INST,inst,"REQUERIMIENTOS_CON_VALOR",List.of("DERECHO"),List.of(),period("MES","2025-07-01"),"percent","TOTAL");
+        // Sede y materia: la consulta vigente con el alcance de la cuenta, que es el del corte.
+        for(var c:List.of(Map.entry(R06,s06),Map.entry(RUPD,upd))){
+            for(var m:StatSource.MEASURES.values()){
+                if(m.code().equals("REQUERIMIENTOS_CON_VALOR")||m.mentions())same(checked,c.getKey(),c.getValue(),m.code(),List.of("DERECHO"),List.of(),cp());
+                else same(checked,c.getKey(),c.getValue(),m.code(),List.of(),List.of(),cp(),"include_proposals",true);
+            }
+            for(var d:StatSource.DIMS.values()){
+                if(d.only()||d.code().equals("TARDANZA"))continue;
+                same(checked,c.getKey(),c.getValue(),"INGRESOS",List.of(d.code()),List.of(),cp(),"percent","TOTAL");
+            }
+        }
+        // Comparada con su corte del mismo instante, la consulta vigente no tiene diferencias.
+        var r=checked.query(access.actor(INST),map("measure","INGRESOS","rows",List.of("TIPO_SOLICITUD"),"columns",List.of("CANAL"),"period",cp(),"compare",Map.of("type","CORTE","cut_id",inst)));
+        var comparison=obj(r.get("comparison"));
+        assertEquals("CORTE",comparison.get("type"));assertEquals(inst,((Number)comparison.get("cut_id")).longValue());
+        assertTrue(list(comparison.get("cells")).stream().allMatch(c->((Number)c.get("delta_n")).longValue()==0),String.valueOf(comparison));
+        assertEquals(0L,((Number)obj(obj(comparison.get("totals")).get("grand")).get("delta_n")).longValue());
+    }
+
     /** Toda dimension, medida y modo se consulta sin error (SQL portable en H2 y MySQL) y ningun requerimiento queda fuera. */
     @Test @Order(70) void barridoDeMedidasDimensionesYModos(){
         var checked=explained();
