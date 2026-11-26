@@ -813,10 +813,26 @@ reducir pruebas ni criterios.
   - Revisar con `EXPLAIN` las consultas que leen tablas recién llenadas en MySQL, con estadísticas de tabla vacía
     (hallazgo de E11). Sugerir un índice donde corresponda.
   - Incluir la carga inicial del Panorama en la medición con 50.000 COM.
+- **Correcciones de presentación de E13** (revisión de capturas del 2026-11-26; encargo del responsable).
+  1. Etiquetas de periodo, en columnas y en líneas: abreviadas («jul 2026») o en dos líneas, nunca superpuestas ni
+     cortadas. El nombre completo queda en la tabla y en la información emergente.
+  2. Comparación con un corte:
+     - el gráfico muestra la cifra actual y la del corte, pareadas;
+     - el circular no se ofrece;
+     - «Cómo leer esta cifra» dice «Comparación con el corte <código>».
+  3. Con un eje de periodo, el texto que explica por qué no se ofrecen barras pareadas dice «Usa columnas pareadas»,
+     coherente con el botón.
+  4. Periodo sin registros: en lugar del gráfico, «Sin registros en el periodo». La nota «Sin registros en: ...» aparece
+     una sola vez por desglose.
+  5. Calidad: sin enlace a la bandeja cuando la variable tiene 0 % pendiente.
 - Archivos autorizados: pruebas; indices si la medicion los pide (migracion nueva, con evidencia); archivos de version;
-  documentos de la seccion 4.
+  documentos de la seccion 4; para las correcciones de presentación de E13, `frontend/src/features/stats/*` y
+  `frontend/src/components/charts/*`.
 - Restricciones: si la medicion no cumple, detenerse y proponer la alternativa de `DISENO` 5.7 (decision expresa).
 - Pruebas: suite H2 y MySQL, frontend, `Check-Scripts.ps1` (guias enlazadas).
+  - Correcciones de presentación de E13: pruebas de modelo y de render para cada punto, cada una con su mutación.
+  - Capturas: las de E14 repiten Informes, Explorar comparado (por periodo y con un corte) y Calidad, en escritorio y
+    móvil.
 - Cierre: commit `gate E14: integracion y cierre de version`.
 
 **E15 - Validacion de uso con la Direccion de UEP** (EXTERNO)
