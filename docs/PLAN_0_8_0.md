@@ -399,6 +399,33 @@ divide (`ENNa` cerrado con lo verificado y `ENNb` ABIERTO). Un gate BLOQUEADO po
 ABIERTO solo cuando el responsable registra la respuesta en la bitacora. Ningun gate implementa la seccion 9.
 Mientras E15 esté POSTERGADO, E16 empieza con E14 CERRADO y E17 exige solo el ciclo de E16.
 
+### Corte por cuota o cambio de agente
+
+1. **Prevención.** Con menos del 25 % de cuota disponible se pospone el inicio de corridas largas, incluida la suite
+   completa de MySQL y las mutaciones. Con menos del 10 %, se resguarda de inmediato y se detiene la sesión.
+2. **Resguardo.** Crear la rama `wip/<gate>-<agente>` desde el HEAD del gate. Usar `git add` con rutas explícitas,
+   excluyendo `target/`, `.tools/`, logs, capturas, archivos `.cnf`, claves y credenciales. Hacer el commit
+   `wip: <gate> de <agente> sin cerrar (no es cierre de gate)`, con un bloque «Dónde quedó» en el cuerpo que
+   registre lo hecho, cada corrida con su log en `D:\Ensayo-<gate>` y lo pendiente. Hacer push de la rama WIP.
+   El resguardo nunca se publica en `main`.
+3. **Corte sin resguardo.** El responsable se abstiene de modificar `C:\sigera` y la carpeta de ensayo. El siguiente
+   agente hace el resguardo como encargo especial con inventario, exclusiones, rama y push. Se detiene tras el push,
+   sin implementar ni correr pruebas.
+4. **Revisión.** Claude Padre revisa la rama contra el GO y entrega el encargo de cierre. Si el agente que continúa
+   no cierra en la misma sesión, registra el GO íntegro en
+   [«GO aprobados pendientes de ejecución»](BITACORA_0_8_0.md#go-aprobados-pendientes-de-ejecucion).
+5. **Validez de la evidencia del agente anterior.** Una corrida vale si ningún archivo de `src` cambió después.
+   Una mutación vale si su archivo no cambió después. El humo vale si `src/main` no cambió. Se repite toda
+   evidencia que no cumpla esas condiciones. Cada corrida de MySQL usa una ruta nueva en la unidad D
+   (`D:\Ensayo-<gate>b`, `D:\Ensayo-<gate>c`, etc.) y exige comprobar antes que el puerto 3417 esté libre.
+6. **Procesos auxiliares.** Cerrar por PID en `finally` los navegadores sin ventana y los servidores de humo.
+   Al terminar, comprobar que no quede ningún proceso propio. Nunca cerrar procesos ajenos.
+7. **Cierre.** En `main`, usar `git merge --squash` y un solo commit `gate <gate>: ...`. Registrar como desvío
+   quién ejecutó, quién cerró y de quién es cada evidencia. Borrar la rama WIP solo después de la verificación de
+   Claude Padre.
+8. **Traspaso.** En cuanto se acuerde una condición para un gate futuro, escribirla en el detalle de ese gate en
+   este plan y hacer un commit de documentación. El plan es la única fuente para el traspaso.
+
 ## 6. Gates
 
 Columnas de la tabla: dependencia (gates que deben estar CERRADO) y secciones de `DISENO_0_8_0.md`. Con un solo
@@ -421,15 +448,16 @@ detalle de cada gate va despues de la tabla.
 | E10 | Cortes estadisticos y configuraciones guardadas (servidor) | E02, E08 | 3.7, 6 |
 | E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | E10 | 7, 8, 12 |
 | E12 | Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz) | E10 | 10.3 |
+| E12b | Desestimación directa de una COM (servidor e interfaz) | E12 | 4.5.1 |
 | E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | E11, E12 | 10.3, 10.4 |
-| E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | E00-E13 | 5.7, 13, 14 |
+| E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | E00-E13 y E12b | 5.7, 13, 14 |
 | E15 | Validacion de uso con la Direccion de UEP (EXTERNO) | E14 | 10.5 |
 | E16 | Auditoria independiente (EXTERNO) | E14 | todo |
 | E17 | Build de entrega y etiqueta | Ciclo de E16 cerrado, sin correcciones ABIERTO | 14 |
 
 Ruta critica (cadena mas larga de dependencias): E00 -> E01 -> E05 -> E06 -> E07 -> E08 -> E10 -> E11 -> E13 -> E14 ->
 E16 -> E17 -> paso U. Fuera de ella, pero antes de lo que los necesita: E02 (antes de E10), E03 (antes de E07),
-E04 (antes de E09), E09 (antes de E14) y E12 (antes de E13).
+E04 (antes de E09), E09 (antes de E14), E12 (antes de E12b y E13) y E12b (antes de E14).
 
 ### Detalle de cada gate
 
@@ -705,6 +733,26 @@ reducir pruebas ni criterios.
   solamente; `prefers-reduced-motion`; movil.
 - Cierre: commit `gate E12: explorador`.
 
+**E12b - Desestimación directa de una COM (servidor e interfaz)**
+- **Alcance.** `DISENO` 4.5.1, «Desestimación directa de una COM». El GO define la adscripción (DI-13) y la sede
+  inicial de una COM desestimada sin SOL.
+- **Restricciones.** Conservar `conserveExternal`, la recepción del Formulario, `external_*` y
+  `communication_original` sin cambios. Mantener `Reports.java` intacto. Si hiciera falta modificarlo, detenerse
+  y consultar. Conservar V1-V24 y agregar una migración solo si es indispensable.
+- **Archivos autorizados.** `IntakeCommands.java` (sin tocar `conserveExternal`), `Workflow.java` (despacho),
+  `Lifecycle.java` (hito), `StatSource.java` y `TerritorialDims.java` (solo si el hito afecta las dimensiones),
+  `Queries.java` (acciones disponibles), `frontend/src/features/detail/{ComDetail.tsx,actions.ts}`, pruebas y
+  documentación.
+- **Pruebas.** Preparar una matriz con cifras esperadas escritas a mano.
+  - Una `INVALIDA` sale de `INGRESOS` y entra en `EXCLUIDOS`. Una `DUPLICADA` sigue contando en `INGRESOS`.
+  - Sin facultad, HTTP 403. Con SOL pendiente o con REQ, HTTP 409.
+  - Se exige fundamento y se rechaza una `DUPLICADA` sin caracterización mínima.
+  - Verificar `ESTADO_COM` y la adscripción según el GO. La Figura 1 y un corte incluyen la `DUPLICADA`.
+  - Los resultados de `Reports` para el resto se conservan.
+  - Ejecutar `InstitutionalReaderTest` e `ImmutabilityTest`, pruebas HTTP y mutaciones.
+  - Ejecutar las suites H2 y MySQL completas, frontend, humo y `Check-Scripts.ps1`.
+- **Cierre.** Commit `gate E12b: desestimacion directa de COM`.
+
 **E13 - Explorador: exportacion, cortes, series historicas y calidad (interfaz)**
 - Alcance: exportacion CSV, XLSX y ZIP desde cualquier vista y desde cortes, con los mensajes de las restricciones del
   ZIP (limite de folios, solo medidas de requerimientos, grupos prioritarios y cortes anteriores a V24); pantallas de
@@ -716,11 +764,26 @@ reducir pruebas ni criterios.
   sumarlas salvo que se pida; y Calidad con barras de completitud por variable y ambito, tendencia mensual y enlace a
   los pendientes. Las bandejas existentes agregan el filtro "Con clasificación pendiente" en `BoardQueries.filter`, con
   las mismas reglas de lectura de la bandeja y sin ruta nueva; el panel de Calidad enlaza a ese filtro.
+- **Ajustes de presentación de E12** (revisión de capturas del 2026-11-26, `DISENO` 10.3).
+  1. En la Figura 1, `PENDIENTE`, `SIN_INFORMACION`, `NO_DECLARADO` y `NO_APLICA` con 0 se listan en una nota
+     bajo la tabla («Sin registros en: ...»), sin fila ni barra. Con más de 0 aparecen como fila. Los ítems del
+     catálogo con 0 conservan su fila.
+  2. En Informes, desde unos 1.200 px de ancho, la tabla y el gráfico van lado a lado. En móvil van apilados.
+  3. El eje de periodo siempre es horizontal, con columnas o líneas. La comparación de periodos usa columnas
+     pareadas o dos líneas, sin barras horizontales.
+  4. Las tablas anchas muestran una sombra o un indicador de desplazamiento horizontal, fijan la primera columna y
+     mantienen completas las cifras y los encabezados.
+  5. En tablas, mostrar la variación con flecha y cifra («+1», «-2 (-15,4 %)», «=»). Mostrar «Sin base de
+     comparación» una sola vez como nota al pie de la tabla.
+  6. Mostrar «Datos de las HH:MM» una sola vez por sección si todas sus consultas son del mismo momento.
 - Archivos autorizados: `features/stats/*`, estilos, pruebas de frontend, `BoardQueries.java` y pruebas de backend.
 - Pruebas:
   - barrido de que el filtro "Con clasificación pendiente" solo muestra lo que la cuenta puede leer;
   - las cifras del filtro iguales a `PENDIENTE` de la completitud de su alcance;
   - mutacion;
+  - pruebas de render y de modelo para cada ajuste de presentación, con su mutación;
+  - registrar como desvío autorizado las aserciones de E12 que cambien por estos ajustes y conservar todas las demás;
+  - repetir en las capturas de E13 los mismos escenarios de E12 para comparar;
   - suites H2 y MySQL completas.
 - Aceptacion: U4, U5, U6 y U9, mas el aviso de espera del corte; el asistente de series se completa sin conocer el
   formato interno.
@@ -745,6 +808,11 @@ reducir pruebas ni criterios.
     `RESUMEN_CAMBIOS_V18`, `RESULTADO_INMEDIATO_V20` y `DIMENSIONES_V21`, las filas y huellas de
     `communication_original` iguales a las del respaldo y `stats.enabled` verdadero.
   - (f) TI activa los catálogos con fundamento, citando la conformidad de DI-01 a DI-04.
+- **Condiciones comprometidas.**
+  - Trasladar la hoja de ruta 0.9.0 (sección 9) a `docs/ALCANCE_Y_PENDIENTES.md`.
+  - Revisar con `EXPLAIN` las consultas que leen tablas recién llenadas en MySQL, con estadísticas de tabla vacía
+    (hallazgo de E11). Sugerir un índice donde corresponda.
+  - Incluir la carga inicial del Panorama en la medición con 50.000 COM.
 - Archivos autorizados: pruebas; indices si la medicion los pide (migracion nueva, con evidencia); archivos de version;
   documentos de la seccion 4.
 - Restricciones: si la medicion no cumple, detenerse y proponer la alternativa de `DISENO` 5.7 (decision expresa).
@@ -761,6 +829,10 @@ trazabilidad de D25-D51 (las vigentes) y de los escenarios, compatibilidad con e
 actualizacion, evidencia de mutacion, re-ejecucion de la suite por el responsable en un clon limpio; procedimiento de
 bloqueo y repeticion de la seccion 5.
 
+Además, E16 revisa el incidente de C: de E08 y el error 1112 de MySQL, el cambio en `Workflow.java`, `StatGuard` y
+el lock de los cortes (decisión A de E10), la memoria y el ZIP exclusivo de E11, y los gates de Codex (E07, la
+preparación de E08, E11 y E12b si lo ejecuta Codex) junto con los cierres hechos por otro agente.
+
 **E17 - Build de entrega y etiqueta**
 - Precondiciones: ultima auditoria (E16 o su ultima repeticion) CERRADO sobre el commit que contiene todas las
   correcciones de E16; ningun gate de correccion ABIERTO; DI-15 respondida.
@@ -772,8 +844,8 @@ bloqueo y repeticion de la seccion 5.
   Se omite el paso 2 (ensayo de actualización en TEST-SIGER) por decisión del responsable del 2026-11-25.
   Las compensaciones se incorporan al paso U en E14.
 
-  3. Limpieza, `SOURCE_SHA256.txt` y etiqueta anotada `v0.8.0`, solo con el paso 1 conforme; si falla, BLOQUEADO con
-     la evidencia y sin etiqueta.
+  3. Limpieza y `SOURCE_SHA256.txt`. Crear la etiqueta anotada `v0.8.0` solo si todas las comprobaciones del gate
+     resultan conformes. Ante un fallo, dejar BLOQUEADO con la evidencia y sin etiqueta.
 - Cierre: commit `gate E17: build y etiqueta`, con "Cierre del plan 0.8.0".
 
 ## 7. Formato del registro de cierre (en la bitacora)

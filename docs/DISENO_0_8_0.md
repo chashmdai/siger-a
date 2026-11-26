@@ -305,6 +305,18 @@ Variables pertinentes por cierre (solo si su catalogo tiene version VIGENTE; sin
 - PENDIENTE (con o sin propuesta) impide el cierre; el dialogo de cierre permite resolverlo en el mismo acto.
 - Una sola regla (`StatCompleteness`) alimenta `closure_blockers` y la validacion del comando.
 
+#### 4.5.1 Desestimación directa de una COM
+
+- `COM_DISCARD` exige la misma facultad que `COM_ROUTE`. Solo se admite sobre una COM `NUEVA` o con SOL devuelta,
+  sin SOL pendiente ni REQ.
+- El resultado es `INVALIDA` o `DUPLICADA`, con fundamento obligatorio. Para `DUPLICADA` rige la misma regla de
+  completitud que en `SOL_DISCARD`.
+- La desestimación registra un hito propio y queda auditada. Es definitiva, sin reapertura.
+- La ficha de la COM ofrece el botón «Desestimar ingreso».
+- Según D25, la `INVALIDA` queda excluida de los ingresos computables y la `DUPLICADA` cuenta.
+- En el GO de E12b se define la adscripción (DI-13) y la sede inicial de una COM desestimada sin SOL. La propuesta es
+  usar el ámbito de quien la desestima, acreditado por el hito. La alternativa es «Pendiente de asignación».
+
 ### 4.6 Territorio multidimensional (D32)
 
 | Dimension | Formulario | Ficha | COM manual | Regla |
@@ -505,6 +517,11 @@ dependencias nuevas.
 **Informes**
 - Figura 1 (tipo de solicitud, requirente, vía y adscripción institucional, DI-13), de julio a junio, con rótulos y
   orden institucionales.
+- Desde E13, los estados especiales `PENDIENTE`, `SIN_INFORMACION`, `NO_DECLARADO` y `NO_APLICA` con 0 se listan
+  en una nota bajo la tabla («Sin registros en: ...»), sin fila ni barra. Con más de 0 aparecen como fila. Los ítems
+  del catálogo con 0 conservan su fila.
+- Desde E13, en escritorio a partir de unos 1.200 px de ancho, la tabla y el gráfico van lado a lado. En móvil van
+  apilados.
 - Exportación CSV y XLSX.
 - El botón "Congelar estas cifras" se agrega en E13.
 
@@ -535,15 +552,17 @@ dependencias nuevas.
 <fecha y hora>; <alcance>; <fecha de análisis>; <modo>", más el código del corte si corresponde.
 
 **Gráficos**
+- Desde E13, el eje de periodo siempre es horizontal.
 - Sugerencia automática según la forma de los datos:
 
   | Forma de los datos | Gráfico sugerido |
   |---|---|
-  | Un eje de periodo | Líneas |
+  | Un eje de periodo | Líneas o columnas (E13) |
   | Una dimensión de valor único | Barras horizontales ordenadas de mayor a menor |
   | Dos dimensiones | Barras agrupadas, o apiladas solo si las columnas son de valor único |
   | Una dimensión múltiple | Barras con la nota |
-  | Una comparación | Barras pareadas o de diferencia |
+  | Una comparación de periodos | Columnas pareadas o dos líneas (E13) |
+  | Otra comparación | Barras pareadas o de diferencia |
 
 - Circular opcional solo con una dimensión de valor único, sin columnas y con 6 categorías o menos, sumando el 100 %;
   si no, se explica por qué y se proponen barras.
@@ -558,16 +577,26 @@ dependencias nuevas.
 - Márgenes y total destacados, nunca sumados en el cliente.
 - Jerarquía eje → derecho → subcategoría plegable.
 - 0 como cero y "—" con explicación cuando no hay dato.
+- Desde E13, las tablas anchas indican el desplazamiento horizontal con una sombra o un indicador, mantienen fija
+  la primera columna y muestran completas todas las cifras y los encabezados.
+- Desde E13, la variación se muestra de forma compacta con flecha y cifra («+1», «-2 (-15,4 %)», «=»).
+  «Sin base de comparación» se muestra una sola vez como nota al pie de la tabla.
 
 **Estado y rendimiento**
 - La consulta queda en la dirección (`#estadisticas?...`) para volver atrás y compartir.
 - Vistas guardadas.
 - Consultas en fila, una a la vez por cuenta por el cupo de `StatGuard`, con caché de la sesión y esqueletos de carga.
+- Desde E13, «Datos de las HH:MM» aparece una sola vez por sección cuando todas sus consultas son del mismo momento.
 - Mensajes llanos para 429, 503 y motor deshabilitado.
 
 **Móvil**: Panorama e Informes completos; Explorar simplificado; tablas con desplazamiento horizontal.
 
 **Restricciones**: sin códigos ni SQL a la vista; sin dependencias nuevas; gráficos SVG propios.
+
+**Verificación de los ajustes de presentación de E13** (revisión de capturas del 2026-11-26). Cada ajuste lleva
+pruebas de render y de modelo, con su mutación. Las aserciones de E12 que cambien por estos ajustes se registran
+como desvío autorizado. Se conservan todas las demás. Las capturas de E13 repiten los mismos escenarios de E12
+para comparar.
 
 ### 10.4 Cortes, series y calidad
 Cortes: generar (asistente de cuatro pasos), ver, verificar integridad, comparar y anular. Series: asistente de
