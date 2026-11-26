@@ -19,11 +19,12 @@ import static cl.nexbyte.sigera.Db.*;
 public class Api {
     final Attention attention;final BoardQueries boards;volatile boolean ready;
     final Access access;final Workflow flow;final Queries queries;final Documents documents;final Db db;final PasswordEncoder passwords;
-    final Integrations integrations;final PersonSearch search;final Holidays holidays;final Reports reports;final Personnel personnel;final StatCatalogs catalogs;final IntakeRecord intake;final StatEngine stats;final StatCuts cuts;final StatViews views;final String environment;final String releaseVersion;
-    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,Reports reports,Personnel personnel,StatCatalogs catalogs,IntakeRecord intake,StatEngine stats,StatCuts cuts,StatViews views,
+    final Integrations integrations;final PersonSearch search;final Holidays holidays;final Reports reports;final Personnel personnel;final StatCatalogs catalogs;final IntakeRecord intake;final StatEngine stats;final StatCuts cuts;final StatViews views;final StatExport statsExport;final StatSeries statSeries;final String environment;final String releaseVersion;
+    public Api(Access access,Workflow flow,Queries queries,Documents documents,Db db,PasswordEncoder passwords,BoardQueries boards,Attention attention,Integrations integrations,PersonSearch search,Holidays holidays,Reports reports,Personnel personnel,StatCatalogs catalogs,IntakeRecord intake,StatEngine stats,StatCuts cuts,StatViews views,StatExport statsExport,StatSeries statSeries,
                @org.springframework.beans.factory.annotation.Value("${siger.environment-label:}")String environment,BuildProperties buildProperties){
         this.attention=attention;this.access=access;this.flow=flow;this.queries=queries;this.documents=documents;this.db=db;this.passwords=passwords;this.boards=boards;
         this.integrations=integrations;this.search=search;this.holidays=holidays;this.reports=reports;this.personnel=personnel;this.catalogs=catalogs;this.intake=intake;this.stats=stats;this.cuts=cuts;this.views=views;this.environment=environment.strip();this.releaseVersion=buildProperties.getVersion();
+        this.statsExport=statsExport;this.statSeries=statSeries;
     }
     private String name(Authentication auth){if(auth==null||!(auth.getPrincipal() instanceof SecurityConfig.Principal))throw new Problem(401,"Inicia sesion.");return auth.getName();}
     @GetMapping("/session") public Map<String,Object> session(Authentication auth,CsrfToken csrf){
@@ -88,6 +89,22 @@ public class Api {
     @GetMapping("/stats/cuts/{id}") public Map<String,Object> statCut(Authentication a,@PathVariable long id){return cuts.detail(access.actor(name(a)),id);}
     @PostMapping("/stats/cuts/{id}/verify") public Map<String,Object> verifyCut(Authentication a,@PathVariable long id){return cuts.verify(access.actor(name(a)),id);}
     @GetMapping("/stats/views") public List<Map<String,Object>> statViews(Authentication a){return views.list(access.actor(name(a)));}
+    @PostMapping(value="/stats/export/{format}",consumes=MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<byte[]> statsExport(Authentication a,@PathVariable String format,@RequestBody Map<String,Object> query){return download(statsExport.export(access.actor(name(a)),format,query));}
+    @GetMapping("/stats/series") public List<Map<String,Object>> statSeries(Authentication a){return statSeries.list(access.actor(name(a)));}
+    @GetMapping("/stats/series/{id:\\d+}") public Map<String,Object> statSeries(Authentication a,@PathVariable long id){return statSeries.detail(access.actor(name(a)),id);}
+    @GetMapping("/stats/series/template/{format}") public ResponseEntity<byte[]> seriesTemplate(Authentication a,@PathVariable String format){return download(statsExport.template(access.actor(name(a)),format));}
+    @PostMapping(value="/stats/series/preview",consumes=MediaType.APPLICATION_JSON_VALUE)
+    public Map<String,Object> seriesPreview(Authentication a,@RequestBody Map<String,Object> input){return statSeries.preview(access.actor(name(a)),input);}
+    @PostMapping(value="/stats/series/compare",consumes=MediaType.APPLICATION_JSON_VALUE)
+    public Map<String,Object> seriesCompare(Authentication a,@RequestBody Map<String,Object> query){return statSeries.compare(access.actor(name(a)),query);}
+    @PostMapping("/stats/series/{id}/export/{format}")
+    public ResponseEntity<byte[]> seriesExport(Authentication a,@PathVariable long id,@PathVariable String format){return download(statsExport.series(access.actor(name(a)),format,id));}
+    private static ResponseEntity<byte[]> download(StatExport.Download file){
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(file.contentType())).contentLength(file.bytes().length)
+            .cacheControl(CacheControl.noStore()).header("X-Content-Type-Options","nosniff")
+            .header("Content-Disposition",ContentDisposition.attachment().filename(file.name()).build().toString()).body(file.bytes());
+    }
     /** CSV de REQ o Casos (G12, EXPORTACION): filtros en el cuerpo como en /reports; CSRF; GET responde 405. */
     @PostMapping("/reports/export/{kind}") public ResponseEntity<byte[]> exportRows(Authentication a,@PathVariable String kind,@RequestBody Reports.Request b){
         var x=reports.export(access.actor(name(a)),kind,b);return csv(x.filename(),x.bytes());

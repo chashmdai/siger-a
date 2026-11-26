@@ -387,6 +387,8 @@ class InstitutionalReaderTest {
   attempts.put("STAT_VIEW_SAVE",new Attempt(null,null,Map.of("title","Intento","definition",Map.of("measure","INGRESOS","period",cutPeriod))));
   attempts.put("STAT_VIEW_DELETE",new Attempt(null,1L,Map.of()));
   attempts.put("STAT_VIEW_SHARE",new Attempt(null,1L,Map.of("shared",true)));
+  attempts.put("STAT_SERIES_IMPORT",new Attempt(null,null,Map.of()));
+  attempts.put("STAT_SERIES_ANNUL",new Attempt(null,1L,Map.of("reason","Intento")));
 
   return attempts;
  }

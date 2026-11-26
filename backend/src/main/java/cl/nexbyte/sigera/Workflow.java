@@ -33,6 +33,7 @@ public class Workflow {
     private final Rights rights;
     private final StatCuts cuts;
     private final StatViews views;
+    private final StatSeries series;
     private final JsonMapper json=JsonMapper.builder().build();
     private static final Logger LOG=LoggerFactory.getLogger(Workflow.class);
     /** Codigo fijo del log tecnico cuando la espera entre comandos llega a su tope (reloj del servidor atrasado). */
@@ -43,7 +44,7 @@ public class Workflow {
     static volatile long lastEnd;
 
     public Workflow(Db db,Access access,IntakeCommands intake,RequirementCommands requirements,CaseCommands cases,Attention attention,Personnel personnel,Rights rights,
-                    StatCuts cuts,StatViews views){
+                    StatCuts cuts,StatViews views,StatSeries series){
         this.db=db;
         this.access=access;
         this.intake=intake;
@@ -54,6 +55,7 @@ public class Workflow {
         this.rights=rights;
         this.cuts=cuts;
         this.views=views;
+        this.series=series;
     }
 
     @Transactional
@@ -86,6 +88,7 @@ public class Workflow {
                  "HOLIDAY_ADD","HOLIDAY_IMPORT","HOLIDAY_REMOVE","CATALOG_IMPORT","CATALOG_ACTIVATE","CATALOG_MAPPING_IMPORT" -> personnel.run(a,type,id,expected,in);
             case "STAT_CUT_CREATE","STAT_CUT_ANNUL" -> cuts.run(a,type,id,expected,in);
             case "STAT_VIEW_SAVE","STAT_VIEW_DELETE","STAT_VIEW_SHARE" -> views.run(a,type,id,expected,in);
+            case "STAT_SERIES_IMPORT","STAT_SERIES_ANNUL" -> series.run(a,type,id,expected,in);
             default -> throw new Problem(400,"Comando desconocido.");
         };
         long end=Lifecycle.now();

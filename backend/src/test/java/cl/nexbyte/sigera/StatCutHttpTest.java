@@ -108,4 +108,30 @@ class StatCutHttpTest {
         assertEquals(200,gestion.command("STAT_CUT_ANNUL",cut,0L,"{\"reason\":\"Fundamento de anulacion\"}",true).statusCode());
         assertEquals("ANULADO",mapper.readTree(gestion.send("GET","/stats/cuts/"+cut,null,null,false).body()).path("state").asString());
     }
+
+    @Test void exportacionYSeriePorSusRutasHttp()throws Exception{
+        var manager=new Browser(account("estat.exp.http","REPORTES","EXPORTACION","GESTION_ESTADISTICA"));
+        var reader=new Browser(account("estat.lector.http","REPORTES"));
+        String q="{\"measure\":\"INGRESOS\",\"period\":"+PERIOD+"}";
+        String path="/stats/export/csv";
+        assertEquals(405,manager.send("GET",path,null,null,false).statusCode());
+        assertEquals(403,manager.send("POST",path,"application/json",q,false).statusCode());
+        assertEquals(403,reader.send("POST",path,"application/json",q,true).statusCode());
+        var file=manager.send("POST",path,"application/json",q,true);
+        assertEquals(200,file.statusCode());assertTrue(file.headers().firstValue("Content-Disposition").orElseThrow().contains("attachment"));
+        assertEquals("no-store",file.headers().firstValue("Cache-Control").orElseThrow());
+        assertEquals(200,manager.send("GET","/stats/series/template/csv",null,null,false).statusCode());
+        assertEquals(403,reader.send("GET","/stats/series/template/csv",null,null,false).statusCode());
+        String data="{\"title\":\"Serie sintética\",\"source\":\"Informe sintético\",\"indicator\":\"INGRESOS\",\"methodology\":\"Conteo\",\"granularity\":\"MES\",\"period_from\":\"2024-01-01\",\"period_to\":\"2024-01-31\",\"reason\":\"Prueba\",\"format\":\"csv\",\"content\":\""
+            +Base64.getEncoder().encodeToString("periodo_desde;periodo_hasta;dimension;categoria;valor\n2024-01-01;2024-01-31;CANAL;Correo;3\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))+"\"}";
+        assertEquals(403,manager.send("POST","/stats/series/preview","application/json",data,false).statusCode());
+        assertEquals(405,manager.send("GET","/stats/series/preview",null,null,false).statusCode());
+        assertEquals(405,manager.send("GET","/stats/series/compare",null,null,false).statusCode());
+        assertEquals(200,manager.send("POST","/stats/series/preview","application/json",data,true).statusCode());
+        var committed=manager.command("STAT_SERIES_IMPORT",null,null,data,true);
+        assertEquals(200,committed.statusCode());long id=mapper.readTree(committed.body()).path("id").asLong();
+        assertEquals(200,reader.send("GET","/stats/series/"+id,null,null,false).statusCode());
+        assertEquals(405,manager.send("GET","/stats/series/"+id+"/export/xlsx",null,null,false).statusCode());
+        assertEquals(200,manager.send("POST","/stats/series/"+id+"/export/xlsx",null,null,true).statusCode());
+    }
 }

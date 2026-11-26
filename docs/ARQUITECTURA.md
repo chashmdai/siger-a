@@ -137,7 +137,12 @@ V22 (E08): indices de las fechas de análisis y del resultado de los comandos, c
 V23 (E10): `stat_cut` (cabecera con huellas) y las tablas congeladas `stat_cut_row`, `stat_cut_event`, `stat_cut_action`,
 `stat_cut_action_institution`, `stat_cut_person` y `stat_cut_case` (lista cerrada de columnas, sin claves foráneas ni
 cascadas), y `stat_view`.
-V1 a V23 no se modifican nunca; un cambio nuevo se agrega como `V24__...` aditivo, compatible con H2 y MySQL. Ninguna
+V24 (E11): `stat_series` y `stat_series_value` guardan series agregadas y sus correspondencias confirmadas. El
+complemento `stat_export_cut_*` congela folios, procedencia REQ/CAS e integridad de los microdatos sin cascadas.
+`StatExport` usa el agregado y las proyecciones de `StatSource.Plan` con los mismos filtros, alcance y temporización.
+`Xlsx` y `XlsxReader` implementan los formatos con la JDK. El detalle de rutas y reglas está en
+`CONTRATO_EXPORTACION_SERIES_0_8_0.md`.
+V1 a V24 no se modifican nunca; un cambio nuevo se agrega como `V25__...` aditivo, compatible con H2 y MySQL. Ninguna
 migracion siembra sedes, regiones, feriados, catalogos ni personas reales. La actualizacion desde 0.4.0 y desde 0.7.0
 se prueba sobre MySQL 8.4 con volcados sinteticos (`MySql84UpgradeTest`, `MySql84Upgrade070Test`).
 

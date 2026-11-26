@@ -829,6 +829,8 @@ archivos previstos y pruebas, esta en `DISENO_0_8_0.md` seccion 15.
 | Pantallas de resolución en el acto con derechos (COM_IMMEDIATE y ATTENTION_CREATE con resolve_now) | - | GO de E09, decisión D | - |
 | Caracterización de la COM en la ficha de la SOL (evita leer la ficha de la COM en el descarte) | - | hallazgo de E09 | - |
 | Corte sin lock global: instantánea consistente con bloqueo de milisegundos (opción D de la detención de E10), si el volumen se acerca al plazo | - | detención de E10 | - |
+| Microdatos a nivel de actuación y de Caso en el paquete estadístico | - | GO de E11 | - |
+| Paquete ZIP escrito por flujo a un temporal (menos memoria; opción 4 de la detención de E11) | - | detención de E11 | - |
 | Otras mejoras operacionales sin relacion directa con los objetivos de 0.8.0 | - | - | - |
 
 En 0.8.0 la seguridad de la actualizacion se mantiene con los scripts y procedimientos vigentes: respaldo con

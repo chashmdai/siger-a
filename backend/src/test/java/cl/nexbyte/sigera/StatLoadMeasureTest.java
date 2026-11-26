@@ -2,6 +2,7 @@ package cl.nexbyte.sigera;
 
 import com.zaxxer.hikari.HikariDataSource;
 import java.io.File;
+import java.lang.management.ManagementFactory;
 import java.nio.file.*;
 import java.sql.DriverManager;
 import java.util.*;
@@ -30,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,properties={
     "spring.datasource.url=jdbc:h2:mem:sigera_medicion;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-    "siger.seed-demo=true","siger.data=./target/test-medicion-${random.uuid}","siger.scheduling=false","siger.stats.timeout-seconds=600"})
+    "siger.seed-demo=true","siger.data=./target/test-medicion-${random.uuid}","siger.scheduling=false","siger.stats.timeout-seconds=${siger.stats.measure-timeout:600}"})
 @ActiveProfiles("test")
 @EnabledIfSystemProperty(named="siger.stats.measure",matches="true")
 public class StatLoadMeasureTest extends StatFixture {
@@ -157,6 +158,133 @@ public class StatLoadMeasureTest extends StatFixture {
     }
     @org.springframework.beans.factory.annotation.Autowired StatCuts cutService;
     StatCuts cutsService(){return cutService;}
+    @org.springframework.beans.factory.annotation.Autowired StatExport exportService;
+
+    @Test @EnabledIfSystemProperty(named="siger.stats.measure-e11",matches="true")
+    void medicionE11()throws Exception{
+        assertTrue(MySqlSuite.enabled(),"MySQL desechable obligatorio");
+        assertEquals(30,guard.timeoutSeconds(),"plazo de producción para medir el ZIP");
+        String schema=MySqlSuite.schema("sigera_medicion");
+        var log=Path.of("target","medicion-e11.txt");
+        try(var mon=raw()){
+            String tmpdir=mon.text("SELECT @@tmpdir"),datadir=mon.text("SELECT @@datadir");
+            assertEquals(List.of(),StatGuard.misplaced("D:",datadir,tmpdir,mon.text("SELECT @@innodb_temp_tablespaces_dir")));
+            assertEquals("TempTable",mon.text("SELECT @@internal_tmp_mem_storage_engine"));
+            assertTrue(mon.number("SELECT @@innodb_lock_wait_timeout")>guard.timeoutSeconds());
+            File drive=new File("D:\\");assertTrue(drive.getUsableSpace()>=START_FREE);
+            generate();assertEquals(TOTAL,db.count("SELECT COUNT(*) FROM communication"));
+            mon.exec("ANALYZE TABLE `"+schema+"`.communication,`"+schema+"`.requirement,`"+schema+"`.case_record,`"+schema+"`.stat_event,`"+schema+"`.stat_declared_version,`"+schema+"`.stat_declared_person,`"+schema+"`.milestone,`"+schema+"`.command_log,`"+schema+"`.management_note");
+            var stop=new AtomicBoolean();var killed=new AtomicBoolean();var minimum=new AtomicLong(Long.MAX_VALUE);var maxHeap=new AtomicLong();
+            var monitorError=new AtomicReference<Exception>();
+            var watcher=Thread.startVirtualThread(()->{
+                try(var w=raw()){
+                    while(!stop.get()){
+                        long free=drive.getUsableSpace();minimum.accumulateAndGet(free,Math::min);
+                        maxHeap.accumulateAndGet(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed(),Math::max);
+                        if(free<STOP_FREE&&!killed.getAndSet(true))for(long id:ids(w,schema))w.exec("KILL QUERY "+id);
+                        Thread.sleep(100);
+                    }
+                }catch(Exception e){monitorError.set(e);}
+            });
+            // Cierre de E11: con la memoria de produccion (-Xmx1024m, Service.ps1); la condicion de detencion del GO es 75 %.
+            long heapMax=Runtime.getRuntime().maxMemory();
+            assertTrue(heapMax<=1024L<<20,"medir con -Xmx1024m (argLine); maximo actual "+(heapMax>>20)+" MiB");
+            long cutMs;var zips=new ArrayList<Zip>();
+            try(var gc=new AfterGc()){
+                String gest=staff("gest.e11.medicion","REPORTES","GESTION_ESTADISTICA");
+                var actor=access.actor(staff("exp.e11.medicion","REPORTES","EXPORTACION","REPORTES_PERSONAS"));
+                var second=access.actor(staff("exp.e11.medicion2","REPORTES","EXPORTACION","REPORTES_PERSONAS"));
+                System.gc();gc.reset();maxHeap.set(0);
+                long start=System.nanoTime();long id=cut(gest,null,cp());cutMs=(System.nanoTime()-start)/1_000_000;
+                String headline="COM="+TOTAL+"; corte="+cutMs+" ms; filas_corte="+db.count("SELECT COUNT(*) FROM stat_cut_row WHERE cut_id=?",id)
+                    +"; heap_max_MiB="+(heapMax>>20)+"; despues_gc_max_MiB_corte="+(gc.reset()>>20)+"; heap_usado_max_MiB_corte="+(maxHeap.get()>>20)+"\n";
+                Files.writeString(log,headline);System.out.print(headline);
+                Map<String,Object> twoYears=map("measure","REQUERIMIENTOS_CON_VALOR","rows",List.of("DERECHO"),"columns",List.of("CONTEXTO"),"period",days("2024-07-01","2026-06-30"));
+                Map<String,Object> account=map("measure","REQUERIMIENTOS_CON_VALOR","rows",List.of("DERECHO"),"columns",List.of("CONTEXTO"),"period",cp());
+                var frozen=new LinkedHashMap<>(account);frozen.put("cut_id",id);
+                for(var step:List.of(Map.entry("vigente Cuenta Publica",account),Map.entry("corte Cuenta Publica",frozen),Map.entry("vigente 2024-07-01 a 2026-06-30",twoYears))){
+                    System.gc();long base=gc.reset();maxHeap.set(0);
+                    var z=zip(step.getKey(),actor,step.getValue()).withMemory(base,gc.reset(),maxHeap.get());
+                    zips.add(z);Files.writeString(log,z.line(),StandardOpenOption.APPEND);System.out.print(z.line());
+                }
+                System.gc();long base=gc.reset();maxHeap.set(0);
+                var ready=new java.util.concurrent.CountDownLatch(2);var go=new java.util.concurrent.CountDownLatch(1);
+                var pair=new ArrayList<java.util.concurrent.CompletableFuture<Zip>>();
+                for(var who:List.of(actor,second))pair.add(java.util.concurrent.CompletableFuture.supplyAsync(()->{
+                    ready.countDown();try{go.await();}catch(InterruptedException e){throw new IllegalStateException(e);}
+                    return zip("simultaneo "+who.username(),who,account);
+                },java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()));
+                ready.await();start=System.nanoTime();go.countDown();
+                var both=pair.stream().map(java.util.concurrent.CompletableFuture::join).toList();
+                long wall=(System.nanoTime()-start)/1_000_000;long after=gc.reset(),peak=maxHeap.get();
+                for(var z:both){var m=z.withMemory(base,after,peak);zips.add(m);Files.writeString(log,m.line(),StandardOpenOption.APPEND);System.out.print(m.line());}
+                String pairLine="dos ZIP simultaneos (Cuenta Publica); pared="+wall+" ms; despues_gc_max_MiB="+(after>>20)+"; heap_usado_max_MiB="+(peak>>20)+"; libre_min_GiB="+(minimum.get()>>30)+"\n";
+                Files.writeString(log,pairLine,StandardOpenOption.APPEND);System.out.print(pairLine);
+            }finally{stop.set(true);watcher.join();}
+            assertNull(monitorError.get());assertFalse(killed.get());
+            // Criterios de la decision del responsable sobre la detencion de E11 (2026-11-26).
+            assertTrue(cutMs<=13_000,"E11: STAT_CUT_CREATE supera 13 s");
+            for(var z:zips){
+                if(z.error()==null)assertTrue(z.ms()<30_000,"E11: el ZIP supera el plazo");
+                assertTrue(z.afterGc()<=(768L<<20),z.name()+": memoria despues de recolectar sobre el 75 % de 1.024 MiB");
+            }
+            for(String name:List.of("vigente Cuenta Publica","corte Cuenta Publica")){
+                var z=zips.stream().filter(x->x.name().equals(name)).findFirst().orElseThrow();
+                assertNull(z.error(),name+": "+z.error());assertTrue(z.ms()<=25_000,name+": supera 25 s");
+            }
+            assertEquals("HTTP 409",zips.stream().filter(x->x.name().startsWith("vigente 2024")).findFirst().orElseThrow().error(),"dos anios superan 30.000 folios");
+            var pairs=zips.stream().filter(x->x.name().startsWith("simultaneo")).toList();
+            assertEquals(1,pairs.stream().filter(x->x.error()==null).count(),"uno de los dos simultaneos se genera");
+            var busy=pairs.stream().filter(x->"HTTP 429".equals(x.error())).toList();
+            assertEquals(1,busy.size(),"el segundo ZIP recibe 429");assertTrue(busy.getFirst().ms()<1_000,"429 de inmediato, sin cola");
+        }
+    }
+    /** Un ZIP medido: tiempo total, fases de StatExport.PHASES y memoria (antes, mayor despues de recolectar y mayor uso muestreado). */
+    record Zip(String name,long ms,long bytes,Map<String,Long> phases,String error,long baseAfterGc,long afterGc,long heapPeak){
+        Zip withMemory(long base,long after,long peak){return new Zip(name,ms,bytes,phases,error,base,after,peak);}
+        String line(){
+            return "ZIP "+name+"; total="+ms+" ms; "+(error==null?"bytes="+bytes:"error="+error)+"; fases_ms="+phases
+                +"; base_despues_gc_MiB="+(baseAfterGc>>20)+"; despues_gc_max_MiB="+(afterGc>>20)+"; heap_usado_max_MiB="+(heapPeak>>20)+"\n";
+        }
+    }
+    Zip zip(String name,Access.Actor actor,Map<String,Object> q){
+        var phases=new LinkedHashMap<String,Long>();StatExport.PHASES.set(phases);
+        long start=System.nanoTime();
+        try{
+            var d=exportService.export(actor,"zip",q);
+            return new Zip(name,(System.nanoTime()-start)/1_000_000,d.bytes().length,new LinkedHashMap<>(phases),null,0,0,0);
+        }catch(Problem p){
+            return new Zip(name,(System.nanoTime()-start)/1_000_000,0,new LinkedHashMap<>(phases),"HTTP "+p.status,0,0,0);
+        }catch(OutOfMemoryError e){
+            return new Zip(name,(System.nanoTime()-start)/1_000_000,0,new LinkedHashMap<>(phases),"OutOfMemoryError",0,0,0);
+        }finally{StatExport.PHASES.remove();}
+    }
+    /**
+     * Mayor ocupacion del heap despues de cada recoleccion (suma de los grupos HEAP de GcInfo.getMemoryUsageAfterGc, por la
+     * notificacion de cada recolector) desde el ultimo reset(); a falta de notificaciones, la CollectionUsage de los grupos.
+     */
+    static final class AfterGc implements javax.management.NotificationListener,AutoCloseable {
+        final AtomicLong max=new AtomicLong();
+        final Set<String> heap=new HashSet<>();
+        AfterGc()throws Exception{
+            for(var p:ManagementFactory.getMemoryPoolMXBeans())if(p.getType()==java.lang.management.MemoryType.HEAP)heap.add(p.getName());
+            for(var gc:ManagementFactory.getGarbageCollectorMXBeans())((javax.management.NotificationEmitter)gc).addNotificationListener(this,null,null);
+        }
+        @Override public void handleNotification(javax.management.Notification n,Object handback){
+            if(!n.getType().equals(com.sun.management.GarbageCollectionNotificationInfo.GARBAGE_COLLECTION_NOTIFICATION))return;
+            var info=com.sun.management.GarbageCollectionNotificationInfo.from((javax.management.openmbean.CompositeData)n.getUserData());
+            long used=0;for(var e:info.getGcInfo().getMemoryUsageAfterGc().entrySet())if(heap.contains(e.getKey()))used+=e.getValue().getUsed();
+            max.accumulateAndGet(used,Math::max);
+        }
+        long reset(){
+            long collection=0;
+            for(var p:ManagementFactory.getMemoryPoolMXBeans())if(p.getType()==java.lang.management.MemoryType.HEAP&&p.getCollectionUsage()!=null)collection+=p.getCollectionUsage().getUsed();
+            long seen=max.getAndSet(0);return seen>0?seen:collection;
+        }
+        @Override public void close()throws Exception{
+            for(var gc:ManagementFactory.getGarbageCollectorMXBeans())((javax.management.NotificationEmitter)gc).removeNotificationListener(this);
+        }
+    }
     /** Created_tmp_disk_tables, Created_tmp_tables y Created_tmp_files del servidor (solo esta prueba lo usa). */
     static long[] status(Connection c)throws Exception{
         return new long[]{c.number("SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Created_tmp_disk_tables'"),

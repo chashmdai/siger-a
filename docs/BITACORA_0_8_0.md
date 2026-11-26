@@ -25,7 +25,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E08b | Motor estadístico: confinamiento, límites de ejecución y concurrencia (servidor) | CERRADO |
 | E09 | Captura estadistica en el flujo (interfaz): caracterizacion, derechos, actuaciones y cierre | CERRADO |
 | E10 | Cortes estadisticos y configuraciones guardadas (servidor) | CERRADO |
-| E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | ABIERTO |
+| E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | CERRADO |
 | E12 | Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz) | ABIERTO |
 | E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | ABIERTO |
 | E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | ABIERTO |
@@ -71,6 +71,7 @@ plan). Los pendientes operacionales postergados no tienen gate en 0.8.0 (seccion
 | Actualización sin ensayo en TEST-SIGER (precisión de D50) | E17 | 2026-11-25: se omite el paso 2 de E17. Fundamento: Update.ps1 y Migrate.ps1 sin cambios desde v0.6.0 y ejecutados con éxito en producción al pasar de 0.6.0 a 0.7.0; la migración desde 0.7.0 hasta la última versión se prueba sobre MySQL 8.4 con el volcado sintético en cada gate y en E14. Compensaciones obligatorias en el paso U (detalle de E14). |
 | Dimensión de adscripción institucional (DI-13) | E10 | 2026-11-25: aprobada; se agrega a E10 con StatSource.java y docs/CONTRATO_STATS_0_8_0.md (cambio aditivo registrado como desvío). |
 | Detención de E10: generación del corte con el lock global (10,6 s con 50.005 COM y 25.084 congeladas, sobre el umbral de 5 s del GO) | E10 | 2026-11-26: opción A. STAT_CUT_CREATE sigue dentro de Workflow.run, con el lock global, como dice el GO. Se admiten optimizaciones que no cambien el resultado (lotes de inserción más grandes) y se registra el tiempo final. Exigido: un comando que llega durante la generación espera y termina bien, probado en MySQL; innodb_lock_wait_timeout mayor que el plazo de StatGuard (si no, detenerse); plazo vencido con rollback completo, 503, nada parcial y la cancelación auditada. Documentación en CLAUDE.md y en el contrato: generar un corte detiene las operaciones unos segundos y se recomienda hacerlo fuera del horario de atención, con la proyección del tiempo según el volumen frente al plazo de 30 s. Hoja de ruta 0.9.0 (sección 9 del plan): corte sin lock global (opción D). El resto del GO de E10 sigue igual. |
+| Detención de E11: con 50.005 COM y -Xmx1024m, ZIP vigente de 2 años en 28,1 s (> 25 s), ZIP desde un corte y dos ZIP simultáneos con 503 por plazo, memoria después de recolectar 956 MiB (93 %) con dos ZIP | E11 | 2026-11-26: aplicar 1, 2 y 3; la 4 (ZIP escrito por flujo a un temporal) pasa a 0.9.0 (sección 9 del plan). (1) Un ZIP a la vez en la instancia: el segundo recibe 429 de inmediato, sin cola, con un cupo propio además del de StatGuard, liberado en finally; un CSV o una consulta siguen funcionando mientras corre un ZIP. (2) Corregir la consulta de microdatos sobre el corte (StatSource, índices en V24 o ambos), con el diagnóstico de EXPLAIN y su causa registrados, sin cambiar el resultado (equivalencias y matriz sin tocar aserciones). (3) `siger.stats.export.max-rows` = 30.000, ajustable con `SIGER_STATS_EXPORT_MAX_ROWS`; por sobre el límite, 409 «Acota el periodo o los filtros». Ajuste del mismo día: el volumen real es de unos 200 requerimientos al mes (unos 2.400 al año, con picos estacionales), de modo que se fija 30.000 sin calibrar 40.000; el fundamento va en el contrato y en CLAUDE.md. (4) Nueva medición con el código final, -Xmx1024m y 50.005 COM: ZIP de la Cuenta Pública vigente y desde un corte en 25 s o menos cada uno, memoria después de recolectar en 75 % o menos, el segundo ZIP con 429 y STAT_CUT_CREATE en 13 s o menos; si no, detenerse y consultar. (5) El registro de fases de StatExport se conserva solo si está inactivo fuera de la medición y no escribe en el log ni en la auditoría. (6) Repetir las 46 mutaciones sobre el código final y agregar las del ZIP exclusivo, el límite y la consulta sobre el corte. (7) Corridas finales una vez y sin paralelo: H2, MySQL desechable en una ruta nueva de D: (actualizaciones desde 0.4.0 y 0.7.0 hasta V24), humo con el JAR nuevo y Check-Scripts.ps1 con powershell.exe 5.1. (8) Hoja de ruta: «Paquete ZIP escrito por flujo a un temporal». (9) Cierre como el encargo anterior. |
 
 ## Definiciones pendientes
 
@@ -544,6 +545,252 @@ Con V22 los cinco pasan a `range` o `ref` sobre su índice (4.464, 4.464, 3.123,
 
 Ejecutado en el commit `gate E08: motor estadistico`.
 
+### E11 - GO del 2026-11-26 y avance del cierre (ejecutado; ver el registro de cierre de E11)
+
+E11 lo implementó Codex en `main` sin commit (sesión de 08:50 a 09:58; se quedó sin cuota). Por encargo especial del
+responsable (2026-11-26), Claude Code lo resguardó sin cambios en la rama `wip/e11-codex` (`de494e9`, sobre `58389fd`) y,
+en un segundo encargo, empezó el cierre desde esa rama sin reimplementar. Se detuvo en el punto 4 (medición) porque se
+cumplieron condiciones de detención del encargo. E11 sigue ABIERTO; nada se fusionó en `main`.
+
+#### GO de E11 (transcrito íntegro)
+
+GO de E11
+Respuestas:
+- A. Sí.
+  - Se autorizan Workflow.java (solo el despacho de STAT_SERIES_IMPORT y STAT_SERIES_ANNUL), StatSource.java (la proyección de microdatos del mismo Plan) y StatCuts.java.
+  - Las tablas complementarias del corte van en V24: el folio y el origen de cada valor (REQ o Caso, con su id). Se escriben en la misma transacción del corte, son inmutables, no tienen cascada y su lista de columnas es cerrada.
+  - Tienen su propia huella. La verificación del corte la recalcula y detecta una alteración hecha por SQL.
+  - La definición de rows_sha256 de V23 no cambia y las pruebas de E10 no cambian sus aserciones.
+  - Vuelve a medir STAT_CUT_CREATE con 50.005 COM. Si pasa de 13 s, detente y consulta.
+  - Para un corte sin tablas complementarias, CSV y XLSX funcionan; el ZIP responde 409 con un mensaje claro.
+- B. Sí, con este ajuste.
+  - Exportar exige EXPORTACION con REPORTES en el mismo ámbito, que cubra el alcance efectivo de la consulta y de los cortes que compara, en ámbitos y en materias (la regla de E10). Si no lo cubre, 403.
+  - Sin REPORTES_PERSONAS en el mismo ámbito:
+    - El ZIP no lleva columnas, estados ni filas de grupos prioritarios.
+    - Si la consulta usa GRUPO_PRIORITARIO o ESTADO_GRUPO_PRIORITARIO como dimensión o filtro, el ZIP completo responde 403.
+    - El diccionario indica la omisión.
+  - CSV y XLSX agregados siguen la regla de la consulta en pantalla.
+- C. Sí.
+  - El ZIP con microdatos solo para medidas a nivel de COM: requerimientos y dimensiones multivaluadas con n, unique y mentions.
+  - Para medidas de actuación o de Caso, solo CSV y XLSX agregados; el ZIP responde 400 con un mensaje en lenguaje llano.
+  - Agrega a la sección 9 del plan: «Microdatos a nivel de actuación y de Caso en el paquete estadístico» | - | GO de E11 | -.
+- DI-12: sin dependencias. Si el escritor o el lector XLSX de la JDK no basta, detente y consulta.
+Condiciones:
+1. Guardas: toda exportación (vigente, a una fecha o desde un corte) pasa por StatGuard.run y StatGuard.read, con cupo, plazo, 503 sin archivo parcial y auditoría STAT_EXPORTACION posterior. Las notas de auditoría llevan solo nombres y códigos: nunca valores de filtros, títulos ni fundamentos. TI nunca exporta.
+2. Microdatos:
+   - Una fila por COM computable y nunca un folio repetido.
+   - microdatos_multivalor.csv con una fila por folio, variable y código, con en_req, casos y menciones.
+   - Un REQ sin valores figura con su estado.
+   - Un barrido de columnas y de contenido demuestra que no hay nombres, RUN, documentos, contactos, relatos, texto libre ni fecha de nacimiento en ningún archivo, CSV, XLSX o ZIP.
+3. Diccionario:
+   - La descripcion de cada ítem de catálogo.
+   - La regla de las constancias reservadas: no se cuentan en los agregados de actuaciones.
+   - La explicación de menciones y total único.
+   - El riesgo residual de reidentificación.
+4. Series (DISENO 7):
+   - El ámbito y la visibilidad siguen la regla de los cortes.
+   - El asistente permite indicar, categoría por categoría, a qué agrupación de SIGER corresponde, sin combinarlas automáticamente.
+   - La correspondencia «Metropolitana» → «Oficina Nacional» (DI-13) se puede sugerir, pero nunca se aplica sin confirmación expresa, y queda en los metadatos de la serie.
+   - La vista previa no escribe nada.
+   - La importación es todo o nada.
+   - La suma solo se hace si se pide y no hay solapamiento.
+5. Seguridad de archivos:
+   - El lector rechaza fórmulas, DTD, entidades, referencias externas, demasiadas entradas, una proporción de compresión excesiva, un tamaño descomprimido excesivo y demasiadas filas, con límites configurados y probados.
+   - El escritor protege las celdas que empiezan con = + - @.
+   - XLSX y ZIP son deterministas, con fechas internas fijas: los mismos datos producen los mismos bytes, salvo metadatos.json, y eso queda documentado.
+6. Matriz de pruebas con cifras esperadas escritas a mano. Escríbela en las pruebas antes de implementar y transcríbela al registro de cierre:
+   - (a) Figura 1 sintética: consulta = agregado.csv = agregado.xlsx = corte = reagregación de los microdatos, en los cuatro desgloses, y cada uno suma el total.
+   - (b) Un derecho registrado en el REQ y en 2 Casos da en_req=1, casos=2, menciones=3 y REQUERIMIENTOS_CON_VALOR=1.
+   - (c) El número de folios es igual al de COM computables: la inválida no aparece y la duplicada sí.
+   - (d) Una actuación reservada queda fuera.
+   - (e) Los grupos prioritarios con y sin REPORTES_PERSONAS (B).
+   - (f) Una serie con 3 periodos: un total declarado distinto de la suma se rechaza; el solapamiento da aviso y no se suma.
+   - (g) Un corte de V23 exporta CSV y XLSX, y su ZIP responde 409.
+   - (h) Un archivo alterado dentro del ZIP no coincide con SHA256SUMS.txt.
+7. Medición con 50.005 COM: generación del ZIP dentro del plazo, con la memoria máxima registrada. Si supera el plazo, detente y consulta.
+8. Mutaciones: una por regla nueva o cambiada, incluidas las de tu plan y las de 1, 2, 5 y la de grupos prioritarios por cruce (B). Regístralas como «regla → prueba que falló».
+9. Lecciones que rigen:
+   - MySQL desechable en 127.0.0.1:3417, con datadir y tmpdir en una ruta nueva de D:, detenido al terminar y MySQL80 intacto.
+   - current_catalog siempre entre acentos graves.
+   - Check-Scripts.ps1 con powershell.exe 5.1, sin el PSModulePath de PowerShell 7 y sin Maven ni npm en paralelo.
+   - Las corridas finales, una sola vez y sin procesos en paralelo: H2, MySQL (actualizaciones desde 0.4.0 y 0.7.0 hasta V24, con communication_original y external_* idénticos), frontend, humo y Check-Scripts.ps1.
+10. Regresión: ninguna aserción se elimina; las pruebas de esquema solo cambian el número, y se registra.
+11. Cierre:
+    - Registro de la sección 7 con desvíos, diferencias de referencia y la matriz.
+    - Commit "gate E11: exportaciones y series".
+    - Verificación de la sección 2 y de que no viajen archivos sensibles.
+    - Push y detente.
+
+#### Evidencia por ejecutor
+
+- Codex (sesión de 08:50 a 09:58; evidencia en `D:\Ensayo-E11`): implementación completa (`Xlsx`, `XlsxReader`, `StatExport`,
+  `StatSeries`, V24, cambios en `Api`, `StatEngine`, `Workflow`, `StatSource` y `StatCuts`, pruebas, contrato y documentos);
+  46 mutaciones de 09:23 a 09:34 (`mutaciones\`); corridas finales de 09:40 a 09:56: H2 `final-h2.log` 373 corridas,
+  2 omitidas, `BUILD SUCCESS`; MySQL 8.4.13 `final-mysql.log` 377 corridas, 2 omitidas (375 ejecutadas); frontend 183,
+  typecheck y build; humo 21/21 con el cliente corregido (`final-humo-corregido.log`; el primero falló por el cliente de
+  PowerShell que conservaba el encabezado CSRF, no por SIGER); `Check-Scripts.ps1` conforme. Una medición a las 09:16
+  (`medicion.log`, `backend\target\medicion-e11.txt` de 09:16): corte 12.463 ms, ZIP 26.766 ms, sin `-Xmx` (montón por
+  omisión) y con el código de ese momento. MySQL de `D:\Ensayo-E11\mysql` detenido a las 09:57 ("Shutdown complete").
+- Claude Code (este cierre parcial; evidencia en `D:\Ensayo-E11c`): puntos 1 a 4 de abajo.
+
+#### Punto 1: mutaciones y archivos cambiados después
+
+El script `ejecutar-mutaciones.py` restaura cada archivo con sus bytes originales y lo comprueba por SHA-256
+(`assert`); `restauracion.log` está vacío porque `javac` recompila sin salida. El registro de la sesión de Codex muestra
+cambios posteriores a la mutación de su regla:
+
+| Hora | Archivo | Cambio | Mutaciones afectadas |
+|---|---|---|---|
+| 09:31:13 | `StatExportTest.java` (+13 -1) | reagregación de los microdatos, total único y menciones, aserciones del diccionario | 01-40 (corridas antes; solo se agregaron aserciones) |
+| 09:31:13 | `StatSeriesTest.java` (+13) | prueba `xlsxConColumnasRelacionadasSeConfirmaIdempotente` | 33-39 |
+| 09:33:27 | `StatSeries.java` (+2 -1) | aviso `ALCANCES_DISTINTOS` por cobertura (`StatCuts.covers` en ambos sentidos) | 33-39 y 45 corrieron sobre la versión anterior; 46 sobre la final |
+| 09:34:18 | `Api.java` (+1 -1) | `GET /stats/series/{id:\d+}` | 40 corrió sobre la versión anterior |
+| 09:34:18 | `StatCutHttpTest.java` (+2) | 405 para `GET /stats/series/preview` y `/compare` | - |
+
+Ningún archivo de `src` cambió después de las 09:34:18 hasta esta sesión. Conclusión: no se puede afirmar que las
+mutaciones 33-40 y 45 se hayan corrido sobre el código final; hay que repetir las 46 (y agregar las nuevas) sobre el
+código final antes del cierre. Las 46 de `evidencia.txt` (la 11 se corrió dos veces, ambas DETECTADA):
+
+| Regla | Prueba que falló |
+|---|---|
+| 01 cifras del mismo motor | StatExportTest#figuraUnoReproducible |
+| 02 duplicadas cuentan D25 | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 03 invalidas fuera D25 | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 04 folio unico | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 05 derecho en REQ | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 06 casos distintos de una clasificacion | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 07 menciones de una clasificacion | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 08 estado de REQ sin valores | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 09 constancia reservada fuera | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 10 excluir grupos del paquete sin facultad | StatExportTest#gruposPrioritariosYAlcance |
+| 11 negar ZIP por cruce de grupos prioritarios | StatExportTest#gruposPrioritariosYAlcance |
+| 12 negar ZIP por filtro sensible | StatExportTest#gruposPrioritariosYAlcance |
+| 13 alcance de exportacion principal | StatExportTest#primerCorteYComparacionExigenMateriaYCupo |
+| 14 alcance del corte de comparacion | StatExportTest#primerCorteYComparacionExigenMateriaYCupo |
+| 15 ZIP requiere medida reproducible | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 16 V23 ZIP 409 explicito | StatExportTest#corteV23SeExportaAgregadoYDetectaCambiosEnSuComplemento |
+| 17 huella del complemento recalculada | StatExportTest#complementoConListaCerradaYProvenienciaQueSeVerifica |
+| 18 huella manifiesto por archivo | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 19 barrido de contenido de archivos | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 20 cupo compartido de exportacion | StatExportTest#primerCorteYComparacionExigenMateriaYCupo |
+| 21 motor deshabilitado protege exportacion | StatExportTest#primerCorteYComparacionExigenMateriaYCupo |
+| 22 plazo de resultado completo | StatTimeoutHttpTest#exportacionVencidaNoAbreUnaDescargaYLiberaCupo |
+| 23 auditoria solo nombres | StatExportTest#exportacionHistoricaConLaMismaReglaYAuditoriaSinValores |
+| 24 XLSX protege prefijos de formula | XlsxTest#idaYVueltaDeterministaConTextoProtegido |
+| 25 XLSX fechas internas fijas | XlsxTest#idaYVueltaDeterministaConTextoProtegido |
+| 26 limite de entradas XLSX | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 27 limite descomprimido XLSX | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 28 limite de filas XLSX | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 29 compresion relativa por entrada XLSX | XlsxTest#relacionDeCompresionPorEntradaAunqueElZipCompletoEstePorDebajo |
+| 30 XLSX rechaza formula | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 31 XLSX rechaza DTD sintacticamente valida | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 32 XLSX rechaza relacion externa incluso relativa | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 33 preview no escribe | StatSeriesTest#tresPeriodosValidacionVistaPreviaCorrespondenciaYSuperposicion |
+| 34 homologacion historica requiere confirmacion | StatSeriesTest#tresPeriodosValidacionVistaPreviaCorrespondenciaYSuperposicion |
+| 35 totales invalidos rechazan la importacion entera | StatSeriesTest#tresPeriodosValidacionVistaPreviaCorrespondenciaYSuperposicion |
+| 36 no sumar periodos solapados | StatSeriesTest#tresPeriodosValidacionVistaPreviaCorrespondenciaYSuperposicion |
+| 37 no sumar sin solicitud | StatSeriesTest#sumaExplicitaPeriodosSeparadosConTotalesSinDuplicar |
+| 38 series visibles solo bajo ambito | StatSeriesTest#facultadesDeSedeYAnulacionConservaFilas |
+| 39 anulacion comprueba revision | StatSeriesTest#facultadesDeSedeYAnulacionConservaFilas |
+| 40 consulta de exportacion solo POST | StatCutHttpTest#exportacionYSeriePorSusRutasHttp |
+| 41 diccionario conserva la descripcion de cada item | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 42 diccionario explica la reserva | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 43 diccionario explica el total unico | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 44 diccionario identifica el riesgo residual | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 45 importacion en el ambito de gestion | StatSeriesTest#facultadesDeSedeYAnulacionConservaFilas |
+| 46 aviso de ambito usa cobertura efectiva | StatSeriesTest#comparacionConSigerAvisaSoloCuandoDifiereElAlcance |
+
+#### Punto 2: pruebas omitidas en H2
+
+Las 2 omitidas de `final-h2.log` (y de `final-mysql.log`) son las dos de `StatLoadMeasureTest`: `medicion` (E08b/E10) y
+`medicionE11`. La clase lleva `@EnabledIfSystemProperty(siger.stats.measure=true)`, de modo que sin esa propiedad JUnit
+omite ambas; `medicionE11` exige además `siger.stats.measure-e11=true` y la suite sobre MySQL. Se omiten a propósito: la
+medición genera 50.005 COM y solo corre a mano sobre el MySQL desechable.
+
+#### Punto 3: pruebas completadas (sin cambiar aserciones existentes)
+
+- (h) `StatExportTest.archivoAlteradoDentroDelZipNoCoincideConSha256Sums`, nueva: el paquete tiene 9 archivos y
+  `SHA256SUMS.txt` declara los otros 8; el paquete se reescribe 8 veces, cada una con un archivo alterado, y al releerlo
+  solo ese archivo no coincide. Un archivo agregado y uno quitado también se detectan. La aserción anterior de Codex
+  alteraba una copia fuera del ZIP y queda igual.
+- Barrido `StatExportTest.barridoDeDatosCiudadanosEnTodosLosArchivosYHojas`, nueva: 2 cuentas (sin y con
+  REPORTES_PERSONAS), 5 consultas (vigente, derechos por contexto, tramo del NNA y del requirente, desde el corte) y
+  ZIP, CSV y XLSX = 230 partes (ZIP: 8 archivos + 9 partes de `agregado.xlsx`; CSV: 1; XLSX: 5), más las actuaciones en
+  CSV y XLSX. Por cada parte: textos ciudadanos sin distinguir mayúsculas ni tildes (nombres, apellido, nombre social,
+  correo, domicilio, otro contacto, documento, celular, relato, RUN con y sin puntos, fecha de nacimiento en 4 formatos);
+  RUN sin DV, celular sin prefijo y fecha compacta como valor aislado; encabezados de cada CSV y de cada hoja XLSX contra
+  una lista de nombres prohibidos; y los seriales de Excel de ambas fechas (35140 y 41538) en ninguna celda. La edad sí
+  viaja: EDAD_NNA = 11 para A (escrito a mano). Para esto la COM A de la población lleva ahora, en su ficha de ingreso,
+  quien presenta (RUN 12345678-5, nacimiento 1996-03-16, correo, celular, domicilio, otro contacto, nombre social) y un
+  NNA (RUN 11111111-1, nacimiento 2013-09-21): datos sintéticos, sin cambio en ninguna aserción existente.
+- Matriz (a)-(h) con cifras escritas a mano:
+
+| Punto | Prueba | Cifras |
+|---|---|---|
+| (a) | StatExportTest#figuraUnoReproducible | TIPO_SOLICITUD VULNERACION 1, CONSULTA_ORIENTACION 2, PROMOCION 1; TIPO_REQUIRENTE PERSONA_NATURAL_ADULTA 2, NNA 1, PERSONA_JURIDICA_ORGANISMO 1; VIA_INGRESO CORREO 2, TELEFONO 1, PRESENCIAL 1; ADSCRIPCION_INICIAL E11-S06 2, OFICINA_NACIONAL 1, PENDIENTE 1; total 4. Consulta = agregado.csv = agregado.xlsx = CSV = XLSX = reagregación de microdatos.csv = consulta y ZIP sobre el corte |
+| (b) | StatExportTest#derechoConTresOrigenesYCuatroFolios | 3.1 en el REQ de A y en 2 Casos: en_req 1, casos 2, menciones 3; REQUERIMIENTOS_CON_VALOR 3.1 = 1, PENDIENTE = 3 (reagregado = agregado.csv); total único 4 |
+| (c) | StatExportTest#derechoConTresOrigenesYCuatroFolios, #figuraUnoReproducible | 4 folios (A, B, C, E) = 4 COM computables: D (INVALIDA) no aparece, C (DUPLICADA) sí |
+| (d) | StatExportTest#derechoConTresOrigenesYCuatroFolios | la constancia reservada OFICIO de A no figura en el multivalor; ACTUACIONES por tipo sin celdas; ZIP de ACTUACIONES 400 |
+| (e) | StatExportTest#gruposPrioritariosYAlcance | sin REPORTES_PERSONAS: sin columnas ni filas de grupos y el diccionario lo indica; con GRUPO_PRIORITARIO o ESTADO_GRUPO_PRIORITARIO como columna o filtro, ZIP 403 y XLSX permitido; con REPORTES_PERSONAS el ZIP los lleva |
+| (f) | StatSeriesTest#tresPeriodosValidacionVistaPreviaCorrespondenciaYSuperposicion, #sumaExplicitaPeriodosSeparadosConTotalesSinDuplicar | 2, 3 y 5; total de febrero declarado 4 en vez de 3: 400 sin escrituras; dos series superpuestas: aviso PERIODOS_SUPERPUESTOS y sin suma; enero y febrero separados con suma pedida: 5 y total 5 |
+| (g) | StatExportTest#corteV23SeExportaAgregadoYDetectaCambiosEnSuComplemento | corte sin complemento: CSV y XLSX con contenido, ZIP 409 ("antes de incorporar") |
+| (h) | StatExportTest#archivoAlteradoDentroDelZipNoCoincideConSha256Sums | 9 archivos, 8 declarados; cada uno de los 8 alterado: solo él no coincide |
+
+Corrida dirigida en H2 después de los cambios (`D:\Ensayo-E11c\h2-e11-dirigidas.log`): StatExportTest 10,
+StatSeriesTest 5, XlsxTest 4, StatTimeoutHttpTest 2, StatCutHttpTest 2; 23 ok.
+
+#### Punto 4: medición (detención)
+
+Cambio en `src/main` para el desglose: `StatExport.PHASES`, un `ThreadLocal` que solo la medición activa y que acumula
+los ms de consulta, microdatos, csv, xlsx y compresión; sin activarlo no registra nada ni cambia el archivo. Por este
+cambio el humo del JAR de Codex ya no vale y hay que repetirlo. `StatLoadMeasureTest.medicionE11` conserva sus dos
+aserciones (corte <= 13 s y cada ZIP < 30 s), ahora al final, y agrega el ZIP desde el corte, dos ZIP simultáneos, la
+memoria después de cada recolección (`GcInfo.getMemoryUsageAfterGc` de los grupos HEAP, por notificación de cada
+recolector, con `CollectionUsage` como respaldo) y la exigencia de medir con `-Xmx1024m` (el de `Service.ps1`).
+
+MySQL 8.4.13 desechable en `D:\Ensayo-E11c\mysql` (datadir y tmpdir ahí, `127.0.0.1:3417`), 50.005 COM, montón de
+1.024 MiB (`-DargLine=-Xmx1024m`), plazo de 30 s; `D:\Ensayo-E11c\medicion-e11.txt` y `medicion-e11.log`:
+
+| Paso | Total | Consulta | Microdatos | CSV | XLSX | Compresión | Memoria después de recolectar (máx.) | Uso máximo muestreado |
+|---|---|---|---|---|---|---|---|---|
+| STAT_CUT_CREATE (Cuenta Pública, 25.084 COM congeladas) | 12.551 ms | - | - | - | - | - | 94 MiB | 192 MiB |
+| ZIP vigente, 2024-07-01 a 2026-06-30 (unos 49.000 folios, estimados: 50.005 COM menos las INVALIDA) | **28.076 ms** | 2.658 | 17.832 | 1.645 | 4.508 | 1.423 | 609 MiB (59 %) | 785 MiB |
+| ZIP vigente, Cuenta Pública | 13.551 ms | 1.289 | 8.451 | 782 | 2.316 | 705 | 434 MiB (42 %) | 512 MiB |
+| ZIP desde el corte, Cuenta Pública | **30.463 ms, 503** | 619 | sin terminar | - | - | - | 130 MiB | 266 MiB |
+| Dos ZIP simultáneos (2 años, dos cuentas) | **30.246 y 30.274 ms, 503 ambos** | 3.050 / 3.054 | 19.472 / 19.457 | 1.746 / 1.750 | 4.559 / 4.589 | 1.410 / 1.418 | **956 MiB (93 %)** | 948 MiB |
+
+Sin falta de memoria. Condiciones de detención cumplidas: un ZIP supera 25 s (28,1 s); el ZIP desde un corte y los dos
+simultáneos agotan el plazo (503); la memoria después de recolectar supera el 75 % de 1.024 MiB (956 MiB con dos ZIP).
+El corte (12,6 s) queda bajo 13 s. La fase dominante es microdatos (las 4 proyecciones del `Plan` y el armado en
+memoria): 64 % del total vigente. Desde el corte, la proyección de microdatos no termina en 29,8 s, cuando la vigente del
+mismo periodo tarda 8,5 s: el problema está en la proyección sobre `stat_cut_*`/`stat_export_cut_*`, no en la memoria.
+
+Propuesta del ejecutor (para decisión del responsable):
+1. Un solo ZIP a la vez en la instancia (cupo propio de la exportación ZIP; el segundo recibe 429 en texto llano, como el
+   cupo actual). Resuelve la memoria de dos simultáneos (uno solo: 609 MiB, 59 %) y que uno haga vencer al otro.
+2. Bajar `siger.stats.export.max-rows` de 100.000 a 30.000 folios por ZIP: la Cuenta Pública (unos 25.000; el corte congela
+   25.084 COM en todos sus estados) cabe en 13,6 s; dos años (unos 49.000) responden 409 "acota el periodo o los filtros". Deja margen bajo 25 s con el volumen actual.
+3. Diagnosticar con EXPLAIN y corregir la proyección de microdatos en modo corte (`StatSource`, autorizado en A, o índices
+   de `stat_export_cut_*` en V24, que aún no está publicada) y volver a medir. Sin esto el ZIP desde un corte no es
+   utilizable, y ni 1 ni 2 lo resuelven.
+4. Alternativa a 1: escribir el ZIP por flujo a un temporal en la unidad de la instancia (para conservar "503 sin archivo
+   parcial") en vez de armarlo en memoria. Baja la memoria pero no el tiempo; más cambio en `StatExport` que 1.
+   Recomendación: 1 + 2 + 3, y 4 solo si se quiere admitir más de un ZIP a la vez.
+
+#### Pendiente para cerrar E11 (después de la decisión)
+
+- Aplicar lo que decida el responsable y repetir la medición (`StatLoadMeasureTest#medicionE11` con `-DargLine=-Xmx1024m`).
+- Repetir las 46 mutaciones sobre el código final y agregar las de (h), el barrido y la regla que se decida (punto 1).
+- Corridas finales, una vez y sin procesos en paralelo: H2 completo, MySQL completo (desechable, actualizaciones desde
+  0.4.0 y 0.7.0 hasta V24), frontend, humo con el JAR (cambió `src/main`) y `Check-Scripts.ps1` con powershell.exe 5.1 si
+  cambia `CLAUDE.md`.
+- Registro de cierre (sección 7), squash de `wip/e11-codex` en `main` con el commit `gate E11: exportaciones y series`, push.
+- Responsable: borrar `D:\Ensayo-E11` y `D:\Ensayo-E11c` (MySQL detenidos; datos sintéticos y la clave del usuario
+  desechable).
+
+Estado al detenerse: MySQL de `D:\Ensayo-E11c\mysql` detenido con `mysqladmin shutdown` ("Shutdown complete"), sin
+proceso escuchando en 3417 (solo conexiones en TIME_WAIT); MySQL80 y la instancia de `D:\sigervalidacion` intactos.
+
 ## Registros de cierre
 
 ### E00 - Linea base, decisiones, AGENTS.md y contrato del Formulario   (CERRADO)
@@ -955,3 +1202,84 @@ Mutaciones de E10 (regla -> prueba que falló):
 | 38 metadatos sin la huella de las filas | StatCutsTest.huellaCanonicaEstableYVerificacionQueDetectaAlteraciones:158 |
 | 39 huella de filas que depende del instante | StatCutsTest.anulacionConservaElCorte:355, StatCutsTest.comandosPosterioresNoCambianElCorte:397, StatCutsTest.congeladoSinClavesAutomaticas:455, StatCutsTest.escenario9CorreccionPosteriorNoCambiaElCorteYLaComparacionLaMuestra:114, StatCutsTest.huellaCanonicaEstableYVerificacionQueDetectaAlteraciones:122, StatCutsTest.serializacionCanonicaDocumentada:176 |
 | 40 una sede anula el corte institucional | StatCutsTest.anulacionConservaElCorte:349 |
+
+### E11 - Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor)   (CERRADO)
+- Fecha: 2026-11-26 (commit `gate E11: exportaciones y series`, squash de `wip/e11-codex` en `main`), DDN-TEST-SIGER (Windows); base `58389fd` (cierre de E10). Ejecutores: Codex (implementación) y Claude Code (cierre); desvío 1.
+- GO del responsable (2026-11-26): A, B (con su ajuste), C y DI-12 sin dependencias, con las condiciones 1 a 11; transcrito íntegro en "GO aprobados pendientes de ejecución" (E11). Detención por la medición y decisión del responsable del 2026-11-26 (tabla de decisiones: 1, 2 y 3; la 4 a 0.9.0; ajuste del punto 3).
+- Hecho: (1) V24 y `StatCuts`: complemento del corte (`stat_export_cut_folio`, `stat_export_cut_origin`, `stat_export_cut_integrity`) en la misma transacción, con lista cerrada, sin cascadas y huella propia; `rows_sha256` de V23 sin cambio. (2) `StatExport`: CSV, XLSX y ZIP del agregado del motor; ZIP con microdatos (un folio por COM computable, archivo multivalor con `en_req`, `casos` y `menciones`), diccionario, catálogos, `LEEME.txt`, metadatos y `SHA256SUMS.txt`; reglas de B y C; `StatGuard.run`/`read` y auditoría `STAT_EXPORTACION` solo con nombres. (3) `StatSeries`: plantilla, vista previa sin escrituras, `STAT_SERIES_IMPORT` todo o nada, correspondencias confirmadas (la sugerencia de DI-13 nunca se aplica sola), anulación, comparación y suma solo pedida y sin solapamiento. (4) `Xlsx`/`XlsxReader` con la JDK (DI-12 sin dependencia). (5) Cierre: un ZIP a la vez en la instancia (`zipSlot`, 429 sin cola); `siger.stats.export.max-rows` = 30.000 con `SIGER_STATS_EXPORT_MAX_ROWS`; índice por COM de las tablas del corte (sugerencias `INDEX` en `StatSource`); registro de fases `StatExport.PHASES`, inactivo fuera de la medición, sin log ni auditoría.
+- Archivos clave: `V24__series_y_exportacion.sql`, `StatExport.java`, `StatSeries.java`, `Xlsx.java`, `XlsxReader.java` (nuevos), `StatSource.java`, `StatCuts.java`, `StatEngine.java`, `Workflow.java` (solo el despacho de `STAT_SERIES_*`), `Api.java`, `application.properties`; `StatExportTest` (13), `StatSeriesTest` (5), `XlsxTest` (4), `StatTimeoutHttpTest` (+1), `StatCutHttpTest` (+1), `StatLoadMeasureTest` (`medicionE11`), `InstitutionalReaderTest` e `ImmutabilityTest` (comandos nuevos), pruebas de esquema 24; `docs/CONTRATO_EXPORTACION_SERIES_0_8_0.md`, `CLAUDE.md`, `docs/ARQUITECTURA.md`, PLAN (sección 9, dos filas).
+- Migraciones: V24 (complemento del corte, `stat_series`, `stat_series_value`; esquema 24), sin siembra.
+- Verificación (Claude Code, `D:\Ensayo-E11d`, una vez y en secuencia, de 11:15 a 11:37): JUnit H2 (`clean test`) 378 ok, 2 omitidas (antes 353 y 1; la corrida de Codex, 373 y 2); MySQL 8.4.13 desechable nuevo en `D:\Ensayo-E11d\mysql` (datadir y tmpdir ahí, `127.0.0.1:3417`; suite con `siger.mysql.suite=true` y `-Dsiger.stats.instance-drive=D:/`; `MySql84UpgradeTest` desde 0.4.0 y `MySql84Upgrade070Test` desde 0.7.0 hasta V24, con `communication_original` y `external_*` idénticos) 382 ok, 2 omitidas; frontend typecheck ok, 183 ok (sin cambio), build ok; humo 21/21 con el JAR nuevo (perfil local, H2 en `backend/target/humo-e11`, puerto 18643; carpeta borrada y proceso detenido); `Check-Scripts.ps1` (powershell.exe 5.1, rutas nativas de módulos, sin Maven ni npm en paralelo): 40 scripts, 73 órdenes en 60 procesos. Las 2 omitidas son `StatLoadMeasureTest.medicion` y `medicionE11` (sin `-Dsiger.stats.measure=true`). MySQL detenido con `mysqladmin shutdown` ("Shutdown complete"), puerto 3417 sin escucha; MySQL80 y la instancia de `D:\sigervalidacion` intactos.
+- Medición final (Claude Code, MySQL 8.4.13, 50.005 COM, `-Xmx1024m`, plazo 30 s; `D:\Ensayo-E11c\medicion-final.txt`): `STAT_CUT_CREATE` de la Cuenta Pública 12,7 s (25.084 COM congeladas; criterio <= 13 s). ZIP de la Cuenta Pública desde la consulta vigente 13,5 s (consulta 1,3; microdatos 8,5; CSV 0,8; XLSX 2,3; compresión 0,7), 15,6 MB; desde el corte recién generado 6,5 s (microdatos 2,1) (criterio <= 25 s). Memoria después de recolectar: máximo 460 MiB, 45 % de 1.024 MiB (criterio <= 75 %). Dos ZIP simultáneos: uno en 13,5 s y el otro con 429 en menos de 1 ms. Dos años (unos 49.000 folios, estimados) responden 409 por el límite. La medición previa a las correcciones está en el registro del GO (detención).
+- Diagnóstico de la consulta sobre el corte (EXPLAIN, `D:\Ensayo-E11c\explain`): aisladas, las cuatro proyecciones sobre el corte tardaban 1,8 s; en la medición, la de actuaciones no terminaba (subfases de `StatExport.PHASES`). Causa: InnoDB recalcula en segundo plano las estadísticas de una tabla recién llenada (una tabla cada unos 10 s; `mysql.innodb_table_stats` mostró `stat_export_cut_folio` y `stat_export_cut_origin` actualizadas después del ZIP fallido) y, con las tablas del corte tenidas por vacías, el optimizador entraba a `stat_cut_event`, `stat_cut_action` y `stat_cut_action_institution` por el prefijo `cut_id` de la clave primaria y recorría todo el corte por cada COM. Reproducido con las estadísticas en cero: actuaciones 55,8 s y clasificaciones más de 180 s; con la sugerencia `INDEX` del índice por COM, 0,12 s y 1,2 s. Corrección solo en `StatSource`, sin índices nuevos (los índices ya existían en V23); resultado sin cambios (equivalencias y matriz sin tocar aserciones).
+- Evidencia de mutación: Claude Code repitió sobre el código final las 46 de Codex y agregó 10 (ZIP exclusivo, su liberación, el límite y su valor configurable, los tres índices del corte, (h) y dos del barrido): 56 de 56 fallaron en la prueba prevista, cada archivo restaurado y comprobado por SHA-256 (`D:\Ensayo-E11c\mutaciones`). Tabla abajo; las de Codex, con la observación sobre su corrida, en el registro del GO.
+- Matriz (a)-(h): la del registro del GO (punto 3), sin cambio; (a)-(g) de Codex, (h) y el barrido de Claude Code.
+- Condiciones de la sección 2: `git diff v0.7.0` vacío para `scripts/`, `.mvn/` y los archivos de recepción del Formulario (`Formulario*.java`, `ExternalOriginal`, `ExternalProjection`, `Documents`); `IntakeCommands`, `RequirementCommands`, `Access`, `Reports` y `Territory` sin cambios; V1-V23 sin cambios; ninguna escritura en `communication_original` ni `external_*`; sin dependencias nuevas; auditoría solo con nombres y códigos; TI sin acceso. No viajan archivos sensibles: las claves del MySQL desechable y los registros quedan en D:, fuera del repositorio.
+- Facilidad de uso: no aplica (servidor); rechazos en texto llano ("Ya se está generando un paquete ZIP en SIGER...", "El paquete supera el máximo de 30.000 folios. Acota el periodo o los filtros.", "Este corte se generó antes de incorporar los datos del paquete ZIP...").
+- Definiciones usadas: DI-12 (sin dependencia) y DI-13 (sugerencia «Metropolitana» -> `OFICINA_NACIONAL`, solo con confirmación).
+- Desvíos del plan: (1) E11 lo implementó Codex (sesión de 08:50 a 09:58, sin commit por falta de cuota): implementación, sus 46 mutaciones (09:23-09:34) y sus corridas finales (09:40-09:56, evidencia en `D:\Ensayo-E11`). Claude Code lo resguardó en `wip/e11-codex` y lo cerró: puntos 1 a 4 del encargo (revisión de las mutaciones de Codex, omitidas explicadas, (h) y barrido, medición), detención, decisión del responsable, correcciones, nueva medición, 56 mutaciones y corridas finales (evidencia en `D:\Ensayo-E11c` y `D:\Ensayo-E11d`); el humo de Codex dejó de valer al cambiar `src/main` y se repitió. (2) La COM A de la población de `StatExportTest` lleva una ficha de ingreso con RUN, nacimiento y contactos sintéticos para el barrido (sin cambiar aserciones). (3) `ImmutabilityTest` agrega `STAT_SERIES_IMPORT` y `STAT_SERIES_ANNUL` a la categoría `STATISTICS`; las pruebas de esquema 23 -> 24 solo cambian el número (`FormularioServiceTest`, `MySql84IntegrationTest` ×2, `MySql84UpgradeTest`); ninguna aserción se eliminó. (4) `medicionE11` conserva sus dos aserciones (corte <= 13 s y ZIP < 30 s, ahora solo para los ZIP generados) y agrega los criterios de la decisión.
+- Diferencias de referencia: DISENO 7 y 8: el ZIP solo para medidas de requerimientos computables (C); un ZIP a la vez y 30.000 folios (detención); el complemento del corte en tablas propias de V24 en vez de columnas de V23.
+- Hallazgos para gates siguientes: una tabla que se llena y se lee en seguida (como las del corte) se puede leer en MySQL con estadísticas de tabla vacía: E14 debe vigilar planes con estadísticas recién recalculadas o fijar el índice. `StatExport.PHASES` y `medicionE11` (`-DargLine=-Xmx1024m`, resultado en `target/medicion-e11.txt`) sirven a E14. E13 debe mostrar en texto llano el 429 del ZIP y el 409 del límite.
+- Pendientes: borrar `D:\Ensayo-E11`, `D:\Ensayo-E11c` y `D:\Ensayo-E11d` (MySQL detenidos; datos sintéticos y las claves de los usuarios desechables) -> responsable; ZIP escrito por flujo a un temporal -> 0.9.0 (sección 9 del plan); microdatos de actuación y de Caso -> 0.9.0.
+- Verificación manual sugerida al usuario: `.\mvnw.cmd -B -ntp -f backend\pom.xml test -Dtest=StatExportTest,StatSeriesTest,XlsxTest,StatCutHttpTest,StatTimeoutHttpTest`; en local, con REPORTES y EXPORTACION, `POST /api/stats/export/zip` con la consulta de `POST /api/stats/query`.
+
+Mutaciones de E11 sobre el código final (regla -> prueba que falló):
+
+| Regla | Prueba que falló |
+|---|---|
+| 01 cifras del mismo motor | StatExportTest#figuraUnoReproducible |
+| 02 duplicadas cuentan D25 | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 03 invalidas fuera D25 | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 04 folio unico | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 05 derecho en REQ | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 06 casos distintos de una clasificacion | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 07 menciones de una clasificacion | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 08 estado de REQ sin valores | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 09 constancia reservada fuera | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 10 excluir grupos del paquete sin facultad | StatExportTest#gruposPrioritariosYAlcance |
+| 11 negar ZIP por cruce de grupos prioritarios | StatExportTest#gruposPrioritariosYAlcance |
+| 12 negar ZIP por filtro sensible | StatExportTest#gruposPrioritariosYAlcance |
+| 13 alcance de exportacion principal | StatExportTest#primerCorteYComparacionExigenMateriaYCupo |
+| 14 alcance del corte de comparacion | StatExportTest#primerCorteYComparacionExigenMateriaYCupo |
+| 15 ZIP requiere medida reproducible | StatExportTest#derechoConTresOrigenesYCuatroFolios |
+| 16 V23 ZIP 409 explicito | StatExportTest#corteV23SeExportaAgregadoYDetectaCambiosEnSuComplemento |
+| 17 huella del complemento recalculada | StatExportTest#complementoConListaCerradaYProvenienciaQueSeVerifica |
+| 18 huella manifiesto por archivo | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 19 barrido de contenido de archivos | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 20 cupo compartido de exportacion | StatExportTest#primerCorteYComparacionExigenMateriaYCupo |
+| 21 motor deshabilitado protege exportacion | StatExportTest#primerCorteYComparacionExigenMateriaYCupo |
+| 22 plazo de resultado completo | StatTimeoutHttpTest#exportacionVencidaNoAbreUnaDescargaYLiberaCupo |
+| 23 auditoria solo nombres | StatExportTest#exportacionHistoricaConLaMismaReglaYAuditoriaSinValores |
+| 24 XLSX protege prefijos de formula | XlsxTest#idaYVueltaDeterministaConTextoProtegido |
+| 25 XLSX fechas internas fijas | XlsxTest#idaYVueltaDeterministaConTextoProtegido |
+| 26 limite de entradas XLSX | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 27 limite descomprimido XLSX | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 28 limite de filas XLSX | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 29 compresion relativa por entrada XLSX | XlsxTest#relacionDeCompresionPorEntradaAunqueElZipCompletoEstePorDebajo |
+| 30 XLSX rechaza formula | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 31 XLSX rechaza DTD sintacticamente valida | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 32 XLSX rechaza relacion externa incluso relativa | XlsxTest#rechazaArchivosFueraDeLimitesYContenidoActivo |
+| 33 preview no escribe | StatSeriesTest#tresPeriodosValidacionVistaPreviaCorrespondenciaYSuperposicion |
+| 34 homologacion historica requiere confirmacion | StatSeriesTest#tresPeriodosValidacionVistaPreviaCorrespondenciaYSuperposicion |
+| 35 totales invalidos rechazan la importacion entera | StatSeriesTest#tresPeriodosValidacionVistaPreviaCorrespondenciaYSuperposicion |
+| 36 no sumar periodos solapados | StatSeriesTest#tresPeriodosValidacionVistaPreviaCorrespondenciaYSuperposicion |
+| 37 no sumar sin solicitud | StatSeriesTest#sumaExplicitaPeriodosSeparadosConTotalesSinDuplicar |
+| 38 series visibles solo bajo ambito | StatSeriesTest#facultadesDeSedeYAnulacionConservaFilas |
+| 39 anulacion comprueba revision | StatSeriesTest#facultadesDeSedeYAnulacionConservaFilas |
+| 40 consulta de exportacion solo POST | StatCutHttpTest#exportacionYSeriePorSusRutasHttp |
+| 41 diccionario conserva la descripcion de cada item | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 42 diccionario explica la reserva | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 43 diccionario explica el total unico | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 44 diccionario identifica el riesgo residual | StatExportTest#huellasExactasYContenidoSinDatosCiudadanos |
+| 45 importacion en el ambito de gestion | StatSeriesTest#facultadesDeSedeYAnulacionConservaFilas |
+| 46 aviso de ambito usa cobertura efectiva | StatSeriesTest#comparacionConSigerAvisaSoloCuandoDifiereElAlcance |
+| 47 un ZIP a la vez en la instancia | StatExportTest#unZipALaVezEnLaInstancia |
+| 48 el cupo del ZIP se libera en finally | StatExportTest#unZipALaVezEnLaInstancia |
+| 49 limite de folios del paquete | StatExportTest#limiteDeFoliosDelPaquete |
+| 50 limite de 30.000 con SIGER_STATS_EXPORT_MAX_ROWS | StatExportTest#limiteDeFoliosDelPaquete |
+| 51 corte: indice por COM de los eventos | StatExportTest#proyeccionesSobreElCorteFijanElIndicePorCom |
+| 52 corte: indice por COM de las actuaciones | StatExportTest#proyeccionesSobreElCorteFijanElIndicePorCom |
+| 53 corte: indice por nota de las instituciones | StatExportTest#proyeccionesSobreElCorteFijanElIndicePorCom |
+| 54 (h) el manifiesto declara cada archivo | StatExportTest#archivoAlteradoDentroDelZipNoCoincideConSha256Sums |
+| 55 barrido: encabezados de las hojas XLSX | StatExportTest#barridoDeDatosCiudadanosEnTodosLosArchivosYHojas |
+| 56 barrido: fecha de nacimiento compacta | StatExportTest#barridoDeDatosCiudadanosEnTodosLosArchivosYHojas |

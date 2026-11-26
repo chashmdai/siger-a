@@ -59,6 +59,11 @@ public class StatCuts {
     }
     static Table table(String name){return TABLES.stream().filter(t->t.name().equals(name)).findFirst().orElseThrow();}
 
+    /** Orden canónico independiente para las tablas de microdatos, incorporadas en V24. */
+    private static final Table EXPORT_FOLIO=new Table("stat_export_cut_folio",List.of("communication_id","folio"),List.of("communication_id"));
+    private static final Table EXPORT_ORIGIN=new Table("stat_export_cut_origin",List.of("source_kind","value_id","record_type","record_id"),List.of("source_kind","value_id"));
+    static final List<Table> EXPORT_TABLES=List.of(EXPORT_FOLIO,EXPORT_ORIGIN);
+
     /** Corte resuelto para leerlo: periodo, instante, alcance en vivo de su concesion y rotulos congelados. */
     record Cut(long id,String code,Long scope,Reports.Reach reach,LocalDate from,LocalDate to,long asOf,String state,
                Map<String,String> scopes,Map<String,String> units,Map<String,Long> versions){
@@ -122,6 +127,7 @@ public class StatCuts {
         counts.put("stat_cut_person",copyPersons(id,Plan.freezer(q).freezePersons(),canonical));
         counts.put("stat_cut_case",copy(id,table("stat_cut_case"),Plan.freezer(q).freezeCases(),canonical));
         String rows=canonical.hex();
+        freezeExport(id,counts);
         probe.run();
 
         var header=new LinkedHashMap<String,Object>();
@@ -139,6 +145,19 @@ public class StatCuts {
         db.update("INSERT INTO stat_cut("+String.join(",",names)+") VALUES("+String.join(",",Collections.nCopies(names.size(),"?"))+")",values.toArray());
         db.audit(a.id(),CREATED,"SISTEMA",0,null,"Corte "+header.get("code")+"; alcance "+scopeName(scope)+"; periodo "+period.type());
         return Workflow.done("CORTE",id);
+    }
+
+    private void freezeExport(long id,Map<String,Object> counts){
+        var canonical=new Canonical();
+        var folios=new Sql("SELECT r.communication_id,c.folio FROM stat_cut_row r JOIN communication c ON c.id=r.communication_id WHERE r.cut_id=? ORDER BY r.communication_id",new Object[]{id});
+        // La población y la reserva ya se decidieron al congelar E10. Aquí solo se toma la procedencia de esas filas.
+        var origins=new Sql("SELECT 'EVENTO' AS source_kind,e.event_id AS value_id,v.record_type,v.record_id FROM stat_cut_event e JOIN stat_event v ON v.id=e.event_id WHERE e.cut_id=?"
+            +" UNION ALL SELECT 'ACTO',a.unit_id,CASE WHEN m.case_id IS NULL THEN 'REQ' ELSE 'CAS' END,COALESCE(m.case_id,r.req_id)"
+            +" FROM stat_cut_action a JOIN stat_cut_row r ON r.cut_id=a.cut_id AND r.communication_id=a.communication_id LEFT JOIN management_note m ON m.id=a.note_id"
+            +" WHERE a.cut_id=? ORDER BY source_kind,value_id",new Object[]{id,id});
+        counts.put(EXPORT_FOLIO.name(),copy(id,EXPORT_FOLIO,folios,canonical));
+        counts.put(EXPORT_ORIGIN.name(),copy(id,EXPORT_ORIGIN,origins,canonical));
+        db.update("INSERT INTO stat_export_cut_integrity(cut_id,export_sha256) VALUES(?,?)",id,canonical.hex());
     }
 
     private Workflow.Result annul(Actor a,long id,Long expected,Input in){
@@ -206,6 +225,7 @@ public class StatCuts {
         out.put("catalog_versions",JSON.readValue(s(r,"catalog_versions"),Map.class));
         out.put("counts",JSON.readValue(s(r,"counts_json"),Map.class));
         out.put("calendar_sha256",s(r,"calendar_sha256"));out.put("metadata_sha256",s(r,"metadata_sha256"));out.put("methodology_version",s(r,"methodology_version"));
+        out.put("export_sha256",exportHash(id));
         out.put("annulled_by",r.get("annuller"));out.put("annulled_at",r.get("annulled_ms")==null?null:iso(n(r,"annulled_ms")));out.put("annul_basis",r.get("annul_basis"));
         return out;
     }
@@ -225,6 +245,18 @@ public class StatCuts {
     private static String iso(long ms){return Instant.ofEpochMilli(ms).atZone(BusinessCalendar.ZONE).toOffsetDateTime().toString();}
 
     // --- Verificacion (POST /api/stats/cuts/{id}/verify) ------------------------------------------------------------------
+    String exportHash(long id){
+        var rows=db.rows("SELECT export_sha256 FROM stat_export_cut_integrity WHERE cut_id=?",id);
+        return rows.isEmpty()?null:s(rows.getFirst(),"export_sha256");
+    }
+    private Boolean exportIntact(long id,Map<String,Object> header,String hash){
+        boolean expectsExport=JSON.readTree(s(header,"counts_json")).has(EXPORT_FOLIO.name());
+        if(!expectsExport&&hash==null)return null;
+        if(!expectsExport||hash==null)return false;
+        var canonical=new Canonical();
+        for(var t:EXPORT_TABLES)stored(id,t,canonical::row,canonical);
+        return canonical.hex().equals(hash);
+    }
     /** Recalcula las dos huellas desde lo guardado; no escribe nada salvo la auditoria CORTE_VERIFICADO. */
     public Map<String,Object> verify(Actor a,long id){
         if(!StatEngine.allowed(a))Problem.denied();
@@ -238,10 +270,14 @@ public class StatCuts {
             var fields=new LinkedHashMap<String,Object>();
             for(String k:METADATA)fields.put(k,header.get(k));
             boolean rowsOk=rows.equals(s(header,"rows_sha256")),metadataOk=metadata(fields).equals(s(header,"metadata_sha256"));
-            db.audit(a.id(),VERIFIED,"SISTEMA",0,null,"Corte "+cut.code()+"; "+(rowsOk&&metadataOk?"integro":"alterado"));
+            String exportHash=exportHash(id);
+            Boolean exportOk=exportIntact(id,header,exportHash);
+            boolean ok=rowsOk&&metadataOk&&!Boolean.FALSE.equals(exportOk);
+            db.audit(a.id(),VERIFIED,"SISTEMA",0,null,"Corte "+cut.code()+"; "+(ok?"integro":"alterado"));
             var out=new LinkedHashMap<String,Object>();
-            out.put("id",id);out.put("code",cut.code());out.put("ok",rowsOk&&metadataOk);out.put("rows_ok",rowsOk);out.put("metadata_ok",metadataOk);
+            out.put("id",id);out.put("code",cut.code());out.put("ok",ok);out.put("rows_ok",rowsOk);out.put("metadata_ok",metadataOk);
             out.put("rows_sha256",s(header,"rows_sha256"));out.put("metadata_sha256",s(header,"metadata_sha256"));
+            out.put("export_sha256",exportHash);out.put("export_ok",exportOk);
             return out;
         }));
     }
@@ -362,7 +398,7 @@ public class StatCuts {
         return m;
     }
     /** Huella del calendario habil vigente: dia, region (NAC = nacional) y nombre, ordenados. */
-    private String calendar(){
+    String calendar(){
         var lines=new ArrayList<String>();
         for(var r:db.rows("SELECT holiday_day,region_key,name FROM business_holiday"))lines.add(Canonical.text(s(r,"holiday_day"))+"\t"+Canonical.text(s(r,"region_key"))+"\t"+Canonical.text(s(r,"name"))+"\n");
         Collections.sort(lines);

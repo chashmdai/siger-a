@@ -92,4 +92,20 @@ class StatTimeoutHttpTest {
         assertFalse(note.contains("PRESENCIAL")||note.contains("2025"),"sin valores ni fechas de la peticion");
         assertEquals(guard.maxConcurrent(),guard.available());assertTrue(guard.active().isEmpty());
     }
+
+    @Test void exportacionVencidaNoAbreUnaDescargaYLiberaCupo()throws Exception{
+        var http=HttpClient.newBuilder().cookieHandler(new CookieManager()).build();
+        var endpoint="http://127.0.0.1:"+port+"/api/session";
+        String who=account("exp.tiempo");
+        db.update("INSERT INTO role_assignment(user_id,role_code,scope_id,valid_from,basis) SELECT id,'EXPORTACION',NULL,0,'Prueba sintética' FROM staff WHERE username=?",who);
+        var csrf=mapper.readTree(http.send(HttpRequest.newBuilder(URI.create(endpoint)).build(),HttpResponse.BodyHandlers.ofString()).body()).path("csrf");
+        assertEquals(204,post(http,csrf.path("header").asString(),csrf.path("token").asString(),"/login","application/x-www-form-urlencoded","username="+who+"&password="+PASSWORD).statusCode());
+        csrf=mapper.readTree(http.send(HttpRequest.newBuilder(URI.create(endpoint)).build(),HttpResponse.BodyHandlers.ofString()).body()).path("csrf");
+        long cancelled=count(StatGuard.CANCELLED),exports=count("STAT_EXPORTACION");
+        var r=post(http,csrf.path("header").asString(),csrf.path("token").asString(),"/stats/export/zip","application/json",QUERY);
+        assertEquals(503,r.statusCode(),r.body());assertTrue(r.headers().firstValue("Content-Disposition").isEmpty());
+        assertEquals(guard.timeoutMessage(),mapper.readTree(r.body()).path("message").asString());
+        assertEquals(cancelled+1,count(StatGuard.CANCELLED));assertEquals(exports,count("STAT_EXPORTACION"));
+        assertEquals(guard.maxConcurrent(),guard.available());assertTrue(guard.active().isEmpty());
+    }
 }

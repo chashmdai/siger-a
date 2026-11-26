@@ -259,7 +259,7 @@ final class StatSource {
                     case RECEPCION -> "r.received_ms>="+from+" AND r.received_ms<"+to;
                     case REGISTRO -> "r.created_ms>="+from+" AND r.created_ms<"+to;
                     case CONSTITUCION_REQ -> "r.req_ms>="+from+" AND r.req_ms<"+to;
-                    case CREACION_CASO -> "EXISTS(SELECT 1 FROM stat_cut_case cx WHERE cx.cut_id=r.cut_id AND cx.communication_id=r.communication_id AND cx.created_ms>="+from+" AND cx.created_ms<"+to+")";
+                    case CREACION_CASO -> "EXISTS(SELECT /*+ INDEX(cx "+CUT_CASE_INDEX+") */ 1 FROM stat_cut_case cx WHERE cx.cut_id=r.cut_id AND cx.communication_id=r.communication_id AND cx.created_ms>="+from+" AND cx.created_ms<"+to+")";
                 });
                 if(q.measure().population()==Population.REQUERIMIENTO)sql.append(" AND r.req_id IS NOT NULL");
                 return sql.toString();
@@ -537,7 +537,7 @@ final class StatSource {
                 case "ORIGEN_ACTUACION" -> {actions();values="SELECT y.com AS com,y.origin AS val,COUNT(*) AS w FROM acts y GROUP BY y.com,y.origin";missing="'NO_APLICA'";}
                 case "TIPO_INSTITUCION" -> {
                     actions();
-                    values="SELECT y.com AS com,COALESCE(ni.type_code,'SIN_INFORMACION') AS val,COUNT(*) AS w FROM acts y JOIN "+institution("ni","y.note+0")+" GROUP BY y.com,COALESCE(ni.type_code,'SIN_INFORMACION')";
+                    values="SELECT "+(cut==null?"":"/*+ "+institutionIndex("ni")+" */ ")+"y.com AS com,COALESCE(ni.type_code,'SIN_INFORMACION') AS val,COUNT(*) AS w FROM acts y JOIN "+institution("ni","y.note+0")+" GROUP BY y.com,COALESCE(ni.type_code,'SIN_INFORMACION')";
                     missing="'NO_APLICA'";
                 }
                 default -> {
@@ -570,11 +570,17 @@ final class StatSource {
         }
         /** Eventos que agregan un valor vigente (o en el corte) de la variable: en el REQ o en un Caso dentro del alcance. */
         private String events(String variable){
-            if(this.cut!=null)return "SELECT "+FIXED+"b.id AS com,e.event_id AS event,e.code AS val,e.catalog_version_id AS ver FROM base0 b JOIN stat_cut_event e ON e.cut_id="+this.cut
-                +" AND e.communication_id=b.id+0 AND e.variable='"+variable+"'";
+            return events(variable,false);
+        }
+        private String events(String variable,boolean origin){
+            if(this.cut!=null)return "SELECT "+fixed(CUT_EVENT)+"b.id AS com,e.event_id AS event,e.code AS val,e.catalog_version_id AS ver"
+                +(origin?",o.record_type,o.record_id":"")+" FROM base0 b JOIN stat_cut_event e ON e.cut_id="+this.cut
+                +" AND e.communication_id=b.id+0 AND e.variable='"+variable+"'"
+                +(origin?" JOIN stat_export_cut_origin o ON o.cut_id=e.cut_id AND o.source_kind='EVENTO' AND o.value_id=e.event_id":"");
             String cut=now;
             if(q.mode()==Mode.AL_INGRESO){raw("f_"+variable,firstEvent(variable));cut="b.f_"+variable;}
-            return "SELECT "+FIXED+"b.id AS com,a.id AS event,a.code AS val,a.catalog_version_id AS ver FROM base0 b JOIN stat_event a ON a.communication_id=b.id+0 AND a.variable='"+variable+"'"
+            return "SELECT "+FIXED+"b.id AS com,a.id AS event,a.code AS val,a.catalog_version_id AS ver"
+                +(origin?",a.record_type,a.record_id":"")+" FROM base0 b JOIN stat_event a ON a.communication_id=b.id+0 AND a.variable='"+variable+"'"
                 +" LEFT JOIN case_record cc ON a.record_type='CAS' AND cc.id=a.record_id LEFT JOIN org_scope cs ON cs.id=cc.scope_id"
                 +" WHERE a.record_type IN ('REQ','CAS') AND "+StatValues.addedSql(cut)+" AND (a.record_type='REQ' OR "+caseReach("cc.matter","cs")+")";
         }
@@ -599,7 +605,7 @@ final class StatSource {
         private void actions(){
             if(tables.containsKey("acts"))return;
             if(this.cut!=null){
-                tables.put("acts","SELECT "+FIXED+"b.id AS com,a.unit_id AS unit,a.action_type AS action_type,a.origin AS origin,a.note_id AS note,a.catalog_version_id AS ver"
+                tables.put("acts","SELECT "+fixed(CUT_ACTION)+"b.id AS com,a.unit_id AS unit,a.action_type AS action_type,a.origin AS origin,a.note_id AS note,a.catalog_version_id AS ver"
                     +" FROM base0 b JOIN stat_cut_action a ON a.cut_id="+this.cut+" AND a.communication_id=b.id+0");
                 return;
             }
@@ -616,7 +622,7 @@ final class StatSource {
                 case ACTUACION -> {actions();tables.put("u","SELECT y.com AS com,y.unit AS unit,y.action_type AS d_TIPO_ACTUACION,y.origin AS d_ORIGEN_ACTUACION,y.note AS note FROM acts y");}
                 case CLASIFICACION -> tables.put("u",rights("e.val",",e.event AS unit,"+level("DERECHO_EJE")+" AS d_DERECHO_EJE,"+level("DERECHO")+" AS d_DERECHO,COALESCE("+level("DERECHO_SUBCATEGORIA")+",'SIN_DESGLOSE') AS d_DERECHO_SUBCATEGORIA"));
                 case CASO -> tables.put("u",cut!=null
-                    ?"SELECT "+FIXED+"b.id AS com,cc.case_id AS unit,cc.created_ms AS case_ms FROM base0 b JOIN stat_cut_case cc ON cc.cut_id="+cut+" AND cc.communication_id=b.id+0 WHERE 1=1"
+                    ?"SELECT "+fixed("INDEX(cc "+CUT_CASE_INDEX+")")+"b.id AS com,cc.case_id AS unit,cc.created_ms AS case_ms FROM base0 b JOIN stat_cut_case cc ON cc.cut_id="+cut+" AND cc.communication_id=b.id+0 WHERE 1=1"
                         +(q.basis()==Basis.CREACION_CASO?" AND cc.created_ms>="+q.span().from()+" AND cc.created_ms<"+q.span().to():"")
                     :"SELECT "+FIXED+"b.id AS com,cc.id AS unit,cc.created_ms AS case_ms FROM base0 b JOIN case_record cc ON cc.requirement_id=b.req+0 JOIN org_scope cs ON cs.id=cc.scope_id WHERE "+caseReach("cc.matter","cs")
                     +(q.mode()==Mode.FECHA?" AND cc.created_ms<="+q.at():"")
@@ -673,7 +679,7 @@ final class StatSource {
         private String source(List<Dim> dims,List<Object> args){
             boolean com=q.measure().unit()==Unit.COM;
             if(!com)units();
-            var select=new StringBuilder("SELECT "+FIXED+"b.id AS com,").append(com?"0":"u.unit").append(" AS unit");
+            var select=new StringBuilder("SELECT "+(unitInstitution()?fixed(institutionIndex("ui")):FIXED)+"b.id AS com,").append(com?"0":"u.unit").append(" AS unit");
             var joins=new StringBuilder(" FROM base b");
             if(!com)joins.append(" JOIN u ON u.com+0=b.id+0");
             if(unitInstitution())joins.append(" LEFT JOIN ").append(institution("ui","u.note+0"));
@@ -782,10 +788,67 @@ final class StatSource {
         }
         /** p_: propuesta de una variable (regla PROPUESTA_V1); en un corte, la congelada (no se recalcula desde external_field). */
         private void proposal(String v){raw("p_"+v,cut!=null?"r.p_"+v.toLowerCase(Locale.ROOT):StatProposals.sqlCode("c",v));}
+        /** JOIN_FIXED_ORDER y, sobre un corte, las sugerencias de indice dadas (ver CUT_EVENT). */
+        private String fixed(String... indexes){
+            return cut==null||indexes.length==0?FIXED:"/*+ JOIN_FIXED_ORDER() "+String.join(" ",indexes)+" */ ";
+        }
+        /** Sugerencia del indice por nota de las instituciones congeladas, para el alias dado (solo sobre un corte). */
+        private String institutionIndex(String alias){return "INDEX("+alias+" "+CUT_INSTITUTION_INDEX+")";}
         /** Tipo de institucion de las actuaciones: note_institution o, en un corte, su copia congelada. */
         private String institution(String alias,String note){
             return cut==null?"note_institution "+alias+" ON "+alias+".note_id="+note
                 :"stat_cut_action_institution "+alias+" ON "+alias+".cut_id="+cut+" AND "+alias+".note_id="+note;
+        }
+
+        // --- Microdatos (E11): las proyecciones reutilizan la base, alcance, evidencia y relaciones del motor. -----------
+        Sql exportRows(List<Dim> singles,int limit){
+            var select=new StringBuilder("SELECT b.id,b.folio,b.evid");
+            raw("folio",cut==null?"c.folio":"(SELECT f.folio FROM stat_export_cut_folio f WHERE f.cut_id=r.cut_id AND f.communication_id=r.communication_id)");
+            evidence();
+            for(var d:singles)select.append(",b.").append(column(d)).append(" AS ").append(frozenColumn(d));
+            for(String v:KEYED){version(v);select.append(",b.v_").append(v);}
+            return exportStatement(select+" FROM pop b ORDER BY b.id LIMIT "+(limit+1));
+        }
+
+        Sql exportClassifications(boolean groups){
+            var parts=new ArrayList<String>();
+            for(String v:CLASSIFIED){
+                if(!groups&&v.equals("GRUPO_PRIORITARIO"))continue;
+                tables.putIfAbsent("ev_"+v,events(v,true));
+                if(v.equals("DERECHO")){
+                    // La misma jerarquía que usa el agregado, con la procedencia de cada asignación.
+                    for(String d:List.of("DERECHO_EJE","DERECHO","DERECHO_SUBCATEGORIA"))
+                        parts.add("SELECT z.com,'"+d+"' AS variable,z.val,z.ver,z.record_type,z.record_id FROM ("
+                            +rights(level(d),",e.record_type,e.record_id")+") z WHERE z.val IS NOT NULL");
+                }else parts.add("SELECT z.com,'"+v+"' AS variable,z.val,z.ver,z.record_type,z.record_id FROM ev_"+v+" z");
+            }
+            return exportStatement("SELECT z.* FROM ("+String.join(" UNION ALL ",parts)+") z JOIN pop b ON b.id+0=z.com+0"
+                +" ORDER BY z.com,z.variable,z.val,z.record_type,z.record_id,z.ver");
+        }
+
+        Sql exportActions(){
+            actions();
+            String provenance=cut!=null?" JOIN stat_export_cut_origin o ON o.cut_id="+cut+" AND o.source_kind='ACTO' AND o.value_id=y.unit+0"
+                :" LEFT JOIN management_note m ON m.id=y.note+0";
+            String record=cut!=null?"o.record_type,o.record_id":"CASE WHEN m.case_id IS NULL THEN 'REQ' ELSE 'CAS' END AS record_type,COALESCE(m.case_id,b.req) AS record_id";
+            return exportStatement("SELECT "+fixed(institutionIndex("ni"))+"y.com,y.unit,y.action_type,y.origin,y.ver,"+record+",ni.type_code,ni.catalog_version_id,ni."
+                +(cut==null?"id":"institution_id")+" AS institution_id FROM acts y JOIN pop b ON b.id+0=y.com+0"+provenance
+                +" LEFT JOIN "+institution("ni","y.note+0")+" ORDER BY y.com,y.unit,institution_id");
+        }
+
+        Sql exportPersons(){
+            tables.put("pa",affected());
+            return exportStatement("SELECT "+FIXED+"pa.com,pa.region_code,pa.commune,pa.age_years,pa.nationality,"
+                +(cut!=null?"pa.age_bracket":PersonDims.bracketSql("pa.age_years"))+" AS age_bracket,CASE WHEN pa.nationality IS NOT NULL THEN "
+                +PersonDims.nationalityGroupSql("pa.nationality")+" END AS nationality_group FROM pa JOIN pop b ON b.id+0=pa.com+0 ORDER BY pa.com");
+        }
+
+        private Sql exportStatement(String select){
+            var unitArgs=new ArrayList<Object>();var more=new LinkedHashMap<String,String>();
+            if(q.measure().unit()!=Unit.COM)more.put("src",source(List.of(),unitArgs));
+            more.put("pop","SELECT u.* FROM ("+population()+") u WHERE u.com_state NOT IN ('INVALIDA','VINCULADA')"+ONCE);
+            var args=new ArrayList<Object>();String from=with(args,more);args.addAll(unitArgs);
+            return new Sql(from+select,args.toArray());
         }
 
         // --- Congelado de un corte (E10) ---------------------------------------------------------------------------
@@ -843,7 +906,7 @@ final class StatSource {
                     yield "SELECT DISTINCT b.v_"+v+" AS ver FROM pop b WHERE b.k_"+v+" NOT IN ("+SPECIAL_SQL+")";
                 }
                 case "TIPO_ACTUACION" -> {actions();yield "SELECT DISTINCT y.ver AS ver FROM acts y JOIN pop b ON b.id+0=y.com+0";}
-                case "TIPO_INSTITUCION" -> {actions();yield "SELECT "+FIXED+"DISTINCT ni.catalog_version_id AS ver FROM acts y JOIN pop b ON b.id+0=y.com+0 JOIN "+institution("ni","y.note+0");}
+                case "TIPO_INSTITUCION" -> {actions();yield "SELECT "+fixed(institutionIndex("ni"))+"DISTINCT ni.catalog_version_id AS ver FROM acts y JOIN pop b ON b.id+0=y.com+0 JOIN "+institution("ni","y.note+0");}
                 default -> {
                     String v=d.catalog();
                     tables.putIfAbsent("ev_"+v,events(v));
@@ -854,6 +917,15 @@ final class StatSource {
     }
     /** Une en el orden escrito (la base primero): sin estadisticas de los CTE, otro orden multiplicaria filas. H2 lo ignora. */
     private static final String FIXED="/*+ JOIN_FIXED_ORDER() */ ";
+    /**
+     * Indice por COM de cada tabla congelada de un corte (cierre de E11): recien escrito el corte, InnoDB aun no recalcula
+     * sus estadisticas (lo hace en segundo plano, una tabla cada unos 10 s) y, con la tabla tenida por vacia, el
+     * optimizador entraba por el prefijo cut_id de la clave primaria y recorria todo el corte por cada COM (una
+     * exportacion desde un corte recien generado pasaba de 2 s a mas de 30 s). La sugerencia INDEX equivale a FORCE INDEX
+     * en MySQL y H2 la ignora como comentario; no cambia el resultado.
+     */
+    static final String CUT_EVENT="INDEX(e ix_stat_cut_event_com)",CUT_ACTION="INDEX(a ix_stat_cut_action_com)",CUT_CASE_INDEX="ix_stat_cut_case_com",
+        CUT_INSTITUTION_INDEX="ix_stat_cut_institution_note";
     /** Un CTE con LIMIT se calcula una sola vez: MySQL no lo fusiona en las partes que lo usan. */
     private static final String ONCE=" LIMIT 9223372036854775807";
     private static String text(String column){return "CONCAT("+column+",'')";}

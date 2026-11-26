@@ -29,7 +29,7 @@ class ImmutabilityTest {
     static final Set<String> EXCEPTIONS=Set.of("CASE_ACK","COM_LINK","LINK_DECIDE","LINK_RETURN","REOPEN_REQUEST","REOPEN_AUTHORIZE","REOPEN_DECIDE");
     static final Set<String> CREATE=Set.of("COM_CREATE","COM_IMMEDIATE","ATTENTION_CREATE","NOTICE_READ");
     /** Cortes y vistas del motor estadistico (E10): no actuan sobre un expediente (un corte es inmutable por si mismo: StatCutsTest). */
-    static final Set<String> STATISTICS=Set.of("STAT_CUT_CREATE","STAT_CUT_ANNUL","STAT_VIEW_SAVE","STAT_VIEW_DELETE","STAT_VIEW_SHARE");
+    static final Set<String> STATISTICS=Set.of("STAT_CUT_CREATE","STAT_CUT_ANNUL","STAT_VIEW_SAVE","STAT_VIEW_DELETE","STAT_VIEW_SHARE","STAT_SERIES_IMPORT","STAT_SERIES_ANNUL");
     @Autowired Workflow flow;@Autowired Db db;
 
     long scope(String code){return n(db.one("SELECT id FROM org_scope WHERE code=?",code),"id");}

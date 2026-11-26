@@ -101,6 +101,13 @@ public class StatEngine {
         var dims=q.axesDims().stream().map(Dim::code).toList();
         names.set("Medida "+q.measure().code()+"; modo "+q.mode().name()+(r.cut()==null?"":"; sobre un corte")+(dims.isEmpty()?"":"; dimensiones: "+String.join(", ",dims))
             +(q.filters().isEmpty()?"":"; filtros: "+q.filters().keySet().stream().map(Dim::code).collect(Collectors.joining(", ")))+(r.compare()==null?"":"; comparacion "+r.compare()));
+        var out=calculate(r);
+        db.audit(a.id(),AUDIT,"SISTEMA",0,null,names.get());
+        return out;
+    }
+    /** Comparación y agregado idénticos para la consulta interactiva y la exportación. */
+    Map<String,Object> calculate(Parsed r){
+        var q=r.query();
         var main=read(q,q.axes(),0,extras(q));
         Result base=null;Span baseSpan=null;
         if(r.baseCut()!=null){
@@ -111,9 +118,7 @@ public class StatEngine {
             baseSpan=previous(r.compare(),r.periodType(),q.span());
             base=read(q.over(baseSpan,axes(q.axesDims(),baseSpan)),q.axes(),main.cells().size(),null);
         }
-        var out=response(r,main,base,baseSpan);
-        db.audit(a.id(),AUDIT,"SISTEMA",0,null,names.get());
-        return out;
+        return response(r,main,base,baseSpan);
     }
     private Problem tooMany(){
         return new Problem(409,"La consulta tiene más de "+String.format(Locale.ROOT,"%,d",maxCells).replace(',','.')+" celdas, incluida su comparación. Quita una dimensión, agrega un filtro o acorta el periodo.");
@@ -122,6 +127,7 @@ public class StatEngine {
     // --- Validacion ---------------------------------------------------------------------------------------------------
     /** cut: corte consultado (nulo = fuente vigente); baseCut: corte con que se compara (compare CORTE). */
     record Parsed(Query query,String periodType,String compare,String percent,StatCuts.Cut cut,StatCuts.Cut baseCut){}
+    static Reports.Reach effectiveReach(Parsed r){return r.cut()==null?r.query().reach():r.cut().reach();}
     /** Periodo de un corte (E10): sin fecha de analisis, porque el corte guarda todas. */
     record Period(String type,Span span){}
     static Period cutPeriod(Object raw){
@@ -167,7 +173,7 @@ public class StatEngine {
     private static List<String> names(Enum<?>[] values){return Arrays.stream(values).map(Enum::name).toList();}
     private static Basis basisOf(Measure m){return m.unit()==Unit.CASO?Basis.CREACION_CASO:m.code().equals("REQ_CONSTITUIDOS")?Basis.CONSTITUCION_REQ:Basis.RECEPCION;}
 
-    private Parsed parse(Access.Actor a,Map<String,Object> body){
+    Parsed parse(Access.Actor a,Map<String,Object> body){
         var b=object(body,"Consulta",FIELDS);
         var measure=StatSource.MEASURES.get(name(b.get("measure"),"Medida",StatSource.MEASURES.keySet(),""));
         if(measure==null)throw bad("Indica la medida.");
@@ -295,6 +301,14 @@ public class StatEngine {
     }
     private Set<String> codes(String sql,Object... args){return db.rows(sql,args).stream().map(x->s(x,"code")).collect(Collectors.toSet());}
 
+    void validateSeriesCode(String dimension,String code){
+        Dim d=dimension(dimension);
+        if(d.only())throw bad("La dimensión no admite correspondencias históricas.");
+        Object value=code;
+        if(d.kind()==Kind.EDAD&&code.matches("[0-9]{1,3}"))value=Integer.valueOf(code);
+        filter(d,List.of(value),null);
+    }
+
     // --- Periodos -----------------------------------------------------------------------------------------------------
     static long ms(LocalDate d){return d.atStartOfDay(BusinessCalendar.ZONE).toInstant().toEpochMilli();}
     /** Ambos dias incluidos en hora de Chile: hasta la medianoche siguiente, excluida. */
@@ -412,7 +426,7 @@ public class StatEngine {
         return new Result(cells,rowTotals,columnTotals,grand,more);
     }
     /** Clave publica de un valor; un intervalo de la base de comparacion toma la clave del intervalo en la misma posicion. */
-    private static String key(Dim d,Query q,Map<String,List<Interval>> target,Object raw){
+    static String key(Dim d,Query q,Map<String,List<Interval>> target,Object raw){
         // Toda dimension entrega un valor o un estado: una clave nula uniria dos celdas.
         if(raw==null)throw new IllegalStateException("Dimension sin clave: "+d.code());
         if(d.kind()==Kind.PERIODO){
