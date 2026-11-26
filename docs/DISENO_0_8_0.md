@@ -483,32 +483,99 @@ inmediatamente despues del panel "Datos del REQ"; `CaseDetail.tsx` inmediatament
 desde "Registrar actuacion" (enlace al panel del mismo registro) y desde la ficha de primera atencion. Solo lectura sin
 facultad; deshabilitado con el registro cerrado y el texto "Requiere reapertura formal".
 
-### 10.3 Explorador estadistico (Direccion de UEP)
-Pantalla `#estadisticas`: preguntas guiadas de inicio ("Cuantos ingresos hubo...", "Por via de ingreso", "Comparar con
-el periodo anterior"), selector de periodo con predefinidos, arrastre o seleccion de filas y columnas, filtros
-combinables con chips, tabla dinamica con totales y porcentajes, graficos (barras, barras apiladas, lineas,
-circulares y tabla), series y comparaciones, vistas guardadas (personales y compartidas), exportacion en un boton.
-Lenguaje institucional, sin codigos ni SQL a la vista; explicacion breve de cada dimension y de las cifras multiples.
-- Grafico circular: para una dimension de valor unico en filas, sin columnas, con porcentaje sobre el total; cada
-  porcion con rotulo, cifra y porcentaje, y la tabla a la vista. No se ofrece para dimensiones multivaluadas (sus
-  partes no suman el total) y el explorador explica por que y propone barras. Todas las categorias se muestran; no se
-  agrupan automaticamente.
-- Dimensiones multivaluadas: la tabla muestra requerimientos con el valor, menciones y el total unico, con la nota
-  "un requerimiento puede tener varios valores".
-- Edad y nacionalidad: junto a la dimension, el porcentaje de requerimientos con dato.
+### 10.3 Explorador estadístico
+Interfaz profesional, útil y clara, que aprovecha todo lo que entrega el motor, sin cambios de servidor ni
+dependencias nuevas.
+
+**Estructura**: `#estadisticas` con las secciones Panorama, Informes y Explorar (E12), y Cortes y series y Calidad
+(E13).
+
+**Panorama**
+- Periodo elegible; por defecto, la Cuenta Pública en curso.
+- Indicadores: ingresos, REQ constituidos, Casos, actuaciones, porcentaje de ingresos con caracterización completa y
+  registros tardíos.
+- Cada indicador con su variación respecto del periodo anterior (cifra, porcentaje, flecha y texto, nunca solo color)
+  y una línea mensual pequeña.
+- Un clic abre la consulta en Explorar.
+
+**Informes**
+- Figura 1 (tipo de solicitud, requirente, vía y adscripción institucional, DI-13), de julio a junio, con rótulos y
+  orden institucionales.
+- Exportación.
+- El botón "Congelar estas cifras" se agrega en E13.
+
+**Explorar**
+- Campos agrupados por familia (Periodo, Ingreso, Territorio, Derechos, Actuaciones, Personas, Estado de la cadena y
+  Calidad), con buscador, descripción breve y la marca "valores múltiples".
+- Filas y columnas por selección o arrastre, también con teclado.
+- Filtros con chips.
+- Medida en lenguaje llano.
+- Selector de cifra: cantidad, % del total, % por fila y % por columna; en las múltiples, "requerimientos con el
+  valor", "menciones" y "total único".
+- "Cómo leer esta cifra", siempre visible: qué cuenta la medida y su unidad, fecha de análisis, modo temporal,
+  alcance, periodo, versiones de catálogo, cobertura de edad y nacionalidad, y cada aviso del servidor traducido a una
+  frase. La región de los NNA se rotula como no aditiva.
+
+**Pie de fuente**: en toda tabla y gráfico, incluido en PNG y SVG: "Fuente: SIGER, Defensoría de la Niñez. Consulta del
+<fecha y hora>; <alcance>; <fecha de análisis>; <modo>", más el código del corte si corresponde.
+
+**Gráficos**
+- Sugerencia automática según la forma de los datos:
+
+  | Forma de los datos | Gráfico sugerido |
+  |---|---|
+  | Un eje de periodo | Líneas |
+  | Una dimensión de valor único | Barras horizontales ordenadas de mayor a menor |
+  | Dos dimensiones | Barras agrupadas, o apiladas solo si las columnas son de valor único |
+  | Una dimensión múltiple | Barras con la nota |
+  | Una comparación | Barras pareadas o de diferencia |
+
+- Circular opcional solo con una dimensión de valor único, sin columnas y con 6 categorías o menos, sumando el 100 %;
+  si no, se explica por qué y se proponen barras.
+- Paleta institucional accesible (contraste AA, distinguible con daltonismo), rótulos directos, formato chileno, foco
+  por teclado y la tabla como alternativa textual.
+- Descarga en PNG y SVG con título, subtítulo, notas y fuente.
+
+**Tabla**
+- Encabezados fijos y cifras a la derecha con `tabular-nums`.
+- Miles con punto y decimales con coma.
+- Orden por columna.
+- Márgenes y total destacados, nunca sumados en el cliente.
+- Jerarquía eje → derecho → subcategoría plegable.
+- 0 como cero y "—" con explicación cuando no hay dato.
+
+**Estado y rendimiento**
+- La consulta queda en la dirección (`#estadisticas?...`) para volver atrás y compartir.
+- Vistas guardadas.
+- Consultas en fila, una a la vez por cuenta por el cupo de `StatGuard`, con caché de la sesión y esqueletos de carga.
+- Mensajes llanos para 429, 503 y motor deshabilitado.
+
+**Móvil**: Panorama e Informes completos; Explorar simplificado; tablas con desplazamiento horizontal.
+
+**Restricciones**: sin códigos ni SQL a la vista; sin dependencias nuevas; gráficos SVG propios.
 
 ### 10.4 Cortes, series y calidad
 Cortes: generar (asistente de cuatro pasos), ver, verificar integridad, comparar y anular. Series: asistente de
 importacion (plantilla, columnas, vista previa, validacion, confirmacion). Calidad: completitud por variable, ambito y
 periodo, con enlace a los registros pendientes que la cuenta puede leer.
+- "Congelar estas cifras" desde cualquier vista abre el asistente de corte prellenado y advierte: "Generar el corte
+  detiene brevemente las operaciones de todos. Hazlo fuera del horario de atención".
+- La comparación con un corte resalta las diferencias celda a celda.
+- Una serie histórica se muestra en el mismo gráfico que SIGER, con la discontinuidad marcada y la nota de ámbito, sin
+  sumarlas salvo que se pida.
+- Calidad: barras de completitud por variable y ámbito, tendencia mensual y enlace a los pendientes.
 
-### 10.5 Criterios de facilidad de uso (aceptacion en E15)
+### 10.5 Criterios de facilidad de uso
+Los acredita el ejecutor en el humo y los revisa Claude Padre en E16, porque E15 está postergado.
+
 U1 Obtener la tabla tipo Figura 1 (cuatro desgloses de la Cuenta Publica) en menos de 2 minutos, sin ayuda. U2
 Comparar con el periodo anterior. U3 Cruzar tipo de solicitud por region del requirente y cambiar a porcentaje por
 fila. U4 Exportar el paquete ZIP. U5 Generar un corte con fundamento. U6 Importar una serie desde la plantilla. U7
 Hacer un grafico y descargarlo en PNG. U8 Guardar y compartir una vista. U9 Encontrar los registros pendientes de su
-alcance. U10 Clasificar derechos de un REQ con busqueda en menos de 1 minuto. Cada escenario se prueba con funcionarios
-de UEP sin conocimientos tecnicos; un escenario no logrado es un hallazgo.
+alcance. U10 Clasificar derechos de un REQ con busqueda en menos de 1 minuto. U11 Abrir un indicador del Panorama en
+Explorar y pasarlo a % por fila en menos de 1 minuto. U12 Explicar, con la nota de la pantalla, por qué un desglose de
+derechos no suma el total. U13 Descargar un gráfico listo para el informe, con título, notas y fuente. Un escenario no
+logrado es un hallazgo.
 
 ## 11. Catalogo de derechos de referencia
 Fuente: Defensoria de la Ninez, "Modelo de conceptualizacion y categorizacion de derechos de la ninez y adolescencia",

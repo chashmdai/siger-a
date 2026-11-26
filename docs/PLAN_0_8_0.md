@@ -688,24 +688,33 @@ reducir pruebas ni criterios.
 - Cierre: commit `gate E11: exportaciones y series`.
 
 **E12 - Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz)**
-- Alcance: pantalla `#estadisticas` (`DISENO` 10.3) con preguntas guiadas, periodo, filas y columnas, filtros, tabla
-  dinamica, totales, porcentajes, dimensiones multivaluadas con su explicacion, edad y nacionalidad con el porcentaje
-  con dato, vistas guardadas; graficos SVG propios (barras, apiladas, lineas y circulares; el circular solo para una
-  dimension de valor unico), series y comparaciones, descarga SVG y PNG; logica en `statsModel.ts`.
+- Alcance: el `DISENO` 10.3 completo ("Explorador estadístico": `#estadisticas` con Panorama, Informes y Explorar);
+  logica en `statsModel.ts`. Sin cambios de servidor ni dependencias nuevas. Se divide solo si es indispensable.
 - Archivos autorizados: `features/stats/*` y `components/charts/*` (nuevos), `app/menu.ts`, `App.tsx`,
-  `app/routes.ts`, `lib/labels.ts`, estilos, pruebas de frontend.
-- Pruebas: modelo de consulta y de graficos (el circular suma 100 % y no se ofrece para multivaluadas ni con columnas);
-  render SSR.
-- Aceptacion: U1, U2, U3, U7 y U8 en el humo; sin codigos visibles; contraste y lectura sin color solamente;
-  `prefers-reduced-motion`; movil.
+  `app/routes.ts`, `lib/labels.ts`, estilos (`styles/tokens.css` solo con agregados), pruebas de frontend.
+- Pruebas:
+  - modelo de consulta y de graficos (el circular suma 100 % y no se ofrece para multivaluadas ni con columnas);
+  - de `statsModel.ts`: formato chileno, sugerencia de gráfico, reglas del circular, porcentajes, cola de consultas y
+    caché, ida y vuelta de la dirección, traducción de cada aviso y pie de fuente;
+  - render SSR de cada sección, con barridos sin códigos y accesibilidad (roles, nombres accesibles y alternativa
+    textual);
+  - si el ejecutor dispone de navegador, capturas de cada sección en escritorio y móvil, guardadas fuera del
+    repositorio y mencionadas en el registro.
+- Aceptacion: U1, U2, U3, U7, U8, U11, U12 y U13 en el humo; sin codigos visibles; contraste y lectura sin color
+  solamente; `prefers-reduced-motion`; movil.
 - Cierre: commit `gate E12: explorador`.
 
 **E13 - Explorador: exportacion, cortes, series historicas y calidad (interfaz)**
 - Alcance: exportacion CSV, XLSX y ZIP desde la vista; pantallas de `DISENO` 10.4 (cortes: generar, ver, verificar,
   comparar y anular; asistente de series; panel de calidad con enlace a los registros pendientes que la cuenta puede
-  leer).
+  leer). Ademas: "Congelar estas cifras" desde cualquier vista (tambien el boton de Informes), que abre el asistente de
+  corte prellenado y advierte "Generar el corte detiene brevemente las operaciones de todos. Hazlo fuera del horario de
+  atención"; la comparacion con un corte resalta las diferencias celda a celda; una serie historica en el mismo grafico
+  que SIGER, con la discontinuidad marcada y la nota de ambito, sin sumarlas salvo que se pida; y Calidad con barras de
+  completitud por variable y ambito, tendencia mensual y enlace a los pendientes.
 - Archivos autorizados: `features/stats/*`, estilos, pruebas de frontend.
-- Aceptacion: U4, U5, U6 y U9; el asistente de series se completa sin conocer el formato interno.
+- Aceptacion: U4, U5, U6 y U9, mas el aviso de espera del corte; el asistente de series se completa sin conocer el
+  formato interno.
 - Cierre: commit `gate E13: exportacion, cortes, series y calidad`.
 
 **E14 - Integracion MySQL, rendimiento, aceptacion y cierre de version**
