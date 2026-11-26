@@ -53,4 +53,5 @@ public record Input(Map<String,Object> values) {
         return out;
     }
     public String reason() { return text("reason",12000,true); }
+    public String optionalReason() { return text("reason",12000,false); }
 }

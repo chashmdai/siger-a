@@ -27,7 +27,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E10 | Cortes estadisticos y configuraciones guardadas (servidor) | CERRADO |
 | E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | CERRADO |
 | E12 | Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz) | CERRADO |
-| E12b | Desestimación directa de una COM (servidor e interfaz) | ABIERTO |
+| E12b | Desestimación directa de una COM (servidor e interfaz) | CERRADO |
 | E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | ABIERTO |
 | E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | ABIERTO |
 | E15 | Validacion de uso con la Direccion de UEP | POSTERGADO |
@@ -78,6 +78,7 @@ plan). Los pendientes operacionales postergados no tienen gate en 0.8.0 (seccion
 | Precisiones del explorador | E12 | 2026-11-26: periodo y comparación del Panorama; definición de caracterización completa (seis variables de E07); jerarquía de derechos por nivel; reparto de la exportación entre E12 y E13; filtro de pendientes en bandejas autorizado en E13 (BoardQueries.java); se reponen las preguntas guiadas y la regla de no agrupar categorías. |
 | Protocolo de corte por cuota | E12b | 2026-11-26: se adopta el protocolo de la sección 5, que formaliza lo hecho en E11 y E12; las condiciones para gates futuros quedan en el plan. |
 | Desestimación directa de una COM | E12b | 2026-11-26: quien puede distribuir una COM podrá desestimarla como inválida o duplicada sin derivarla antes a una SOL. Gate intercalado en 0.8.0, como E08b. |
+| Justificación solo al desestimar | E12b | 2026-11-26: justificar la distribución no forma parte de las funciones contractuales. Distribuir, asumir, redirigir y redistribuir admiten omitir el fundamento. Vincular y devolver admiten observación opcional. Desestimar la COM y descartar la SOL mantienen fundamento obligatorio. |
 
 ## Definiciones pendientes
 
@@ -797,6 +798,33 @@ Propuesta del ejecutor (para decisión del responsable):
 Estado al detenerse: MySQL de `D:\Ensayo-E11c\mysql` detenido con `mysqladmin shutdown` ("Shutdown complete"), sin
 proceso escuchando en 3417 (solo conexiones en TIME_WAIT); MySQL80 y la instancia de `D:\sigervalidacion` intactos.
 
+### E12b - GO del 2026-11-26
+
+- Aprobada la adscripción por el ámbito del hito `COM_DESCARTADA` para una COM sin SOL. Una sede regional usa su
+  código, y el nivel central, Oficina Nacional en `ADSCRIPCION_INICIAL` y el ámbito acreditado en `SEDE_INICIAL`.
+  Antes del hito, «Pendiente de asignación». Si hay SOL devuelta, conserva su primer destino y, en la misma
+  transacción, queda `DESCARTADA` con su historial.
+- Esquema 24. El fundamento obligatorio de `COM_DISCARD` se registra con `life.changed` como `COM_INVALIDA` o
+  `COM_DUPLICADA` y se muestra con las reglas de lectura de la ficha. El texto libre queda fuera de estadísticas,
+  exportaciones y logs técnicos. `can_discard`, bloqueos, decisión definitiva, caracterización de duplicadas en
+  el diálogo, estados históricos de COM y SOL y conservación de las cifras de Reports, según el plan aprobado.
+- `Input.optionalReason()` con el mismo máximo que `reason()`, devuelve cadena vacía si se omite en `COM_ROUTE`,
+  `COM_ASSUME`, `COM_LINK`, `SOL_ROUTE`, `SOL_ASSUME` y `SOL_RETURN`. `solicitation.classification` guarda
+  cadena vacía si corresponde. El historial y la ficha omiten textos y rótulos vacíos. En el frontend solo
+  vincular y devolver ofrecen «Observación (opcional)». Ambos descartes mantienen «Fundamento» obligatorio.
+  Cierres, reaperturas, `LINK_DECIDE`, `LINK_RETURN` y flujos de REQ y Caso conservan su comportamiento.
+- Alcance aprobado: los archivos del plan sin V25, más `Input.java`, `fields.ts` y los detalles que muestran el
+  fundamento. Documentar en DISENO 4.5.1, CLAUDE, arquitectura, contrato estadístico y bitácora. Se conservan
+  `conserveExternal`, los siete archivos de recepción del Formulario, `Reports.java`, `scripts/`, `.mvn/` y V1–V24.
+  Sin dependencias nuevas.
+- Matriz a mano antes de implementar. Pruebas para los seis comandos sin fundamento, los dos descartes con
+  fundamento obligatorio, render y mutaciones por regla, incluidas las de opcionalidad. Adaptar solo las
+  expectativas anteriores afectadas y registrar el desvío. Secuencia final: H2, MySQL 8.4 completo con ambos
+  volcados en `D:\Ensayo-E12b\mysql` por el puerto 3417, frontend, humo del JAR y `Check-Scripts.ps1` en PS 5.1.
+  Detener el MySQL propio y conservar MySQL80 y `D:\sigervalidacion`. Umbrales de cuota de la sección 5
+  (25 % para iniciar corridas largas, 10 % para resguardo `wip/e12b-codex`). Un solo commit
+  `gate E12b: desestimacion directa de COM`, push a `origin/main` y detención.
+
 ## Registros de cierre
 
 ### E00 - Linea base, decisiones, AGENTS.md y contrato del Formulario   (CERRADO)
@@ -1363,3 +1391,68 @@ Mutaciones de E12 (regla -> prueba que falló; R = repetida sobre el código fin
 | 34 porcentaje de caracterización completa mal dividido | stats.test: caracterización completa |
 | 35 «Cómo leer» sin la región no aditiva | stats.test: «Cómo leer esta cifra»; render: resultado de un cruce |
 | 36 dirección que acepta valores alterados | stats.test: dirección |
+
+### E12b - Desestimación directa de una COM (servidor e interfaz)   (CERRADO)
+- Fecha: 2026-11-26 (commit `gate E12b: desestimacion directa de COM`), DDN-TEST-SIGER (Windows), Codex, base `9c778be`.
+- GO del responsable: A (sede y adscripción por el hito para COM sin SOL, primer destino si hubo SOL devuelta), B (fundamento en la historia, esquema 24) y justificación solo en los descartes, con las condiciones del GO registrado arriba.
+- Hecho: `COM_DISCARD` usa la facultad de distribución y la revisión de la COM. Valida el fundamento y la completitud de duplicadas. Cambia la SOL devuelta a descartada en el mismo acto y registra hito y auditoría con el mismo instante.
+- Hecho: la ficha ofrece «Desestimar ingreso» según el servidor y permite completar la caracterización de una duplicada. El motor reconstruye los estados históricos y acredita la sede y adscripción inicial con el hito.
+- Hecho: distribuir, asumir, redirigir y redistribuir sin campo de fundamento. Vincular y devolver permiten una observación opcional. El historial y la ficha de SOL omiten el texto vacío.
+- Archivos clave: `IntakeCommands.java`, `Workflow.java`, `Input.java`, `Lifecycle.java`, `Queries.java`, `StatSource.java`, `TerritorialDims.java`, `ComDetail.tsx`, `SolDetail.tsx`, `Detail.tsx`, `actions.ts`, `fields.ts`. Pruebas `ComDiscardHttpTest`, `ComDiscardStatsTest`, `DistributionReasonTest` y `discard-render.test.mjs`, con los barridos de lectura e inmutabilidad ampliados.
+- Migraciones: no aplica (V24).
+- Verificación: H2 383 aprobadas de 385 contabilizadas y MySQL 8.4.13 387 de 389. Ambas omiten las 2 mediciones optativas. Actualizaciones desde 0.4.0 y 0.7.0 hasta V24 conformes. Frontend 220, typecheck y build conformes. Humo HTTP 22/22 y escritorio y móvil conformes. `Check-Scripts.ps1` en PowerShell 5.1 conforme (40 scripts, 73 órdenes en 60 procesos).
+- Evidencia de mutación: 29/29 detectadas, en copia separada con restauración por SHA-256. Matriz y tabla de fallos abajo. Logs y capturas en `D:\Ensayo-E12b`.
+- Condiciones de la sección 2: diff vacío para la recepción del Formulario, `Reports.java`, `scripts/` y `.mvn/` contra `v0.7.0`, y para V1–V24 y dependencias contra la base. Las dos sobrecargas de `conserveExternal` coinciden con `v0.7.0`. Original firmado y proyecciones idénticos tras el descarte. El fundamento queda fuera de estadísticas, CSV, XLSX, ZIP y logs técnicos.
+- Facilidad de uso: prueba del diálogo en 1366×900 y 390×844 con el JAR y Chrome aislado. En móvil se completó la caracterización y se confirmó una duplicada. Rótulos, obligatoriedad y visibilidad por facultad cubiertos por render.
+- Definiciones usadas: DI-13 y decisión de E12b para una COM sin SOL. Catálogos DI-01 a DI-04 como referencia para las pruebas.
+- Desvíos del plan: V25 se descartó en el GO. Las aserciones existentes se conservaron y se agregaron las de fundamento opcional. El navegador interactivo estaba indisponible y el humo visual se ejecutó en un perfil aislado.
+- Hallazgos para gates siguientes: puestos en estado descartado, los ingresos salen de las bandejas operativas correspondientes. El alcance de REPORTES se mantiene. Un corte anterior conserva la cifra y adscripción de su instante.
+- Pendientes: la revisión automática bloqueó borrar el perfil de Chrome y quitar la unión de la copia de ensayo. Ambos quedan en `D:\Ensayo-E12b`, con datos sintéticos y sin procesos propios. El MySQL desechable y el servidor de humo se detuvieron y sus datos se retiraron. MySQL80 y `D:\sigervalidacion` quedaron intactos.
+- Verificación manual sugerida al usuario: con Distribución, abrir un ingreso nuevo y elegir «Desestimar ingreso». Seleccionar «Duplicada» para ver la caracterización exigida y el fundamento obligatorio.
+
+Matriz sintética de E12b (`ComDiscardStatsTest`):
+
+| Consulta o caso | Cifras esperadas |
+|---|---|
+| Antes y corte previo | 4 ingresos y 0 excluidos. `NUEVA=3`, `ENVIADA=1`. Adscripción: Oficina Nacional 1, pendiente 3. |
+| A, nueva central presencial, pasa a inválida | Sale de ingresos y aporta 1 a excluidos. Al hito: Oficina Nacional y sede inicial `UPR-REQ`. |
+| B, nueva regional por correo, pasa a duplicada | Permanece en ingresos. Antes del hito: pendiente de asignación. Al hito: `REG-DEMO`. |
+| C, SOL devuelta tras redirección, pasa a duplicada | Permanece en ingresos. Estado histórico de la SOL: `DEVUELTA` antes del hito y `DESCARTADA` desde el hito. Primera sede `UPR-REQ`, adscripción Oficina Nacional. |
+| D, nueva por correo, control | Permanece en ingresos y pendiente de asignación. |
+| Después | 3 ingresos (`DUPLICADA=2`, `NUEVA=1`), 1 excluido (`INVALIDA=1`). |
+| Figura 1 vigente y corte posterior | Solicitud: consulta 2, promoción 1. Requirente: persona adulta 2, organismo 1. Vía: correo 2, teléfono 1. Adscripción: `REG-DEMO` 1, Oficina Nacional 1, pendiente 1. Cada desglose suma 3. |
+| Reports `VOLUMEN` | 4 COM administrativas antes y después, con los mismos desgloses operacionales. |
+
+Mutaciones de E12b:
+
+| Regla | Prueba que falló |
+|---|---|
+| 01 despacho de COM_DISCARD | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 02 facultad de distribución | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 03 revisión de la COM | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 04 SOL pendiente rechazada | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 05 REQ impide descartar | `ComDiscardHttpTest#inclusoConEstadoNuevoUnaComConReqSeRechaza` |
+| 06 desestimación definitiva | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 07 solo inválida o duplicada | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 08 fundamento obligatorio en COM_DISCARD | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 09 fundamento obligatorio en SOL_DISCARD | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 10 SOL devuelta queda descartada | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 11 hito en el mismo instante que la auditoría | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 12 fundamento en historia autorizada | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 13 completitud de una duplicada | `ComDiscardHttpTest#duplicadaExigeCompletitudYRevierteClasificacionParcial` |
+| 14 caracterización en el mismo acto | `ComDiscardHttpTest#duplicadaExigeCompletitudYRevierteClasificacionParcial` |
+| 15 facultad publicada en la ficha | `ComDiscardHttpTest#permisosEstadosFundamentoEIdempotencia` |
+| 16 estado histórico de la COM | `ComDiscardStatsTest#figuraUnoYEstadosAntesDespuesYEnCortes` |
+| 17 estado histórico de la SOL devuelta | `ComDiscardStatsTest#figuraUnoYEstadosAntesDespuesYEnCortes` |
+| 18 sede acreditada por el hito | `ComDiscardStatsTest#figuraUnoYEstadosAntesDespuesYEnCortes` |
+| 19 adscripción respeta el instante | `ComDiscardStatsTest#figuraUnoYEstadosAntesDespuesYEnCortes` |
+| 20 primer destino de la SOL devuelta | `ComDiscardStatsTest#figuraUnoYEstadosAntesDespuesYEnCortes` |
+| 21 inválidas fuera de ingresos | `ComDiscardStatsTest#figuraUnoYEstadosAntesDespuesYEnCortes` |
+| 22 duplicadas cuentan como ingresos | `ComDiscardStatsTest#figuraUnoYEstadosAntesDespuesYEnCortes` |
+| 23 estado correcto en cortes | `ComDiscardStatsTest#figuraUnoYEstadosAntesDespuesYEnCortes` |
+| 24 distribución sin fundamento | `DistributionReasonTest#cadaActoDeDistribucionAdmiteOmitirElFundamento` |
+| 25 sin campo en distribución | `discard-render.test.mjs` · distribución, asunción, redirección y redistribución abren sin campo de fundamento |
+| 26 observación opcional | `discard-render.test.mjs` · vincular y devolver ofrecen una observación opcional |
+| 27 botón condicionado por facultad | `discard-render.test.mjs` · desestimar respeta la facultad, pide fundamento y permite resolver la caracterización |
+| 28 fundamento requerido en el diálogo | `discard-render.test.mjs` · desestimar respeta la facultad, pide fundamento y permite resolver la caracterización |
+| 29 ocultar rótulo de clasificación vacía | `discard-render.test.mjs` · fichas e historia omiten observaciones vacías y muestran el fundamento de la desestimación |

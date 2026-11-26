@@ -329,6 +329,7 @@ class InstitutionalReaderTest {
   // Ficha de ingreso (E03): una complementacion valida, para que la unica causa de rechazo sea la funcion.
   attempts.put("COM_COMPLETE",new Attempt("communication",f.comNew(),Map.of("intake",Map.of("contact_restrictions","Intento"),"reason","Intento")));
   attempts.put("COM_ROUTE",new Attempt("communication",f.comNew(),Map.of("scope_id",upr,"reason","Intento")));
+  attempts.put("COM_DISCARD",new Attempt("communication",f.comNew(),Map.of("disposition","INVALIDA","reason","Intento")));
   attempts.put("COM_ASSUME",new Attempt("communication",f.comNew(),Map.of("responsible_id",prof,"reason","Intento")));
   attempts.put("STAT_CLASSIFY",new Attempt("stat_event",f.comNew(),Map.of("stat",Map.of("TIPO_SOLICITUD",Map.of("status","SIN_INFORMACION"),"reason","Intento"))));
   attempts.put("RIGHTS_CLASSIFY",new Attempt("stat_event_req",f.req(),Map.of("record","REQ","variables",Map.of("DERECHO",Map.of("status","SIN_INFORMACION")),"reason","Intento")));

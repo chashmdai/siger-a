@@ -70,6 +70,21 @@ public class TerritorialDims {
         return "CASE WHEN "+req+".id IS NOT NULL THEN "+firstReq+" ELSE "+firstSol+" END";
     }
 
+    private static String discardScope(String com,Long at){
+        return "(SELECT m.scope_id FROM milestone m WHERE m.communication_id="+com+".id AND m.event='COM_DESCARTADA'"
+            +(at==null?"":" AND m.at_ms<="+at)+" ORDER BY m.at_ms,m.id LIMIT 1)";
+    }
+
+    /** La primera adscripción histórica requiere evidencia hasta la fecha consultada. */
+    static String initialScopeSql(String com,String req,String sol,Mode mode,Long at){
+        if(mode==Mode.REQ)return scopeSql(com,req,sol,mode,null);
+        boolean historical=mode==Mode.HISTORICO;
+        String first=firstScope(com,req,sol);
+        String known=historical?scopeSql(com,req,sol,mode,at)+" IS NOT NULL":"1=1";
+        return "CASE WHEN "+sol+".id IS NULL AND "+req+".id IS NULL THEN "+discardScope(com,historical?at:null)
+            +" WHEN "+known+" THEN "+first+" END";
+    }
+
     static String scopeSql(String com,String req,String sol,Mode mode,Long at){
         if(mode==Mode.INGRESO)return firstScope(com,req,sol);
         if(mode==Mode.VIGENTE)return "COALESCE("+req+".principal_scope,"+sol+".destination_scope)";

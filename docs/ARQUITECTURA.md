@@ -25,6 +25,10 @@ sobre MySQL 8.4 con `MySqlSuite`).
   Casos y tareas, primera atencion (ficha 1.1 de la persona adulta con `AdultIdentity`). `Lifecycle` concentra las
   transiciones compartidas y escribe los hitos. `Rules`: reglas de cierre puras (cierre de Caso por nivel o jefatura,
   cierre de REQ, derivacion).
+- La desestimación directa de una COM (E12b) registra `COM_DESCARTADA` con el ámbito, el instante y el resultado.
+  Si había SOL devuelta, cambia a descartada en la misma transacción y conserva su primer destino. El fundamento
+  queda en la historia autorizada de la COM. El motor estadístico lee el hito para reconstruir estados y acreditar
+  la primera adscripción cuando no hubo SOL.
 - `Personnel`: cuentas, perfil de funciones (`PROFILE_SET`), subrogancias, sedes (`SCOPE_*`) y su cobertura territorial
   (`SCOPE_COVERAGE`, `CENTRAL_COVERAGE`), avisos de administracion; `Holidays`: calendario habil. Solo TI.
 - `Territory`: regla unica de "quien atiende hoy una region": sede ACTIVA por su region fisica o por cobertura abierta,

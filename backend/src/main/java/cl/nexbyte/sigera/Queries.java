@@ -125,10 +125,16 @@ public class Queries {
                     out.put("code_labels",StatValues.codeLabels(db,view));
                 }
                 else out.put("persons",db.rows("SELECT * FROM communication_person WHERE communication_id=? ORDER BY id",id));
-                out.put("can_route",access.canDistribute(a,c)&&s(c,"state").equals("NUEVA")&&db.count("SELECT COUNT(*) FROM solicitation WHERE communication_id=?",id)==0);
+                var sols=db.rows("SELECT * FROM solicitation WHERE communication_id=?",id);
+                var reqs=db.rows("SELECT * FROM requirement WHERE communication_id=?",id);
+                boolean distributes=access.canDistribute(a,c);
+                out.put("can_route",distributes&&s(c,"state").equals("NUEVA")&&sols.isEmpty());
+                boolean canDiscard=distributes&&IntakeCommands.discardable(c,sols.isEmpty()?null:sols.getFirst(),!reqs.isEmpty());
+                out.put("can_discard",canDiscard);
+                if(canDiscard)out.put("discard_blockers",completeness.blockers(StatCompleteness.Closing.DUPLICATE,id,null));
                 out.put("can_assume",a.head(scope)&&s(c,"state").equals("NUEVA"));out.put("attention_scopes",access.managementScopes(a,scope));
-                out.put("solicitations",db.rows("SELECT * FROM solicitation WHERE communication_id=?",id).stream().filter(s->solVisible(a,s)).toList());
-                out.put("requirements",db.rows("SELECT * FROM requirement WHERE communication_id=?",id).stream().filter(r->access.reqRead(a,r)).map(r->reqSummary(a,r)).toList());
+                out.put("solicitations",sols.stream().filter(s->solVisible(a,s)).toList());
+                out.put("requirements",reqs.stream().filter(r->access.reqRead(a,r)).map(r->reqSummary(a,r)).toList());
                 out.put("links",db.rows("SELECT l.id,l.requirement_id,l.state,l.returned_ms,r.folio FROM communication_link l JOIN requirement r ON r.id=l.requirement_id WHERE l.communication_id=?",id));
                 out.put("documents",documents(a,"COM",id));
                 // Solo en la ficha autorizada (comForRead): datos de identificacion y registrales del Formulario.

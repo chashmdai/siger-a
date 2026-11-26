@@ -14,6 +14,7 @@ import {FlowDetail} from './FlowDetail';
 import {DetailHeader} from './parts';
 
 const BODIES: Record<string, ComponentType<{r: Row; ctx: Context}>> = {COM: ComDetail, SOL: SolDetail, REQ: RequirementDetail, CAS: CaseDetail, FLUJO: FlowDetail};
+const HISTORY_LABELS = {...ACTION_LABELS, COM_INVALIDA: 'Ingreso desestimado como inválido', COM_DUPLICADA: 'Ingreso desestimado como duplicado'};
 
 /** Ficha autorizada: encabezado, cuerpo segun el tipo, cierres conservados e historia de decisiones. */
 export default function Detail({kind, row: r, ctx}: {kind: string; row: Row; ctx: Context}) {
@@ -37,8 +38,8 @@ export default function Detail({kind, row: r, ctx}: {kind: string; row: Row; ctx
     <Panel title="Historia de decisiones" icon="history" count={history.length} description="Quién decidió qué y cuándo. La historia no se edita.">
       {history.length === 0 ? <EmptyState compact icon="history" title="Sin decisiones visibles">La historia se muestra según tus permisos sobre este registro.</EmptyState>
         : <ol className="timeline">{history.map((e, i) => <li key={i}>
-          <div className="timeline-head"><strong>{humanize(e.action, ACTION_LABELS)}</strong><span className="timeline-meta">{text(e, 'actor')} · {when(e.at_ms)}</span></div>
-          {text(e, 'note') && <p className="timeline-body preserve">{text(e, 'note')}</p>}
+          <div className="timeline-head"><strong>{humanize(e.action, HISTORY_LABELS)}</strong><span className="timeline-meta">{text(e, 'actor')} · {when(e.at_ms)}</span></div>
+          {text(e, 'note').trim() && <p className="timeline-body preserve">{text(e, 'note')}</p>}
         </li>)}</ol>}
     </Panel>
   </article>;

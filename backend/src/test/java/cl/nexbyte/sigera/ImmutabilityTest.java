@@ -110,6 +110,7 @@ class ImmutabilityTest {
         attempts.put("COM_COMPLETE",new Attempt(HEAD,"communication",com,Map.of("intake",Map.of("contact_restrictions","Intento"),"reason","Intento")));
         attempts.put("COM_COMPLETE@ATENCION",new Attempt(ADMIN,"communication",attCom,Map.of("intake",Map.of("contact_restrictions","Intento"),"reason","Intento")));
         attempts.put("COM_ROUTE",new Attempt(DIST,"communication",com,Map.of("scope_id",upr,"reason","Intento")));
+        attempts.put("COM_DISCARD",new Attempt(DIST,"communication",com,Map.of("disposition","INVALIDA","reason","Intento")));
         attempts.put("COM_ASSUME",new Attempt(HEAD,"communication",com,Map.of("responsible_id",user(PROF),"reason","Intento")));
         var solData=Map.<String,Object>of("scope_id",upr,"responsible_id",user(PROF),"disposition","DUPLICADA","reason","Intento");
         attempts.put("SOL_ROUTE",new Attempt(DIST,"solicitation",sol,solData));

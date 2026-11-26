@@ -16,6 +16,7 @@ export const DOCUMENT_TYPES = ['OFICIO', 'INFORME', 'CORREO', 'CONSTANCIA', 'OTR
 export const REMINDERS = [{value: '0', label: 'Avisar una sola vez'}, {value: '24', label: 'Cada 24 horas'}, {value: '48', label: 'Cada 48 horas'}, {value: '168', label: 'Cada 7 días'}];
 
 export const reason: Field = {key: 'reason', label: 'Fundamento o resultado de la decisión', type: 'textarea', required: true, max: 12000};
+export const optionalObservation: Field = {...reason, label: 'Observación (opcional)', required: false};
 export const matter: Field = {key: 'matter', label: 'Materia del Caso (no es complejidad)', type: 'select', options: labeled(['UPR', 'UPD', 'UEP', 'OTRA'], MATTER_LABELS), required: true};
 export const reqMatter: Field = {key: 'matter', label: 'Materia del Requerimiento', type: 'select', options: labeled(REGIONAL_MATTERS, MATTER_LABELS), required: true};
 export const objective: Field = {key: 'objective', label: 'Objetivo de esta línea de gestión', type: 'textarea', required: true, max: 3000};

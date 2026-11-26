@@ -314,8 +314,13 @@ Variables pertinentes por cierre (solo si su catalogo tiene version VIGENTE; sin
 - La desestimación registra un hito propio y queda auditada. Es definitiva, sin reapertura.
 - La ficha de la COM ofrece el botón «Desestimar ingreso».
 - Según D25, la `INVALIDA` queda excluida de los ingresos computables y la `DUPLICADA` cuenta.
-- En el GO de E12b se define la adscripción (DI-13) y la sede inicial de una COM desestimada sin SOL. La propuesta es
-  usar el ámbito de quien la desestima, acreditado por el hito. La alternativa es «Pendiente de asignación».
+- El hito `COM_DESCARTADA` acredita el ámbito de la desestimación. Si la COM carece de SOL, la sede inicial es ese
+  ámbito y la adscripción (DI-13) es la sede regional u Oficina Nacional. Una consulta anterior al hito muestra
+  «Pendiente de asignación». Si había SOL devuelta, se conserva su primer destino y la misma SOL pasa a descartada
+  en el acto, con su historial.
+- El fundamento se guarda en la historia autorizada de la COM. Para distribuir, asumir o redirigir se puede omitir.
+  Vincular al REQ y devolver a Distribución admiten una observación opcional. El descarte por jefatura y la
+  desestimación directa exigen fundamento.
 
 ### 4.6 Territorio multidimensional (D32)
 

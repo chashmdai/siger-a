@@ -42,6 +42,7 @@ public class IntakeCommands {
             case "COM_IMMEDIATE" -> createCom(a,in,true);
             case "COM_COMPLETE" -> records.complete(a,id,expected,in);
             case "COM_ROUTE" -> routeCom(a,id,expected,in);
+            case "COM_DISCARD" -> discardCom(a,id,expected,in);
             case "COM_ASSUME" -> assumeOwn(a,id,expected,in);
             case "SOL_ROUTE","SOL_RETURN","SOL_ASSUME","SOL_DISCARD" -> sol(a,type,id,expected,in);
             case "COM_LINK" -> link(a,id,expected,in);
@@ -163,10 +164,11 @@ public class IntakeCommands {
         stats.inline(a,comId,in.values().get("stat"));
         long user=in.id("responsible_id");
         long attention=access.solAttentionScope(a,user,scope,in.optionalId("area_scope_id"));
-        long sol=db.insert("INSERT INTO solicitation(communication_id,destination_scope,state,classification,created_by,created_ms) VALUES(?,?,'ASUMIDA',?,?,?)",comId,scope,in.reason(),a.id(),now());
+        String reason=in.optionalReason();
+        long sol=db.insert("INSERT INTO solicitation(communication_id,destination_scope,state,classification,created_by,created_ms) VALUES(?,?,'ASUMIDA',?,?,?)",comId,scope,reason,a.id(),now());
         long req=life.newReq(a,comId,sol,scope,user,attention);
         db.update("UPDATE communication SET state='ENVIADA',revision=revision+1 WHERE id=?",comId);
-        life.changed(a,"ASUNCION_INGRESO_PROPIO","SOL",sol,scope,in.reason());
+        life.changed(a,"ASUNCION_INGRESO_PROPIO","SOL",sol,scope,reason);
         life.solAssumed(a,sol,req,true);
         access.notice(user,"Se asigno un REQ por asuncion directa de jefatura.","REQ",req);
         return done("REQ",req);
@@ -182,13 +184,50 @@ public class IntakeCommands {
         long scope=destination.scope();
         if(access.regional(n(com,"origin_scope")))require(scope==n(com,"origin_scope"),"La distribucion regional se limita a su sede; usa redireccion de SOL posteriormente.");
         String matter=suggestedMatter(in,scope);
+        String reason=in.optionalReason();
         stats.inline(a,id,in.values().get("stat"));
-        long sol=db.insert("INSERT INTO solicitation(communication_id,destination_scope,requested_area_scope,classification,created_by,created_ms,suggested_matter) VALUES(?,?,?,?,?,?,?)",id,scope,destination.area(),in.reason(),a.id(),now(),matter);
+        long sol=db.insert("INSERT INTO solicitation(communication_id,destination_scope,requested_area_scope,classification,created_by,created_ms,suggested_matter) VALUES(?,?,?,?,?,?,?)",id,scope,destination.area(),reason,a.id(),now(),matter);
         db.update("UPDATE communication SET state='ENVIADA',revision=revision+1 WHERE id=?",id);
-        long at=life.changed(a,"SOL_DISTRIBUIDA","SOL",sol,scope,matterNote(matter)+in.reason());
+        long at=life.changed(a,"SOL_DISTRIBUIDA","SOL",sol,scope,(matterNote(matter)+reason).stripTrailing());
         life.solMilestone("SOL_DISTRIBUIDA",sol,a.id(),scope,at,null);
         access.notifySolReceivers(scope,"Tienes una SOL pendiente de asumir.",sol);
         return done("SOL",sol);
+    }
+
+    static boolean discardable(Map<String,Object> com,Map<String,Object> sol,boolean hasReq){
+        return !hasReq&&(sol==null?s(com,"state").equals("NUEVA")
+            :s(com,"state").equals("ENVIADA")&&s(sol,"state").equals("DEVUELTA"));
+    }
+
+    private Result discardCom(Actor a,long id,Long expected,Input in){
+        var com=access.comForRead(a,id);
+        if(!access.canDistribute(a,com))Problem.denied();
+        revision(com,expected);
+        var sols=db.rows("SELECT id,state FROM solicitation WHERE communication_id=?",id);
+        var sol=sols.isEmpty()?null:sols.getFirst();
+        require(discardable(com,sol,db.count("SELECT COUNT(*) FROM requirement WHERE communication_id=?",id)>0),
+            "Solo se puede desestimar un ingreso nuevo o devuelto a Distribución, sin requerimiento.");
+        String disposition=in.choice("disposition","INVALIDA","DUPLICADA");
+        String reason=in.reason();
+        classifyForDiscard(a,id,in,disposition);
+        if(sol!=null)markSolDiscarded(n(sol,"id"));
+        markComDiscarded(id,disposition);
+        life.comDiscarded(a,id,n(com,"origin_scope"),disposition,reason);
+        return new Result("COM",id,"Ingreso desestimado.");
+    }
+
+    /** La clasificación se registra antes del descarte y se congela con él (D35). */
+    private void classifyForDiscard(Actor a,long com,Input in,String disposition){
+        stats.inline(a,com,in.values().get("stat"));
+        if(disposition.equals("DUPLICADA"))completeness.require(StatCompleteness.Closing.DUPLICATE,com,null);
+    }
+
+    private void markSolDiscarded(long sol){
+        db.update("UPDATE solicitation SET state='DESCARTADA',revision=revision+1 WHERE id=?",sol);
+    }
+
+    private void markComDiscarded(long com,String disposition){
+        db.update("UPDATE communication SET state=?,revision=revision+1 WHERE id=?",disposition,com);
     }
 
     /**
@@ -216,7 +255,7 @@ public class IntakeCommands {
             if(!access.solReceiver(a,oldScope))Problem.denied();
             require(s(r,"state").equals("PENDIENTE"),"La SOL no esta pendiente.");
         }
-        String reason=in.reason();
+        String reason=type.equals("SOL_DISCARD")?in.reason():in.optionalReason();
         switch(type){
             case "SOL_ROUTE" -> {
                 var destination=access.solDestination(in);
@@ -226,7 +265,7 @@ public class IntakeCommands {
                 String matter=suggestedMatter(in,target);
                 require(returned||target!=oldScope||!Objects.equals(destination.area(),nullableId(r,"requested_area_scope"))||!Objects.equals(matter,r.get("suggested_matter")),"El destino, el area y la materia sugerida no cambiaron.");
                 db.update("UPDATE solicitation SET destination_scope=?,requested_area_scope=?,suggested_matter=?,classification=?,state='PENDIENTE',revision=revision+1 WHERE id=?",target,destination.area(),matter,reason,id);
-                long at=life.changed(a,"SOL_REDIRIGIDA","SOL",id,target,"Destino anterior "+oldScope+". "+matterNote(matter)+reason);
+                long at=life.changed(a,"SOL_REDIRIGIDA","SOL",id,target,("Destino anterior "+oldScope+". "+matterNote(matter)+reason).stripTrailing());
                 life.solMilestone("SOL_REDIRIGIDA",id,a.id(),target,at,null);
                 access.notifySolReceivers(target,"Una SOL fue remitida a tu ambito.",id);
                 return done("SOL",id);
@@ -240,11 +279,9 @@ public class IntakeCommands {
             }
             case "SOL_DISCARD" -> {
                 String disposition=in.choice("disposition","INVALIDA","DUPLICADA");
-                // La clasificacion se registra antes del descarte: despues queda como se registro (D35).
-                stats.inline(a,comId,in.values().get("stat"));
-                if(disposition.equals("DUPLICADA"))completeness.require(StatCompleteness.Closing.DUPLICATE,comId,null);
-                db.update("UPDATE solicitation SET state='DESCARTADA',revision=revision+1 WHERE id=?",id);
-                db.update("UPDATE communication SET state=?,revision=revision+1 WHERE id=?",disposition,comId);
+                classifyForDiscard(a,comId,in,disposition);
+                markSolDiscarded(id);
+                markComDiscarded(comId,disposition);
                 long at=life.changed(a,"SOL_"+disposition,"SOL",id,oldScope,reason);
                 life.solMilestone("SOL_DESCARTADA",id,a.id(),oldScope,at,disposition);
                 return done("SOL",id);
@@ -277,9 +314,10 @@ public class IntakeCommands {
         var r=matches.getFirst();
         long req=n(r,"id");
         require(n(r,"communication_id")!=com,"No se vincula el origen a si mismo.");
-        db.insert("INSERT INTO communication_link(communication_id,requirement_id,reason,proposed_by,proposed_ms) VALUES(?,?,?,?,?)",com,req,in.reason(),a.id(),now());
+        String reason=in.optionalReason();
+        db.insert("INSERT INTO communication_link(communication_id,requirement_id,reason,proposed_by,proposed_ms) VALUES(?,?,?,?,?)",com,req,reason,a.id(),now());
         db.update("UPDATE communication SET state='VINCULADA',revision=revision+1 WHERE id=?",com);
-        life.changed(a,"COM_HIJA_PROPUESTA","COM",com,n(c,"origin_scope"),"REQ "+req+". "+in.reason());
+        life.changed(a,"COM_HIJA_PROPUESTA","COM",com,n(c,"origin_scope"),("REQ "+req+". "+reason).stripTrailing());
         access.notifyHeads(n(r,"principal_scope"),"Una COM fue propuesta como antecedente de tu REQ.","REQ",req);
         return done("COM",com);
     }

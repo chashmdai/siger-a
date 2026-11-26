@@ -1,12 +1,24 @@
 import type {Row} from '../../lib/rows';
 import {list, localTime, number, text} from '../../lib/rows';
 import type {Field} from '../../components/ActionDialog';
-import {destinationField, fixedSelect, objective, reason, REMINDERS} from '../../lib/fields';
+import {decision, destinationField, fixedSelect, objective, reason, REMINDERS} from '../../lib/fields';
 import type {Operation} from '../../lib/destination';
 import {people} from '../../lib/catalog';
 import type {Context} from '../../app/context';
 import {FLOW_LABELS} from '../../lib/labels';
 import {actionTypeField, institutionsField, rightsHint} from './ActionFields';
+import {statField} from './Characterization';
+import {completeness, type StatVar} from './characterizationModel.ts';
+
+export function discardFields(catalog: Row, vars: StatVar[]): Field[] {
+  const required = completeness(catalog).duplicate;
+  return [
+    decision([['INVALIDA', 'Inválida'], ['DUPLICADA', 'Duplicada']], 'disposition'),
+    ...(vars.length ? [statField(catalog, vars, {required: data => data.disposition === 'DUPLICADA' ? required : [],
+      lead: 'Una duplicada cuenta en las estadísticas. Completa la caracterización pendiente antes de confirmar.'})] : []),
+    {...reason, label: 'Fundamento'},
+  ];
+}
 
 /**
  * Actuacion de REQ (sin seguimiento) o de Caso (con reserva opcional). Desde 0.8.0 (D36, E09): tipo de actuacion del

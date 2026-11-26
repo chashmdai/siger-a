@@ -100,6 +100,10 @@ en el instante), `SIN_INFORMACION`, `NO_DECLARADO`, `NO_APLICA` y `SIN_DESGLOSE`
   requerimiento computable cuenta una vez y el desglose suma el total. La homologación de la Oficina Nacional con
   "Metropolitana" rige solo al comparar con series históricas (E11); ningún rótulo de esta dimensión dice "Metropolitana". La
   región del NNA afectado (`REGION_NNA`) es otra dimensión, múltiple y no aditiva.
+- E12b: para una COM desestimada sin SOL, el hito `COM_DESCARTADA` acredita el ámbito en `SEDE_INICIAL` y la sede
+  regional u Oficina Nacional en `ADSCRIPCION_INICIAL`. A una fecha anterior al hito figura «Pendiente de asignación».
+  Una COM con SOL devuelta conserva su primer destino. El ámbito de referencia para el alcance de REPORTES
+  sigue la regla de la sección 1.
 - Derechos y caracterización: `DERECHO_EJE`*, `DERECHO`*, `DERECHO_SUBCATEGORIA`* (una subcategoría implica su derecho y su eje),
   `CONTEXTO`*, `CARACTERIZACION`*, `ROL_ESTADO`*, `GRUPO_PRIORITARIO`*.
 - Actuaciones: `TIPO_ACTUACION`*, `ORIGEN_ACTUACION`* y `TIPO_INSTITUCION`* ("Tipo de institución de las actuaciones", solo de
@@ -149,6 +153,9 @@ Valores de la lista o del catálogo de la dimensión (cualquier versión activad
   si no hay después un cambio auditado (`REQ_COMPLEJIDAD`, `REQ_MATTER`, por código y nunca por texto; redirección de la SOL
   por hito) o una versión posterior de la ficha; si no, `PENDIENTE` con el aviso `HISTORIA_INCOMPLETA` y su cantidad.
 - La región física de una sede es siempre la actual. El estado D25 de `AL_INGRESO` y `AL_REQ` es el vigente.
+- En `FECHA`, `COM_DESCARTADA` cambia `ESTADO_COM` a inválida o duplicada desde su instante. Si había SOL devuelta,
+  `ESTADO_SOL` pasa a descartada desde el mismo instante. El fundamento de la desestimación se lee en la ficha
+  de la COM con sus permisos habituales y queda fuera de las consultas estadísticas y las exportaciones.
 
 ## 8. Respuesta
 

@@ -123,6 +123,11 @@ public class Lifecycle {
     void solMilestone(String event,long sol,long actor,long scope,long at,String detail){
         milestone(event,"SOL",sol,n(db.one("SELECT communication_id FROM solicitation WHERE id=?",sol),"communication_id"),null,null,actor,null,scope,at,detail);
     }
+
+    void comDiscarded(Actor a,long com,long scope,String disposition,String reason){
+        long at=changed(a,"COM_"+disposition,"COM",com,scope,reason);
+        milestone("COM_DESCARTADA","COM",com,com,null,null,a.id(),null,scope,at,disposition);
+    }
     /** SOL asumida: el REQ nace en el mismo acto, con su instante, su principal y su encargado. */
     void solAssumed(Actor a,long sol,long req,boolean direct){
         var r=db.one("SELECT communication_id,created_ms,principal_scope,attention_user FROM requirement WHERE id=?",req);

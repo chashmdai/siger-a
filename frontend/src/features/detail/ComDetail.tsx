@@ -3,7 +3,7 @@ import {bool, list, number, obj, text, when} from '../../lib/rows';
 import {SOURCE_LABELS} from '../../lib/formulario';
 import {ExternalCom} from './ExternalCom';
 import {solicitationPeople} from '../../lib/catalog';
-import {choose, destinationField, reason} from '../../lib/fields';
+import {choose, destinationField, optionalObservation} from '../../lib/fields';
 import {CHANNEL_LABELS, humanize, PERSON_ROLE_LABELS} from '../../lib/labels';
 import type {Context} from '../../app/context';
 import {Kind, Status} from '../../components/Status';
@@ -15,6 +15,8 @@ import {ActionBar, DetailGrid} from './parts';
 import {IntakeRecordPanel} from '../intake/IntakeRecordPanel';
 import {Characterization, characterizationOf, statField} from './Characterization';
 import {fichaVars} from './characterizationModel.ts';
+import {discardFields} from './actions';
+import {blockersOf} from './ClosureStatus';
 
 /** Comunicacion: lo recibido, tal como se registro. Distribucion, antecedente o asuncion propia. */
 export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
@@ -22,11 +24,19 @@ export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
   const characterization = characterizationOf(r), statVars = fichaVars(characterization);
   // Con la facultad del propio comando (StatValues.inline); solo si la clasificacion no esta cerrada.
   const stat = !text(characterization, 'blocked') && statVars.length ? [statField(ctx.catalog, statVars)] : [];
-  const route = () => choose(ctx, 'Clasificar y enviar SOL', 'COM_ROUTE', r, [destinationField(ctx.catalog, 'SOL', text(r, 'suggested_region')), ...stat, reason]);
-  const link = () => choose(ctx, 'Vincular al REQ existente', 'COM_LINK', r, [{key: 'folio', label: 'Folio exacto del REQ', required: true, max: 48}, reason], 'La COM conserva su folio. El vínculo no crea otro REQ ni reabre Casos.');
-  const assume = () => choose(ctx, 'Asumir ingreso propio', 'COM_ASSUME', r, [{key: 'responsible_id', label: 'Profesional encargado de la unidad', type: 'select', required: true, options: solicitationPeople(ctx.catalog, number(r, 'origin_scope'))}, ...stat, reason], 'La jefatura asume directamente un ingreso de su competencia, sin enviarlo artificialmente a central.');
+  const route = () => choose(ctx, 'Clasificar y enviar SOL', 'COM_ROUTE', r, [destinationField(ctx.catalog, 'SOL', text(r, 'suggested_region')), ...stat]);
+  const link = () => choose(ctx, 'Vincular al REQ existente', 'COM_LINK', r, [{key: 'folio', label: 'Folio exacto del REQ', required: true, max: 48}, optionalObservation], 'La COM conserva su folio. El vínculo no crea otro REQ ni reabre Casos.');
+  const assume = () => choose(ctx, 'Asumir ingreso propio', 'COM_ASSUME', r, [{key: 'responsible_id', label: 'Profesional encargado de la unidad', type: 'select', required: true, options: solicitationPeople(ctx.catalog, number(r, 'origin_scope'))}, ...stat], 'La jefatura asume directamente un ingreso de su competencia, sin enviarlo artificialmente a central.');
+  const pending = blockersOf(r, 'discard_blockers');
+  const discard = () => choose(ctx, 'Desestimar ingreso', 'COM_DISCARD', r, [
+    ...discardFields(ctx.catalog, statVars),
+    ...(pending.length ? [{key: 'discard_info', label: 'Pendiente', type: 'custom' as const,
+      render: (_value: unknown, _set: (value: unknown) => void, _disabled: boolean, data: Row) => data.disposition === 'DUPLICADA'
+        ? <Callout tone="warn" title="Caracterización pendiente al abrir el diálogo">{pending.join(' ')}</Callout> : null}] : []),
+  ], 'La decisión es definitiva y el ingreso original se conserva.');
   const restrictions = text(r, 'contact_restrictions');
   const continuity = list(r, 'solicitations').length + list(r, 'requirements').length + list(r, 'links').length;
+  const discarded = ['INVALIDA', 'DUPLICADA'].includes(text(r, 'state'));
   // COM del Formulario Publico: proyeccion autorizada que entrega el servidor (sin el documento original).
   const external = obj(r, 'external'), isExternal = Object.keys(external).length > 0;
   // COM manual con ficha de ingreso (0.8.0, D33): sus datos se leen de la ficha, con versiones y complementacion.
@@ -41,6 +51,7 @@ export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
           {bool(r, 'can_link') && <button onClick={link}><Icon name="link" size={18}/>Proponer antecedente</button>}
         </>}
         {bool(r, 'can_assume') && <button onClick={assume}><Icon name="check" size={18}/>Asumir como jefatura</button>}
+        {bool(r, 'can_discard') && <button onClick={discard}>Desestimar ingreso</button>}
       </ActionBar>
       <Panel title="Relato original" icon="message" description="Tal como se registró al recibirlo.">
         <p className="preserve reading">{text(r, 'body') || (isExternal ? 'El tipo de presentación no incluye un relato.' : 'Sin relato registrado.')}</p>
@@ -57,7 +68,7 @@ export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
         ]}/>
       </Panel>}
       <Panel title="Continuidad" icon="flow" description="Solicitudes, requerimientos y vínculos que nacieron de esta comunicación.">
-        {continuity === 0 ? <EmptyState compact icon="send" title="Aún sin destino">{bool(r, 'can_route') ? 'Distribúyela a la jefatura competente o propón vincularla a un REQ existente.' : 'Distribución todavía no la ha clasificado.'}</EmptyState> : <ul className="link-list">
+        {continuity === 0 ? <EmptyState compact icon="send" title={discarded ? 'Ingreso desestimado' : 'Aún sin destino'}>{discarded ? 'La decisión está registrada en la historia.' : bool(r, 'can_route') ? 'Distribúyela a la jefatura competente o propón vincularla a un REQ existente.' : 'Distribución todavía no la ha clasificado.'}</EmptyState> : <ul className="link-list">
           {list(r, 'solicitations').map(s => <li key={'s' + number(s, 'id')}><button className="link-row" onClick={() => ctx.go('SOL', number(s, 'id'))}><Kind kind="SOL"/><span>Solicitud {number(s, 'id')}</span><Icon name="right" size={18}/></button></li>)}
           {list(r, 'requirements').map(q => <li key={'q' + number(q, 'id')}><button className="link-row" onClick={() => ctx.go('REQ', number(q, 'id'))}><Kind kind="REQ"/><span className="folio">{text(q, 'folio')}</span><Icon name="right" size={18}/></button></li>)}
           {list(r, 'links').map(l => <li key={'l' + number(l, 'id')} className="link-row static"><Icon name="link" size={18}/><span>Vínculo a <span className="folio">{text(l, 'folio')}</span>{l.returned_ms ? ' · Devuelta a clasificación' : ''}</span><Status value={l.state}/></li>)}

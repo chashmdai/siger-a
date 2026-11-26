@@ -301,12 +301,12 @@ final class StatSource {
         private String comState(){
             if(q.mode()!=Mode.FECHA)return "c.state";
             String t=String.valueOf(q.at());
-            return "CASE WHEN EXISTS(SELECT 1 FROM milestone m WHERE m.communication_id=c.id AND m.event='SOL_DESCARTADA' AND m.at_ms<="+t+")"
-                +" THEN (SELECT m.detail FROM milestone m WHERE m.communication_id=c.id AND m.event='SOL_DESCARTADA' AND m.at_ms<="+t+" ORDER BY m.at_ms DESC,m.id DESC LIMIT 1)"
-                +" WHEN c.state IN ('INVALIDA','DUPLICADA') AND NOT EXISTS(SELECT 1 FROM milestone m WHERE m.communication_id=c.id AND m.event='SOL_DESCARTADA') THEN c.state"
+            String discard=" FROM milestone m WHERE m.communication_id=c.id AND m.event IN ('SOL_DESCARTADA','COM_DESCARTADA')";
+            return "COALESCE((SELECT m.detail"+discard+" AND m.at_ms<="+t+" ORDER BY m.at_ms DESC,m.id DESC LIMIT 1),"
+                +"CASE WHEN c.state IN ('INVALIDA','DUPLICADA') AND NOT EXISTS(SELECT 1"+discard+") THEN c.state"
                 +" WHEN EXISTS(SELECT 1 FROM communication_link k WHERE k.communication_id=c.id AND k.proposed_ms<="+t+" AND (k.returned_ms IS NULL OR k.returned_ms>"+t+")) THEN 'VINCULADA'"
                 +" WHEN q.id IS NOT NULL AND q.solicitation_id IS NULL THEN 'ATENDIDA'"
-                +" WHEN q.id IS NOT NULL OR EXISTS(SELECT 1 FROM milestone m WHERE m.communication_id=c.id AND m.event='SOL_DISTRIBUIDA' AND m.at_ms<="+t+") THEN 'ENVIADA' ELSE 'NUEVA' END";
+                +" WHEN q.id IS NOT NULL OR EXISTS(SELECT 1 FROM milestone m WHERE m.communication_id=c.id AND m.event='SOL_DISTRIBUIDA' AND m.at_ms<="+t+") THEN 'ENVIADA' ELSE 'NUEVA' END)";
         }
 
         /** Columna d_* de una dimension de valor unico. */
@@ -419,12 +419,14 @@ final class StatSource {
             return "CASE WHEN "+condition+" THEN 1 ELSE 0 END";
         }
         private String solState(){
-            String last="(SELECT CASE m.event WHEN 'SOL_DEVUELTA' THEN 'DEVUELTA' WHEN 'SOL_DESCARTADA' THEN 'DESCARTADA' WHEN 'SOL_ASUMIDA' THEN 'ASUMIDA' ELSE 'PENDIENTE' END FROM milestone m"
-                +" WHERE m.communication_id=c.id AND m.resource_type='SOL'%s ORDER BY m.at_ms %s,m.id %s LIMIT 1)";
+            String last="(SELECT CASE m.event WHEN 'SOL_DEVUELTA' THEN 'DEVUELTA' WHEN 'SOL_DESCARTADA' THEN 'DESCARTADA'"
+                +" WHEN 'COM_DESCARTADA' THEN 'DESCARTADA' WHEN 'SOL_ASUMIDA' THEN 'ASUMIDA' ELSE 'PENDIENTE' END FROM milestone m"
+                +" WHERE m.communication_id=c.id AND %s ORDER BY m.at_ms %s,m.id %s LIMIT 1)";
             return switch(q.mode()){
                 case VIGENTE -> "COALESCE(sol.state,'NO_APLICA')";
-                case FECHA -> "CASE WHEN sol.id IS NULL THEN 'NO_APLICA' ELSE COALESCE("+last.formatted(" AND m.at_ms<="+at,"DESC","DESC")+",'SIN_INFORMACION') END";
-                case AL_INGRESO -> "CASE WHEN sol.id IS NULL THEN 'NO_APLICA' ELSE COALESCE("+last.formatted("","ASC","ASC")+",'SIN_INFORMACION') END";
+                case FECHA -> "CASE WHEN sol.id IS NULL THEN 'NO_APLICA' ELSE COALESCE("
+                    +last.formatted("(m.resource_type='SOL' OR m.event='COM_DESCARTADA') AND m.at_ms<="+at,"DESC","DESC")+",'SIN_INFORMACION') END";
+                case AL_INGRESO -> "CASE WHEN sol.id IS NULL THEN 'NO_APLICA' ELSE COALESCE("+last.formatted("m.resource_type='SOL'","ASC","ASC")+",'SIN_INFORMACION') END";
                 case AL_REQ -> "CASE WHEN q.id IS NULL OR q.solicitation_id IS NULL THEN 'NO_APLICA' ELSE 'ASUMIDA' END";
             };
         }
@@ -501,8 +503,7 @@ final class StatSource {
         private void current(){raw("sc",TerritorialDims.scopeSql("c","q","sol",q.mode().dims,q.at()));}
         /** Primer ambito de destino acreditado en el instante (SEDE_INICIAL y ADSCRIPCION_INICIAL). */
         private void first(){
-            String first=TerritorialDims.scopeSql("c","q","sol",q.mode()==Mode.AL_REQ?TerritorialDims.Mode.REQ:TerritorialDims.Mode.INGRESO,null);
-            raw("sc_first",q.mode()==Mode.FECHA?"CASE WHEN "+TerritorialDims.scopeSql("c","q","sol",TerritorialDims.Mode.HISTORICO,q.at())+" IS NULL THEN NULL ELSE "+first+" END":first);
+            raw("sc_first",TerritorialDims.initialScopeSql("c","q","sol",q.mode().dims,q.at()));
         }
         private String scopeColumn(String column,String field,String missing){return "COALESCE((SELECT x."+field+" FROM org_scope x WHERE x.id=b0."+column+"),"+missing+")";}
         /** Posicion del intervalo (o dia civil) de una fecha que ya esta dentro del periodo. */
