@@ -195,6 +195,14 @@ cache de cinco minutos (`statQuery.ts`). Los graficos son SVG propios (`componen
 sugerencia segun la forma de los datos, circular solo cuando corresponde, escala desde 0, paleta `--chart-*` con contraste
 probado y descarga en PNG y SVG con titulo, notas y pie de fuente.
 
+E13 agrega al explorador las secciones Cortes y series (asistente de corte en cuatro pasos con su aviso, "Congelar estas
+cifras" desde cualquier vista, consulta, comparacion celda a celda, verificacion y anulacion de cortes; asistente de series
+con vista previa sin escrituras y la serie junto a SIGER sin combinarlas) y Calidad (COMPLETITUD por variable, ambito y mes,
+con enlace a la bandeja con el filtro `stat_pending` de `BoardQueries`, la misma regla de PENDIENTE del motor), las
+descargas CSV, XLSX y ZIP desde cualquier vista y los ajustes de presentacion de E12 (columnas para el eje de periodo,
+primera columna fija, variacion compacta y una sola hora por seccion). La logica esta en `cutsModel.ts`, `seriesModel.ts` y
+`qualityModel.ts`; el servidor solo agrega el filtro de las bandejas.
+
 Presentacion: sistema visual propio sin dependencias nuevas (tokens CSS, iconos propios, Cabin OFL y escudo
 institucional servidos desde el JAR), con barra lateral por tipo de trabajo, paleta Ctrl+K, fichas con cadena
 COM->SOL->REQ->Caso y version movil. Decisiones en `docs/DISENO_0_4_0.md`.

@@ -28,7 +28,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E11 | Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor) | CERRADO |
 | E12 | Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz) | CERRADO |
 | E12b | Desestimación directa de una COM (servidor e interfaz) | CERRADO |
-| E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | ABIERTO |
+| E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | CERRADO |
 | E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | ABIERTO |
 | E15 | Validacion de uso con la Direccion de UEP | POSTERGADO |
 | E16 | Auditoria independiente | EXTERNO |
@@ -79,6 +79,8 @@ plan). Los pendientes operacionales postergados no tienen gate en 0.8.0 (seccion
 | Protocolo de corte por cuota | E12b | 2026-11-26: se adopta el protocolo de la sección 5, que formaliza lo hecho en E11 y E12; las condiciones para gates futuros quedan en el plan. |
 | Desestimación directa de una COM | E12b | 2026-11-26: quien puede distribuir una COM podrá desestimarla como inválida o duplicada sin derivarla antes a una SOL. Gate intercalado en 0.8.0, como E08b. |
 | Justificación solo al desestimar | E12b | 2026-11-26: justificar la distribución no forma parte de las funciones contractuales. Distribuir, asumir, redirigir y redistribuir admiten omitir el fundamento. Vincular y devolver admiten observación opcional. Desestimar la COM y descartar la SOL mantienen fundamento obligatorio. |
+| GO de E13 | E13 | 2026-11-26: A (filtro de datos estadísticos pendientes en COM, SOL y REQ con las reglas de lectura de cada bandeja; igualdades con COMPLETITUD por variable y, en REQ, con la «caracterización completa» del Panorama; nota en el contrato), B (se autorizan `components/charts/*`, el rótulo en `WorkspaceList.tsx`, `downloadGet` en `lib/api.ts`, `can_manage_stats` en `lib/access.ts` y la documentación del gate), C (asistente de corte de 4 pasos con el aviso textual, «Ver estas cifras sobre el corte», solo con `can_manage_stats`, explica que congela todo el periodo y el alcance), D (serie y SIGER en dos líneas, discontinuidad con texto, notas de ámbito y superposición, suma solo con casilla y si el servidor la admite, correspondencia confirmada una a una y nunca marcada), E (ZIP deshabilitado para medidas que no son de requerimientos; los demás rechazos con el mensaje del servidor), F (celdas cambiadas con texto y resumen) y condiciones 1 a 8. |
+| Precisión del GO de E13: región del requirente | E13 | 2026-11-26: la región queda fuera del filtro (en el modo vigente su falta es SIN_INFORMACION, estado final de E07 que el cierre no exige, no PENDIENTE). El filtro usa solo las clasificaciones con catálogo VIGENTE (COM y SOL: tipo de solicitud, de requirente y vía; REQ: además derecho y contexto consolidados); sin catálogos vigentes no muestra nada; igualdades por variable contra PENDIENTE de COMPLETITUD y, en REQ, contra INGRESOS con REQ menos la «caracterización completa» del Panorama de E12, sin cambiarlo. Se eliminan la mutación «filtro sin la región» y la frase «sin catálogo vigente, solo cuenta la región». En Calidad, la región con su porcentaje «Sin información» y sin enlace. Todo lo demás del GO sigue igual. |
 
 ## Definiciones pendientes
 
@@ -1456,3 +1458,100 @@ Mutaciones de E12b:
 | 27 botón condicionado por facultad | `discard-render.test.mjs` · desestimar respeta la facultad, pide fundamento y permite resolver la caracterización |
 | 28 fundamento requerido en el diálogo | `discard-render.test.mjs` · desestimar respeta la facultad, pide fundamento y permite resolver la caracterización |
 | 29 ocultar rótulo de clasificación vacía | `discard-render.test.mjs` · fichas e historia omiten observaciones vacías y muestran el fundamento de la desestimación |
+
+### E13 - Explorador: exportacion, cortes, series historicas y calidad (interfaz)   (CERRADO)
+- Fecha: 2026-11-26 (commit `gate E13: exportacion, cortes, series y calidad`), DDN-TEST-SIGER (Windows), Claude Code; base `8981e55` (cierre de E12b).
+- GO del responsable: A-F y condiciones 1 a 8 (tabla de decisiones, «GO de E13»), con la precisión del mismo día sobre la región (fila «Precisión del GO de E13»).
+- Hecho: (1) Servidor: filtro `stat_pending` («Con datos estadísticos pendientes») en `BoardQueries.filter` para `com`, `sol` y `req`, con la regla de PENDIENTE de COMPLETITUD y las reglas de lectura de cada bandeja; ruta, conteos y visibilidad sin cambios. (2) Explorador: secciones «Cortes y series» (`CutsSeries.tsx`: asistente de corte de 4 pasos con `CUT_WARNING` y `CUT_EXPLAIN`, «Congelar estas cifras» desde Explorar e Informes, lista con Consultar, Comparar con hoy, Verificar, detalle, descargas y Anular; asistente de series con plantilla, vista previa sin escrituras, columnas y correspondencias confirmadas una a una; serie junto a SIGER) y «Calidad» (`Quality.tsx`: COMPLETITUD por variable, ámbito y mes con porcentajes del servidor y enlace a la bandeja solo si la cuenta la tiene). (3) Consulta y comparación sobre un corte (`cut_id`, compare CORTE, `ct`/`kc` en la dirección) con celdas cambiadas marcadas por texto. (4) Descargas CSV, XLSX y ZIP desde cualquier vista y desde cortes (`ExportBar.tsx`). (5) Ajustes de presentación 1-6 completos.
+- Archivos clave: `BoardQueries.java`; `frontend/src/features/stats/{CutsSeries,Quality,ExportBar}.tsx`, `{cutsModel,seriesModel,qualityModel}.ts`, `statsModel.ts`, `Explore.tsx`, `Informes.tsx`, `Panorama.tsx`, `ResultTable.tsx`, `ResultView.tsx`, `Stats.tsx`; `components/charts/{Chart.tsx,chartModel.ts}`; `features/worklist/WorkspaceList.tsx` (rótulo); `lib/api.ts` (`downloadGet`); `lib/access.ts`; `styles/screens.css`; pruebas `StatPendingFilterTest`, `StatLoadMeasureTest.medicionE13`, `tests/statsE13.test.ts`, `statsE13-render.test.mjs`, `charts.test.ts`; `CLAUDE.md`, `docs/ARQUITECTURA.md`, `docs/CONTRATO_STATS_0_8_0.md` (nota del filtro).
+- Migraciones: no aplica (esquema 24).
+- Verificación (una vez y en secuencia; evidencia en `D:\Ensayo-E13`): JUnit H2 384 ok, 3 omitidas (antes 383 y 2; la nueva omitida es `medicionE13`); MySQL 8.4.13 desechable nuevo en `D:\Ensayo-E13\mysql` (datadir y tmpdir ahí, `127.0.0.1:3417`, suite con `siger.mysql.suite=true`, actualizaciones desde 0.4.0 y 0.7.0 hasta V24) 388 ok, 3 omitidas (antes 387 y 2); frontend typecheck ok, 242 ok (antes 220), build ok; humo con el JAR (perfil local, H2 en `backend/target/humo-e13`, puerto 18643): HTTP 18/18 y navegador aislado con 24 capturas (los 7 escenarios de E12 y 5 de E13, en 1366×900 y 390×844) más U4, U5, U6 y U9; `Check-Scripts.ps1` (powershell.exe 5.1, sin el PSModulePath de PowerShell 7): 40 scripts, 73 órdenes en 60 procesos. MySQL detenidos con `mysqladmin shutdown`, puerto 3417 libre; MySQL80 y `D:\sigervalidacion` intactos; servidor de humo y Chrome cerrados por PID y perfil en `finally`, sin procesos propios.
+- Medición del filtro (condición 4; MySQL 8.4.13, 50.005 COM, 11 catálogos vigentes, `D:\Ensayo-E13\medicion\medicion-e13.txt`): primera página con su conteo, cuenta institucional, tres corridas: COM 1.103-1.110 ms (15.000 de 50.005), SOL 978-979 ms (5.000 de 34.005), REQ 1.593-1.602 ms (5.000 de 34.005). EXPLAIN: `communication` ALL (49.633 filas) en COM; `solicitation`/`requirement` por índice `communication_id`; todas las subconsultas por índice (`ix_stat_event_record`, `ux_stat_catalog_current`, `ix_case_req`), sin recorridos de `stat_event`. Para E14.
+- Evidencia de mutación: 51 de 51 detectadas (8 del servidor y 43 del frontend), cada archivo restaurado y comprobado por SHA-256 (`D:\Ensayo-E13\mutaciones`); tabla abajo.
+- Condiciones de la sección 2: `git diff v0.7.0` vacío para `scripts/`, `.mvn/`, los 7 archivos de recepción del Formulario y `Reports.java`; `IntakeCommands` (con `conserveExternal`), V1-V24, `pom.xml`, `package.json` y `package-lock.json` sin cambios respecto de la base; en `backend/src/main` solo `BoardQueries.java`; la dirección solo lleva códigos e identificadores enteros; sin dependencias nuevas; datos sintéticos.
+- Facilidad de uso: recorridos medidos en el humo (abajo) y por render; barridos sin códigos (render y texto de cada captura); el estado nunca solo por color (celdas cambiadas con «antes N, ±d», barras de Calidad con texto); móvil en las 12 pantallas, tabla y gráfico apilados bajo 1.200 px y lado a lado sobre ellos; capturas en `D:\Ensayo-E13\capturas` (28 archivos) para comparar con `D:\Ensayo-E12\capturas`.
+- Definiciones usadas: DI-13 (sugerencia «Metropolitana» -> Oficina Nacional, solo confirmada); DI-01 a DI-04 (catálogos de referencia en pruebas y humo).
+- Desvíos del plan: (1) Precisión del GO (región fuera del filtro), consultada antes de editar. (2) Aserciones de E12 reemplazadas por los ajustes: `charts.test.ts`, la sugerencia para «periodo con comparación» pasa de barras pareadas a columnas (ajuste 3); la tabla de comparación ya no tiene la columna «Diferencia», que queda dentro de la variación compacta (ajuste 5; no había aserción de E12 sobre ella). (3) El catálogo no publica la población de las medidas: la lista de medidas sin ZIP está en `statsModel.ts` y una prueba la compara con `StatSource.java`. (4) `BoardQueries.statPending` queda visible en el paquete para el EXPLAIN de la medición. (5) El humo encontró que Calidad sin registros en el periodo dejaba el panel vacío: se agregó «Sin registros en el periodo» y se repitieron el frontend, el JAR y el humo (el backend no cambió después de H2 y MySQL). (6) La igualdad de la bandeja SOL se prueba con la cuenta institucional: en una sede la bandeja SOL solo muestra las SOL pendientes de su receptor (otra población que la del motor).
+- Diferencias de referencia: DISENO 10.4: el corte congela el periodo y el alcance, no los filtros (E10), y el asistente lo explica; la comparación con un corte se marca en la tabla y el gráfico muestra la cifra actual; la serie junto a SIGER se grafica con una categoría de la serie a la vez (el total declarado primero) y SIGER filtrado por su correspondencia confirmada.
+- Hallazgos para gates siguientes: E14 debe vigilar el filtro de bandejas con el volumen real (1,0-1,6 s con 50.005 COM, recorrido completo de `communication`); `StatLoadMeasureTest.medicionE13` (`-Dsiger.stats.measure-e13=true`) sirve a E14. PowerShell 5.1 con `$ErrorActionPreference='Stop'` corta al primer texto de error de un proceso hijo: los scripts de ensayo redirigen por `cmd /c`. `innerText` aplica `text-transform` (los encabezados de tabla salen en mayúsculas). En Calidad, la vía con 0 % pendiente sigue ofreciendo el enlace (la bandeja muestra los pendientes de cualquier variable).
+- Pendientes: borrar `D:\Ensayo-E13` (MySQL detenidos; datos sintéticos, perfil de Chrome y las claves de los usuarios desechables) -> responsable, después de revisar las capturas; E14.
+- Verificación manual sugerida al usuario: `cd frontend; node --test tests/statsE13.test.ts tests/statsE13-render.test.mjs`; `.\mvnw.cmd -B -ntp -f backend\pom.xml test -Dtest=StatPendingFilterTest`; en local, con Reportes, Gestión estadística y Exportación: Explorar > «Congelar estas cifras», «Cortes y series» y «Calidad» > «Ver las comunicaciones con datos pendientes».
+
+Matriz del filtro (`StatPendingFilterTest`, cifras a mano; población en su Javadoc: A-L central, R1-R2 sede REG-DEMO; H INVALIDA e I VINCULADA no cuentan; L con estados especiales no es pendiente):
+
+| Cuenta | Bandeja | Variable vigente | Registros | Cuáles |
+|---|---|---|---|---|
+| Institucional | COM | Tipo de solicitud / Tipo de requirente / Vía / todas | 3 / 5 / 0 / 5 | B, F, G / B, C, F, G, R1 / - / B, C, F, G, R1 |
+| Institucional | SOL | Tipo de solicitud / Tipo de requirente / Vía / todas | 1 / 2 / 0 / 2 | F / C, F / - / C, F |
+| Institucional | REQ | Solicitud / Requirente / Vía / Derecho / Contexto / todas | 1 / 1 / 0 / 2 / 3 / 3 | F / F / - / F, R2 / D, F, R2 (K, contexto en su Caso) / D, F, R2 |
+| Sede (Coordinación regional con Reportes en REG-DEMO) | COM | Solicitud / Requirente / todas | 0 / 1 / 1 | - / R1 / R1 |
+| Sede | REQ | Derecho / Contexto / todas | 1 / 1 / 1 | R2 |
+
+Cada cifra por variable es igual a PENDIENTE de COMPLETITUD en la población de la bandeja; con todas, a INGRESOS de la población menos los sin variables pendientes (en REQ, la «caracterización completa» del Panorama: 5 - 2 = 3). Sin catálogos vigentes, 0 en las tres bandejas. Lo pendiente de DIST, HEAD, PROF, ADMIN, la sede, su profesional, LECTURA y la dirección de UPD es exactamente lo legible de su bandeja que es pendiente para la institución.
+
+Otras matrices a mano: Calidad (`statsE13.test.ts`): tipo de solicitud 6 informados (60 %), 1 sin información (10 %), 3 pendientes (30 %); región 80 % informada y 20 % sin información (sin pendiente); contexto 33,3 % y 66,7 % del servidor (no se recalcula). Diferencias con un corte (tipo de solicitud × canal): 5 (antes 3, +2), 1 (igual), 2 (antes 3, −1), 0 (igual) = 2 celdas cambiaron; humo: 2 celdas tras una corrección posterior al corte. Suma de series: sin solapamiento, Metropolitana 850 y total 1.900 del servidor; con PERIODOS_SUPERPUESTOS el servidor no suma y la pantalla no ofrece cifra.
+
+Recorridos U de E13 (acciones desde la vista o la entrada indicada, medidas en el humo):
+
+| U | Recorrido | Acciones |
+|---|---|---|
+| U4 Paquete ZIP | desde un resultado de Explorar: «Paquete ZIP» | 1 |
+| U5 Corte con fundamento | desde un resultado: «Congelar estas cifras», Continuar, Continuar, fundamento, Continuar (aviso a la vista), «Generar el corte» | 6 |
+| U6 Serie desde la plantilla | «Importar una serie»: datos, plantilla, archivo, vista previa, confirmación (HTTP y render; en el navegador, el asistente y la serie junto a SIGER) | 5 pasos |
+| U9 Pendientes de su alcance | Calidad, «Ver las comunicaciones con datos pendientes» | 2 |
+
+Mutaciones de E13 (regla -> prueba que falló):
+
+| Regla | Prueba que falló |
+|---|---|
+| B01 filtro sin la lectura de la bandeja | StatPendingFilterTest.mismaReglaQueCompletitudConLecturaYAlcanceCoincidentes |
+| B02 filtro con INVALIDA y VINCULADA | StatPendingFilterTest.mismaReglaQueCompletitudConLecturaYAlcanceCoincidentes |
+| B03 variables sin catalogo vigente | StatPendingFilterTest.mismaReglaQueCompletitudConLecturaYAlcanceCoincidentes |
+| B04 sin catalogos el filtro muestra todo | StatPendingFilterTest.mismaReglaQueCompletitudConLecturaYAlcanceCoincidentes |
+| B05 derecho y contexto solo del REQ, sin sus Casos | StatPendingFilterTest.mismaReglaQueCompletitudConLecturaYAlcanceCoincidentes |
+| B06 REQ sin las variables del ingreso | StatPendingFilterTest.mismaReglaQueCompletitudConLecturaYAlcanceCoincidentes |
+| B07 estado especial contado como pendiente | StatPendingFilterTest.mismaReglaQueCompletitudConLecturaYAlcanceCoincidentes |
+| B08 SOL sin el filtro (todas) | StatPendingFilterTest.mismaReglaQueCompletitudConLecturaYAlcanceCoincidentes |
+| F01 ajuste 1: especiales con 0 como fila | ajuste 1: los estados especiales con 0 van a la nota «Sin registros en»; con más de 0 son fila; los ítems del catálogo con 0 conservan su fila |
+| F02 ajuste 1: items del catalogo con 0 sin fila | ajuste 1: los estados especiales con 0 van a la nota «Sin registros en»; con más de 0 son fila; los ítems del catálogo con 0 conservan su fila |
+| F03 ajuste 1: sin la nota | ajuste 1: los estados especiales con 0 van a la nota «Sin registros en»; con más de 0 son fila; los ítems del catálogo con 0 conservan su fila |
+| F04 ajuste 2: lado a lado sin la regla de 1.200 px | ajuste 4: la tabla ancha indica el desplazamiento y fija la primera columna |
+| F05 ajuste 3: barras horizontales con eje de periodo | E13, ajuste 3: el eje de periodo siempre es horizontal (columnas o líneas); la comparación de periodos, columnas pareadas o dos líneas |
+| F06 ajuste 3: comparacion de periodos en barras pareadas | sugerencia según la forma: periodo -> líneas; una dimensión -> barras; dos -> agrupadas; múltiple -> barras; comparación -> pareadas |
+| F07 ajuste 3: pareadas horizontales con periodo | E13, ajuste 3: el eje de periodo siempre es horizontal (columnas o líneas); la comparación de periodos, columnas pareadas o dos líneas |
+| F08 ajuste 3: columnas sin rotulo de pareadas | E13, ajuste 3: el eje de periodo siempre es horizontal (columnas o líneas); la comparación de periodos, columnas pareadas o dos líneas |
+| F09 ajuste 4: tabla ancha sin indicador | ajuste 4: la tabla ancha indica el desplazamiento y fija la primera columna |
+| F10 ajuste 4: sin sombra de desplazamiento | ajuste 4: la tabla ancha indica el desplazamiento y fija la primera columna |
+| F11 ajuste 5: con base 0 se informa porcentaje | ajuste 5: variación compacta «+1», «−2 (−15,4 %)», «=»; sin base, solo la cifra y la nota al pie |
+| F12 ajuste 5: cero como 0 en vez de = | ajuste 5: variación compacta «+1», «−2 (−15,4 %)», «=»; sin base, solo la cifra y la nota al pie |
+| F13 ajuste 5: nota al pie repetida por fila | ajuste 5: variación compacta con flecha y cifra; «Sin base de comparación» una sola vez al pie (desvío: sin la columna «Diferencia») |
+| F14 ajuste 6: hora unica aunque difiera el minuto | ajuste 6: «Datos de las HH:MM» una sola vez si todas las consultas son del mismo minuto de Chile |
+| F15 consulta sobre un corte sin cut_id | corte en la consulta: cut_id y compare CORTE en el cuerpo y en la dirección, solo con identificadores |
+| F16 corte con modo a una fecha | corte en la consulta: cut_id y compare CORTE en el cuerpo y en la dirección, solo con identificadores |
+| F17 direccion acepta un corte alterado | corte en la consulta: cut_id y compare CORTE en el cuerpo y en la dirección, solo con identificadores |
+| F18 ZIP ofrecido para casos | ZIP: las medidas sin paquete son las de StatSource.java con unidad propia o fuera de los requerimientos computables |
+| F19 boton ZIP sin deshabilitar | descargas: ZIP deshabilitado con su explicación si la medida no es de requerimientos; sin Exportación se explica; congelar solo con Gestión |
+| F20 congelar sin Gestion estadistica | descargas: ZIP deshabilitado con su explicación si la medida no es de requerimientos; sin Exportación se explica; congelar solo con Gestión |
+| F21 diferencias con un corte solo sin columnas | comparación con un corte: matriz a mano de celdas cambiadas, también con columnas, y su texto |
+| F22 celda sin cambio marcada | comparación con un corte: cada celda cambiada dice «antes» y la diferencia, también con columnas, y se resume |
+| F23 celda cambiada solo por color | comparación con un corte: cada celda cambiada dice «antes» y la diferencia, también con columnas, y se resume |
+| F24 texto antes sin la diferencia | comparación con un corte: matriz a mano de celdas cambiadas, también con columnas, y su texto |
+| F25 aviso del corte ausente en la revision | revisión del corte: el aviso textual de la detención |
+| F26 aviso del corte con otro texto | asistente de corte: alcances de Gestión estadística, prellenado desde la consulta, pasos, cuerpo cerrado y avisos textuales |
+| F27 corte con la fecha de analisis de la consulta | asistente de corte: alcances de Gestión estadística, prellenado desde la consulta, pasos, cuerpo cerrado y avisos textuales |
+| F28 corte que no toma el periodo de la consulta | asistente de corte: alcances de Gestión estadística, prellenado desde la consulta, pasos, cuerpo cerrado y avisos textuales |
+| F29 corte sin fundamento | asistente de corte: alcances de Gestión estadística, prellenado desde la consulta, pasos, cuerpo cerrado y avisos textuales |
+| F30 asistente sin Gestion estadistica | «Congelar estas cifras» abre el asistente prellenado: cuatro pasos y qué congela el corte |
+| F31 correspondencia marcada de antemano | series: correspondencias sugeridas nunca marcadas; solo las confirmadas viajan; base64 del archivo |
+| F32 correspondencias enviadas sin confirmar | series: correspondencias sugeridas nunca marcadas; solo las confirmadas viajan; base64 del archivo |
+| F33 suma ofrecida con solapamiento | suma de series: solo la que entrega el servidor; con solapamiento no se ofrece aunque se pida (matriz a mano) |
+| F34 serie y SIGER sumadas en una linea | series junto a SIGER: claves de periodo del motor, consulta hasta ayer, dos líneas sin sumar y la discontinuidad con texto |
+| F35 SIGER hasta hoy y no hasta ayer | series junto a SIGER: claves de periodo del motor, consulta hasta ayer, dos líneas sin sumar y la discontinuidad con texto |
+| F36 discontinuidad sin marcar | series junto a SIGER: claves de periodo del motor, consulta hasta ayer, dos líneas sin sumar y la discontinuidad con texto |
+| F37 discontinuidad solo con la linea (sin texto) | ajuste 3 y serie histórica: columnas verticales desde 0 y la discontinuidad con texto |
+| F38 enlace mostrado sin bandeja | Calidad: enlace a la bandeja con el filtro solo si la cuenta la tiene; la región sin enlace (condición 1 y precisión del GO) |
+| F39 region con enlace a la bandeja | Calidad: enlace a la bandeja con el filtro solo si la cuenta la tiene; la región sin enlace (condición 1 y precisión del GO) |
+| F40 Calidad recalcula el porcentaje en el cliente | Calidad: consultas de COMPLETITUD, barras con los porcentajes del servidor y matriz a mano |
+| F41 Calidad sin porcentaje por fila | Calidad: consultas de COMPLETITUD, barras con los porcentajes del servidor y matriz a mano |
+| F42 enlace de derecho a la bandeja de COM | Calidad: enlace a la bandeja con el filtro solo si la cuenta la tiene; la región sin enlace (condición 1 y precisión del GO) |
+| F43 bandeja SOL sin el filtro | bandejas: el filtro «Con datos estadísticos pendientes» en Comunicaciones, Solicitudes y Requerimientos |

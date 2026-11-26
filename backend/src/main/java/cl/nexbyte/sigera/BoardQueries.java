@@ -114,6 +114,9 @@ public class BoardQueries {
             case "atenciones:closed"->"r.state='CERRADO'";
             case "com:pending"->"c.state='NUEVA' AND "+v.distribution("c");
             case "com:mine"->"c.created_by="+v.a.id();
+            // Con datos estadisticos pendientes (E13): la misma regla de COMPLETITUD del motor, sobre lo que la bandeja ya deja leer.
+            case "com:stat_pending","sol:stat_pending"->statPending("c",null);
+            case "req:stat_pending"->"EXISTS(SELECT 1 FROM communication pc WHERE pc.id=r.communication_id AND "+statPending("pc","r")+")";
             // Filtros de decision propia: con la consulta institucional el permiso ya no los acota.
             case "sol:pending"->"s.state='PENDIENTE' AND "+at("s.destination_scope",v.receivers);
             case "sol:returned"->"s.state='DEVUELTA' AND "+v.distribution("c");
@@ -136,6 +139,26 @@ public class BoardQueries {
             case "avisos:unread"->"i.read_ms IS NULL";
             default->throw new Problem(400,"Filtro de bandeja desconocido.");
         };
+    }
+    /**
+     * Filtro "Con datos estadisticos pendientes" (0.8.0, gate E13; precision del GO): COM computable (ni INVALIDA ni
+     * VINCULADA) con alguna clasificacion en PENDIENTE entre las que tienen catalogo VIGENTE: tipo de solicitud, tipo de
+     * requirente y via (StatValues.stateSql, con la via derivada del canal) y, en el REQ, derecho y contexto consolidados
+     * del REQ y de todos sus Casos (Rights.consolidatedStateSql). La region del requirente no entra: en el modo vigente
+     * su falta es SIN_INFORMACION, no PENDIENTE. Sin catalogos vigentes no muestra nada. Es la misma regla que el estado
+     * PENDIENTE de la medida COMPLETITUD de StatSource: con una cuenta cuya lectura y alcance de Reportes coinciden, las
+     * cifras son iguales (StatPendingFilterTest).
+     */
+    String statPending(String c,String req){
+        var current=new HashSet<String>();
+        for(var row:db.rows("SELECT `current_catalog` AS name FROM stat_catalog_version WHERE `current_catalog` IS NOT NULL"))current.add(s(row,"name"));
+        var pending=new ArrayList<String>();
+        for(String variable:List.of("TIPO_SOLICITUD","TIPO_REQUIRENTE","VIA_INGRESO"))
+            if(current.contains(variable))pending.add(StatValues.stateSql(c,variable,null)+"='"+StatValues.PENDING+"'");
+        if(req!=null)for(String variable:List.of("DERECHO","CONTEXTO"))
+            if(current.contains(variable))pending.add(Rights.consolidatedStateSql(req,variable)+"='"+StatValues.PENDING+"'");
+        if(pending.isEmpty())return "1=0";
+        return c+".state NOT IN ('INVALIDA','VINCULADA') AND ("+String.join(" OR ",pending)+")";
     }
     private String ready(String r,Visibility v){return r+".state='ABIERTO' AND "+at(r+".principal_scope",v.heads)+" AND NOT EXISTS(SELECT 1 FROM case_record cc WHERE cc.requirement_id="+r+".id AND cc.state<>'CERRADO') AND NOT EXISTS(SELECT 1 FROM flow_request ff WHERE ff.requirement_id="+r+".id AND ff.state='PENDIENTE') AND NOT EXISTS(SELECT 1 FROM reopening rr WHERE rr.requirement_id="+r+".id AND rr.state='PENDIENTE') AND NOT EXISTS(SELECT 1 FROM attention_handoff hh WHERE hh.requirement_id="+r+".id AND hh.state='PENDIENTE') AND NOT EXISTS(SELECT 1 FROM attention_record af WHERE af.requirement_id="+r+".id AND af.followup_required=TRUE AND NOT EXISTS(SELECT 1 FROM case_record cf WHERE cf.requirement_id="+r+".id)) AND NOT EXISTS(SELECT 1 FROM task_item tt JOIN case_record tc ON tc.id=tt.case_id WHERE tc.requirement_id="+r+".id AND tt.state IN ('PENDIENTE','EN_CURSO'))";}
     public Map<String,Object> page(Actor a,String kind,int page,int size,String q,String state,Long scope){return page(new Visibility(a),kind,page,size,q,state,scope);}

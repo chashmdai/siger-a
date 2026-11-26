@@ -30,9 +30,9 @@ const BOARDS: Record<string, Board> = {
 /** Filtros que reconoce /api/worklist/{kind}; el primero es el predeterminado salvo en tareas. */
 const FILTERS: Record<string, [string, string][]> = {
   atenciones: [['all', 'Todas'], ['mine', 'A mi cargo'], ['incoming', 'Por recibir'], ['outgoing', 'Entregas enviadas'], ['created', 'Iniciadas por mí'], ['followup', 'Seguimiento por asignar'], ['closed', 'Resueltas']],
-  com: [['all', 'Todas'], ['pending', 'Por distribuir'], ['mine', 'Mis ingresos']],
-  sol: [['all', 'Todas'], ['pending', 'Por asumir'], ['returned', 'Devueltas a Distribución']],
-  req: [['all', 'Todos'], ['open', 'Abiertos'], ['closed', 'Cerrados'], ['without_case', 'Abiertos sin Caso'], ['ready', 'Sin bloqueos para cierre']],
+  com: [['all', 'Todas'], ['pending', 'Por distribuir'], ['mine', 'Mis ingresos'], ['stat_pending', 'Con datos estadísticos pendientes']],
+  sol: [['all', 'Todas'], ['pending', 'Por asumir'], ['returned', 'Devueltas a Distribución'], ['stat_pending', 'Con datos estadísticos pendientes']],
+  req: [['all', 'Todos'], ['open', 'Abiertos'], ['closed', 'Cerrados'], ['without_case', 'Abiertos sin Caso'], ['ready', 'Sin bloqueos para cierre'], ['stat_pending', 'Con datos estadísticos pendientes']],
   cas: [['all', 'Todos'], ['mine', 'Mis Casos abiertos'], ['open', 'Abiertos'], ['closed', 'Cerrados'], ['review', 'Cierres por revisar'], ['unacknowledged', 'Asignaciones sin acuse'], ['returned', 'Mis cierres devueltos']],
   flujos: [['all', 'Todos'], ['pending', 'Pendientes'], ['incoming', 'Para mi decisión'], ['outgoing', 'Solicitados por mi ámbito']],
   tareas: [['pending', 'Pendientes'], ['overdue', 'Vencidas'], ['soon', 'Próximos 7 días'], ['all', 'Incluye terminadas']],

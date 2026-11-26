@@ -1,4 +1,5 @@
 import {useId, useState} from 'react';
+import type {ReactNode} from 'react';
 import {Chart} from '../../components/charts/Chart';
 import type {ChartKind} from '../../components/charts/chartModel';
 import {choices, suggest} from '../../components/charts/chartModel';
@@ -33,14 +34,16 @@ export function queryTitle(cat: StatsCatalog, q: Query) {
  * Resultado de una consulta: grafico sugerido (con los demas posibles y la razon de los que no), tabla con las cifras del
  * servidor como alternativa textual, propuestas aparte y "Como leer esta cifra".
  */
-export function ResultView({cat, catalog, q, r, at, refresh, scope, levels, tree}: {cat: StatsCatalog; catalog: Record<string, unknown>; q: Query; r: Result; at: number;
-  refresh: () => void; scope: string; levels?: Partial<Record<string, Result>>; tree?: TreeRow[] | null}) {
+export function ResultView({cat, catalog, q, r, at, refresh, scope, levels, tree, actions, cutCode}: {cat: StatsCatalog; catalog: Record<string, unknown>; q: Query; r: Result; at: number;
+  refresh: () => void; scope: string; levels?: Partial<Record<string, Result>>; tree?: TreeRow[] | null; actions?: ReactNode; cutCode?: string}) {
   const id = useId().replace(/:/g, '');
   const metric: Metric = q.percent ? 'percent' : 'n';
   const comparison = !!r.comparison;
+  // Comparacion con un corte (E13): por celdas y margenes, marcadas en la tabla; el grafico muestra la cifra actual.
+  const cutCompare = comparison && q.compare === 'CORTE';
   const table = tableModel(r, q.rows, q.columns);
-  const shape = chartShape(cat, q, table, comparison);
-  const data = chartData(table, metric, comparison, r.comparison?.period ? periodLabel(r.comparison.period) : '');
+  const shape = chartShape(cat, q, table, comparison && !cutCompare);
+  const data = chartData(table, metric, comparison && !cutCompare, r.comparison?.period ? periodLabel(r.comparison.period) : '');
   const values = data.series[0]?.values.map(v => v ?? 0);
   const options = choices(shape, values, data.total ?? undefined);
   const suggested = suggest(shape);
@@ -48,8 +51,9 @@ export function ResultView({cat, catalog, q, r, at, refresh, scope, levels, tree
   const kind = picked && options.find(o => o.kind === picked)?.ok ? picked : suggested;
   const multiple = [...q.rows, ...q.columns].some(c => isMultiple(cat, c));
   const title = queryTitle(cat, q);
-  const subtitle = periodLabel(r.metadata.period as Record<string, unknown>) + (r.comparison?.period ? ' · comparado con ' + periodLabel(r.comparison.period) : '');
-  const source = sourceFooter({at, scope, basis: String((r.metadata.period as Record<string, unknown>)?.date_basis ?? ''), mode: String(r.metadata.time_mode ?? 'VIGENTE')});
+  const subtitle = periodLabel(r.metadata.period as Record<string, unknown>) + (cutCode ? ' · cifras del corte ' + cutCode : '')
+    + (cutCompare ? ' · comparado con el corte ' + (r.comparison?.cutCode || '') : r.comparison?.period ? ' · comparado con ' + periodLabel(r.comparison.period) : '');
+  const source = sourceFooter({at, scope, basis: String((r.metadata.period as Record<string, unknown>)?.date_basis ?? ''), mode: String(r.metadata.time_mode ?? 'VIGENTE'), cut: cutCode || null});
   const notes: string[] = [];
   if (multiple) notes.push(MULTIPLE_NOTE + ' Las categorías no suman el total.');
   if ([...q.rows, ...q.columns].some(c => NON_ADDITIVE_DIMS.includes(c))) notes.push(NON_ADDITIVE_NOTE);
@@ -68,7 +72,8 @@ export function ResultView({cat, catalog, q, r, at, refresh, scope, levels, tree
       {unavailable.some(o => o.kind === 'circular') && <p className="field-help">Circular no disponible: {unavailable.find(o => o.kind === 'circular')!.reason}</p>}
       <Chart kind={kind} data={data} title={title} subtitle={subtitle} notes={notes} source={source} file={fileStem(title)} tableId={tableId}/>
     </> : <p className="field-help">{options[0]?.reason || 'No hay cifras para graficar.'} Las cifras están en la tabla.</p>}
-    <ResultTable id={tableId} caption={title + ' · ' + subtitle} table={table} metric={metric} multiple={multiple} comparison={comparison} tree={tree} levels={levels}/>
+    <ResultTable id={tableId} caption={title + ' · ' + subtitle} table={table} metric={metric} multiple={multiple} comparison={comparison} cutCompare={cutCompare} tree={tree} levels={levels}/>
+    {actions}
     <p className="stat-source">{source}</p>
     {r.proposals.length > 0 && <section className="stat-proposals" aria-label="Propuestas pendientes de confirmar">
       <h3>Propuestas pendientes de confirmar</h3>

@@ -17,9 +17,23 @@ test('sugerencia según la forma: periodo -> líneas; una dimensión -> barras; 
   assert.equal(suggest(shape({columns: 1, series: 3})), 'agrupadas');
   assert.equal(suggest(shape({multipleRows: true})), 'barras');
   assert.equal(suggest(shape({comparison: true, series: 2})), 'pareadas');
-  assert.equal(suggest(shape({period: true, comparison: true, series: 2})), 'pareadas');
+  // Desvio autorizado de E13 (ajuste 3): la comparacion de periodos va en columnas pareadas (antes, barras pareadas).
+  assert.equal(suggest(shape({period: true, comparison: true, series: 2})), 'columnas');
   assert.equal(suggest(shape({categories: 0})), null);
   assert.equal(suggest(shape({categories: 81})), null, 'demasiadas categorías: la tabla');
+});
+
+test('E13, ajuste 3: el eje de periodo siempre es horizontal (columnas o líneas); la comparación de periodos, columnas pareadas o dos líneas', () => {
+  const period = shape({period: true, categories: 12});
+  for (const kind of ['barras', 'agrupadas', 'apiladas', 'pareadas']) assert.ok(!ok({...period, columns: kind === 'barras' || kind === 'pareadas' ? 0 : 1, series: 2}, kind), kind);
+  assert.match(choices(period).find(c => c.kind === 'barras')!.reason, /horizontal/);
+  assert.ok(ok(period, 'columnas') && ok(period, 'lineas'));
+  const compared = shape({period: true, comparison: true, series: 2});
+  assert.ok(ok(compared, 'columnas') && ok(compared, 'lineas'), 'columnas pareadas o dos líneas');
+  assert.ok(!ok(compared, 'pareadas'), 'sin barras horizontales pareadas');
+  assert.equal(choices(compared).find(c => c.kind === 'columnas')!.label, 'Columnas pareadas');
+  assert.ok(!ok(shape(), 'columnas'), 'las columnas son para un eje de periodo');
+  assert.equal(suggest(shape({comparison: true, series: 2})), 'pareadas', 'otra comparación: barras pareadas');
 });
 
 test('apiladas solo si las columnas son de valor único y en cantidades; más de 8 series no se colorean', () => {

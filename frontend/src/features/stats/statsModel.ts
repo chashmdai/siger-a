@@ -59,12 +59,33 @@ export function variation(deltaN: number, deltaPercent: number | null | undefine
   return {direction, arrow, text: direction === 'same' ? 'Sin cambio (0 %)' : `${word} ${fmtSigned(deltaN)} (${deltaPercent == null ? '—' : (deltaN > 0 ? '+' : '−') + fmtPct(Math.abs(deltaPercent))})`};
 }
 
+/**
+ * Variacion compacta de una tabla (E13, ajuste 5): "+1", "−2 (−15,4 %)" o "=". Con base 0 no hay porcentaje y noBase pide
+ * la nota al pie "Sin base de comparación", que la tabla muestra una sola vez.
+ */
+export function compactDelta(deltaN: number, deltaPercent: number | null | undefined, base: number): {text: string; label: string; noBase: boolean} {
+  if (deltaN === 0) return {text: '=', label: 'Sin cambio', noBase: base === 0};
+  const word = deltaN > 0 ? 'Aumenta' : 'Disminuye';
+  if (base === 0 || deltaPercent == null) return {text: fmtSigned(deltaN), label: `${word} ${fmtSigned(deltaN)}`, noBase: base === 0};
+  const pct = (deltaN > 0 ? '+' : '−') + fmtPct(Math.abs(deltaPercent));
+  return {text: `${fmtSigned(deltaN)} (${pct})`, label: `${word} ${fmtSigned(deltaN)} (${pct})`, noBase: false};
+}
+export const NO_BASE_NOTE = 'Sin base de comparación: la cifra base es 0, por lo que no hay variación porcentual.';
+
 // --- Fechas en hora de Chile ----------------------------------------------------------------------------------------
 export const ZONE = 'America/Santiago';
 /** Dia civil de Chile de un instante (nunca la zona del navegador). */
 export const chileDay = (now: Date = new Date()) => new Intl.DateTimeFormat('sv-SE', {timeZone: ZONE}).format(now);
 /** Hora y minutos de Chile de un instante. */
 export const chileTime = (ms: number) => new Intl.DateTimeFormat('es-CL', {timeZone: ZONE, hour: '2-digit', minute: '2-digit', hour12: false}).format(new Date(ms));
+/**
+ * "Datos de las HH:MM" una sola vez por seccion (E13, ajuste 6): la hora comun si todas las consultas ya respondieron y son
+ * del mismo minuto de Chile; si no, nulo y cada panel muestra la suya.
+ */
+export function sameMinute(ats: number[]): number | null {
+  if (ats.length === 0 || ats.some(a => !(a > 0))) return null;
+  return ats.every(a => chileTime(a) === chileTime(ats[0])) ? Math.max(...ats) : null;
+}
 export const chileDateTime = (ms: number) => new Intl.DateTimeFormat('es-CL', {timeZone: ZONE, dateStyle: 'long', timeStyle: 'short'}).format(new Date(ms));
 /** Suma dias a un dia civil aaaa-mm-dd, sin pasar por zonas horarias. */
 export function addDays(day: string, n: number) {
@@ -107,9 +128,10 @@ export function periodLabel(p: Row | Period | undefined) {
 }
 
 // --- Consulta ----------------------------------------------------------------------------------------------------
+/** cut: consulta sobre un corte (E10, cut_id); compareCut: corte con que se compara (compare CORTE). */
 export type Query = {
   measure: string; rows: string[]; columns: string[]; filters: Record<string, string[]>; period: Period;
-  mode: string; asOf: string; compare: string; percent: string; proposals: boolean; mention: string;
+  mode: string; asOf: string; compare: string; percent: string; proposals: boolean; mention: string; cut?: number | null; compareCut?: number | null;
 };
 export const emptyQuery = (period: Period): Query => ({measure: 'INGRESOS', rows: [], columns: [], filters: {}, period, mode: 'VIGENTE', asOf: '', compare: '', percent: '', proposals: false, mention: ''});
 
@@ -135,8 +157,9 @@ export function requestBody(q: Query, cat?: StatsCatalog | null): Row {
   if (q.period.to) period.to = q.period.to;
   return {
     measure: q.measure, rows: q.rows, columns: q.columns, filters, period,
-    time_mode: q.mode || 'VIGENTE', as_of: q.mode === 'FECHA' ? chileIso(q.asOf) : null, cut_id: null,
-    compare: q.compare ? {type: q.compare} : null, percent: q.percent || null, include_proposals: q.proposals,
+    time_mode: q.cut ? 'VIGENTE' : q.mode || 'VIGENTE', as_of: !q.cut && q.mode === 'FECHA' ? chileIso(q.asOf) : null, cut_id: q.cut ?? null,
+    compare: q.compare === 'CORTE' ? (q.compareCut ? {type: 'CORTE', cut_id: q.compareCut} : null) : q.compare ? {type: q.compare} : null,
+    percent: q.percent || null, include_proposals: q.proposals,
     mention_dimension: q.mention || null,
   };
 }
@@ -151,7 +174,9 @@ export function canonical(value: unknown): string {
 export function fromBody(def: Row): Query {
   const period = (def.period ?? {}) as Row;
   const asOf = text(def, 'as_of');
+  const cut = Number(def.cut_id ?? 0), compareCut = Number(((def.compare ?? {}) as Row).cut_id ?? 0);
   return {
+    ...(cut > 0 ? {cut} : {}), ...(compareCut > 0 ? {compareCut} : {}),
     measure: text(def, 'measure'), rows: ((def.rows as string[]) ?? []).slice(), columns: ((def.columns as string[]) ?? []).slice(),
     filters: Object.fromEntries(Object.entries((def.filters ?? {}) as Record<string, unknown[]>).map(([k, v]) => [k, (v ?? []).map(String)])),
     period: {type: text(period, 'type'), from: text(period, 'from'), ...(text(period, 'to') ? {to: text(period, 'to')} : {}), ...(text(period, 'date_basis') ? {basis: text(period, 'date_basis')} : {})},
@@ -181,7 +206,7 @@ export function periodStart(type: string, day: string) {
  * La consulta queda en la direccion para volver atras y compartir. Solo lleva codigos de medidas, dimensiones, periodos,
  * modos y valores de catalogo; nunca datos personales ni el texto del buscador de campos (que no es parte de Query).
  */
-export const SECTIONS = ['panorama', 'informes', 'explorar'] as const;
+export const SECTIONS = ['panorama', 'informes', 'explorar', 'cortes', 'calidad'] as const;
 export type Section = typeof SECTIONS[number];
 export function encodeRoute(section: Section, q?: Query, extra: Record<string, string> = {}) {
   const p = new URLSearchParams();
@@ -202,6 +227,8 @@ export function encodeRoute(section: Section, q?: Query, extra: Record<string, s
     if (q.percent) p.set('pc', q.percent);
     if (q.proposals) p.set('pr', '1');
     if (q.mention) p.set('md', q.mention);
+    if (q.cut) p.set('ct', String(q.cut));
+    if (q.compare === 'CORTE' && q.compareCut) p.set('kc', String(q.compareCut));
   }
   for (const [k, v] of Object.entries(extra)) if (v) p.set(k, v);
   const s = p.toString();
@@ -227,11 +254,14 @@ export function decodeRoute(route: string): {section: Section; query: Query | nu
   }
   const h = params.get('h') ?? '', b = params.get('b') ?? '', t = params.get('t') ?? '', a = params.get('a') ?? '';
   const k = params.get('k') ?? '', pc = params.get('pc') ?? '', md = params.get('md') ?? '';
+  const id = (key: string) => /^[1-9]\d{0,9}$/.test(params.get(key) ?? '') ? Number(params.get(key)) : null;
+  const cut = id('ct'), compareCut = id('kc');
   return {section, params, query: {
     measure: m, rows: codes('r'), columns: codes('c'), filters,
     period: {type, from: d, ...(DAY.test(h) ? {to: h} : {}), ...(CODE.test(b) ? {basis: b} : {})},
     mode: CODE.test(t) ? t : 'VIGENTE', asOf: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(a) ? a : '',
     compare: CODE.test(k) ? k : '', percent: CODE.test(pc) ? pc : '', proposals: params.get('pr') === '1', mention: CODE.test(md) ? md : '',
+    ...(cut ? {cut} : {}), ...(compareCut ? {compareCut} : {}),
   }};
 }
 
@@ -468,7 +498,7 @@ export type Cell = {row: string[]; column: string[]; n: number; unique: number; 
 export type Delta = {base_n: number; delta_n: number; delta_percent: number | null};
 export type Result = {values: Record<string, Value[]>; cells: Cell[]; grand: {n: number; unique: number; mentions: number | null};
   rowTotals: Map<string, {n: number; unique: number; mentions: number | null}>; colTotals: Map<string, {n: number; unique: number; mentions: number | null}>;
-  comparison: {cells: Map<string, Delta>; grand: Delta | null; rows: Map<string, Delta>; columns: Map<string, Delta>; period: Row | null} | null;
+  comparison: {cells: Map<string, Delta>; grand: Delta | null; rows: Map<string, Delta>; columns: Map<string, Delta>; period: Row | null; cutCode?: string} | null;
   metadata: Row; warnings: Row[]; late: Row | null; coverage: Row; proposals: Row[]};
 export const keyOf = (parts: string[]) => parts.join('\u0001');
 export function readResult(data: Row): Result {
@@ -488,7 +518,7 @@ export function readResult(data: Row): Result {
       grand: (cmp.totals as Row)?.grand ? deltas([(cmp.totals as Row).grand as Row], () => []).get('') ?? null : null,
       rows: deltas(list(cmp.totals as Row ?? {}, 'rows'), r => (r.key as string[]) ?? []),
       columns: deltas(list(cmp.totals as Row ?? {}, 'columns'), r => (r.key as string[]) ?? []),
-      period: (cmp.period as Row) ?? null,
+      period: (cmp.period as Row) ?? null, cutCode: text(cmp, 'cut_code'),
     } : null,
     metadata: (data.metadata ?? {}) as Row, warnings: list(data, 'warnings'), late: (data.late_records as Row) ?? null,
     coverage: (data.data_coverage ?? {}) as Row, proposals: list(data, 'proposals'),
@@ -630,6 +660,40 @@ export function figureRows(cat: StatsCatalog, catalog: Row, dim: string, r: Resu
   }
   return rows;
 }
+
+/**
+ * Figura 1 en pantalla (E13, ajuste 1): los estados especiales con 0 salen de la tabla y se listan en una nota ("Sin
+ * registros en: ..."); con mas de 0 son una fila. Los items del catalogo con 0 conservan su fila.
+ */
+export function figureTable(rows: {key: string; label: string; n: number}[]): {rows: {key: string; label: string; n: number}[]; empty: string[]; note: string} {
+  const special = (k: string) => SPECIAL_ORDER.includes(k);
+  const empty = rows.filter(r => special(r.key) && r.n === 0).map(r => r.label);
+  return {rows: rows.filter(r => !(special(r.key) && r.n === 0)), empty, note: empty.length ? `Sin registros en: ${empty.join(', ')}.` : ''};
+}
+
+// --- Exportacion (E13) -------------------------------------------------------------------------------------------------
+/**
+ * Medidas sin paquete ZIP (contrato de exportacion; StatExport: medida de unidad propia o de una poblacion que no son los
+ * requerimientos computables). El catalogo no publica la poblacion: tests/stats.test.ts compara esta lista con StatSource.java.
+ */
+export const NO_ZIP_MEASURES = ['EXCLUIDOS', 'ANTECEDENTES', 'CASOS', 'ACTUACIONES', 'CLASIFICACIONES_DERECHO', 'COMPLETITUD'];
+export const NO_ZIP_TEXT = 'El paquete ZIP se arma solo para medidas de requerimientos (ingresos, REQ, requerimientos con un valor o menciones): con esta medida descarga CSV o XLSX.';
+export const zipProblem = (q: Query) => NO_ZIP_MEASURES.includes(q.measure) ? NO_ZIP_TEXT : '';
+
+// --- Comparacion con un corte (E13) --------------------------------------------------------------------------------------
+/** Celdas cuya cifra cambio respecto del corte (diferencia del servidor distinta de 0), tambien con columnas. */
+export function changedCells(t: TableModel): number {
+  let n = 0;
+  const cols = t.colDims.length ? t.columns.map(c => c.key) : [[]];
+  for (const r of t.rows) for (const c of cols) {
+    const d = t.delta(r.key, c);
+    if (d && d.delta_n !== 0) n++;
+  }
+  return n;
+}
+/** Texto de una celda cambiada: "antes 5, +2" (nunca solo el color). */
+export const beforeText = (d: Delta) => `antes ${fmtInt(d.base_n)}, ${fmtSigned(d.delta_n)}`;
+export const changedSummary = (n: number) => n === 0 ? 'Ninguna celda cambió respecto del corte.' : n === 1 ? '1 celda cambió respecto del corte.' : `${fmtInt(n)} celdas cambiaron respecto del corte.`;
 
 // --- Avisos y "Como leer esta cifra" ---------------------------------------------------------------------------------
 /** Cada aviso del servidor en una frase; un aviso desconocido tiene una frase general (nunca su codigo). */

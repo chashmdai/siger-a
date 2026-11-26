@@ -1,10 +1,11 @@
+import {useCallback, useEffect, useState} from 'react';
 import type {Context} from '../../app/context';
 import {Icon} from '../../components/Icon';
 import {CHART_COLORS, linePoints, MUTED_COLOR, scale} from '../../components/charts/chartModel';
 import {Callout, Skeleton} from '../../components/Primitives';
 import type {Indicator, Period, Result, StatsCatalog} from './statsModel';
 import {chileDay, chileTime, COMPARE_LABELS, COMPLETE_NOTE, completeShare, encodeRoute, fmtInt, fmtPoints, indicatorQuery, INDICATORS, panoramaPeriod, periodLabel,
-  publicAccount, publicYearOf, readResult, requestBody, sourceFooter, tableModel, variation} from './statsModel';
+  publicAccount, publicYearOf, readResult, requestBody, sameMinute, sourceFooter, tableModel, variation} from './statsModel';
 import {useStat} from './statQuery';
 import {Freshness, HowToRead} from './ResultView';
 
@@ -28,10 +29,12 @@ function Spark({values, label}: {values: number[]; label: string}) {
   </svg>;
 }
 
-function Card({ind, cat, catalog, period, compare, user, total}: {ind: Indicator; cat: StatsCatalog; catalog: Context['catalog']; period: Period; compare: string; user: number;
-  total?: Result | null}) {
+function Card({ind, cat, catalog, period, compare, user, total, report, inlineFresh}: {ind: Indicator; cat: StatsCatalog; catalog: Context['catalog']; period: Period; compare: string; user: number;
+  total?: Result | null; report: (key: string, at: number) => void; inlineFresh: boolean}) {
   const q = indicatorQuery(ind, cat, catalog, period, compare);
   const s = useStat(q ? requestBody(q, cat) : null, user);
+  const at = s.status === 'ok' ? s.at : 0;
+  useEffect(() => report(ind.key, q ? at : -1), [ind.key, at, report, q]);
   const open = () => {if (q) location.hash = encodeRoute('explorar', q);};
   if (!q) return <div className="stat-card"><h3>{ind.label}</h3><p className="field-help">No disponible con los campos que publica el servidor.</p></div>;
   if (s.status === 'error') return <div className="stat-card"><h3>{ind.label}</h3><p role="alert" className="error">{s.error}</p>
@@ -60,7 +63,7 @@ function Card({ind, cat, catalog, period, compare, user, total}: {ind: Indicator
     <Spark values={months.map(m => m.n)} label={'Mes a mes: ' + months.map(m => `${m.label} ${fmtInt(m.n)}`).join('; ')}/>
     <p className="field-help">{ind.help}{extra ? ' ' + extra : ''}</p>
     <span className="stat-card-open" aria-hidden="true">Abrir en Explorar <Icon name="arrowRight" size={16}/></span>
-    <span className="stat-fresh-inline">Datos de las {chileTime(s.at)}</span>
+    {inlineFresh && <span className="stat-fresh-inline">Datos de las {chileTime(s.at)}</span>}
   </article>;
 }
 
@@ -80,19 +83,23 @@ export default function Panorama({ctx, cat, scope, params}: {ctx: Context; cat: 
   const totalState = useStat(totalQuery ? requestBody(totalQuery, cat) : null, ctx.user.id);
   const totalResult = totalState.status === 'ok' && totalState.data ? readResult(totalState.data) : null;
   const label = chosen.key === 'curso' ? panoramaPeriod(today).label : periodLabel(chosen.period);
+  // Ajuste 6 (E13): una sola hora en la seccion si todas sus consultas son del mismo minuto; si no, cada tarjeta la suya.
+  const [ats, setAts] = useState<Record<string, number>>({});
+  const report = useCallback((key: string, at: number) => setAts(prev => prev[key] === at ? prev : {...prev, [key]: at}), []);
+  const common = sameMinute(INDICATORS.map(i => ats[i.key] ?? 0).filter(a => a !== -1));
   return <section aria-label="Panorama">
     <div className="stat-toolbar">
       <label><span>Periodo</span><select value={chosen.key} onChange={e => set(e.target.value, compare)}>{options.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}</select></label>
       <label><span>Comparar con</span><select value={compare} onChange={e => set(chosen.key, e.target.value)}>
         {['MISMO_PERIODO_ANIO_ANTERIOR', 'PERIODO_ANTERIOR'].filter(c => cat.compares.includes(c)).map(c => <option key={c} value={c}>{COMPARE_LABELS[c]}</option>)}
       </select></label>
-      <Freshness at={totalState.at} refresh={totalState.refresh}/>
+      <Freshness at={common ?? 0} refresh={totalState.refresh}/>
     </div>
     <p className="stat-period">{label}</p>
     {totalState.status === 'error' && <Callout tone="warn">{totalState.error}</Callout>}
     <div className="stat-cards">
       {INDICATORS.map(ind => <Card key={ind.key} ind={ind} cat={cat} catalog={ctx.catalog} period={chosen.period} compare={compare} user={ctx.user.id}
-        total={totalResult}/>)}
+        total={totalResult} report={report} inlineFresh={common == null}/>)}
     </div>
     <HowToRead lines={[
       `Periodo: ${label}, según la fecha de recepción (los REQ, por su constitución; los Casos, por su creación), en hora de Chile.`,

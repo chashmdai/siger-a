@@ -80,6 +80,15 @@ Completitud: una cuenta de sede **puede ver PENDIENTE un derecho o contexto regi
 El cierre no cambia: `StatCompleteness` evalúa el expediente completo. Con alcance institucional coincide con
 `StatCompleteness.indicators`.
 
+Filtro de las bandejas (E13, cambio aditivo registrado como desvío): «Con datos estadísticos pendientes» (`stat_pending`) de
+las bandejas COM, SOL y REQ (`BoardQueries`) aplica la regla de `PENDIENTE` de esta medida a las COM computables, solo en las
+clasificaciones con catálogo VIGENTE (tipo de solicitud, de requirente y vía; en REQ, además derecho y contexto consolidados
+del REQ y de **todos** sus Casos); la región del requirente no entra (en `VIGENTE` su falta es `SIN_INFORMACION`). Sin
+catálogos vigentes no muestra nada. La bandeja usa sus propias reglas de lectura y no tiene periodo: sus cifras son iguales a
+`PENDIENTE` de `COMPLETITUD` solo cuando la lectura de la cuenta y su alcance de REPORTES coinciden y el periodo cubre todos
+los ingresos (`StatPendingFilterTest`, cuenta institucional y una sede); con alcance de una sede puede diferir por un Caso
+ajeno, como arriba.
+
 ## 4. Dimensiones
 
 Cada COM tiene un valor o un estado en toda dimensión; ninguna queda fuera. Estados: `PENDIENTE` (sin evento o sin evidencia

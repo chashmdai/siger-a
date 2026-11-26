@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import type {DragEvent} from 'react';
 import type {Context} from '../../app/context';
 import {Icon} from '../../components/Icon';
@@ -9,8 +9,25 @@ import type {Query, Result, StatsCatalog} from './statsModel';
 import {BASIS_LABELS, chileDay, COMPARE_LABELS, dimOf, encodeRoute, fieldLabel, filterValues, GUIDED, guidedQuery, isMultiple, measureHelp, measureOf, MODE_HELP,
   MODE_LABELS, multipleIn, panoramaPeriod, PERCENT_LABELS, PERIOD_LABELS, periodStart, queryProblem, readResult, requestBody, RIGHTS_LEVELS, rightsTree, vigentItems} from './statsModel';
 import {useStat} from './statQuery';
-import {ResultView} from './ResultView';
+import {queryTitle, ResultView} from './ResultView';
 import {SavedViews} from './SavedViews';
+import {ExportBar, FreezeButton} from './ExportBar';
+import {request} from '../../lib/api';
+import type {Row} from '../../lib/rows';
+import type {CutRow} from './cutsModel';
+import {readCut} from './cutsModel';
+
+/** Cortes que la cuenta cubre (GET /api/stats/cuts), para consultar o comparar; vacio si no hay o no se pudo leer. */
+export function useCuts(enabled: boolean) {
+  const [cuts, setCuts] = useState<CutRow[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    request<Row[]>('/stats/cuts').then(r => {if (alive) setCuts(r.map(readCut));}, () => {if (alive) setCuts([]);});
+    return () => {alive = false;};
+  }, [enabled]);
+  return cuts;
+}
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('es-CL');
 const AXIS_LABELS: Record<Axis, string> = {rows: 'Filas', columns: 'Columnas', filters: 'Filtros'};
@@ -73,6 +90,7 @@ export default function Explore({ctx, cat, scope, query}: {ctx: Context; cat: St
   const [flat, setFlat] = useState(false);
   const levelBody = (dim: string) => rightsRow && !flat && q && !problem && dim !== q.rows[0] ? requestBody({...q, rows: [dim]}, cat) : null;
   const eje = useStat(levelBody('DERECHO_EJE'), ctx.user.id), der = useStat(levelBody('DERECHO'), ctx.user.id), sub = useStat(levelBody('DERECHO_SUBCATEGORIA'), ctx.user.id);
+  const cuts = useCuts(cat.compares.includes('CORTE'));
 
   if (!q) return <section aria-label="Explorar">
     <h2 className="stat-section-title">¿Qué quieres saber?</h2>
@@ -123,11 +141,17 @@ export default function Explore({ctx, cat, scope, query}: {ctx: Context; cat: St
   const treeReady = rightsRow && !flat && RIGHTS_LEVELS.every(d => levels[d]);
   const tree = treeReady ? rightsTree(levels as Record<typeof RIGHTS_LEVELS[number], Result>, ctx.catalog) : null;
   const levelError = [eje, der, sub].find(s => s.status === 'error')?.error;
+  const onCut = q.cut ? cuts.find(c => c.id === q.cut) : undefined;
+  const compareChoices = q.cut ? [] : cat.compares.filter(c => c !== 'CORTE');
 
   return <section aria-label="Explorar" className="stat-explore">
     <FieldPicker cat={cat} q={q} add={add}/>
     <div className="stat-work">
       <Panel title="Consulta" icon="search">
+        {q.cut && <Callout tone="info" title={`Cifras congeladas del corte ${onCut?.code ?? ''}`.trim()}>
+          Son los valores del instante del corte{onCut ? ` (${onCut.title})` : ''}: no cambian aunque se corrijan los registros. Solo se usan los valores vigentes en ese instante.
+          <div className="actions"><button type="button" className="sm" onClick={() => go({...q, cut: null})}>Volver a las cifras de hoy</button></div>
+        </Callout>}
         <div className="form-grid">
           <label className="span-all"><span>Qué contar</span>
             <select value={counting && COUNTS.includes(q.measure) ? 'INGRESOS' : q.measure} onChange={e => go(withMeasure(q, e.target.value))}>
@@ -155,19 +179,25 @@ export default function Explore({ctx, cat, scope, query}: {ctx: Context; cat: St
             go({...q, period: {...q.period, from: q.period.type === 'PERSONALIZADO' ? e.target.value : periodStart(q.period.type, e.target.value)}});
           }}/></label>
           {q.period.type === 'PERSONALIZADO' && <label><span>Hasta</span><input type="date" value={q.period.to ?? ''} min={q.period.from} required onChange={e => {if (e.target.value) go({...q, period: {...q.period, to: e.target.value}});}}/></label>}
-          <label><span>Comparar con</span><select value={q.compare} onChange={e => go({...q, compare: e.target.value})}>
+          <label><span>Comparar con</span><select value={q.compare} onChange={e => go({...q, compare: e.target.value, compareCut: e.target.value === 'CORTE' ? q.compareCut ?? null : null})}>
             <option value="">Sin comparación</option>
-            {cat.compares.filter(c => c !== 'CORTE').map(c => <option key={c} value={c}>{COMPARE_LABELS[c] ?? c}</option>)}
+            {compareChoices.map(c => <option key={c} value={c}>{COMPARE_LABELS[c] ?? c}</option>)}
+            {cat.compares.includes('CORTE') && cuts.length > 0 && <option value="CORTE">Un corte estadístico</option>}
           </select></label>
+          {q.compare === 'CORTE' && <label><span>Corte</span><select value={q.compareCut ?? ''} onChange={e => go({...q, compareCut: e.target.value ? Number(e.target.value) : null})}>
+            <option value="">Elige un corte</option>
+            {cuts.filter(c => c.id !== q.cut).map(c => <option key={c.id} value={c.id}>{c.code}: {c.title} ({c.period})</option>)}
+          </select><small>Se compara por celdas con el mismo periodo, con el alcance del corte.</small></label>}
         </div>
         <details className="disclosure">
           <summary><Icon name="layers" size={18}/>Opciones avanzadas <small>{BASIS_LABELS[q.period.basis || m?.default_date_basis || 'RECEPCION']}; {MODE_LABELS[q.mode]}</small><Icon name="down" size={18}/></summary>
           <div className="disclosure-body form-grid">
             <label><span>Fecha de análisis</span><select value={q.period.basis || m?.default_date_basis || 'RECEPCION'} onChange={e => go({...q, period: {...q.period, basis: e.target.value}})}>
               {basisOptions.map(b => <option key={b} value={b}>{BASIS_LABELS[b] ?? b}</option>)}</select></label>
-            <label><span>Valores</span><select value={q.mode} onChange={e => go({...q, mode: e.target.value})}>
-              {cat.time_modes.map(t => <option key={t} value={t}>{MODE_LABELS[t] ?? t}</option>)}</select><small>{MODE_HELP[q.mode]}</small></label>
-            {q.mode === 'FECHA' && <label><span>Fecha y hora (hora de Chile)</span><input type="datetime-local" value={q.asOf} max={today + 'T23:59'} onChange={e => go({...q, asOf: e.target.value})}/></label>}
+            <label><span>Valores</span><select value={q.cut ? 'VIGENTE' : q.mode} disabled={!!q.cut} onChange={e => go({...q, mode: e.target.value})}>
+              {cat.time_modes.map(t => <option key={t} value={t}>{MODE_LABELS[t] ?? t}</option>)}</select>
+              <small>{q.cut ? 'Un corte tiene los valores vigentes en su instante.' : MODE_HELP[q.mode]}</small></label>
+            {q.mode === 'FECHA' && !q.cut && <label><span>Fecha y hora (hora de Chile)</span><input type="datetime-local" value={q.asOf} max={today + 'T23:59'} onChange={e => go({...q, asOf: e.target.value})}/></label>}
             <label className="check span-all"><input type="checkbox" checked={q.proposals} onChange={e => go({...q, proposals: e.target.checked})}/>
               <span>Mostrar aparte las propuestas del Formulario pendientes de confirmar (nunca se suman a las cifras)</span></label>
           </div>
@@ -203,7 +233,11 @@ export default function Explore({ctx, cat, scope, query}: {ctx: Context; cat: St
             : !r || (rightsRow && !flat && !treeReady && !levelError) ? <div aria-busy="true"><Skeleton lines={6} title/><p className="field-help">Calculando…</p></div>
               : <>
                 {levelError && <ErrorMessage>{levelError}</ErrorMessage>}
-                <ResultView cat={cat} catalog={ctx.catalog} q={q} r={r} at={main.at} refresh={main.refresh} scope={scope} levels={tree ? levels : undefined} tree={tree}/>
+                <ResultView cat={cat} catalog={ctx.catalog} q={q} r={r} at={main.at} refresh={main.refresh} scope={scope} levels={tree ? levels : undefined} tree={tree}
+                  cutCode={onCut?.code} actions={body && <div className="stat-result-actions">
+                    <ExportBar ctx={ctx} q={q} body={body} title={queryTitle(cat, q)}/>
+                    <FreezeButton ctx={ctx} q={q}/>
+                  </div>}/>
               </>}
       </Panel>
       <SavedViews ctx={ctx} cat={cat} q={problem ? null : q}/>

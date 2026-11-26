@@ -111,3 +111,29 @@ export async function downloadPost(path: string, body: unknown, fallback: string
     track(-1);
   }
 }
+
+/**
+ * Descarga un archivo pedido por GET sin datos en la URL (E13: plantilla de las series historicas). El nombre sale de
+ * Content-Disposition; un rechazo trae el mensaje del servidor.
+ */
+export async function downloadGet(path: string, fallback: string, nameOf: (header: string | null, fallback: string) => string) {
+  track(1);
+  try {
+    const response = await fetch('/api' + path, {method: 'GET', credentials: 'same-origin', cache: 'no-store'});
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 428) window.dispatchEvent(new Event('siger-session'));
+      const data: Row = await response.json().catch(() => ({}));
+      throw Object.assign(new Error(text(data, 'message') || GENERIC_ERRORS[response.status] || 'No se pudo descargar el archivo.'), {status: response.status});
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nameOf(response.headers.get('Content-Disposition'), fallback);
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } finally {
+    track(-1);
+  }
+}

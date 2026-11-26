@@ -15,39 +15,46 @@ export const MAX_SERIES = CHART_COLORS.length;
 export const MAX_PIE = 6;
 export const MAX_BARS = 80;
 
-export type ChartKind = 'barras' | 'agrupadas' | 'apiladas' | 'lineas' | 'circular' | 'pareadas';
-export const KIND_LABELS: Record<ChartKind, string> = {barras: 'Barras', agrupadas: 'Barras agrupadas', apiladas: 'Barras apiladas', lineas: 'Líneas', circular: 'Circular', pareadas: 'Barras pareadas'};
+export type ChartKind = 'barras' | 'agrupadas' | 'apiladas' | 'lineas' | 'columnas' | 'circular' | 'pareadas';
+export const KIND_LABELS: Record<ChartKind, string> = {barras: 'Barras', agrupadas: 'Barras agrupadas', apiladas: 'Barras apiladas', lineas: 'Líneas', columnas: 'Columnas',
+  circular: 'Circular', pareadas: 'Barras pareadas'};
+/** E13 (ajuste 3): el eje de periodo siempre es horizontal, con columnas o lineas; nunca barras horizontales. */
+export const PERIOD_HORIZONTAL = 'El eje de periodo va en horizontal: usa columnas o líneas.';
 /** Forma de los datos: dimensiones, si son de periodo o multiples, si hay comparacion y cuantas categorias y series hay. */
 export type Shape = {rows: number; columns: number; period: boolean; multipleRows: boolean; multipleColumns: boolean; comparison: boolean; percent: boolean;
   categories: number; series: number};
 export type Choice = {kind: ChartKind; label: string; ok: boolean; reason: string};
 
 /**
- * Grafico sugerido (tabla de DISENO 10.3): una comparacion -> barras pareadas; un eje de periodo -> lineas; dos
- * dimensiones -> barras agrupadas; una dimension (de valor unico o multiple) -> barras horizontales de mayor a menor.
+ * Grafico sugerido (tabla de DISENO 10.3, con los ajustes de E13): una comparacion de periodos -> columnas pareadas; otra
+ * comparacion -> barras pareadas; un eje de periodo -> lineas; dos dimensiones -> barras agrupadas; una dimension (de valor
+ * unico o multiple) -> barras horizontales de mayor a menor.
  */
 export function suggest(s: Shape): ChartKind | null {
   const all = choices(s).filter(c => c.ok);
   if (all.length === 0) return null;
-  const order: ChartKind[] = s.comparison ? ['pareadas'] : s.period ? ['lineas'] : s.columns > 0 ? ['agrupadas', 'apiladas'] : ['barras'];
+  const order: ChartKind[] = s.comparison ? (s.period ? ['columnas', 'lineas'] : ['pareadas']) : s.period ? ['lineas', 'columnas'] : s.columns > 0 ? ['agrupadas', 'apiladas'] : ['barras'];
   return order.find(k => all.some(c => c.kind === k)) ?? all[0].kind;
 }
 /** Graficos que admite la forma, con la razon en lenguaje llano de los que no. */
 export function choices(s: Shape, values?: number[], total?: number): Choice[] {
-  const c = (kind: ChartKind, reason: string): Choice => ({kind, label: KIND_LABELS[kind], ok: reason === '', reason});
+  const c = (kind: ChartKind, reason: string, label = KIND_LABELS[kind]): Choice => ({kind, label, ok: reason === '', reason});
   const tooMany = s.categories > MAX_BARS ? `Hay ${s.categories} categorías: el gráfico no se leería. Usa la tabla o acota con un filtro.` : '';
   const empty = s.categories === 0 ? 'No hay cifras para graficar.' : '';
   const base = empty || tooMany;
   const seriesProblem = s.series > MAX_SERIES ? `Hay ${s.series} columnas y solo ${MAX_SERIES} colores distinguibles. Pasa ese campo a filas o usa la tabla.` : '';
   return [
-    c('barras', base || (s.columns > 0 ? 'Con columnas usa barras agrupadas o apiladas.' : s.comparison ? 'Con una comparación usa barras pareadas.' : '')),
-    c('agrupadas', base || (s.columns === 0 ? 'Necesita un campo en columnas.' : s.comparison ? 'Con una comparación usa barras pareadas.' : seriesProblem)),
-    c('apiladas', base || (s.columns === 0 ? 'Necesita un campo en columnas.' : s.comparison ? 'Con una comparación usa barras pareadas.'
+    c('barras', base || (s.period ? PERIOD_HORIZONTAL : s.columns > 0 ? 'Con columnas usa barras agrupadas o apiladas.' : s.comparison ? 'Con una comparación usa barras pareadas.' : '')),
+    c('agrupadas', base || (s.period ? PERIOD_HORIZONTAL : s.columns === 0 ? 'Necesita un campo en columnas.' : s.comparison ? 'Con una comparación usa barras pareadas.' : seriesProblem)),
+    c('apiladas', base || (s.period ? PERIOD_HORIZONTAL : s.columns === 0 ? 'Necesita un campo en columnas.' : s.comparison ? 'Con una comparación usa barras pareadas.'
       : s.multipleColumns ? 'El campo de columnas tiene valores múltiples: sus partes no suman el total y no se pueden apilar.'
         : s.percent ? 'Los porcentajes no se apilan: usa barras agrupadas.' : seriesProblem)),
-    c('lineas', base || (!s.period ? 'Las líneas necesitan un eje de periodo en filas.' : s.comparison ? 'Con una comparación usa barras pareadas.' : seriesProblem)),
+    // Con una comparacion de periodos, dos lineas: la del periodo consultado y la de comparacion.
+    c('lineas', base || (!s.period ? 'Las líneas necesitan un eje de periodo en filas.' : seriesProblem)),
+    c('columnas', base || (!s.period ? 'Las columnas se usan para un eje de periodo; para categorías usa barras.' : seriesProblem), s.comparison ? 'Columnas pareadas' : KIND_LABELS.columnas),
     c('circular', base || pieReason(s, values, total)),
-    c('pareadas', base || (!s.comparison ? 'Necesita una comparación con otro periodo.' : s.columns > 0 ? 'La comparación se grafica sin columnas: quita el campo de columnas o usa la tabla.' : '')),
+    c('pareadas', base || (!s.comparison ? 'Necesita una comparación con otro periodo.' : s.period ? 'Con un eje de periodo la comparación va en columnas pareadas o en dos líneas.'
+      : s.columns > 0 ? 'La comparación se grafica sin columnas: quita el campo de columnas o usa la tabla.' : '')),
   ];
 }
 /**

@@ -160,6 +160,49 @@ public class StatLoadMeasureTest extends StatFixture {
     StatCuts cutsService(){return cutService;}
     @org.springframework.beans.factory.annotation.Autowired StatExport exportService;
 
+    @org.springframework.beans.factory.annotation.Autowired BoardQueries boardsService;
+
+    /**
+     * E13 (condicion 4 del GO): filtro "Con datos estadisticos pendientes" de las bandejas COM, SOL y REQ con 50.005 COM, para
+     * E14: tiempo de la primera pagina con su conteo (tres corridas tras una de calentamiento) y EXPLAIN del conteo en MySQL.
+     * Resultado en target/medicion-e13.txt. Solo con -Dsiger.stats.measure-e13=true y la suite sobre MySQL.
+     */
+    @Test @EnabledIfSystemProperty(named="siger.stats.measure-e13",matches="true")
+    void medicionE13()throws Exception{
+        assertTrue(MySqlSuite.enabled(),"MySQL desechable obligatorio");
+        String schema=MySqlSuite.schema("sigera_medicion");
+        var log=Path.of("target","medicion-e13.txt");
+        try(var mon=raw()){
+            assertEquals(List.of(),StatGuard.misplaced("D:",mon.text("SELECT @@datadir"),mon.text("SELECT @@tmpdir"),mon.text("SELECT @@innodb_temp_tablespaces_dir")));
+            File drive=new File("D:\\");assertTrue(drive.getUsableSpace()>=START_FREE);
+            generate();assertEquals(TOTAL,db.count("SELECT COUNT(*) FROM communication"));
+            mon.exec("ANALYZE TABLE `"+schema+"`.communication,`"+schema+"`.solicitation,`"+schema+"`.requirement,`"+schema+"`.case_record,`"+schema+"`.stat_event,`"+schema+"`.stat_catalog_version");
+            var reader=access.actor(staff("consulta.e13.medicion","CONSULTA_INSTITUCIONAL","REPORTES"));
+            var out=new StringBuilder("COM="+TOTAL+"; catalogos vigentes="+db.count("SELECT COUNT(*) FROM stat_catalog_version WHERE `current_catalog` IS NOT NULL")+"\n");
+            var from=Map.of("com","communication c","sol","solicitation s JOIN communication c ON c.id=s.communication_id","req","requirement r");
+            for(String kind:List.of("com","sol","req")){
+                boardsService.page(reader,kind,0,25,"","stat_pending",null);
+                var times=new ArrayList<Long>();long total=0;
+                for(int i=0;i<3;i++){
+                    long t0=System.nanoTime();
+                    total=((Number)boardsService.page(reader,kind,0,25,"","stat_pending",null).get("total")).longValue();
+                    times.add((System.nanoTime()-t0)/1_000_000);
+                }
+                long all=((Number)boardsService.page(reader,kind,0,25,"","all",null).get("total")).longValue();
+                out.append(kind).append(": total=").append(total).append(" de ").append(all).append("; ms=").append(times).append('\n');
+                String where=kind.equals("req")?"EXISTS(SELECT 1 FROM communication pc WHERE pc.id=r.communication_id AND "+boardsService.statPending("pc","r")+")":boardsService.statPending("c",null);
+                try(var st=mon.c().createStatement()){
+                    st.execute("USE `"+schema+"`");
+                    try(var rs=st.executeQuery("EXPLAIN SELECT COUNT(*) FROM "+from.get(kind)+" WHERE "+where)){
+                        while(rs.next())out.append("  explain ").append(rs.getString("select_type")).append(' ').append(rs.getString("table")).append(' ').append(rs.getString("type"))
+                            .append(" key=").append(rs.getString("key")).append(" rows=").append(rs.getString("rows")).append(' ').append(rs.getString("Extra")).append('\n');
+                    }
+                }
+            }
+            Files.writeString(log,out.toString());System.out.print(out);
+        }
+    }
+
     @Test @EnabledIfSystemProperty(named="siger.stats.measure-e11",matches="true")
     void medicionE11()throws Exception{
         assertTrue(MySqlSuite.enabled(),"MySQL desechable obligatorio");

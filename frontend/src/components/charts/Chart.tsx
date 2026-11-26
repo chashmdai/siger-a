@@ -7,8 +7,12 @@ import {downloadPng, downloadSvg} from './chartExport';
 
 export type Category = {key: string; label: string; special?: boolean; total?: number | null};
 export type Series = {key: string; label: string; values: (number | null)[]; base?: boolean};
-/** keepOrder: conserva el orden recibido (orden institucional) en vez de ordenar las barras de mayor a menor. */
-export type ChartData = {categories: Category[]; series: Series[]; total?: number | null; percent: boolean; format: (v: number | null) => string; keepOrder?: boolean};
+/**
+ * keepOrder: conserva el orden recibido (orden institucional) en vez de ordenar las barras de mayor a menor. divider: marca de
+ * discontinuidad (E13, serie historica junto a SIGER) despues de la categoria indicada, con su texto: nunca solo una linea.
+ */
+export type ChartData = {categories: Category[]; series: Series[]; total?: number | null; percent: boolean; format: (v: number | null) => string; keepOrder?: boolean;
+  divider?: {after: number; label: string}};
 
 const W = 720;
 const short = (s: string, max = 34) => s.length > max ? s.slice(0, max - 1) + '…' : s;
@@ -75,18 +79,71 @@ function Bars({data, mode}: {data: ChartData; mode: 'barras' | 'agrupadas' | 'ap
   </svg>;
 }
 
-/** Lineas para un eje de periodo: 2 px, marcadores de 8 px, base en 0. */
+/** Marca de discontinuidad: linea punteada entre dos categorias con su texto a la vista (y en el nombre accesible). */
+function Divider({x, height, label}: {x: number; height: number; label: string}) {
+  return <g role="img" aria-label={label} className="chart-divider"><title>{label}</title>
+    <line x1={x} x2={x} y1={-6} y2={height} stroke={TEXT_COLOR} strokeWidth={1.5} strokeDasharray="5 4"/>
+    <text x={x + 6} y={6} fontSize={11} fill={TEXT_COLOR} fontFamily={FONT}>{short(label, 60)}</text>
+  </g>;
+}
+
+/**
+ * Columnas verticales para un eje de periodo (E13, ajuste 3): una serie, agrupadas por columnas o pareadas con la cifra
+ * base de una comparacion (gris); siempre desde 0 y con el periodo en el eje horizontal.
+ */
+function Columns({data}: {data: ChartData}) {
+  const series = data.series;
+  const legendH = series.length > 1 ? 30 : 8, left = 56, right = 24, plotH = 220, top = data.divider ? 18 : 0;
+  const plot = W - left - right;
+  const n = Math.max(1, data.categories.length);
+  const band = plot / n, groupW = Math.min(64, band * 0.72), barW = groupW / Math.max(1, series.length);
+  const peak = Math.max(0, ...series.flatMap(s => s.values.map(v => v ?? 0)));
+  const sc = scale(peak, !data.percent);
+  const height = legendH + top + plotH + 52;
+  const every = Math.max(1, Math.ceil(data.categories.length / 12));
+  const value = n <= 24 && series.length <= 2;
+  return <svg xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${W} ${height}`} width={W} height={height} className="chart-svg">
+    <Legend series={series} y={18}/>
+    <g transform={`translate(${left} ${legendH + top})`}>
+      {sc.ticks.map(t => {
+        const y = plotH - t / sc.max * plotH;
+        return <g key={t}><line x1={0} x2={plot} y1={y} y2={y} stroke={GRID_COLOR} strokeWidth={1}/>
+          <text x={-8} y={y + 4} fontSize={11} fill={MUTED_COLOR} fontFamily={FONT} textAnchor="end">{data.format(t)}</text></g>;
+      })}
+      <line x1={0} x2={plot} y1={plotH} y2={plotH} stroke={MUTED_COLOR} strokeWidth={1}/>
+      {data.categories.map((c, i) => {
+        const x0 = i * band + (band - groupW) / 2;
+        return <g key={c.key}>
+          {i % every === 0 && <text x={i * band + band / 2} y={plotH + 18} fontSize={11} fill={MUTED_COLOR} fontFamily={FONT} textAnchor="middle">{short(c.label, 14)}</text>}
+          {series.map((s, si) => {
+            const v = s.values[i];
+            const h = barLength(v, sc.max, plotH);
+            const x = x0 + si * barW;
+            return <Mark key={s.key} label={`${c.label}${series.length > 1 ? ', ' + s.label : ''}: ${data.format(v)}`}>
+              {h > 0 && <rect x={x} y={plotH - h} width={Math.max(1, barW - 2)} height={h} rx={2} fill={color(s, si)}/>}
+              {value && (series.length === 1 || (v ?? 0) > 0) && <text x={x + barW / 2 - 1} y={plotH - h - 4} fontSize={10} fill={TEXT_COLOR} fontFamily={FONT} textAnchor="middle">{data.format(v)}</text>}
+            </Mark>;
+          })}
+        </g>;
+      })}
+      {data.divider && <Divider x={(data.divider.after + 1) * band} height={plotH} label={data.divider.label}/>}
+    </g>
+  </svg>;
+}
+
+/** Lineas para un eje de periodo: 2 px, marcadores de 8 px, base en 0; la serie base de una comparacion, punteada. */
 function Lines({data}: {data: ChartData}) {
   const series = data.series;
-  const legendH = series.length > 1 ? 30 : 8, left = 56, right = 24, plotH = 220;
+  const legendH = series.length > 1 ? 30 : 8, left = 56, right = 24, plotH = 220, top = data.divider ? 18 : 0;
   const plot = W - left - right;
   const peak = Math.max(0, ...series.flatMap(s => s.values.map(v => v ?? 0)));
   const sc = scale(peak, !data.percent);
-  const height = legendH + plotH + 52;
+  const height = legendH + top + plotH + 52;
   const every = Math.max(1, Math.ceil(data.categories.length / 12));
+  const xs = linePoints(data.categories.map(() => 0), plot, plotH, sc.max).map(p => p.x);
   return <svg xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${W} ${height}`} width={W} height={height} className="chart-svg">
     <Legend series={series} y={18}/>
-    <g transform={`translate(${left} ${legendH})`}>
+    <g transform={`translate(${left} ${legendH + top})`}>
       {sc.ticks.map(t => {
         const y = plotH - t / sc.max * plotH;
         return <g key={t}><line x1={0} x2={plot} y1={y} y2={y} stroke={GRID_COLOR} strokeWidth={1}/>
@@ -99,12 +156,13 @@ function Lines({data}: {data: ChartData}) {
         const pts = linePoints(s.values, plot, plotH, sc.max);
         const path = pts.reduce((acc, p, i) => p.y == null ? acc : acc + (i === 0 || pts[i - 1].y == null ? ' M ' : ' L ') + p.x.toFixed(1) + ' ' + p.y.toFixed(1), '').trim();
         return <g key={s.key}>
-          <path d={path} fill="none" stroke={color(s, si)} strokeWidth={2} strokeLinejoin="round"/>
+          <path d={path} fill="none" stroke={color(s, si)} strokeWidth={2} strokeLinejoin="round" strokeDasharray={s.base ? '6 4' : undefined}/>
           {pts.map((p, i) => p.y != null && <Mark key={i} label={`${data.categories[i].label}${series.length > 1 ? ', ' + s.label : ''}: ${data.format(p.value)}`}>
             <circle cx={p.x} cy={p.y} r={4} fill={color(s, si)} stroke="#ffffff" strokeWidth={2}/>
           </Mark>)}
         </g>;
       })}
+      {data.divider && xs.length > 1 && <Divider x={((xs[data.divider.after] ?? 0) + (xs[data.divider.after + 1] ?? plot)) / 2} height={plotH} label={data.divider.label}/>}
     </g>
   </svg>;
 }
@@ -149,13 +207,14 @@ export function Chart({kind, data, title, subtitle, notes, source, file, tableId
       setError((e as Error).message);
     }
   };
-  const body = kind === 'lineas' ? <Lines data={data}/> : kind === 'circular' ? <Pie data={data}/> : <Bars data={data} mode={kind}/>;
+  const body = kind === 'lineas' ? <Lines data={data}/> : kind === 'columnas' ? <Columns data={data}/> : kind === 'circular' ? <Pie data={data}/> : <Bars data={data} mode={kind}/>;
   return <figure className="stat-chart" aria-labelledby={id + 't'}>
     <figcaption>
       <strong id={id + 't'}>{title}</strong>
       {subtitle && <span className="stat-chart-sub">{subtitle}</span>}
     </figcaption>
     <div ref={ref} className="stat-chart-canvas" role="group" aria-label={`${KIND_LABELS[kind]}: ${title}. ${data.categories.length} categorías.${tableId ? ' Las cifras están también en la tabla.' : ''}`}>{body}</div>
+    {data.divider && <p className="stat-chart-divider"><span aria-hidden="true">┆ </span>{data.divider.label}</p>}
     {notes.length > 0 && <ul className="stat-chart-notes">{notes.map(n => <li key={n}>{n}</li>)}</ul>}
     <p className="stat-source">{source}</p>
     <div className="actions">
