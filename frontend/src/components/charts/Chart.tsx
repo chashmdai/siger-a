@@ -2,7 +2,7 @@ import {useId, useRef, useState} from 'react';
 import type {ReactNode} from 'react';
 import {Icon} from '../Icon';
 import type {ChartKind} from './chartModel';
-import {arcPath, barLength, BASE_COLOR, byValue, CHART_COLORS, FONT, GRID_COLOR, KIND_LABELS, linePoints, MUTED_COLOR, pieSlices, scale, TEXT_COLOR} from './chartModel';
+import {arcPath, barLength, BASE_COLOR, byValue, CHART_COLORS, FONT, GRID_COLOR, KIND_LABELS, linePoints, MUTED_COLOR, periodAxis, pieSlices, scale, TEXT_COLOR} from './chartModel';
 import {downloadPng, downloadSvg} from './chartExport';
 
 export type Category = {key: string; label: string; special?: boolean; total?: number | null};
@@ -79,6 +79,15 @@ function Bars({data, mode}: {data: ChartData; mode: 'barras' | 'agrupadas' | 'ap
   </svg>;
 }
 
+/**
+ * Rotulo del eje de periodo (E14, correccion 1): abreviado o en dos lineas, sin cortar; el nombre completo en la ayuda
+ * emergente (y en la tabla).
+ */
+function Tick({x, y, lines, title}: {x: number; y: number; lines: string[]; title: string}) {
+  return <text x={x} y={y} fontSize={11} fill={MUTED_COLOR} fontFamily={FONT} textAnchor="middle" className="chart-tick"><title>{title}</title>
+    {lines.map((l, k) => <tspan key={k} x={x} dy={k ? 13 : 0}>{l}</tspan>)}</text>;
+}
+
 /** Marca de discontinuidad: linea punteada entre dos categorias con su texto a la vista (y en el nombre accesible). */
 function Divider({x, height, label}: {x: number; height: number; label: string}) {
   return <g role="img" aria-label={label} className="chart-divider"><title>{label}</title>
@@ -100,7 +109,7 @@ function Columns({data}: {data: ChartData}) {
   const peak = Math.max(0, ...series.flatMap(s => s.values.map(v => v ?? 0)));
   const sc = scale(peak, !data.percent);
   const height = legendH + top + plotH + 52;
-  const every = Math.max(1, Math.ceil(data.categories.length / 12));
+  const axis = periodAxis(data.categories.map(c => c.label), band);
   const value = n <= 24 && series.length <= 2;
   return <svg xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${W} ${height}`} width={W} height={height} className="chart-svg">
     <Legend series={series} y={18}/>
@@ -114,7 +123,7 @@ function Columns({data}: {data: ChartData}) {
       {data.categories.map((c, i) => {
         const x0 = i * band + (band - groupW) / 2;
         return <g key={c.key}>
-          {i % every === 0 && <text x={i * band + band / 2} y={plotH + 18} fontSize={11} fill={MUTED_COLOR} fontFamily={FONT} textAnchor="middle">{short(c.label, 14)}</text>}
+          {i % axis.step === 0 && <Tick x={i * band + band / 2} y={plotH + 18} {...axis.ticks[i]}/>}
           {series.map((s, si) => {
             const v = s.values[i];
             const h = barLength(v, sc.max, plotH);
@@ -139,8 +148,8 @@ function Lines({data}: {data: ChartData}) {
   const peak = Math.max(0, ...series.flatMap(s => s.values.map(v => v ?? 0)));
   const sc = scale(peak, !data.percent);
   const height = legendH + top + plotH + 52;
-  const every = Math.max(1, Math.ceil(data.categories.length / 12));
   const xs = linePoints(data.categories.map(() => 0), plot, plotH, sc.max).map(p => p.x);
+  const axis = periodAxis(data.categories.map(c => c.label), xs.length > 1 ? xs[1] - xs[0] : plot);
   return <svg xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${W} ${height}`} width={W} height={height} className="chart-svg">
     <Legend series={series} y={18}/>
     <g transform={`translate(${left} ${legendH + top})`}>
@@ -150,8 +159,7 @@ function Lines({data}: {data: ChartData}) {
           <text x={-8} y={y + 4} fontSize={11} fill={MUTED_COLOR} fontFamily={FONT} textAnchor="end">{data.format(t)}</text></g>;
       })}
       <line x1={0} x2={plot} y1={plotH} y2={plotH} stroke={MUTED_COLOR} strokeWidth={1}/>
-      {data.categories.map((c, i) => i % every === 0 && <text key={c.key} x={linePoints(data.categories.map(() => 0), plot, plotH, sc.max)[i].x} y={plotH + 18}
-        fontSize={11} fill={MUTED_COLOR} fontFamily={FONT} textAnchor="middle">{short(c.label, 14)}</text>)}
+      {data.categories.map((c, i) => i % axis.step === 0 && <Tick key={c.key} x={xs[i]} y={plotH + 18} {...axis.ticks[i]}/>)}
       {series.map((s, si) => {
         const pts = linePoints(s.values, plot, plotH, sc.max);
         const path = pts.reduce((acc, p, i) => p.y == null ? acc : acc + (i === 0 || pts[i - 1].y == null ? ' M ' : ' L ') + p.x.toFixed(1) + ' ' + p.y.toFixed(1), '').trim();

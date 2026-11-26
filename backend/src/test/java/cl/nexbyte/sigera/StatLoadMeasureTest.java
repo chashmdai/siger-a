@@ -203,6 +203,193 @@ public class StatLoadMeasureTest extends StatFixture {
         }
     }
 
+    /**
+     * E14 (GO del 2026-11-26, A y condicion 3): carga inicial del Panorama (las seis consultas que lanza la pantalla, de a una,
+     * con la Cuenta Publica 2025-2026 comparada con el mismo periodo del anio anterior) y las consultas pesadas del explorador
+     * con 50.005 COM: cada una bajo 3 s (DISENO 5.7), con el total del Panorama y su proyeccion lineal al volumen real (unos
+     * 7.200 ingresos al anio). Antes de ANALYZE (tablas recien llenadas: las stat_declared como tras la carga V21 de la
+     * actualizacion, y las stat_cut y stat_export_cut recien congeladas) y despues, EXPLAIN de cada sentencia que el motor, la
+     * consulta sobre el corte, su comparacion, su verificacion y su exportacion leen, capturada en la conexion JDBC con sus
+     * parametros: se informa todo recorrido completo (type ALL) de una tabla recien llenada. Resultado en
+     * target/medicion-e14.txt. Solo con -Dsiger.stats.measure-e14=true y la suite sobre MySQL.
+     */
+    @Test @EnabledIfSystemProperty(named="siger.stats.measure-e14",matches="true")
+    void medicionE14()throws Exception{
+        assertTrue(MySqlSuite.enabled(),"MySQL desechable obligatorio");
+        assertEquals(30,guard.timeoutSeconds(),"plazo de produccion");
+        String schema=MySqlSuite.schema("sigera_medicion");
+        var log=Path.of("target","medicion-e14.txt");
+        try(var mon=raw()){
+            assertEquals(List.of(),StatGuard.misplaced("D:",mon.text("SELECT @@datadir"),mon.text("SELECT @@tmpdir"),mon.text("SELECT @@innodb_temp_tablespaces_dir")));
+            assertEquals("TempTable",mon.text("SELECT @@internal_tmp_mem_storage_engine"));
+            File drive=new File("D:\\");assertTrue(drive.getUsableSpace()>=START_FREE);
+            var out=new StringBuilder("Medicion E14 - MySQL "+mon.text("SELECT VERSION()")+", esquema "+schema+"\n");
+            long t0=System.currentTimeMillis();
+            generate();assertEquals(TOTAL,db.count("SELECT COUNT(*) FROM communication"));
+            out.append("Generacion: ").append(System.currentTimeMillis()-t0).append(" ms\n");
+            // Las tablas base se analizan como en E08b; las derivadas y las del corte quedan recien llenadas.
+            mon.exec("ANALYZE TABLE `"+schema+"`.communication,`"+schema+"`.solicitation,`"+schema+"`.requirement,`"+schema+"`.case_record,`"+schema+"`.stat_event,`"+schema+"`.milestone,`"+schema+"`.command_log,`"+schema+"`.management_note");
+            var rep=access.actor(REP);
+            String gest=staff("gest.e14.medicion","REPORTES","GESTION_ESTADISTICA");
+            var exporter=access.actor(staff("exp.e14.medicion","REPORTES","EXPORTACION","REPORTES_PERSONAS"));
+            var capture=new Capture(db.dataSource());
+            var cdb=new Db(new org.springframework.jdbc.core.JdbcTemplate(capture));
+            var creports=new Reports(cdb);var ccuts=new StatCuts(cdb,creports,guard);var cengine=new StatEngine(cdb,creports,guard,ccuts,20000);
+            var cseries=new StatSeries(cdb,creports,ccuts,cengine,2097152,20000,96,33554432,160);
+            var cexport=new StatExport(cdb,creports,guard,cengine,ccuts,cseries,30000,500000);
+            // Fase 1: lecturas del motor sobre stat_declared_* recien llenadas.
+            for(var q:consultas()){capture.phase("motor: "+q.name());cengine.query(rep,q.body());}
+            long cut=cut(gest,null,cp());
+            for(var q:consultas()){
+                if(q.body().containsKey("compare")||q.body().containsKey("time_mode"))continue;
+                var frozen=new LinkedHashMap<>(q.body());frozen.put("cut_id",cut);
+                capture.phase("corte: "+q.name());cengine.query(rep,frozen);
+            }
+            var compared=new LinkedHashMap<>(consultas().get(2).body());compared.put("compare",map("type","CORTE","cut_id",cut));
+            capture.phase("comparacion con el corte");cengine.query(rep,compared);
+            capture.phase("verificacion del corte");assertEquals(true,ccuts.verify(rep,cut).get("ok"));
+            var frozenZip=map("measure","REQUERIMIENTOS_CON_VALOR","rows",List.of("DERECHO"),"period",cp(),"cut_id",cut);
+            capture.phase("ZIP desde el corte");cexport.export(exporter,"zip",frozenZip);
+            capture.phase("CSV desde el corte");cexport.export(exporter,"csv",frozenZip);
+            var statements=capture.done();
+            var fresh=Set.of("stat_declared_version","stat_declared_person","stat_cut_row","stat_cut_event","stat_cut_action","stat_cut_action_institution","stat_cut_person","stat_cut_case",
+                "stat_export_cut_folio","stat_export_cut_origin","stat_export_cut_integrity");
+            out.append("Sentencias capturadas: ").append(statements.size()).append('\n');
+            var before=explain(statements,fresh);
+            var analyze=new StringBuilder("ANALYZE TABLE ");
+            for(String t:new TreeSet<>(fresh))if(db.count("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?",t)>0)analyze.append('`').append(schema).append("`.").append(t).append(',');
+            mon.exec(analyze.substring(0,analyze.length()-1));
+            var after=explain(statements,fresh);
+            out.append("EXPLAIN antes de ANALYZE (tablas recien llenadas; fase | tabla | tipo | indice | filas estimadas):\n");
+            for(var line:before)out.append("  ").append(line).append('\n');
+            out.append("EXPLAIN despues de ANALYZE:\n");
+            for(var line:after)out.append("  ").append(line).append('\n');
+            long fullBefore=before.stream().filter(l->l.contains("| ALL |")).count(),fullAfter=after.stream().filter(l->l.contains("| ALL |")).count();
+            out.append("Recorridos completos de tablas recien llenadas: antes=").append(fullBefore).append(", despues=").append(fullAfter).append('\n');
+            Files.writeString(log,out.toString());
+            // Fase 2: tiempos, con todo analizado (como queda la instancia minutos despues).
+            long inPeriod=db.count("SELECT COUNT(*) FROM communication WHERE received_ms>=? AND received_ms<?",
+                java.time.OffsetDateTime.parse("2025-07-01T04:00:00Z").toInstant().toEpochMilli(),java.time.OffsetDateTime.parse("2026-07-01T04:00:00Z").toInstant().toEpochMilli());
+            double factor=7200.0/inPeriod;
+            out.append("COM recibidas en la Cuenta Publica 2025-2026: ").append(inPeriod).append("; volumen real anual ~7.200; factor de proyeccion lineal ")
+                .append(String.format(Locale.ROOT,"%.3f",factor)).append('\n');
+            var panorama=panorama();
+            var times=new LinkedHashMap<String,List<Long>>();
+            for(int run=0;run<3;run++){
+                for(var e:panorama.entrySet()){
+                    long s=System.nanoTime();engine.query(rep,e.getValue());
+                    times.computeIfAbsent("panorama: "+e.getKey(),k->new ArrayList<>()).add((System.nanoTime()-s)/1_000_000);
+                }
+                for(var q:consultas()){
+                    long s=System.nanoTime();engine.query(rep,q.body());
+                    times.computeIfAbsent("explorador: "+q.name(),k->new ArrayList<>()).add((System.nanoTime()-s)/1_000_000);
+                }
+            }
+            out.append("consulta;ms (primera, segunda, tercera);maximo;proyeccion_ms\n");
+            long first=0;
+            for(var e:times.entrySet()){
+                long max=Collections.max(e.getValue());
+                if(e.getKey().startsWith("panorama: "))first+=e.getValue().getFirst();
+                out.append(e.getKey()).append(';').append(e.getValue()).append(';').append(max).append(';').append(Math.round(max*factor)).append('\n');
+            }
+            out.append("Carga inicial del Panorama (suma de la primera corrida de sus ").append(panorama.size()).append(" consultas, de a una): ").append(first)
+                .append(" ms; proyeccion al volumen real: ").append(Math.round(first*factor)).append(" ms\n");
+            Files.writeString(log,out.toString());System.out.print(out);
+            for(var e:times.entrySet())assertTrue(Collections.max(e.getValue())<3_000,e.getKey()+" supera 3 s: "+e.getValue());
+        }
+    }
+    /** Las seis consultas distintas que lanza el Panorama (statsModel.ts: INDICATORS e indicatorQuery; el total de ingresos es la del primero). */
+    @SuppressWarnings("unchecked")
+    Map<String,Map<String,Object>> panorama(){
+        var period=cp();var compare=map("type","MISMO_PERIODO_ANIO_ANTERIOR");
+        var out=new LinkedHashMap<String,Map<String,Object>>();
+        for(var m:List.of("INGRESOS","REQ_CONSTITUIDOS","CASOS","ACTUACIONES"))
+            out.put(m,map("measure",m,"rows",List.of("PERIODO_MES"),"period",period,"compare",compare));
+        var options=new HashMap<String,List<String>>();
+        for(var d:(List<Map<String,Object>>)engine.catalog().get("dimensions")){
+            var codes=new ArrayList<String>();
+            for(var o:(List<Map<String,Object>>)d.get("options"))codes.add((String)o.get("code"));
+            options.put((String)d.get("code"),codes);
+        }
+        var filters=new LinkedHashMap<String,Object>();
+        for(var code:List.of("ESTADO_TIPO_SOLICITUD","ESTADO_TIPO_REQUIRENTE","ESTADO_VIA_INGRESO","ESTADO_DERECHO","ESTADO_CONTEXTO"))
+            filters.put(code,options.get(code).stream().filter(c->!c.equals("PENDIENTE")).toList());
+        var regions=new ArrayList<String>(AdultIdentity.REGIONS.keySet());Collections.sort(regions);
+        regions.addAll(List.of("SIN_INFORMACION","NO_DECLARADO","NO_APLICA"));
+        filters.put("REGION_REQUIRENTE",regions);
+        out.put("caracterizacion completa",map("measure","INGRESOS","rows",List.of("PERIODO_MES"),"period",period,"compare",compare,"filters",filters));
+        out.put("registros tardios",map("measure","INGRESOS","rows",List.of("PERIODO_MES"),"period",period,"compare",compare,"filters",map("TARDANZA",List.of("SI"))));
+        return out;
+    }
+    /**
+     * EXPLAIN de cada sentencia capturada: las filas de una tabla recien llenada, como "fase | tabla | tipo | indice | filas".
+     * EXPLAIN informa el alias de la tabla: los alias de cada tabla recien llenada se leen del texto de la sentencia
+     * ("FROM tabla alias" o "JOIN tabla alias"); un alias que la sentencia usa tambien para otra tabla se informa igual.
+     */
+    List<String> explain(List<Capture.Statement> statements,Set<String> fresh){
+        var out=new TreeSet<String>();
+        var named=java.util.regex.Pattern.compile("(?i)\\b(?:FROM|JOIN)\\s+`?([a-z_]+)`?(?:\\s+(?:AS\\s+)?([a-z][a-z0-9_]*))?");
+        var reserved=Set.of("where","on","join","left","inner","cross","group","order","limit","union","using","straight_join","force","use","ignore","natural");
+        for(var st:statements){
+            String sql=st.sql().stripLeading();
+            if(!(sql.regionMatches(true,0,"SELECT",0,6)||sql.regionMatches(true,0,"WITH",0,4)))continue;
+            var aliases=new HashMap<String,String>();
+            var m=named.matcher(sql);
+            while(m.find()){
+                String table=m.group(1).toLowerCase(Locale.ROOT);
+                if(!fresh.contains(table))continue;
+                aliases.put(table,table);
+                if(m.group(2)!=null&&!reserved.contains(m.group(2).toLowerCase(Locale.ROOT)))aliases.put(m.group(2),table);
+            }
+            if(aliases.isEmpty())continue;
+            for(var r:db.rows("EXPLAIN "+sql,st.args().toArray())){
+                String table=aliases.get(String.valueOf(r.get("table")));
+                if(table==null)continue;
+                out.add(st.phase()+" | "+table+" ("+r.get("table")+") | "+r.get("type")+" | "+r.get("key")+" | "+r.get("rows"));
+            }
+        }
+        return new ArrayList<>(out);
+    }
+    /**
+     * Fuente de datos que captura cada sentencia preparada (texto y parametros en orden) que pasa por sus conexiones, con la
+     * fase vigente; delega todo lo demas en la fuente real. Solo para la medicion.
+     */
+    static final class Capture implements javax.sql.DataSource {
+        record Statement(String phase,String sql,List<Object> args){}
+        final javax.sql.DataSource real;
+        final List<Statement> seen=Collections.synchronizedList(new ArrayList<>());
+        volatile String phase="";
+        Capture(javax.sql.DataSource real){this.real=real;}
+        void phase(String p){phase=p;}
+        List<Statement> done(){synchronized(seen){return List.copyOf(seen);}}
+        @Override public java.sql.Connection getConnection()throws java.sql.SQLException{return wrap(real.getConnection());}
+        @Override public java.sql.Connection getConnection(String u,String p)throws java.sql.SQLException{return wrap(real.getConnection(u,p));}
+        java.sql.Connection wrap(java.sql.Connection c){
+            return (java.sql.Connection)java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),new Class<?>[]{java.sql.Connection.class},(proxy,m,a)->{
+                Object r;
+                try{r=m.invoke(c,a);}catch(java.lang.reflect.InvocationTargetException e){throw e.getCause();}
+                if(m.getName().equals("prepareStatement")&&r instanceof java.sql.PreparedStatement ps)return statement(ps,(String)a[0]);
+                return r;
+            });
+        }
+        java.sql.PreparedStatement statement(java.sql.PreparedStatement ps,String sql){
+            var args=new TreeMap<Integer,Object>();String current=phase;
+            return (java.sql.PreparedStatement)java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),new Class<?>[]{java.sql.PreparedStatement.class},(proxy,m,a)->{
+                String n=m.getName();
+                if(n.startsWith("set")&&a!=null&&a.length>=2&&a[0] instanceof Integer i)args.put(i,n.equals("setNull")?null:a[1]);
+                if(n.equals("executeQuery")||n.equals("execute"))seen.add(new Statement(current,sql,new ArrayList<>(args.values())));
+                try{return m.invoke(ps,a);}catch(java.lang.reflect.InvocationTargetException e){throw e.getCause();}
+            });
+        }
+        @Override public java.io.PrintWriter getLogWriter()throws java.sql.SQLException{return real.getLogWriter();}
+        @Override public void setLogWriter(java.io.PrintWriter out)throws java.sql.SQLException{real.setLogWriter(out);}
+        @Override public void setLoginTimeout(int seconds)throws java.sql.SQLException{real.setLoginTimeout(seconds);}
+        @Override public int getLoginTimeout()throws java.sql.SQLException{return real.getLoginTimeout();}
+        @Override public java.util.logging.Logger getParentLogger(){return java.util.logging.Logger.getGlobal();}
+        @Override public <T> T unwrap(Class<T> iface)throws java.sql.SQLException{return real.unwrap(iface);}
+        @Override public boolean isWrapperFor(Class<?> iface)throws java.sql.SQLException{return real.isWrapperFor(iface);}
+    }
+
     @Test @EnabledIfSystemProperty(named="siger.stats.measure-e11",matches="true")
     void medicionE11()throws Exception{
         assertTrue(MySqlSuite.enabled(),"MySQL desechable obligatorio");

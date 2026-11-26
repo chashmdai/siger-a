@@ -3,9 +3,10 @@ import type {Context} from '../../app/context';
 import {Icon} from '../../components/Icon';
 import {CHART_COLORS, linePoints, MUTED_COLOR, scale} from '../../components/charts/chartModel';
 import {Callout, Skeleton} from '../../components/Primitives';
-import type {Indicator, Period, Result, StatsCatalog} from './statsModel';
+import type {Indicator, Period, Query, Result, StatsCatalog} from './statsModel';
 import {chileDay, chileTime, COMPARE_LABELS, COMPLETE_NOTE, completeShare, encodeRoute, fmtInt, fmtPoints, indicatorQuery, INDICATORS, panoramaPeriod, periodLabel,
   publicAccount, publicYearOf, readResult, requestBody, sameMinute, sourceFooter, tableModel, variation} from './statsModel';
+import type {StatState} from './statQuery';
 import {useStat} from './statQuery';
 import {Freshness, HowToRead} from './ResultView';
 
@@ -35,6 +36,14 @@ function Card({ind, cat, catalog, period, compare, user, total, report, inlineFr
   const s = useStat(q ? requestBody(q, cat) : null, user);
   const at = s.status === 'ok' ? s.at : 0;
   useEffect(() => report(ind.key, q ? at : -1), [ind.key, at, report, q]);
+  return <IndicatorCard ind={ind} q={q} s={s} total={total} inlineFresh={inlineFresh}/>;
+}
+
+/**
+ * Una tarjeta del Panorama segun el estado de su propia consulta (E14): cada indicador se muestra apenas llega su
+ * respuesta, sin esperar a los demas; solo la caracterizacion completa espera ademas el total de ingresos.
+ */
+export function IndicatorCard({ind, q, s, total, inlineFresh}: {ind: Indicator; q: Query | null; s: StatState & {refresh: () => void}; total?: Result | null; inlineFresh: boolean}) {
   const open = () => {if (q) location.hash = encodeRoute('explorar', q);};
   if (!q) return <div className="stat-card"><h3>{ind.label}</h3><p className="field-help">No disponible con los campos que publica el servidor.</p></div>;
   if (s.status === 'error') return <div className="stat-card"><h3>{ind.label}</h3><p role="alert" className="error">{s.error}</p>

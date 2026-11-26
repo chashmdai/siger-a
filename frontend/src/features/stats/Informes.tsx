@@ -6,7 +6,7 @@ import {Callout, ErrorMessage, Panel, Skeleton} from '../../components/Primitive
 import {downloadPost} from '../../lib/api';
 import {filenameOf} from '../reports/reportsModel';
 import type {Query, StatsCatalog} from './statsModel';
-import {chileDay, emptyQuery, encodeRoute, errorText, FIGURE_DIMS, FIGURE_TITLES, figureRows, figureTable, fileStem, fmtInt, fmtPct, howToRead, periodLabel, publicAccount, publicYearOf,
+import {breakdownView, chileDay, emptyQuery, encodeRoute, errorText, FIGURE_DIMS, FIGURE_TITLES, figureRows, figureTable, fileStem, fmtInt, fmtPct, howToRead, periodLabel, publicAccount, publicYearOf,
   readResult, requestBody, sameMinute, sourceFooter} from './statsModel';
 import {queue, useStat} from './statQuery';
 import {Freshness, HowToRead} from './ResultView';
@@ -38,6 +38,7 @@ function Breakdown({ctx, cat, dim, year, scope, exporter, report, ownFresh}: {ct
   if (s.status !== 'ok' || !s.data) return <Panel title={FIGURE_TITLES[dim]}><div aria-busy="true"><Skeleton lines={5}/></div></Panel>;
   const r = readResult(s.data);
   const figure = figureTable(figureRows(cat, ctx.catalog, dim, r));
+  const view = breakdownView(figure.note, r.grand.n);
   const rows = figure.rows;
   const percent = (key: string) => r.cells.find(c => c.row[0] === key)?.percent ?? 0;
   const source = sourceFooter({at: s.at, scope, basis: 'RECEPCION', mode: 'VIGENTE'});
@@ -57,12 +58,12 @@ function Breakdown({ctx, cat, dim, year, scope, exporter, report, ownFresh}: {ct
             <tfoot><tr className="total"><th scope="row">Total</th><td className="num">{fmtInt(r.grand.n)}</td><td className="num">{r.grand.n > 0 ? fmtPct(100) : '—'}</td></tr></tfoot>
           </table>
         </div>
-        {figure.note && <p className="field-help stat-empty-note">{figure.note}</p>}
+        {view.tableNote && <p className="field-help stat-empty-note">{view.tableNote}</p>}
       </div>
       <div className="stat-breakdown-chart">
-        <Chart kind="barras" title={title} subtitle={periodLabel(r.metadata.period as Record<string, unknown>)} notes={figure.note ? [figure.note] : []} source={source} file={fileStem(title)} tableId={tableId}
+        {view.chart ? <Chart kind="barras" title={title} subtitle={periodLabel(r.metadata.period as Record<string, unknown>)} notes={view.chartNotes} source={source} file={fileStem(title)} tableId={tableId}
           data={{categories: rows.map(x => ({key: x.key, label: x.label})), series: [{key: 'n', label: 'Ingresos', values: rows.map(x => x.n)}], total: r.grand.n, percent: false,
-            format: v => v == null ? '—' : fmtInt(v), keepOrder: true}}/>
+            format: v => v == null ? '—' : fmtInt(v), keepOrder: true}}/> : <p className="field-help stat-empty">{view.empty}</p>}
       </div>
     </div>
     {ownFresh && <Freshness at={s.at} refresh={s.refresh}/>}
@@ -105,7 +106,7 @@ export default function Informes({ctx, cat, scope, params}: {ctx: Context; cat: 
     </div>
     <HowToRead lines={howToRead({cat, q: {...q, rows: []}, r: null, scope, extra: [
       'Cada desglose cuenta los mismos ingresos una vez: todos suman el total.',
-      'Se muestran todas las categorías del listado vigente, también las que no tienen ingresos (0). Los estados especiales aparecen como fila solo si tienen ingresos: «Pendiente» reúne los ingresos aún sin clasificar; los que no tienen ingresos se nombran bajo la tabla.',
+      'Se muestran todas las categorías del listado vigente, también las que no tienen ingresos (0). Los estados especiales aparecen como fila solo si tienen ingresos: «Pendiente» reúne los ingresos aún sin clasificar; los que no tienen ingresos se nombran una vez, en la nota «Sin registros en».',
       'La adscripción institucional es la sede regional u Oficina Nacional a la que se adscribió primero cada ingreso; «Pendiente de asignación», si aún no tiene destino.',
     ]})}/>
   </section>;

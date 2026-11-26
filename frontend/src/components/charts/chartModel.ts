@@ -20,6 +20,8 @@ export const KIND_LABELS: Record<ChartKind, string> = {barras: 'Barras', agrupad
   circular: 'Circular', pareadas: 'Barras pareadas'};
 /** E13 (ajuste 3): el eje de periodo siempre es horizontal, con columnas o lineas; nunca barras horizontales. */
 export const PERIOD_HORIZONTAL = 'El eje de periodo va en horizontal: usa columnas o líneas.';
+/** E14 (correccion 3): con un eje de periodo, la comparacion se ofrece en columnas pareadas, como dice su boton. */
+export const PERIOD_PAIRED = 'Usa columnas pareadas: con un eje de periodo, la comparación va en columnas.';
 /** Forma de los datos: dimensiones, si son de periodo o multiples, si hay comparacion y cuantas categorias y series hay. */
 export type Shape = {rows: number; columns: number; period: boolean; multipleRows: boolean; multipleColumns: boolean; comparison: boolean; percent: boolean;
   categories: number; series: number};
@@ -53,7 +55,7 @@ export function choices(s: Shape, values?: number[], total?: number): Choice[] {
     c('lineas', base || (!s.period ? 'Las líneas necesitan un eje de periodo en filas.' : seriesProblem)),
     c('columnas', base || (!s.period ? 'Las columnas se usan para un eje de periodo; para categorías usa barras.' : seriesProblem), s.comparison ? 'Columnas pareadas' : KIND_LABELS.columnas),
     c('circular', base || pieReason(s, values, total)),
-    c('pareadas', base || (!s.comparison ? 'Necesita una comparación con otro periodo.' : s.period ? 'Con un eje de periodo la comparación va en columnas pareadas o en dos líneas.'
+    c('pareadas', base || (!s.comparison ? 'Necesita una comparación con otro periodo.' : s.period ? PERIOD_PAIRED
       : s.columns > 0 ? 'La comparación se grafica sin columnas: quita el campo de columnas o usa la tabla.' : '')),
   ];
 }
@@ -65,7 +67,7 @@ export function pieReason(s: Shape, values?: number[], total?: number): string {
   if (s.multipleRows) return 'Un requerimiento puede tener varios valores: las partes no suman el total. Usa barras.';
   if (s.rows !== 1) return s.rows === 0 ? 'Necesita un campo en filas.' : 'Solo con un campo en filas. Usa barras.';
   if (s.columns > 0) return 'Solo sin campos en columnas. Usa barras agrupadas.';
-  if (s.comparison) return 'No muestra comparaciones. Usa barras pareadas.';
+  if (s.comparison) return s.period ? 'No muestra comparaciones. Usa columnas pareadas.' : 'No muestra comparaciones. Usa barras pareadas.';
   if (s.period) return 'Un eje de tiempo se lee en líneas, no en un circular.';
   if (s.percent) return 'Elige «Cantidad»: el circular ya muestra el porcentaje de cada parte.';
   if (s.categories > MAX_PIE) return `Tiene ${s.categories} categorías; el circular admite ${MAX_PIE} o menos. Usa barras.`;
@@ -114,6 +116,46 @@ export function linePoints(values: (number | null)[], width: number, height: num
 /** Orden de barras horizontales de mayor a menor (DISENO 10.3); los estados especiales siempre al final. */
 export function byValue<T extends {value: number | null; special?: boolean}>(items: T[]) {
   return [...items].sort((a, b) => Number(!!a.special) - Number(!!b.special) || (b.value ?? -1) - (a.value ?? -1));
+}
+
+// --- Eje de periodo (E14, correccion 1) --------------------------------------------------------------------------------
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const SHORT_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+/** Ancho estimado de un caracter del eje (11 px de Cabin) y separacion minima entre dos rotulos. */
+export const TICK_CHAR = 6.4;
+export const TICK_GAP = 8;
+/**
+ * Rotulo abreviado de un periodo del motor, en una o dos partes y sin cortar: "julio de 2026" -> jul / 2026,
+ * "1.º trimestre de 2026" -> T1 / 2026, "2.º semestre de 2026" -> S2 / 2026, "Cuenta Pública 2025-2026" -> CP / 2025-2026,
+ * "01-07-2026" -> 01-07 / 2026. Otro texto se reparte por palabras en dos lineas. El nombre completo va en la ayuda.
+ */
+export function periodTick(label: string): string[] {
+  let m = /^(\p{L}+) de (\d{4})$/u.exec(label);
+  if (m && MONTHS.includes(m[1].toLocaleLowerCase('es-CL'))) return [SHORT_MONTHS[MONTHS.indexOf(m[1].toLocaleLowerCase('es-CL'))], m[2]];
+  if ((m = /^(\d)\.º trimestre de (\d{4})$/.exec(label))) return ['T' + m[1], m[2]];
+  if ((m = /^(\d)\.º semestre de (\d{4})$/.exec(label))) return ['S' + m[1], m[2]];
+  if ((m = /^Cuenta Pública (\d{4}-\d{4})$/.exec(label))) return ['CP', m[1]];
+  if ((m = /^(\d{2}-\d{2})-(\d{4})$/.exec(label))) return [m[1], m[2]];
+  const words = label.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return [label];
+  let best = 1, worst = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const w = Math.max(words.slice(0, i).join(' ').length, words.slice(i).join(' ').length);
+    if (w < worst) {worst = w; best = i;}
+  }
+  return [words.slice(0, best).join(' '), words.slice(best).join(' ')];
+}
+/**
+ * Rotulos del eje de periodo para un espacio de `band` px por categoria: en una linea ("jul 2026") si todos caben, si no en
+ * dos; y cada cuantas categorias se rotula (step) para que dos rotulos nunca se superpongan. Nunca se cortan con "…".
+ */
+export function periodAxis(labels: string[], band: number): {ticks: {lines: string[]; title: string}[]; step: number} {
+  const parts = labels.map(periodTick);
+  const width = (t: string) => t.length * TICK_CHAR;
+  const oneLine = parts.every(p => width(p.join(' ')) + TICK_GAP <= band);
+  const ticks = parts.map((p, i) => ({lines: oneLine ? [p.join(' ')] : p, title: labels[i]}));
+  const widest = Math.max(0, ...ticks.flatMap(t => t.lines.map(width)));
+  return {ticks, step: band > 0 ? Math.max(1, Math.ceil((widest + TICK_GAP) / band)) : 1};
 }
 
 // --- Contraste (WCAG 2.x) -------------------------------------------------------------------------------------------

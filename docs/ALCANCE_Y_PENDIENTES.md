@@ -1,4 +1,4 @@
-# SIGER 0.7.0 - alcance y pendientes
+# SIGER 0.8.0 - alcance y pendientes
 
 ## Incluido en el fuente
 
@@ -76,6 +76,39 @@ Nuevo en 0.7.0 (decisiones D18-D24, "Precision 0.7.0"; migraciones V15 y V16, ad
   sale cuando haya quien pueda (en produccion, cuando TI cree las cuentas de distribucion en V5). Las COM del Formulario
   que ya esten por distribuir al instalar 0.7.0 se avisan en el primer ciclo, de a 100 por ciclo.
 
+Nuevo en 0.8.0 (decisiones D25-D43, "Precision 0.8.0"; normalizacion integral de la informacion e inteligencia de
+negocios para Estudios; migraciones V17 a V24, aditivas; sin cambios en scripts ni en la recepcion del Formulario):
+
+- **Normalizacion de la captura** (D33): persona declarada canonica (`persona-1`) con las mismas reglas del Formulario
+  en la ficha de primera atencion 1.2 (tambien en la modalidad NNA: region y comuna estructuradas, relacion, hechos e
+  instituciones) y en la nueva ficha de ingreso de la COM manual; complementar se distingue de rectificar y los datos
+  historicos se conservan sin dividirse ni interpretarse.
+- **Catalogos estadisticos versionados** (D27): doce catalogos (tipo de solicitud, requirente, via, contexto,
+  caracterizacion, derechos del modelo 2.0 de 2022, rol del Estado, grupos prioritarios, tipo de actuacion, tipo de
+  institucion, relacion y tramos de edad) que TI importa y activa con fundamento; archivos de referencia en
+  `config-ejemplo\catalogos\` (PROPUESTA, con conformidad institucional de DI-01 a DI-04 del 2026-11-25). Sin catalogo
+  vigente nada se exige.
+- **Clasificacion estadistica** (D28-D31, D34-D36): tipo de solicitud, requirente y via de cada ingreso (la via se
+  deriva del canal; el Formulario propone y un funcionario confirma); derechos, contexto, caracterizacion, rol del
+  Estado y grupos prioritarios del REQ y de sus Casos, consolidados sin duplicar; actuaciones tipificadas con sus
+  instituciones y resultado de la primera atencion; historia completa y clasificacion retrospectiva solo con reapertura
+  formal (D35, DI-07). El cierre exige lo pendiente con catalogo vigente.
+- **Motor estadistico y explorador** (D37-D41): una sola metodologia para pantalla, exportacion y cortes; Panorama,
+  Informes (Figura 1 con la adscripcion institucional, DI-13), Explorar (cruces, porcentajes, comparaciones, cuatro
+  modos temporales, graficos con descarga PNG y SVG, vistas guardadas y compartidas), Cortes y series, y Calidad
+  (completitud por variable, ambito y mes, con enlace a las bandejas filtradas por "Con datos estadisticos pendientes").
+  Cifras exactas, con limites de ejecucion (concurrencia, plazo de 30 s y confinamiento de los temporales de MySQL en
+  la unidad de la instancia).
+- **Cortes, exportaciones y series** (D39-D42): cortes inmutables con huella SHA-256 y verificacion (generarlos detiene
+  las operaciones unos segundos); CSV, XLSX y paquete ZIP con microdatos sin datos ciudadanos (un ZIP a la vez, hasta
+  30.000 folios); series historicas importadas con vista previa y correspondencia confirmada, nunca sumadas solas.
+- **Funcion GESTION_ESTADISTICA** (D43): genera y anula cortes, importa y anula series y comparte vistas; exige REPORTES
+  en el mismo alcance y no combina con TI.
+- **Desestimacion directa de una COM** (E12b): quien distribuye puede desestimarla como invalida o duplicada sin pasar
+  por una SOL, con fundamento obligatorio; distribuir, asumir, redirigir y redistribuir admiten omitir el fundamento.
+- Rendimiento medido en E14 con 50.005 COM sinteticas: cada consulta del Panorama y del explorador bajo 3 s (registro de
+  E14 en `docs/BITACORA_0_8_0.md`).
+
 ## Verificado en la VM
 
 - **PULL/ACK real con el Formulario Publico** (verificado por el responsable el 2026-11-21 en "Auditoria y operacion" de
@@ -111,30 +144,39 @@ la validacion. Solo un consumidor por cola: al activar produccion, el de la vali
 
 ## Pendientes que NO se presentan como terminados
 
-- **Uso del paquete 0.7.0 en V4**: el paquete `SIGER-20261123-133838.zip` (T06a) quedo ensayado en TEST-SIGER (T06b,
-  CERRADO) con la etiqueta `v0.7.0`. V4 lo usa solo si el responsable lo aprueba de forma expresa al corte del 07/12;
-  si no, V4 usa el paquete 0.6.0
-  (`SIGER-20261122-201515.zip`, H06d), sin `cobertura` ni `coberturaNivelCentral` en la estructura, y 0.7.0 queda para
-  despues del 15/12 con su propio ensayo de `Update.ps1`. Recorridos de 0.7.0 en `docs/PRUEBAS_MANUALES_0_7_0.md`.
+- **Actualizacion de produccion a 0.8.0** (paso U de `docs/DESPLIEGUE_VM.md`, seccion 5): produccion corre 0.7.0
+  (DI-15: instalada con 0.6.0 y actualizada a 0.7.0 con `Update.ps1`). El paso U lo ejecuta el responsable con
+  autorizacion expresa despues de E17 CERRADO, con DI-11 respondida, respaldo y ensayo de restauracion inmediatamente
+  antes de `Update.ps1` y, antes del 15/12, al menos dos dias de margen. TI activa los catalogos despues (U7).
 - Ejecucion en la VM de la salida a produccion (pasos V1-V6 de `docs/PLAN_0_6_0.md` y `docs/DESPLIEGUE_VM.md`): cierre
   de la validacion 0.4.0 con sus 9 recepciones de prueba, produccion nueva (0.7.0 o 0.6.0 segun el corte) en
   automatico, acreditacion (D13), eliminacion de la validacion con constancia y, sin entregas de prueba en produccion, la
   primera entrega ciudadana despues del 15/12 como unica prueba de punta a punta (`docs/PRUEBAS_MANUALES_0_6_0.md`).
   Tambien `Recover-Ti.ps1` y un envio real por Graph.
 
-Pendientes para 0.8.0 (cada uno toma un gate propio cuando se planifique):
+Hoja de ruta 0.9.0 (postergado por decision del responsable del 2026-11-24, `docs/PLAN_0_8_0.md` seccion 9; las
+decisiones y definiciones ya aprobadas se conservan como base de su planificacion; diseno de cada punto en
+`docs/DISENO_0_8_0.md` seccion 15; ningun gate de 0.8.0 los implementa):
 
-- **Mejoras del correo de avisos**, despues de que produccion este estable: folio en el texto, asunto segun el tipo de
-  aviso y enlace directo a la ficha (solo con el id; sirve si los funcionarios acceden por red). El correo sigue sin
-  antecedentes ni datos ciudadanos.
-- **Observaciones de los funcionarios**, por recoger despues de la salida a produccion.
-- **Distribucion territorial del Formulario por sede** (D23): que la distribucion de una sede vea y distribuya solo las
-  COM de su territorio; cambia el modelo de acceso y requiere decision propia.
-- **Region de la ficha en la modalidad NNA**: hoy es texto libre y casi siempre queda "sin region declarada" (hallazgo de
-  T02).
-- **Fecha de apertura al activar una sede** (observacion de T06b, comportamiento anterior a 0.7.0): `SCOPE_ACTIVATE`
-  conserva la fecha de apertura proyectada que ya estaba declarada (`COALESCE`), aunque la sede se active antes; en el
-  ensayo, la sede activada siguio mostrando "Apertura 01-03-27". Decidir si la activacion registra la fecha real.
+| Punto | Decision | Definicion aprobada |
+|---|---|---|
+| Fechas de las sedes: apertura proyectada, apertura efectiva y activacion (hoy `SCOPE_ACTIVATE` conserva la apertura proyectada; observacion de T06b) | D44 | DI-06 |
+| Distribucion territorial del Formulario por coordinacion regional | D45 | DI-05 |
+| Correo de avisos: asunto por evento, folio, descripcion breve y enlace | D46 | DI-09 |
+| Observaciones de funcionarios (registro en la bitacora de 0.8.0) | D47 | - |
+| Indice de `inbox_notice`: evaluacion con medicion | D48 | - |
+| Antiguedad del respaldo en `Update.ps1` (hoy acepta cualquier respaldo integro de la misma raiz, base y JAR) | D49 | - |
+| Paso de RDP a acceso por red (requisito del enlace directo del correo; no hay script para cambiar `bindAddress` despues de `Init-Server.ps1` sin `-AccesoRed`) | D49 | - |
+| Renovacion del certificado autofirmado | D49 | DI-10: desestimada; se mantienen certificado y HTTPS |
+| Dimension estadistica "instituciones de los hechos" (ficha, ficha de ingreso y Formulario) | D38 | GO de E08 (2026-11-25) |
+| Pantallas de resolucion en el acto con derechos (COM_IMMEDIATE y ATTENTION_CREATE con resolve_now) | - | GO de E09, decision D |
+| Caracterizacion de la COM en la ficha de la SOL (evita leer la ficha de la COM en el descarte) | - | hallazgo de E09 |
+| Corte sin lock global: instantanea consistente con bloqueo de milisegundos (opcion D de la detencion de E10), si el volumen se acerca al plazo | - | detencion de E10 |
+| Microdatos a nivel de actuacion y de Caso en el paquete estadistico | - | GO de E11 |
+| Paquete ZIP escrito por flujo a un temporal (menos memoria; opcion 4 de la detencion de E11) | - | detencion de E11 |
+| Figura 1 en un solo libro XLSX (cuatro hojas) | - | GO de E12 |
+| Reportes de gestion y su exportacion (`Reports`) que excluyan a una cuenta TI con una concesion inconsistente (TI con REPORTES insertada por SQL; la aplicacion no permite crearla y Administracion avisa `TI_INCOMPATIBLE`); en 0.8.0 queda como excepcion explicita de `PermisosFinalesTest` | - | hallazgo de E14 (preexistente desde 0.5.0) |
+| Otras mejoras operacionales sin relacion directa con los objetivos de 0.8.0 | - | - |
 
 Pendientes sin version asignada (detalle en `docs/BITACORA_0_6_0.md`):
 
@@ -142,12 +184,6 @@ Pendientes sin version asignada (detalle en `docs/BITACORA_0_6_0.md`):
   salida de red para las firmas) o Kaspersky KES 14 (codigo nuevo en `DocumentScanner`, previa confirmacion con TI de
   que la cuenta de servicio puede analizar). Mientras tanto rige D17 para los originales del Formulario y los adjuntos
   subidos en SIGER siguen en cuarentena.
-- **Antiguedad del respaldo en `Update.ps1`**: hoy acepta cualquier respaldo integro de la misma raiz, base y JAR; sirve
-  al actualizar produccion (por ejemplo, a 0.7.0 si V4 se hace con 0.6.0).
-- **Paso de solo RDP a acceso por red**: no hay script para cambiar `bindAddress` despues de `Init-Server.ps1` sin
-  `-AccesoRed`.
-- **Renovacion del certificado autofirmado**: no hay script para regenerarlo; sin un PFX institucional, su renovacion
-  (vence a los 365 dias de V4) no tiene procedimiento.
 
 Otros pendientes:
 

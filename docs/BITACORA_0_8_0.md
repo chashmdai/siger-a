@@ -29,7 +29,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E12 | Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz) | CERRADO |
 | E12b | Desestimación directa de una COM (servidor e interfaz) | CERRADO |
 | E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | CERRADO |
-| E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | ABIERTO |
+| E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | CERRADO |
 | E15 | Validacion de uso con la Direccion de UEP | POSTERGADO |
 | E16 | Auditoria independiente | EXTERNO |
 | E17 | Build de entrega y etiqueta | ABIERTO |
@@ -1555,3 +1555,68 @@ Mutaciones de E13 (regla -> prueba que falló):
 | F41 Calidad sin porcentaje por fila | Calidad: consultas de COMPLETITUD, barras con los porcentajes del servidor y matriz a mano |
 | F42 enlace de derecho a la bandeja de COM | Calidad: enlace a la bandeja con el filtro solo si la cuenta la tiene; la región sin enlace (condición 1 y precisión del GO) |
 | F43 bandeja SOL sin el filtro | bandejas: el filtro «Con datos estadísticos pendientes» en Comunicaciones, Solicitudes y Requerimientos |
+
+### E14 - Integracion MySQL, rendimiento, aceptacion y cierre de version   (CERRADO)
+- Fecha: 2026-11-26 (commit `gate E14: integracion y cierre de version`), DDN-TEST-SIGER (Windows), Claude Code; base `62c1c7f` (`docs: correcciones de presentacion en E14`, sobre el cierre de E13 `4bf2a64`).
+- GO del responsable (2026-11-26): A (cada consulta del Panorama bajo 3 s, total informado con su proyeccion al volumen real y los indicadores a medida que llegan, con prueba de render), B (paso U con el bloque interactivo de solo lectura: `my.ini` y `SELECT @@datadir, @@tmpdir, @@innodb_temp_tablespaces_dir` en D: antes del respaldo, marcadores, `communication_original` contra el `siger_a_restore_*` de `Restore-Check.ps1`, `Remove-SecretFile` en `finally`, `stats.enabled` por el log y el explorador), C (sin dividir) y condiciones 1 a 11. Decisiones del mismo dia durante el gate: (1) el hallazgo de `Reports.java` queda como excepcion explicita en la prueba y como pendiente de 0.9.0, sin modificar `Reports.java`; (2) si una consulta supera 3 s, registrar y detenerse sin optimizar; (3) sin otros pendientes nuevos en `ALCANCE_Y_PENDIENTES.md`.
+- Hecho: (1) Correcciones de presentacion 1-5 de E13 (`chartModel.ts: periodTick`/`periodAxis`, `Chart.tsx: Tick`; comparacion con un corte pareada, sin circular y con `cutComparisonText`; `PERIOD_PAIRED`; `EMPTY_PERIOD` y `breakdownView`; `pendingLink` con la cantidad pendiente) y `IndicatorCard` del Panorama. (2) `PermisosFinalesTest`: las 39 rutas `/api` clasificadas por reflexion (falla ante una sin clasificar, una que ya no existe o una sin metodo), 401 sin sesion, 403 a TI (tambien con concesion inconsistente) en las 15 estadisticas y de reportes, POST sin CSRF 403 y GET 405 en los 8 POST. (3) `StatLoadMeasureTest.medicionE14` (Panorama, explorador y EXPLAIN de tablas recien llenadas capturado en la conexion JDBC). (4) Version 0.8.0. (5) Documentacion de la seccion 4: paso U (seccion 5 de `DESPLIEGUE_VM.md`), `PRUEBAS_MANUALES_0_8_0.md` (escenarios 1-15 y U1-U13), `ALCANCE_Y_PENDIENTES.md` con la hoja de ruta 0.9.0, `README.md`, `ARQUITECTURA.md`, `INSTALACION_VM.md` (remision), `CLAUDE.md` y el contrato (seccion 14).
+- Archivos clave: `frontend/src/components/charts/{Chart.tsx,chartModel.ts}`, `frontend/src/features/stats/{statsModel.ts,ResultView.tsx,Informes.tsx,Panorama.tsx,Quality.tsx,qualityModel.ts}`, `frontend/tests/statsE14.test.ts`, `statsE14-render.test.mjs`; `backend/src/test/.../PermisosFinalesTest.java`, `StatLoadMeasureTest.java`; `backend/pom.xml`, `frontend/package.json`, `package-lock.json`; `docs/DESPLIEGUE_VM.md`, `docs/PRUEBAS_MANUALES_0_8_0.md`, `docs/ALCANCE_Y_PENDIENTES.md`, `docs/CONTRATO_STATS_0_8_0.md`, `README.md`, `CLAUDE.md`, `docs/ARQUITECTURA.md`, `docs/INSTALACION_VM.md`.
+- Migraciones: no aplica (esquema 24; V25 descartada por el EXPLAIN, abajo). `backend/src/main` sin cambios.
+- Verificacion (una vez al final y en secuencia; evidencia en `D:\Ensayo-E14` y `D:\Ensayo-E14b`): JUnit H2 388 ok, 4 omitidas (antes 384 y 3; la nueva omitida es `medicionE14`); MySQL 8.4.13 desechable nuevo en `D:\Ensayo-E14\mysql` (datadir y tmpdir ahi, `127.0.0.1:3417`, `siger.mysql.suite=true`) 392 ok, 4 omitidas (antes 388 y 3), con `MySql84UpgradeTest` (0.4.0 -> V24) y `MySql84Upgrade070Test` (0.7.0 -> V24, `communication_original` y `external_*` identicos); mediciones en otro MySQL nuevo, `D:\Ensayo-E14b\mysql` (E14, E08b/E10, E11 con `-Xmx1024m` y E13); frontend typecheck ok, 252 ok (antes 242), build ok; humo con el JAR (perfil local, H2 en `backend/target/humo-e14`, puerto 18643): HTTP 22/22 y navegador aislado con 24 escenarios en 1366x900 y 390x844 (29 capturas en `D:\Ensayo-E14\capturas`: los 24 escenarios y las de U3, U5, U6 y U10), las cinco correcciones, el escenario 1 en pantalla y U1-U13; `Check-Scripts.ps1` (powershell.exe 5.1, rutas nativas de modulos): 40 scripts, 81 ordenes en 63 procesos (antes 73 en 60: las 8 del paso U). Ambos MySQL detenidos con `mysqladmin shutdown`, puerto 3417 libre; servidor de humo y Chrome cerrados por PID y perfil en `finally`, carpeta de humo borrada, sin procesos propios ni uniones; MySQL80 y `D:\sigervalidacion` intactos (el `java` del 25/11 es esa instancia; no bloquea `backend\target`).
+- Medicion (condicion 3, `D:\Ensayo-E14b\medicion-e14.txt`; 50.005 COM, Cuenta Publica 2025-2026 con 25.003 COM recibidas, tres corridas, maximo): Panorama ingresos 274 ms, REQ 182, Casos 203, actuaciones 546, caracterizacion completa **2.942 ms** (la mas cercana al umbral), tardios 237; carga inicial 4.320 ms, proyeccion lineal al volumen real (7.200/25.003 = 0,288) 1.244 ms. Explorador 130-2.669 ms (completitud 2.669). Ninguna llega a 3 s. Repeticiones: corte 11.730 ms (E10) y 12.610 ms (E11); ZIP vigente 13.316 ms y desde el corte 6.411 ms, 431/419 MiB despues de recolectar (<= 75 %), segundo ZIP 429; filtro de bandejas 0,97-1,60 s. Una medicion previa exploratoria (`D:\Ensayo-E14b\previa`, antes de corregir el alias del EXPLAIN) dio las mismas cifras.
+- EXPLAIN (hallazgo de E11): 65 sentencias capturadas con sus parametros; 72 accesos a `stat_declared_*`, `stat_cut_*` y `stat_export_cut_*`, todos por indice (`PRIMARY` 54, `ix_stat_cut_event_com` 6, `ix_stat_declared_com_at` 6, `ix_stat_cut_action_com` 4, `ix_stat_cut_institution_note` 2) antes y despues de ANALYZE; sin estadisticas, la estimacion por clave sube (por ejemplo 50.005 en `ix_stat_declared_com_at`) pero el acceso no cambia. Recorridos completos: 0 y 0. Sin V25.
+- Formulario durante la detencion (condicion 2; SIGER y chashmdai/formulario-web `6f886eb`, solo lectura): las entregas sin ACK quedan en `PENDIENTE` en la cola del Formulario sin plazo, tamano ni limpieza que las pierda (minimizacion y retirada de adjuntos solo de `CONFIRMADA`; abandono y borradores solo de recorridos sin entrega; cuarentena por reclamos, no por tiempo, y reponible; el piso de espacio solo impide admitir nuevas); la reserva de 5 min vence y vuelve a ser reclamable; al volver SIGER concilia los ACK pendientes y el Formulario acepta la confirmacion tardia. Ningun plazo menor a 24 h. Ventana planificada de hasta 4 h (por la atencion, no por la cola); referencias con archivo y linea en `DESPLIEGUE_VM.md`, seccion 5.
+- Evidencia de mutacion: 22 de 23 detectadas, 1 equivalente (`D:\Ensayo-E14\mutaciones`, cada archivo restaurado y comprobado por SHA-256); tabla abajo.
+- Condiciones de la seccion 2: `git diff v0.7.0` vacio para `scripts/`, `.mvn/`, los 7 archivos de recepcion del Formulario y `Reports.java`; `conserveExternal` sin cambios; `backend/src/main` y V1-V24 sin cambios respecto de la base; en `pom.xml`, `package.json` y `package-lock.json` solo las 4 lineas de version; sin dependencias nuevas; datos sinteticos.
+- Facilidad de uso: U1-U13 medidos en el navegador (tabla abajo); barrido sin codigos en cada pantalla; rotulos del eje medidos con `getBBox` sin superposicion ni "…" en escritorio y movil; estado nunca solo por color.
+- Definiciones usadas: DI-01 a DI-04 (los doce catalogos de referencia activados en el humo, U7 del paso U); DI-13 (adscripcion en el escenario 1); DI-15 (paso U desde 0.7.0); DI-11 queda como requisito explicito antes del paso U.
+- Desvios del plan: (1) La medicion previa exploratoria en `D:\Ensayo-E14b\previa` corrio antes de la secuencia final (para detectar a tiempo un umbral); las cifras oficiales son las de la secuencia final. (2) El humo se repitio tres veces por defectos de su propio script (la SOL se lee desde la jefatura; los datos del escenario 1 en la Cuenta Publica 2025-2026, la que muestra Informes; recarga de la pagina al cambiar de cuenta); la aplicacion no cambio entre corridas. (3) Mutacion B05 equivalente (abrir `/api/catalog` en `SecurityConfig` no cambia nada: `Api.name()` responde 401 sin sesion); se agrego B06 (quitar `/api/health` de las publicas), detectada. (4) Texto de "Como leer esta cifra" de Informes: los estados sin ingresos "se nombran una vez, en la nota «Sin registros en»" (antes "bajo la tabla"; sin asercion previa). (5) Ninguna asercion de E13 cambio.
+- Hallazgos para gates siguientes: los reportes de gestion (`Reports`, 0.5.0) no excluyen a una TI con REPORTES insertada por SQL (excepcion cerrada `TI_MIXED_KNOWN` en `PermisosFinalesTest`; hoja de ruta 0.9.0); la caracterizacion completa del Panorama es la consulta mas lenta (2,9 s con 50.005 COM, 0,85 s proyectada); E16 audita sobre este commit; E17 genera el paquete y verifica `@@tmpdir` y `@@innodb_temp_tablespaces_dir` en D:. En el humo, cambiar de cuenta en el navegador exige recargar la pagina (el token CSRF es de la sesion anterior).
+- Pendientes: E16 (EXTERNO) -> responsable; DI-11 antes del paso U -> responsable; borrar `D:\Ensayo-E14` y `D:\Ensayo-E14b` (MySQL detenidos; datos sinteticos, perfil de Chrome y claves de los usuarios desechables) -> responsable, despues de revisar las capturas; `D:\Ensayo-E12`, `D:\Ensayo-E12b` y `D:\Ensayo-E13` siguen pendientes de E12-E13.
+- Verificacion manual sugerida al usuario: `cd frontend; node --test tests/statsE14.test.ts tests/statsE14-render.test.mjs`; `.\mvnw.cmd -B -ntp -f backend\pom.xml test -Dtest=PermisosFinalesTest`; leer la seccion 5 de `docs/DESPLIEGUE_VM.md` (paso U) y `docs/PRUEBAS_MANUALES_0_8_0.md`; revisar `D:\Ensayo-E14\capturas`.
+
+Mutaciones de E14 (regla -> prueba que fallo):
+
+| Regla | Prueba que fallo |
+|---|---|
+| F01 el paso del eje evita superponer rotulos | statsE14: con 12, 24, 36 y 60 meses ningun rotulo se superpone ni se corta |
+| F02 dos lineas cuando no cabe una | statsE14: 12, 24, 36 y 60 meses; render: los 12 meses abreviados en dos lineas |
+| F03 meses abreviados | statsE14: rotulos abreviados; 12, 24, 36 y 60 meses; render: los 12 meses |
+| F04 nombre completo en la ayuda del rotulo | render: los 12 meses abreviados, sin «…» y con el nombre completo en la ayuda |
+| F05 columnas rotulan segun el paso del eje | render: los 12 meses abreviados |
+| F06 series «Cifra actual» y «Corte <codigo>» | statsE14 y render: correccion 2 |
+| F07 grafico pareado con un corte | render: correccion 2 (barras pareadas, sin circular) |
+| F08 «Como leer» nombra el corte | statsE14 y render: correccion 2 |
+| F09 razon de las pareadas con eje de periodo | statsE14: correccion 3 |
+| F10 el circular con periodo dice columnas pareadas | statsE14: correccion 3 |
+| F11 sin registros, texto en lugar del grafico (Informes) | statsE14: correccion 4 |
+| F12 nota una sola vez por desglose | statsE14: correccion 4 |
+| F13 sin registros, texto en lugar del grafico (Explorar) | render: correccion 4 |
+| F14 sin enlace con 0 pendientes | statsE14: correccion 5 |
+| F15 cantidad pendiente de la celda del servidor | statsE14: correccion 5 |
+| F16 cada indicador sin esperar a los demas | render: Panorama |
+| F17 la caracterizacion completa espera el total | render: Panorama |
+| B01 ruta sin metodo HTTP declarado | PermisosFinalesTest.todasLasRutasEstanClasificadas, postsSinCsrfYGet405 |
+| B02 ruta nueva sin clasificar | PermisosFinalesTest.todasLasRutasEstanClasificadas, tiNuncaEnEstadisticasNiReportes |
+| B03 TI nunca consulta estadisticas (concesion inconsistente) | PermisosFinalesTest.tiNuncaEnEstadisticasNiReportes |
+| B04 POST estadisticos exigen CSRF | PermisosFinalesTest.postsSinCsrfYGet405 |
+| B05 sin sesion solo las publicas (`/api/catalog` abierta en SecurityConfig) | equivalente: `Api.name()` responde 401 igual |
+| B06 las publicas responden sin sesion | PermisosFinalesTest.sinSesionSoloLasPublicas |
+
+Recorridos U de E14 (acciones desde la vista indicada, medidas en el navegador):
+
+| U | Recorrido | Acciones |
+|---|---|---|
+| U1 Figura 1 | desde el Panorama: «Informes» (cuatro desgloses en 0,3 s) | 1 |
+| U2 Comparar | desde un resultado: «Comparar con» > «Periodo anterior» | 1 |
+| U3 Cruce con % por fila | «Explorar», «Consulta vacia», Tipo de solicitud a filas, Territorio, Region del requirente a columnas, Cifra > «% por fila» | 6 |
+| U4 Paquete ZIP | desde un resultado: «Paquete ZIP» | 1 |
+| U5 Corte con fundamento | «Congelar estas cifras», Continuar, Continuar, fundamento, Continuar (aviso a la vista), «Generar el corte» | 6 |
+| U6 Serie | «Importar una serie» (asistente; importacion completa por HTTP) y «Ver junto a SIGER» con la discontinuidad | 2 |
+| U7 Grafico y PNG | «Explorar», «Por via de ingreso», «Descargar PNG» | 3 |
+| U8 Guardar y compartir | «Guardar vista», nombre, «Confirmar», «Compartir» | 4 |
+| U9 Pendientes de su alcance | «Calidad», «Ver las comunicaciones con datos pendientes» | 2 |
+| U10 Derechos con busqueda | (jefatura del REQ) «Clasificar», «educacion», marcar, «Confirmar» (1,5 s) | 4 |
+| U11 Indicador a % por fila | clic en «Ingresos» del Panorama, Cifra > «% por fila» | 2 |
+| U12 Por que no suma | la nota «Los niveles inferiores no suman el superior» a la vista | 0 |
+| U13 Grafico para el informe | «Descargar SVG» (titulo y fuente en el archivo) | 1 |

@@ -7,7 +7,7 @@ eliminar la validacion con constancia. P0 y V0-V3 se ejecutan con el paquete 0.6
 T06b esta CERRADO, existe la etiqueta `v0.7.0` y el responsable lo aprueba de forma expresa; si no, V4 usa el paquete
 0.6.0. Cada comando es una linea de PowerShell y se ejecuta tal cual,
 con `powershell.exe ... -File`, desde una consola de PowerShell. `FECHA` es el sufijo del ZIP (`SIGER-FECHA.zip`). El
-detalle tecnico de cada script esta en `docs/INSTALACION_VM.md` y en su encabezado.
+detalle tecnico de cada script esta en `docs/INSTALACION_VM.md` y en su encabezado. La actualizacion de produccion a 0.8.0 (paso U) esta en la seccion 5.
 
 Valores de esta VM: validacion `D:\SIGER-VALIDACION` (0.4.0, esquema V10), produccion `D:\SIGER`, cuenta de servicio
 `DDN-SIGER\svc-siger` (la misma en ambas, duena de DPAPI), motor `D:\Herramientas\mysql-8.4` (compartido: nunca se
@@ -673,3 +673,289 @@ Pausar el consumidor (TI, Auditoria y operacion), esperar a que termine su ciclo
 `Set-Integration.ps1 -Root 'D:\SIGER' -Formulario Manual` y reiniciar. Las entregas esperan en la cola del Formulario.
 SMR no se reactiva desde esta guia: se consulta al responsable. Nunca hay dos consumidores activos, y no se borran COM,
 originales, recepciones ni leases para revertir.
+
+## 5. Actualizacion de produccion a 0.8.0 (paso U)
+
+Actualiza en sitio la produccion de `D:\SIGER` desde 0.7.0 (esquema 16; DI-15: instalada con 0.6.0 y actualizada a
+0.7.0 con `Update.ps1`) al paquete 0.8.0 (`docs/PLAN_0_8_0.md`, seccion 3 y gate E14). No hay ensayo en TEST-SIGER
+(precision de D50 del 2026-11-25): lo compensan las tareas de esta seccion. Se ejecuta solo despues de E17 CERRADO, con la
+etiqueta `v0.8.0` y la **autorizacion expresa del responsable** para esta ventana. Los scripts son los mismos de 0.6.0 y
+0.7.0 (`scripts\` sin cambios en 0.8.0). `FECHA080` es el sufijo del ZIP 0.8.0 (`SIGER-FECHA080.zip`); el registro de
+E17 en `docs/BITACORA_0_8_0.md` del repositorio trae su nombre y su SHA-256.
+
+Reglas de toda la seccion:
+
+- **Solo lectura o cambio de estado.** Cada tarea dice cual es. Las de cambio de estado (U3 a U5 y U7) las ejecuta el
+  responsable, o alguien en su presencia, con su autorizacion expresa para esta ventana; las de solo lectura (U1, U2 y
+  U6) no cambian la instancia y se pueden repetir.
+- **Consolas.** "Consola de svc-siger" es una consola de Windows PowerShell 5.1 abierta como `DDN-SIGER\svc-siger`; la
+  abre el responsable (RDP con esa cuenta o `runas /user:DDN-SIGER\svc-siger powershell.exe`, que pide la contrasena en
+  la propia ventana). "Consola de administrador" es una consola elevada de un administrador de la VM. Ninguna contrasena
+  ni secreto se escribe en esta guia, en una orden ni en un archivo de notas.
+- **Se preservan**: el paso P0 y `D:\Custodia-SIGER-P0`, los respaldos y constancias existentes (`D:\Respaldos-*`,
+  `D:\SIGER-CONSTANCIAS`), los originales y documentos de `D:\SIGER\data`, y los paquetes inmutables de `D:\Entregas`
+  (0.6.0, 0.7.0 y 0.8.0). Nada de esta seccion borra, renombra ni sobrescribe esos archivos.
+- **Detencion.** Si una tarea no da el resultado esperado, no se pasa a la siguiente: se anota el resultado y se informa
+  al responsable. Las cifras se anotan sin datos personales ni secretos.
+
+### U0. Requisitos antes de fijar la ventana (responsable)
+
+| | |
+|---|---|
+| Equipo y cuenta | Ninguno: es una verificacion documental del responsable |
+| Precondiciones | 1) E17 CERRADO y etiqueta `v0.8.0`. 2) **DI-11 respondida** en la tabla de definiciones de la bitacora (alcance de la clasificacion retrospectiva en produccion: desde que fecha, que registros y quien); sin respuesta no se empieza. 3) Conformidad institucional de DI-01 a DI-04 registrada (2026-11-25), que cita U7. 4) Ventana (c) sin usuarios en SIGER: si es antes del 15/12/2026, debe terminar a mas tardar el 12/12/2026 a las 23:59 (al menos dos dias de margen antes de la apertura del Formulario del 15/12 a las 00:00); **con menos de 2 dias de margen no se ejecuta** y se deja para despues del 15/12. 5) Carpeta `D:\Respaldos-SIGER` con control total para `DDN-SIGER\svc-siger` (si no existe, la crea un administrador con las ordenes de abajo). 6) El ZIP 0.8.0 copiado en `D:\Entregas`. |
+| Resultado esperado | Los seis puntos cumplidos y anotados con la fecha de la ventana |
+| Criterio de detencion | Cualquier punto sin cumplir: no se fija la ventana |
+
+Solo si falta la carpeta de respaldos, en la consola de administrador (cambio de estado fuera de la instancia):
+
+```powershell
+New-Item -ItemType Directory -Path 'D:\Respaldos-SIGER'
+```
+```powershell
+icacls 'D:\Respaldos-SIGER' /grant 'DDN-SIGER\svc-siger:(OI)(CI)F'
+```
+
+### Entregas del Formulario mientras SIGER esta detenido
+
+Verificado en E14 en el codigo de SIGER y del Formulario (chashmdai/formulario-web `6f886eb`, solo lectura). Durante la
+ventana el consumidor automatico no corre y el Formulario sigue recibiendo y guardando entregas:
+
+- Cada entrega nueva queda en `PENDIENTE` en la cola del Formulario
+  (`formulario-publico/backend/src/main/java/cl/nexbyte/siger/formulario/RecepcionFormularioJdbc.java:67`). Solo se
+  reclama con un reclamo de SIGER; el reclamo toma las `PENDIENTE` y las `RESERVADA` cuyo plazo vencio (`:124-136`), de
+  modo que nada sale de la cola sin SIGER.
+- La reserva de una entrega que SIGER tenia tomada al detenerse dura 5 minutos (`:132`, `lease_until_ms=now+300000`) y
+  despues vuelve a ser reclamable. Si SIGER ya la registro
+  (COM con ACK pendiente), al volver concilia primero los ACK pendientes (`backend/src/main/java/cl/nexbyte/sigera/FormularioConsumer.java:47-49`)
+  y el Formulario acepta la confirmacion tardia (`RecepcionFormularioJdbc.java:156-172`, `REGISTRO_SIGER_CONFIRMADO_TARDIO`).
+- **No hay plazo de retencion de entregas sin ACK.** Lo que el Formulario minimiza o borra exige una entrega confirmada:
+  la custodia transitoria solo recorre `CONFIRMADA` (`custodia/CustodiaTransitoria.java:57` y `:86-104`), la retirada de
+  adjuntos exige estado `CONFIRMADA` y ACK (`multimedia/CicloVidaCustodia.java:70`), y el abandono y la minimizacion de
+  borradores solo tocan recorridos **sin** entrega (`CicloVidaCustodia.java:259-261`, `custodia/MinimizacionBorradores.java:65`).
+- Limites que no pierden entregas: la cuarentena por mas de 10 reclamos (`RecepcionFormularioJdbc.java:134`) cuenta
+  reclamos, no tiempo, y con SIGER detenido no hay reclamos; una entrega en cuarentena se repone (`:175`) y SIGER puede
+  confirmarla (`:165`). El piso de espacio libre del Formulario (`custodia/GuardiaCapacidad.java:9-11`,
+  `capacidad.minimo-libre`) solo impide **admitir** entregas nuevas si su disco se llena; no borra las guardadas.
+- Al volver, el ciclo automatico drena la cola (`FormularioAutomatic.java:21`: un segundo entre entregas, reintentos de 10 s
+  a 5 min). La COM registrada conserva su fecha de recepcion del Formulario: una entrega recibida durante la ventana no
+  cambia su fecha ni su conteo.
+
+Duracion maxima segura de la ventana: respecto de las entregas no hay un maximo tecnico (ningun plazo, tamano ni
+limpieza las pierde mientras no estan confirmadas). La ventana se planifica por la atencion, no por la cola: **hasta 4
+horas**. Si una falla (U5) deja SIGER detenido, las entregas siguen esperando sin perderse; si la detencion supera 24
+horas, el responsable informa a la Direccion y al equipo del Formulario que la cola esta en espera.
+
+### U1. Paquete 0.8.0 (preparacion, no cambia la instancia)
+
+| | |
+|---|---|
+| Equipo, cuenta y consola | DDN-SIGER, administrador, consola de administrador |
+| Precondiciones | U0 cumplido; `D:\Entregas\SIGER-FECHA080.zip` copiado |
+| Resultado esperado | `certutil` muestra el mismo SHA-256 del registro de E17; la carpeta `D:\Entregas\SIGER-FECHA080` queda creada, con `manifest.json` 0.8.0 |
+| Riesgos | Un paquete distinto del registrado (copia danada o equivocada) |
+| Criterio de detencion | Huella distinta: no se descomprime ni se sigue |
+
+```powershell
+certutil -hashfile 'D:\Entregas\SIGER-FECHA080.zip' SHA256
+```
+```powershell
+Expand-Archive -LiteralPath 'D:\Entregas\SIGER-FECHA080.zip' -DestinationPath 'D:\Entregas'
+```
+```powershell
+Get-Content -LiteralPath 'D:\Entregas\SIGER-FECHA080\manifest.json'
+```
+
+`manifest.json` debe decir `"version": "0.8.0"`, el esquema de la ultima migracion del paquete (24, o la que registre
+E17) y `"automatedTestsExecuted": true`.
+
+### U2. Consultas previas (a), solo lectura
+
+| | |
+|---|---|
+| Equipo, cuenta y consola | DDN-SIGER, `DDN-SIGER\svc-siger`, consola de svc-siger |
+| Precondiciones | U1 conforme; SIGER en servicio (aun 0.7.0) |
+| Resultado esperado | Version 0.7.0, esquema 16, diario `COMPLETE`, `datadir`, `tmpdir` e `innodb_temp_tablespaces_dir` en D:, espacio libre suficiente |
+| Riesgos | Ninguno: no cambia nada |
+| Criterio de detencion | Cualquier valor distinto del esperado; en particular, si alguna de las tres rutas no esta en D: **el paso U se detiene aqui**, antes del respaldo |
+
+Estado de la instancia:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Estado.ps1' -Root 'D:\SIGER'
+```
+
+Debe mostrar `AppRunning` verdadero, `Health` UP, `Version` 0.7.0, `Migration` 16 y `Update` COMPLETE (diario de la
+actualizacion de 0.6.0 a 0.7.0). Con otro valor en `Update`, `Update.ps1` se negaria a seguir: se informa.
+
+Rutas del motor propio en su configuracion:
+
+```powershell
+Select-String -LiteralPath 'D:\SIGER\mysql\my.ini' -Pattern '^(datadir|tmpdir)='
+```
+
+Las mismas rutas vistas por el motor, con el bloque interactivo de solo lectura. Se pega completo en la consola de
+svc-siger; usa las funciones de `D:\SIGER\scripts\Common.ps1`, crea un archivo temporal de cliente con la credencial de
+la instancia (sin mostrarla) y lo borra al terminar aunque algo falle:
+
+```powershell
+. 'D:\SIGER\scripts\Common.ps1'
+$s=Read-Settings 'D:\SIGER'; Assert-InstanceOwner $s 'la consulta previa'
+$client=$null
+try {
+    $client=MySql-ClientFile $s (Import-Clixml 'D:\SIGER\config\secrets.clixml') 'owner'
+    Require-OwnMySql $s $client
+    Invoke-SigerSql $s $client 'SELECT @@datadir, @@tmpdir, @@innodb_temp_tablespaces_dir'
+    Invoke-SigerSql $s $client 'SELECT COUNT(*) FROM communication_original' $s.database
+} finally { Remove-SecretFile $client }
+```
+
+Las tres rutas de la primera linea deben empezar con `D:` (las relativas, como `.\#innodb_temp\`, quedan dentro del
+`datadir`). La segunda cifra es la cantidad de originales del Formulario: se anota para U6.
+
+Espacio libre en D: (respaldo, ensayo de restauracion y candidata; temporales del motor estadistico, medidos en E08b y
+E14):
+
+```powershell
+Get-PSDrive -Name D | Select-Object Used,Free
+```
+```powershell
+(Get-ChildItem -LiteralPath 'D:\SIGER' -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+```
+
+El espacio libre debe ser al menos tres veces el tamano de `D:\SIGER` y nunca menor que 20 GiB (umbral con que se midio
+el motor estadistico con 50.005 COM, muy por sobre el volumen real).
+
+### U3. Detener SIGER (cambio de estado)
+
+| | |
+|---|---|
+| Equipo, cuenta y consola | DDN-SIGER, `DDN-SIGER\svc-siger`, consola de svc-siger; ejecuta el responsable con su autorizacion expresa |
+| Precondiciones | U2 conforme; ventana iniciada y sin usuarios |
+| Resultado esperado | Servicio `SIGER` detenido y `SIGERMySQL` en ejecucion (el respaldo lo necesita) |
+| Riesgos | Las entregas del Formulario esperan en su cola mientras dure la ventana (ver arriba); no se pierden |
+| Criterio de detencion | El servicio no se detiene: no se sigue y se informa |
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Stop.ps1' -Root 'D:\SIGER'
+```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Estado.ps1' -Root 'D:\SIGER'
+```
+
+`Estado.ps1` debe mostrar `AppRunning` falso, `Service` SIGER detenido y `MySqlService` en ejecucion.
+
+### U4. Respaldo y ensayo de restauracion (b), cambio de estado
+
+| | |
+|---|---|
+| Equipo, cuenta y consola | DDN-SIGER, `DDN-SIGER\svc-siger`, consola de svc-siger; ejecuta el responsable |
+| Precondiciones | U3 conforme; carpetas de destino nuevas; en la misma ventana e **inmediatamente antes** de U5 |
+| Resultado esperado | `Backup.ps1` termina con "Respaldo coherente e integridad verificada"; `Restore-Check.ps1` con "Restauracion comprobada" y `restore-result.json` con `completed` verdadero |
+| Riesgos | Ocupa espacio en D: (U2) y carga el motor durante la restauracion; no toca el esquema activo |
+| Criterio de detencion | Cualquier error o `completed` distinto de verdadero: **no se actualiza**; se vuelve a iniciar SIGER 0.7.0 (`Start.ps1`) y se informa |
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Backup.ps1' -Root 'D:\SIGER' -Destination 'D:\Respaldos-SIGER\previo-0.8.0'
+```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Restore-Check.ps1' -Root 'D:\SIGER' -BackupDirectory 'D:\Respaldos-SIGER\previo-0.8.0' -Destination 'D:\SIGER-RESTORE-PREVIO-080'
+```
+```powershell
+Get-Content -LiteralPath 'D:\SIGER-RESTORE-PREVIO-080\restore-result.json'
+```
+
+`restore-result.json` debe decir `"completed": true` y trae el nombre del esquema restaurado (`siger_a_restore_*`),
+que U6 usa para comparar. El respaldo y el ensayo se conservan.
+
+### U5. Actualizacion (cambio de estado)
+
+| | |
+|---|---|
+| Equipo, cuenta y consola | DDN-SIGER, `DDN-SIGER\svc-siger`, consola de svc-siger; ejecuta el responsable |
+| Precondiciones | U4 conforme en esta misma ventana; SIGER detenido |
+| Resultado esperado | `Update.ps1`: "Candidata migrada y seleccionada"; `Start.ps1` confirma version 0.8.0 y el esquema del paquete, y el diario queda en `COMPLETE` |
+| Riesgos | Una migracion que falle a mitad no es reversible por si sola; por eso el respaldo de U4 |
+| Criterio de detencion (d) | Ante `MIGRATION_FAILED`, `PROMOTION_FAILED` o `START_FAILED` en el diario (`Estado.ps1`, campo `Update`): **detenerse**. Se prohibe reintentar, reparar Flyway, borrar el diario o volver al JAR anterior. Se conservan el respaldo, el descriptor anterior (`config\instance-update-*.previous.json`), el diario (`config\update-state.json`) y los logs, y se informa al responsable (`docs/INSTALACION_VM.md`, "Actualizacion y recuperacion de error"). Las entregas del Formulario siguen esperando en su cola |
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Update.ps1' -Root 'D:\SIGER' -Release 'D:\Entregas\SIGER-FECHA080' -BackupDirectory 'D:\Respaldos-SIGER\previo-0.8.0'
+```
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Start.ps1' -Root 'D:\SIGER'
+```
+
+`Update.ps1` migra con el JAR candidato antes de seleccionarlo. Al primer arranque, 0.8.0 completa sus cargas
+derivadas con marcador (resumen de cambios de las fichas, resultado de la primera atencion y dimensiones declaradas):
+corren por lotes con el lock global y el arranque puede tardar algo mas que de costumbre. El Formulario vuelve en el
+modo en que estaba (automatico) y drena su cola.
+
+### U6. Verificacion (e), solo lectura
+
+| | |
+|---|---|
+| Equipo, cuenta y consola | DDN-SIGER, `DDN-SIGER\svc-siger`, consola de svc-siger; luego un navegador con una cuenta con la funcion Reportes |
+| Precondiciones | U5 conforme |
+| Resultado esperado | Version 0.8.0, esquema del paquete, diario `COMPLETE`; los tres marcadores; `communication_original` con el mismo conteo de U2 y del respaldo y cero filas distintas; sin aviso `MOTOR_ESTADISTICO_DESHABILITADO`; el Explorador estadistico abre |
+| Riesgos | Ninguno: no cambia nada |
+| Criterio de detencion | Una cifra distinta: no se activa ningun catalogo (U7); se conserva todo y se informa al responsable |
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\SIGER\scripts\Estado.ps1' -Root 'D:\SIGER'
+```
+
+Debe mostrar `Health` UP, `Version` 0.8.0, `Migration` igual al esquema de `manifest.json` (U1) y `Update` COMPLETE.
+
+Bloque interactivo de solo lectura (consola de svc-siger; reemplazar `siger_a_restore_AAAAMMDDHHMMSS_xxxxxx` por el
+esquema de `restore-result.json` de U4):
+
+```powershell
+. 'D:\SIGER\scripts\Common.ps1'
+$s=Read-Settings 'D:\SIGER'; Assert-InstanceOwner $s 'la verificacion'
+$restore='siger_a_restore_AAAAMMDDHHMMSS_xxxxxx'
+$client=$null
+try {
+    $client=MySql-ClientFile $s (Import-Clixml 'D:\SIGER\config\secrets.clixml') 'owner'
+    Require-OwnMySql $s $client
+    Invoke-SigerSql $s $client "SELECT code, applied_ms, amount FROM application_marker WHERE code IN ('RESUMEN_CAMBIOS_V18','RESULTADO_INMEDIATO_V20','DIMENSIONES_V21') ORDER BY code" $s.database
+    Invoke-SigerSql $s $client "SELECT (SELECT COUNT(*) FROM communication_original), (SELECT COUNT(*) FROM ``$restore``.communication_original), (SELECT COUNT(*) FROM communication_original a LEFT JOIN ``$restore``.communication_original b ON b.id=a.id AND b.document_sha256=a.document_sha256 WHERE b.id IS NULL), (SELECT COUNT(*) FROM ``$restore``.communication_original b LEFT JOIN communication_original a ON a.id=b.id AND a.document_sha256=b.document_sha256 WHERE a.id IS NULL)" $s.database
+} finally { Remove-SecretFile $client }
+```
+
+La primera consulta debe listar los tres marcadores. La segunda devuelve cuatro cifras: originales vivos, originales
+del respaldo, vivos sin su par identico en el respaldo y del respaldo sin su par identico vivos. Las dos primeras deben
+ser iguales entre si y a la de U2, y las dos ultimas, 0. (Si el Formulario ya registro entregas nuevas despues de
+iniciar, la primera cifra es mayor y la tercera cuenta exactamente esas entregas: se anota la diferencia; la cuarta
+sigue siendo 0.)
+
+Motor estadistico habilitado: sin el aviso en el log desde el arranque de U5 (no debe devolver lineas):
+
+```powershell
+Select-String -Path 'D:\SIGER\logs\siger*.log' -Pattern 'MOTOR_ESTADISTICO_DESHABILITADO'
+```
+
+Y con una cuenta con la funcion Reportes: menu "Explorador estadistico", seccion Panorama; abre con sus indicadores (sin
+catalogos vigentes, las clasificaciones figuran como pendientes, lo que es correcto hasta U7). TI no ve el explorador
+(D2). Si nadie tiene aun Reportes, TI la concede en el perfil de la cuenta de Estudios que designe el responsable.
+
+### U7. Activacion de los catalogos (f), cambio de estado
+
+| | |
+|---|---|
+| Equipo, cuenta y consola | Navegador, cuenta TI de produccion; con autorizacion expresa del responsable |
+| Precondiciones | U6 conforme; conformidad institucional de DI-01 a DI-04 (Direccion de UEP, 2026-11-25) |
+| Resultado esperado | Los doce catalogos en estado VIGENTE, cada uno con su fundamento |
+| Riesgos | Desde la activacion, los cierres de REQ y de primera atencion exigen las clasificaciones del catalogo vigente (D28); antes de activar nada se exige |
+| Criterio de detencion | Un archivo rechazado al importar: no se activa ese catalogo y se informa (los archivos son los mismos que importan las pruebas de `ReferenceCatalogsTest`) |
+
+En "Catalogos estadisticos" (`#catalogos`), "Importar catalogo" con cada archivo de
+`D:\Entregas\SIGER-FECHA080\config-ejemplo\catalogos\` (doce archivos `.json`; `LEEME.txt` trae sus fuentes y huellas)
+y, para cada version importada, "Activar" con el fundamento:
+
+> Conformidad institucional de DI-01 a DI-04 (Direccion de UEP, 2026-11-25), plan 0.8.0.
+
+Al terminar, cada catalogo muestra una version VIGENTE. La clasificacion retrospectiva de registros anteriores sigue lo
+que defina DI-11 (U0) y usa el mecanismo de reapertura vigente (DI-07).
+
+Despues, TI revisa en Auditoria y operacion el Formulario en "Esperando entregas" con su ultimo exito reciente, y el
+responsable anota la ventana con sus cifras (U2, U4 y U6) en la bitacora de produccion.

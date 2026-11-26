@@ -3,8 +3,8 @@ import type {Context} from '../../app/context';
 import {Chart} from '../../components/charts/Chart';
 import {Callout, Panel, Skeleton} from '../../components/Primitives';
 import type {Period, StatsCatalog, TableModel} from './statsModel';
-import {encodeRoute, fmtInt, fmtPct, readResult, requestBody, sameMinute, sourceFooter, tableModel} from './statsModel';
-import {byMonth, byScope, byVariable, partsText, pendingLink, REGION_NOTE, share, stateParts} from './qualityModel';
+import {EMPTY_PERIOD, encodeRoute, fmtInt, fmtPct, readResult, requestBody, sameMinute, sourceFooter, tableModel} from './statsModel';
+import {byMonth, byScope, byVariable, count, partsText, pendingLink, REGION_NOTE, share, stateParts} from './qualityModel';
 import {useStat} from './statQuery';
 import {Freshness, HowToRead} from './ResultView';
 import {panoramaChoices} from './Panorama';
@@ -54,7 +54,7 @@ export default function Quality({ctx, cat, scope, params}: {ctx: Context; cat: S
     <Panel title="Completitud por variable" icon="checkCircle">
       {main.status === 'error' ? <Callout tone="warn">{main.error}</Callout> : !t ? <Skeleton lines={6}/> : t.rows.length === 0 ? <p className="field-help">Sin registros en el periodo.</p> : <ul className="stat-quality">
         {t.rows.map(r => {
-          const code = r.key[0], link = pendingLink(ctx.user, code);
+          const code = r.key[0], link = pendingLink(ctx.user, code, count(t, r.key, 'PENDIENTE'));
           return <li key={code} className={code === variable ? 'on' : ''}>
             <div className="stat-quality-head">
               <button type="button" className="link" aria-pressed={code === variable} onClick={() => setVariable(code)}>{r.labels[0]}</button>
@@ -75,7 +75,7 @@ export default function Quality({ctx, cat, scope, params}: {ctx: Context; cat: S
       {common == null && scopes.status === 'ok' && <Freshness at={scopes.at} refresh={scopes.refresh}/>}
     </Panel>
     <Panel title={`${label}: mes a mes`} icon="chart">
-      {months.status === 'error' ? <Callout tone="warn">{months.error}</Callout> : !tm ? <Skeleton lines={4}/> : <Chart kind="lineas" title={`${label}: ${region ? 'sin información' : 'pendiente'}, mes a mes`}
+      {months.status === 'error' ? <Callout tone="warn">{months.error}</Callout> : !tm ? <Skeleton lines={4}/> : tm.rows.length === 0 ? <p className="field-help">{EMPTY_PERIOD}</p> : <Chart kind="lineas" title={`${label}: ${region ? 'sin información' : 'pendiente'}, mes a mes`}
         notes={['El porcentaje lo calcula SIGER sobre los requerimientos de cada mes.']} source={source} file={'siger-calidad-' + variable.toLowerCase()}
         data={{categories: tm.rows.map(r => ({key: r.key[0], label: r.labels[0]})), series: [{key: gap, label: region ? 'Sin información' : 'Pendiente', values: tm.rows.map(r => share(tm, r.key, gap))}],
           total: null, percent: true, format: v => fmtPct(v)}}/>}

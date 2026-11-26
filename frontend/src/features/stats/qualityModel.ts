@@ -31,6 +31,8 @@ export function stateParts(t: TableModel, row: string[]): {state: string; label:
   }
   return out.sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state));
 }
+/** Cantidad de un estado en una fila (del servidor; 0 si no hay celda). */
+export const count = (t: TableModel, row: string[], state: string) => t.value(row, [state])?.n ?? 0;
 /** Porcentaje de un estado en una fila (del servidor; 0 si no hay celda). */
 export function share(t: TableModel, row: string[], state: string): number {
   const c = t.value(row, [state]);
@@ -45,13 +47,15 @@ export function boardFor(variable: string): 'com' | 'req' | null {
   if (['DERECHO', 'CONTEXTO'].includes(variable)) return 'req';
   return null;
 }
+export const NO_PENDING_TEXT = 'Sin registros pendientes en el periodo.';
 /**
  * Enlace a los pendientes (condicion 1 del GO de E13): solo si la cuenta tiene esa bandeja en su menu; si no, la frase.
- * La bandeja aplica sus propias reglas de lectura.
+ * La bandeja aplica sus propias reglas de lectura. E14 (correccion 5): sin pendientes (0), no hay enlace.
  */
-export function pendingLink(user: User, variable: string): {href: string; text: string} | {href: null; text: string} | null {
+export function pendingLink(user: User, variable: string, pending = 1): {href: string; text: string} | {href: null; text: string} | null {
   const kind = boardFor(variable);
   if (!kind) return null;
+  if (pending === 0) return {href: null, text: NO_PENDING_TEXT};
   const has = menuItems(menuFor(user, 0)).some(i => i.path === kind);
   if (!has) return {href: null, text: NO_BOARD_TEXT + '.'};
   return {href: '#' + boardRoute(kind, PENDING_FILTER), text: kind === 'com' ? 'Ver las comunicaciones con datos pendientes' : 'Ver los requerimientos con datos pendientes'};

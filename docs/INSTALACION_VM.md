@@ -226,6 +226,14 @@ Los scripts siguen sin ejecutarse aqui sobre Windows/MySQL. Su primera validacio
 
 **Referencia; no se ejecuta**: la validacion de la VM no se actualiza (se cierra en 0.4.0) y produccion se instala con 0.6.0 (D14 de `docs/PLAN_0_6_0.md`). La secuencia completa (consultas previas, respaldo, ensayo de restauracion obligatorio con `Restore-Check.ps1`, `Update.ps1`, cifras a revisar y tareas de TI posteriores) esta en `docs/ACTUALIZACION_0_5_0.md`, con las consultas previas de solo lectura en su anexo. Desde 0.5.0 el ingreso pasa el usuario a minusculas, el CSV de las bandejas exige la funcion `EXPORTACION` y las descargas llevan un nombre neutro (`<FOLIO>-documento-<id>.<ext>`).
 
+### Actualizar a 0.8.0
+
+La actualizacion de produccion de 0.7.0 a 0.8.0 es el paso U de `docs/DESPLIEGUE_VM.md` (seccion 5): requisitos (DI-11,
+ventana sin usuarios y margen antes del 15/12), consultas previas de solo lectura, respaldo y `Restore-Check.ps1`
+inmediatamente antes de `Update.ps1`, criterio de detencion ante `MIGRATION_FAILED`, `PROMOTION_FAILED` o
+`START_FAILED`, verificacion posterior (marcadores, originales del Formulario y motor estadistico) y activacion de los
+catalogos por TI. Los scripts son los mismos de 0.6.0 y 0.7.0. Recorridos de 0.8.0 en `docs/PRUEBAS_MANUALES_0_8_0.md`.
+
 ### Supresion de AUTORIDAD al actualizar a 0.5.0
 
 Al primer arranque de 0.5.0 (tambien con `Update.ps1`, que migra con el JAR candidato) una rutina revoca las funciones AUTORIDAD vigentes o programadas. No borra filas: conserva la historia y registra un evento `FUNCION_REVOCADA` por cada una, con el fundamento "Rol suprimido en 0.5.0 (D1)", a nombre de la identidad tecnica `sistema:actualizacion` (sin sesion, sin funciones y fuera de las listas). Se aplica una sola vez (marcador `ROL_AUTORIDAD_SUPRIMIDO_050`). La cuenta que tenia la autoridad sigue existiendo, sin esa funcion.

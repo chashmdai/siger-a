@@ -283,3 +283,23 @@ consultas sobre el corte tardaron entre 0,04 y 0,9 s (la misma consulta vigente,
 COM con esta población): unos 4 s con 10.000 COM, 10 s con 25.000, 20 s con 50.000; el plazo se alcanzaría con unas 70.000 COM
 en un solo corte, y entonces la generación responde 503 sin escribir nada. Si el volumen se acerca a ese límite, la hoja de
 ruta 0.9.0 prevé el corte sin lock global (instantánea consistente con bloqueo de milisegundos).
+
+## 14. Medicion de cierre (E14)
+
+MySQL 8.4.13 aislado (datadir y temporales en D:), 50.005 COM sinteticas de `StatLoadMeasureTest` (`medicionE14`), con
+-Xmx1024m y el plazo de 30 s; tres corridas de cada consulta. Objetivo de `DISENO_0_8_0.md` 5.7: menos de 3 s por respuesta.
+
+- Panorama de la Cuenta Publica 2025-2026 (25.003 COM recibidas) comparado con el mismo periodo del anio anterior: ingresos
+  0,24-0,27 s, REQ 0,16-0,18 s, Casos 0,18-0,20 s, actuaciones 0,44-0,55 s, registros tardios 0,23-0,24 s y caracterizacion
+  completa (filtros de cinco estados y region) 2,76-2,94 s, la mas cercana al objetivo. Carga inicial completa, de a una
+  consulta: 4,3 s; cada indicador se muestra al llegar su respuesta. Proyeccion lineal al volumen real (unos 7.200 ingresos
+  al anio, factor 0,288): 1,2 s la carga completa y 0,85 s la caracterizacion completa.
+- Explorador (las diez consultas pesadas de E08b): entre 0,12 y 2,67 s (completitud 2,61-2,67 s; tipo de solicitud por
+  requirente 1,43 s; derecho por contexto 1,21-1,25 s).
+- Tablas recien llenadas (las `stat_declared_*` tras la carga V21 de la actualizacion; `stat_cut_*` y `stat_export_cut_*`
+  recien congeladas): EXPLAIN de las 65 sentencias del motor, la consulta y la comparacion sobre un corte, su verificacion y
+  su exportacion, antes y despues de ANALYZE: siempre por indice (`ref`, `eq_ref` o `const`); sin estadisticas, el optimizador
+  estima mas filas por clave pero no cambia el acceso. Cero recorridos completos: no se agrega un indice.
+- Repeticion sobre el codigo final: corte de la Cuenta Publica 11,7 s (E10) y 12,6 s (E11, dentro de `medicionE11`), ZIP
+  vigente 13,3 s y desde el corte 6,4 s con 431 y 419 MiB despues de recolectar (42 y 41 % de 1.024 MiB), segundo ZIP 429
+  de inmediato; filtro "Con datos estadisticos pendientes" 1,0-1,6 s por pagina (E13).

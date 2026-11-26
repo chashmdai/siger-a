@@ -1,4 +1,4 @@
-# SIGER 0.7.0 - arquitectura
+# SIGER 0.8.0 - arquitectura
 
 Un JAR Spring Boot con React compilado y una base propia. Java 25 / Spring Boot 4.1.1 / Spring JDBC / Security /
 Flyway; React 19 / TypeScript 6 / Vite 8; MySQL 8.4 propio en la VM y H2 (`MODE=MySQL`) para pruebas y uso local.
@@ -203,6 +203,12 @@ descargas CSV, XLSX y ZIP desde cualquier vista y los ajustes de presentacion de
 primera columna fija, variacion compacta y una sola hora por seccion). La logica esta en `cutsModel.ts`, `seriesModel.ts` y
 `qualityModel.ts`; el servidor solo agrega el filtro de las bandejas.
 
+E14 cierra la version sin cambios de servidor: corrige la presentacion de E13 (eje de periodo abreviado o en dos lineas
+sin superponerse, comparacion con un corte en barras pareadas y sin circular, "Sin registros en el periodo" en lugar del
+grafico, Calidad sin enlace con 0 pendientes y un Panorama que muestra cada indicador al llegar), agrega el barrido final
+de permisos (`PermisosFinalesTest`: toda ruta `/api` clasificada) y mide con 50.005 COM la carga del Panorama y el
+explorador (`StatLoadMeasureTest.medicionE14`, cada consulta bajo 3 s, EXPLAIN de las tablas recien llenadas).
+
 Presentacion: sistema visual propio sin dependencias nuevas (tokens CSS, iconos propios, Cabin OFL y escudo
 institucional servidos desde el JAR), con barra lateral por tipo de trabajo, paleta Ctrl+K, fichas con cadena
 COM->SOL->REQ->Caso y version movil. Decisiones en `docs/DISENO_0_4_0.md`.
@@ -221,4 +227,6 @@ DPAPI); un administrador solo ejecuta `Install-Service.ps1`, que registra los se
 `Test-GraphMail.ps1`. Liberacion por analisis en origen: `Set-OriginRelease.ps1`. Rotacion de la cuenta de servicio:
 `Export-InstanceConfig.ps1`, `Test-InstanceConfig.ps1`, `Import-InstanceConfig.ps1` y `Set-ServicePassword.ps1`.
 Salida a produccion (`docs/DESPLIEGUE_VM.md`): la validacion se cierra con `Close-Validation.ps1` y se elimina con
-constancia con `Remove-Validation.ps1`.
+constancia con `Remove-Validation.ps1`. Actualizacion de produccion a 0.8.0 (paso U, seccion 5 de esa guia): con los mismos
+scripts (`Backup.ps1`, `Restore-Check.ps1`, `Update.ps1`, `Start.ps1`, `Estado.ps1`) y consultas de solo lectura; mientras
+SIGER esta detenido las entregas del Formulario esperan en su cola, que no las retira ni las borra sin ACK.

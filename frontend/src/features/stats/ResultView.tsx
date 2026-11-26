@@ -5,7 +5,7 @@ import type {ChartKind} from '../../components/charts/chartModel';
 import {choices, suggest} from '../../components/charts/chartModel';
 import {Icon} from '../../components/Icon';
 import type {Metric, Query, Result, StatsCatalog, TreeRow} from './statsModel';
-import {catalogName, chartData, chartShape, chileTime, dimOf, fieldLabel, fileStem, fmtInt, howToRead, isMultiple, measureOf, MULTIPLE_NOTE, NON_ADDITIVE_DIMS,
+import {catalogName, chartData, chartShape, chileTime, EMPTY_PERIOD, dimOf, fieldLabel, fileStem, fmtInt, howToRead, isMultiple, measureOf, MULTIPLE_NOTE, NON_ADDITIVE_DIMS,
   NON_ADDITIVE_NOTE, periodLabel, sourceFooter, tableModel, HIERARCHY_NOTE} from './statsModel';
 import {ResultTable} from './ResultTable';
 
@@ -39,11 +39,13 @@ export function ResultView({cat, catalog, q, r, at, refresh, scope, levels, tree
   const id = useId().replace(/:/g, '');
   const metric: Metric = q.percent ? 'percent' : 'n';
   const comparison = !!r.comparison;
-  // Comparacion con un corte (E13): por celdas y margenes, marcadas en la tabla; el grafico muestra la cifra actual.
+  // Comparacion con un corte (E13): por celdas y margenes, marcadas en la tabla. E14 (correccion 2): sin columnas, el grafico
+  // pone la cifra actual y la del corte pareadas y no ofrece el circular; con columnas muestra la cifra actual (sin circular).
   const cutCompare = comparison && q.compare === 'CORTE';
   const table = tableModel(r, q.rows, q.columns);
-  const shape = chartShape(cat, q, table, comparison && !cutCompare);
-  const data = chartData(table, metric, comparison && !cutCompare, r.comparison?.period ? periodLabel(r.comparison.period) : '');
+  const paired = comparison && !(cutCompare && q.columns.length > 0);
+  const shape = chartShape(cat, q, table, paired);
+  const data = chartData(table, metric, paired, r.comparison?.period && !cutCompare ? periodLabel(r.comparison.period) : '', cutCompare ? r.comparison?.cutCode ?? '' : null);
   const values = data.series[0]?.values.map(v => v ?? 0);
   const options = choices(shape, values, data.total ?? undefined);
   const suggested = suggest(shape);
@@ -64,7 +66,7 @@ export function ResultView({cat, catalog, q, r, at, refresh, scope, levels, tree
   return <div className="stat-result">
     <Freshness at={at} refresh={refresh}/>
     <p className="stat-total"><strong>{fmtInt(r.grand.n)}</strong> {multiple ? 'requerimientos únicos en total' : 'en total'}</p>
-    {kind ? <>
+    {r.grand.n === 0 ? <p className="field-help stat-empty">{EMPTY_PERIOD}</p> : kind ? <>
       <div className="stat-kinds" role="radiogroup" aria-label="Tipo de gráfico">
         {options.filter(o => o.ok).map(o => <button key={o.kind} type="button" role="radio" aria-checked={o.kind === kind} className="stat-kind"
           onClick={() => setPicked(o.kind)}>{o.label}</button>)}

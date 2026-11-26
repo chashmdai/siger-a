@@ -671,6 +671,16 @@ export function figureTable(rows: {key: string; label: string; n: number}[]): {r
   return {rows: rows.filter(r => !(special(r.key) && r.n === 0)), empty, note: empty.length ? `Sin registros en: ${empty.join(', ')}.` : ''};
 }
 
+/** E14 (correccion 4): un periodo sin registros muestra este texto en lugar del grafico. */
+export const EMPTY_PERIOD = 'Sin registros en el periodo.';
+/**
+ * Un desglose de la Figura 1 (E14, correccion 4): con registros, grafico y la nota "Sin registros en: ..." una sola vez (con
+ * el grafico, que la lleva a la descarga); sin registros en el periodo, el texto en lugar del grafico y la nota bajo la tabla.
+ */
+export function breakdownView(note: string, total: number): {chart: boolean; empty: string; tableNote: string; chartNotes: string[]} {
+  return total > 0 ? {chart: true, empty: '', tableNote: '', chartNotes: note ? [note] : []} : {chart: false, empty: EMPTY_PERIOD, tableNote: note, chartNotes: []};
+}
+
 // --- Exportacion (E13) -------------------------------------------------------------------------------------------------
 /**
  * Medidas sin paquete ZIP (contrato de exportacion; StatExport: medida de unidad propia o de una poblacion que no son los
@@ -739,7 +749,8 @@ export function howToRead(o: {cat: StatsCatalog; q: Query; r: Result | null; sco
   lines.push(`${MODE_LABELS[mode] ?? 'Valores vigentes'}: ${MODE_HELP[mode] ?? ''}${mode === 'FECHA' && text(meta, 'as_of') ? ' Fecha: ' + chileDateTime(Date.parse(text(meta, 'as_of'))) + '.' : ''}`);
   lines.push(`Alcance: ${o.scope}. Solo se cuentan los requerimientos de tu alcance.`);
   if (q.percent) lines.push(`${PERCENT_LABELS[q.percent]}: el porcentaje lo calcula SIGER sobre ${q.percent === 'TOTAL' ? 'el total' : q.percent === 'FILA' ? 'el total de cada fila' : 'el total de cada columna'} de ${UNIT_LABELS[text(meta, 'percent_unit') || 'COM'] ?? 'requerimientos'} únicos.`);
-  if (r?.comparison?.period) lines.push(`Comparación con ${periodLabel(r.comparison.period)}: diferencia y variación sobre la cifra base.`);
+  if (q.compare === 'CORTE' && r?.comparison) lines.push(`${cutComparisonText(r.comparison.cutCode)}: cada cifra actual se muestra junto a la del corte, con su diferencia.`);
+  else if (r?.comparison?.period) lines.push(`Comparación con ${periodLabel(r.comparison.period)}: diferencia y variación sobre la cifra base.`);
   const versions = Object.entries((meta.catalog_versions ?? {}) as Record<string, number[]>);
   if (versions.length) lines.push('Listados usados: ' + versions.map(([c, v]) => `${catalogName(c)} (versión ${v.join(', ')})`).join('; ') + '.');
   const multiple = multipleIn(cat, q);
@@ -815,15 +826,19 @@ export function chartShape(cat: StatsCatalog, q: Query, t: TableModel, compariso
     categories: t.rows.length, series: q.columns.length ? t.columns.length : comparison ? 2 : 1};
 }
 const SPECIALS = new Set(['PENDIENTE', 'SIN_INFORMACION', 'NO_DECLARADO', 'NO_APLICA', 'SIN_DESGLOSE']);
+/** E14 (correccion 2): rotulo de la comparacion con un corte, con su codigo. */
+export const cutComparisonText = (code?: string) => 'Comparación con el corte' + (code ? ' ' + code : '');
 /**
  * Datos del grafico desde la tabla: categorias = filas, series = columnas (o la cifra y su base en una comparacion). Las
- * cifras son las del servidor; los totales por categoria (barras apiladas) son sus margenes.
+ * cifras son las del servidor; los totales por categoria (barras apiladas) son sus margenes. Con un corte (E14, correccion
+ * 2), la cifra base es la del corte y las series se rotulan "Cifra actual" y "Corte <codigo>".
  */
-export function chartData(t: TableModel, metric: Metric, comparison: boolean, basePeriod: string) {
+export function chartData(t: TableModel, metric: Metric, comparison: boolean, basePeriod: string, cutCode: string | null = null) {
   const categories = t.rows.map(r => ({key: keyOf(r.key), label: r.labels.join(' · ') || 'Total', special: r.key.some(k => SPECIALS.has(k)), total: t.rowTotal(r.key)?.n ?? null}));
   const series = t.colDims.length
     ? t.columns.map(c => ({key: keyOf(c.key), label: c.labels.join(' · '), values: t.rows.map(r => cellFigure(t.value(r.key, c.key), metric).value)}))
-    : [{key: 'actual', label: comparison ? 'Periodo consultado' : 'Cifra', values: t.rows.map(r => cellFigure(t.value(r.key, []), metric).value)},
-      ...(comparison ? [{key: 'base', label: basePeriod ? 'Comparación: ' + basePeriod : 'Periodo de comparación', base: true, values: t.rows.map(r => t.delta(r.key, [])?.base_n ?? 0)}] : [])];
+    : [{key: 'actual', label: comparison ? (cutCode != null ? 'Cifra actual' : 'Periodo consultado') : 'Cifra', values: t.rows.map(r => cellFigure(t.value(r.key, []), metric).value)},
+      ...(comparison ? [{key: 'base', label: cutCode != null ? ('Corte ' + cutCode).trim() : basePeriod ? 'Comparación: ' + basePeriod : 'Periodo de comparación', base: true,
+        values: t.rows.map(r => t.delta(r.key, [])?.base_n ?? 0)}] : [])];
   return {categories, series, total: t.rowTotal([])?.n ?? null, percent: metric === 'percent', format: (v: number | null) => metric === 'percent' ? fmtPct(v) : v == null ? '—' : fmtInt(v)};
 }
