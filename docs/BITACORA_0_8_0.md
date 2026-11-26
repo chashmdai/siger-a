@@ -29,14 +29,14 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E12 | Explorador estadistico: tablas, filtros, porcentajes, graficos y comparaciones (interfaz) | ABIERTO |
 | E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | ABIERTO |
 | E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | ABIERTO |
-| E15 | Validacion de uso con la Direccion de UEP | EXTERNO |
+| E15 | Validacion de uso con la Direccion de UEP | POSTERGADO |
 | E16 | Auditoria independiente | EXTERNO |
-| E17 | Build de entrega, ensayo de actualizacion y etiqueta | ABIERTO |
+| E17 | Build de entrega y etiqueta | ABIERTO |
 
 Todo gate depende de E00 y de su contrato del Formulario (seccion 3 del plan). Un gate ABIERTO cuyas dependencias
-(columna "Depende de" de la seccion 6 del plan) no estan CERRADO se detiene en sus precondiciones. E16 empieza con el
-ciclo de E15 cerrado (E15 o su ultima repeticion CERRADO), y E17 con ese ciclo y la ultima auditoria CERRADO (seccion 5
-del plan). Los pendientes operacionales postergados no tienen gate en 0.8.0 (seccion 9 del plan).
+(columna "Depende de" de la seccion 6 del plan) no estan CERRADO se detiene en sus precondiciones. Mientras E15 esté
+POSTERGADO, E16 empieza con E14 CERRADO y E17 exige el ciclo de E16 cerrado, sin correcciones ABIERTO (seccion 5 del
+plan). Los pendientes operacionales postergados no tienen gate en 0.8.0 (seccion 9 del plan).
 
 ## Decisiones del responsable
 
@@ -67,6 +67,9 @@ del plan). Los pendientes operacionales postergados no tienen gate en 0.8.0 (sec
 | Archivos de referencia segun DI-01 a DI-04 | E06 | 2026-11-24: aprobado. E06 actualiza `deploy/config-ejemplo/catalogos/` desde `docs/VALIDACION_CATALOGOS_0_8_0.md`: completa contexto, caracterizacion y tramos de edad; ajusta tipo de actuacion, relacion y via (agrupaciones como items padre no seleccionables); crea rol del Estado (desde el eje VII ya transcrito) y grupos prioritarios (denominaciones verificadas contra el PDF); agrega las descripciones; ajusta `ReferenceCatalogsTest` y `LEEME.txt`. Todo queda en estado PROPUESTA. |
 | Verificación de la transcripción de derechos y grupos prioritarios | Activación | 2026-11-25: el responsable acepta la transcripción tal como está (verificada por programa contra el PDF de huella registrada en E02 y E06), sin revisión manual adicional. |
 | Incidente de E08 (temporales de MySQL llenaron C: en el equipo de pruebas) | E08b | 2026-11-25: se agrega E08b para confinamiento, límites de ejecución y concurrencia del motor. E16 revisa el incidente, el cambio en Workflow.java, la forma de evitar el error 1112 de MySQL y las guardas de E08b. E17 y el paso U verifican @@tmpdir y @@innodb_temp_tablespaces_dir en D:. |
+| E15 postergado | E16 | 2026-11-25: por la naturaleza del proyecto no habrá otra validación institucional que la ratificación pendiente de DI-13. U1-U10 los acredita el ejecutor en el humo de E09, E12, E13 y E14, y Claude Padre los revisa en E16. Las observaciones de uso posteriores siguen D47 (0.9.0). E16 depende de E14. |
+| Actualización sin ensayo en TEST-SIGER (precisión de D50) | E17 | 2026-11-25: se omite el paso 2 de E17. Fundamento: Update.ps1 y Migrate.ps1 sin cambios desde v0.6.0 y ejecutados con éxito en producción al pasar de 0.6.0 a 0.7.0; la migración desde 0.7.0 hasta la última versión se prueba sobre MySQL 8.4 con el volcado sintético en cada gate y en E14. Compensaciones obligatorias en el paso U (detalle de E14). |
+| Dimensión de adscripción institucional (DI-13) | E10 | 2026-11-25: aprobada; se agrega a E10 con StatSource.java y docs/CONTRATO_STATS_0_8_0.md (cambio aditivo registrado como desvío). |
 
 ## Definiciones pendientes
 
@@ -88,9 +91,9 @@ definicion ya respondida que se conserva para la hoja de ruta (seccion 9 del pla
 | DI-10 | Renovacion del certificado: autofirmado renovado o PFX institucional; autorizacion de TI para el firewall al pasar a red (solo para la ejecucion en produccion) | Responsable con TI | 0.9.0 | 2026-11-24: desestimada. Se mantienen el certificado y la configuracion HTTPS actuales. Sin gate. |
 | DI-11 | Alcance de la clasificacion retrospectiva en produccion (desde que fecha, que registros, quien) | Responsable con la institucion | Paso U | |
 | DI-12 | Autorizacion de una dependencia XLSX (`org.dhatim:fastexcel`) solo si el escritor o lector propio no basta | Responsable | E11, si se pide | |
-| DI-13 | Correspondencia entre la "region de origen" publicada en el Informe Anual y las dimensiones territoriales de SIGER | Institucion | E15 | |
-| DI-14 | Funcionarios de UEP que participan en la validacion de uso | Responsable con UEP | E15 | |
-| DI-15 | Version efectiva de produccion para el ensayo de actualizacion (0.6.0 o 0.7.0, segun el corte del 07/12) | Responsable | E17 | |
+| DI-13 | Correspondencia entre la "region de origen" publicada en el Informe Anual y las dimensiones territoriales de SIGER | Institucion | E15 | 2026-11-25: respuesta del responsable; la regla temporal y la homologación quedan sujetas a ratificación institucional. La Figura 1 se desglosa por la adscripción institucional del requerimiento: la sede regional u Oficina Nacional a la que está adscrito el ingreso (los Informes Anuales 2022-2026 siguen el despliegue de las sedes, no las 16 regiones). Se usa la primera adscripción acreditada en el instante de la consulta o del corte; sin adscripción, 'Pendiente de asignación'. Cada requerimiento computable cuenta una vez: NNA, Casos, actuaciones y transferencias no lo multiplican. La región del requirente, la del NNA afectado y la de los hechos siguen como dimensiones independientes; la del NNA es no aditiva y se rotula así. La homologación de la Oficina Nacional con 'Metropolitana' rige solo al comparar con series históricas (correspondencia del asistente de series, E11), sin cambiar el rótulo en SIGER. Se implementa en E10 (dimensión ADSCRIPCION_INICIAL). |
+| DI-14 | Funcionarios de UEP que participan en la validacion de uso | Responsable con UEP | E15 | 2026-11-25: no aplica; E15 postergado. |
+| DI-15 | Version efectiva de produccion para el ensayo de actualizacion (0.6.0 o 0.7.0, segun el corte del 07/12) | Responsable | E17 | 2026-11-25: 0.7.0 (esquema 16). Producción ya corre 0.7.0, instalada con 0.6.0 y actualizada a 0.7.0 con Update.ps1, según confirmó el responsable. El paso U parte de esa versión; el diario de Update.ps1 de esa actualización debe estar en COMPLETE. |
 
 ## Antecedentes para E00
 
@@ -817,7 +820,7 @@ Mutaciones de E08 (regla -> prueba que falló):
 - Desvíos del plan: `stats.enabled` en `/api/catalog` (cambio aditivo del contrato autorizado en el GO). M23 (lock global dentro de la consulta) falló al tomar el segundo cupo, que ya queda bloqueado, antes del paso del comando.
 - Limitaciones residuales: las guardas no son una cuota de disco (MySQL 8.4 no limita por sesión sus temporales en disco): una consulta puede escribir temporales hasta que vence su plazo (30 s más hasta 1 s por el redondeo de `setQueryTimeout`); H2 revisa la cancelación cada 128 filas; los cupos son por proceso (un servicio); la unidad no distingue un MySQL remoto; KILL QUERY usa una conexión adicional del servidor.
 - Hallazgos para gates siguientes: E10 y E11 usan `StatGuard.run` (cupos) y `StatGuard.read` (plazo y auditoría de la cancelación) con su propia nota de nombres; `StatLoadMeasureTest` sirve a E14 (`-Dsiger.stats.measure=true`, resultado en `target/medicion-e08b.txt`); en este equipo la suite MySQL necesita `-Dsiger.stats.instance-drive=D:\`; E17 y el paso U verifican `@@tmpdir` y `@@innodb_temp_tablespaces_dir` en D: (si no, el motor queda deshabilitado).
-- Pendientes: borrar `D:\Ensayo-E08b` (MySQL desechable ya detenido) -> responsable; medición formal de rendimiento -> E14; rutas de MySQL en la VM -> E17 y paso U.
+- Pendientes: borrar `D:\Ensayo-E08b` (MySQL desechable ya detenido) -> responsable; medición formal de rendimiento -> E14; rutas de MySQL en la VM -> E17 y paso U. Actualización 2026-11-25: el responsable borró D:\Ensayo-E08b.
 - Verificación manual sugerida al usuario: `.\mvnw.cmd -B -ntp -f backend\pom.xml test -Dtest=StatGuardTest,StatTimeoutHttpTest,StatQueryHttpTest`.
 
 Mutaciones de E08b (regla -> prueba que falló):

@@ -198,6 +198,7 @@ repiten innecesariamente las pruebas de infraestructura. Las verificaciones se c
 H2 y MySQL 8.4, la integridad de datos, los permisos, los originales firmados y las funcionalidades nuevas. Se ensaya la
 actualizacion desde la version efectiva de produccion, con respaldo previo verificado y auditoria independiente. Una
 vez autorizada, la actualizacion se instala sin periodos artificiales de espera.
+   - Precisión del responsable (2026-11-25): sin ensayo de la actualización en TEST-SIGER; compensaciones en el paso U (E14).
 
 D51. **Organizacion de la version** (DP-18, ajustada por el responsable el 2026-11-24). 0.8.0 se concentra en la
 normalizacion integral y la inteligencia de negocios para Estudios; los pendientes operacionales (D44-D49) pasan a 0.9.0
@@ -207,10 +208,11 @@ facilidad de uso es criterio transversal de aceptacion, en especial para la Dire
 ejecutor puede ser Claude Code o Codex: el repositorio agrega un `AGENTS.md` que remite a `CLAUDE.md`, sin duplicar
 contenido.
 
-Escenarios de aceptacion (pruebas automatizadas, humo de E14 y, los de interfaz, ensayo de E17):
+Escenarios de aceptacion (pruebas automatizadas y humo de los gates correspondientes):
 1. **Figura 1 sintetica**: con un conjunto sintetico de esperados conocidos, el explorador entrega los cuatro desgloses
-   (tipo de solicitud, requirente, via, region del requirente) de un periodo julio-junio; cada desglose suma el total;
-   la exportacion y un corte de la misma consulta dan las mismas cifras.
+   (tipo de solicitud, requirente, via, adscripcion institucional (DI-13)) de un periodo julio-junio; cada desglose suma
+   el total; la exportacion y un corte de la misma consulta dan las mismas cifras. La región del requirente, la del NNA
+   y la de los hechos se consultan como dimensiones aparte.
 2. Conteo D25: invalida excluida, duplicada contada, antecedente no contado, vinculo devuelto vuelve a contar, COM
    pendiente y primera atencion contadas, REQ reabierto, transferido y con varios Casos contado una vez.
 3. Fechas D26: recepcion el 30-06 a las 23:59:59,999 y el 01-07 a las 00:00 (hora de Chile) en periodos distintos;
@@ -235,7 +237,7 @@ Escenarios de aceptacion (pruebas automatizadas, humo de E14 y, los de interfaz,
 11. Ficha 1.2 y COM manual: un nombre historico no se divide; completar una region no es correccion; RUN, documento,
     nacionalidad, correo y celular con las mismas reglas del Formulario.
 12. Contrato: las entregas NNA con RUN de fuente SRCeI se registran sin autenticacion y sin elevar la procedencia.
-13. Facilidad de uso: escenarios U1-U10 de `DISENO` 10.5 con funcionarios de UEP.
+13. Facilidad de uso: escenarios U1-U10 de DISENO 10.5, acreditados por el ejecutor en el humo y revisados en E16 (E15 postergado el 2026-11-25).
 14. Edad y nacionalidad: un NNA con fecha de nacimiento tiene su edad a la fecha de recepcion; uno con edad declarada
     entera la conserva; un texto historico de edad no se interpreta y queda "sin informacion"; una nacionalidad libre
     de una ficha 1.0 no se convierte en pais; la fecha de nacimiento nunca se exporta.
@@ -290,7 +292,7 @@ Escenarios de aceptacion (pruebas automatizadas, humo de E14 y, los de interfaz,
     aislado y desechable en `127.0.0.1`.
 14. **Entornos institucionales**: en DDN-SIGER solo `D:`; prohibido consultar o intervenir `C:`, `E:`, otros volumenes o
     el sistema legado; sin detener servicios, reiniciar, borrar ni actualizar produccion sin autorizacion expresa del
-    responsable. En TEST-SIGER, rutas de ensayo nuevas (`D:\Ensayo-E17\...`).
+    responsable. En TEST-SIGER, rutas de ensayo nuevas (`D:\Ensayo-E14\...`).
 15. **Documentos**: las ordenes `powershell.exe ... -File` solo van en las guias que enlaza `Check-Scripts.ps1`
     (`DESPLIEGUE_VM.md`, `INSTALACION_VM.md`, `PRUEBAS_MANUALES_0_6_0.md`, `README.md`, `CLAUDE.md`), con argumentos
     literales que enlacen.
@@ -307,7 +309,7 @@ Escenarios de aceptacion (pruebas automatizadas, humo de E14 y, los de interfaz,
   correccion desde la etiqueta de la version que usara produccion (regla 16), antes de la apertura del Formulario del
   15/12; E00 vuelve a ABIERTO cuando esa decision se registra.
 - La actualizacion de produccion a 0.8.0 (pasos U de `DESPLIEGUE_VM.md`, que redacta E14) la ejecuta el responsable con
-  autorizacion expresa, despues de E17 CERRADO, desde la version efectiva de produccion, con `Backup.ps1` y
+  autorizacion expresa, despues de E17 CERRADO, desde 0.7.0, version efectiva de produccion (DI-15), con `Backup.ps1` y
   `Restore-Check.ps1` en la misma ventana, inmediatamente antes de `Update.ps1`. Los catalogos se importan y activan
   despues de su validacion institucional (DI-01 a DI-04); sin catalogos vigentes nada bloquea el cierre.
 
@@ -336,19 +338,19 @@ dependencias y llega el GO):
 | 02-04/12 | E10, E11 |
 | 04-06/12 | E12, E13 |
 | 07/12 | E14 |
-| 08-09/12 | E15 y sus correcciones |
 | 09-10/12 | E16 y sus correcciones |
 | 10-11/12 | E17 |
-| 11-14/12 | Paso U en produccion, con autorizacion expresa y respaldo verificado |
+| 11-13/12 | Paso U en produccion, con autorizacion expresa, respaldo verificado y el margen de E14 |
 
 Reglas del plazo:
 - El plazo no reduce pruebas, mutaciones, auditoria ni ensayo. Si un gate no se cierra con sus verificaciones, no se
   cierra; la unica forma de sacar un gate del cierre de 0.8.0 es que el responsable lo pase a POSTERGADO con fundamento.
+- Por decisión del 2026-11-25, E15 queda POSTERGADO y E17 no ensaya la actualización (bitácora, Decisiones del responsable).
 - La apertura del Formulario del 15/12 no depende de 0.8.0: produccion abre con la version de V0-V6. Si E17 no esta
   CERRADO a tiempo, el paso U se realiza despues, sin atajos.
 - Trabajo en paralelo del responsable, sin esperar al ejecutor: GO oportunos; validacion institucional de los
-  catalogos (DI-01 a DI-04) para que TI los active en el paso U; DI-11, DI-13, DI-14 y DI-15; convocatoria de UEP para
-  E15 e instancia de ensayo preparada desde E14; verificacion de la transcripcion de derechos (E02).
+  catalogos (DI-01 a DI-04) para que TI los active en el paso U; DI-11 y ratificación institucional de DI-13;
+  verificacion de la transcripcion de derechos (E02).
 - Revision anticipada opcional: el responsable puede pedir a Claude Padre revisar bloques de gates ya cerrados mientras
   avanza la implementacion; no reemplaza a E16 ni cambia su alcance, y acorta su duracion.
 
@@ -395,6 +397,7 @@ en su repeticion con ese escenario. E17 exige el ciclo de E15 cerrado, la ultima
 contiene todas las correcciones de E15 y de E16, y ningun gate de correccion ABIERTO. Un gate que resulte mayor se
 divide (`ENNa` cerrado con lo verificado y `ENNb` ABIERTO). Un gate BLOQUEADO por una definicion pendiente pasa a
 ABIERTO solo cuando el responsable registra la respuesta en la bitacora. Ningun gate implementa la seccion 9.
+Mientras E15 esté POSTERGADO, E16 empieza con E14 CERRADO y E17 exige solo el ciclo de E16.
 
 ## 6. Gates
 
@@ -421,11 +424,11 @@ detalle de cada gate va despues de la tabla.
 | E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | E11, E12 | 10.3, 10.4 |
 | E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | E00-E13 | 5.7, 13, 14 |
 | E15 | Validacion de uso con la Direccion de UEP (EXTERNO) | E14 | 10.5 |
-| E16 | Auditoria independiente (EXTERNO) | Ciclo de E15 cerrado (con sus correcciones) | todo |
-| E17 | Build de entrega, ensayo de actualizacion y etiqueta | Ciclos de E15 y E16 cerrados, sin correcciones ABIERTO | 14 |
+| E16 | Auditoria independiente (EXTERNO) | E14 | todo |
+| E17 | Build de entrega y etiqueta | Ciclo de E16 cerrado, sin correcciones ABIERTO | 14 |
 
 Ruta critica (cadena mas larga de dependencias): E00 -> E01 -> E05 -> E06 -> E07 -> E08 -> E10 -> E11 -> E13 -> E14 ->
-E15 -> E16 -> E17 -> paso U. Fuera de ella, pero antes de lo que los necesita: E02 (antes de E10), E03 (antes de E07),
+E16 -> E17 -> paso U. Fuera de ella, pero antes de lo que los necesita: E02 (antes de E10), E03 (antes de E07),
 E04 (antes de E09), E09 (antes de E14) y E12 (antes de E13).
 
 ### Detalle de cada gate
@@ -647,11 +650,25 @@ reducir pruebas ni criterios.
 - Alcance: `DISENO` 6 completo (migracion, `STAT_CUT_CREATE`, `STAT_CUT_ANNUL`, verificacion, comparacion, consulta
   sobre cortes con el mismo motor, relacion multivaluada congelada) y `stat_view` personal y compartida (compartir exige
   GESTION_ESTADISTICA), con revision y auditoria `VISTA_COMPARTIDA`.
-- Archivos autorizados: migracion nueva, `StatCuts.java` y `StatViews.java` (nuevos), `StatEngine.java`,
-  `Workflow.java`, `Api.java`, pruebas, documentacion.
+  Dimensión ADSCRIPCION_INICIAL (DI-13), con la misma regla temporal que SEDE_INICIAL: si el ámbito es regional, el
+  código de su sede; si es del nivel central, OFICINA_NACIONAL; sin destino, PENDIENTE con el rótulo 'Pendiente de
+  asignación'. Se congela en los cortes.
+- Archivos autorizados: migracion nueva, `StatCuts.java` y `StatViews.java` (nuevos), `StatEngine.java`, `StatSource.java`,
+  `Workflow.java`, `Api.java`, pruebas, `docs/CONTRATO_STATS_0_8_0.md` (cambio aditivo por DI-13) y documentación.
 - Pruebas y mutacion: escenario 9; huella canonica estable (incluida la relacion multivaluada); nadie modifica un
   corte (barrido); un corte reproduce el agregado de la consulta vigente del mismo instante; alcance de cortes y
-  vistas.
+  vistas. Para DI-13, la matriz usa cuatro ingresos computables registrados antes de `t` (2026-07-10 a las 12:00,
+  hora de Chile). D se distribuye y se asume después de `t`. Las cifras esperadas se fijan a mano.
+
+  | Regla y dato sintético | Cifras esperadas | Mutación que debe fallar |
+  |---|---|---|
+  | A es una COM sin destino. | A aporta 1 a PENDIENTE («Pendiente de asignación»). | Devolver un valor nulo para la COM sin destino. |
+  | B se adscribió a un ámbito central. | B aporta 1 a OFICINA_NACIONAL («Oficina Nacional»). | Usar el código del ámbito central como categoría. |
+  | C se adscribió a REG-06 y antes de `t` se transfirió a REG-07. | C aporta 1 a REG-06 y 0 a REG-07. | Usar la sede vigente tras la transferencia. |
+  | En el REQ de D constan dos NNA de las regiones 05 y 07. | D aporta 1 a REG-05 en adscripción. La dimensión de región del NNA aporta 1 a 05 y 1 a 07 para D y se rotula como no aditiva. | Contar una vez por NNA en el desglose de adscripción. |
+  | D se distribuye a REG-05 después de `t`. Consultar a `t` y generar un corte en `t` que se relee tras la distribución. | D aporta 1 a PENDIENTE y 0 a REG-05 en la consulta a `t` y en el corte. En la consulta vigente posterior aporta 1 a REG-05. | Usar una adscripción posterior al instante de consulta o corte. |
+  | Suma del desglose de los cuatro ingresos. | A `t` y en el corte, 2 PENDIENTE + 1 OFICINA_NACIONAL + 1 REG-06 = 4. Después, 1 PENDIENTE + 1 OFICINA_NACIONAL + 1 REG-06 + 1 REG-05 = 4. | Excluir Oficina Nacional de las filas del desglose y conservarla en el total general. |
+
 - Cierre: commit `gate E10: cortes y configuraciones`.
 
 **E11 - Exportaciones CSV, XLSX y ZIP e importacion de series historicas (servidor)**
@@ -693,10 +710,23 @@ reducir pruebas ni criterios.
 
 **E14 - Integracion MySQL, rendimiento, aceptacion y cierre de version**
 - Alcance: suite completa sobre MySQL 8.4 con los dos volcados; medicion de rendimiento con 50.000 COM sinteticas
-  (`DISENO` 5.7); escenario 1 completo pantalla-exportacion-corte; barrido final de inmutabilidad y de permisos;
-  version 0.8.0; documentacion de la seccion 4; `PRUEBAS_MANUALES_0_8_0.md` con escenarios 1-15 y U1-U10; seccion U de
-  `DESPLIEGUE_VM.md` (actualizacion de produccion con los scripts existentes, `Backup.ps1` y `Restore-Check.ps1` en la
-  misma ventana inmediatamente antes de `Update.ps1`); humo.
+  (`DISENO` 5.7); escenario 1 completo (pantalla, exportación y corte) con `ADSCRIPCION_INICIAL`; barrido final de
+  inmutabilidad y de permisos; version 0.8.0; documentacion de la seccion 4; `PRUEBAS_MANUALES_0_8_0.md` con escenarios
+  1-15 y U1-U10; humo y paso U de `DESPLIEGUE_VM.md` con los scripts existentes y las siguientes compensaciones:
+  - (a) Consultas previas de solo lectura. Confirmar versión 0.7.0 y esquema 16 (DI-15), diario de `Update.ps1` en
+    `COMPLETE`, rutas de `SELECT @@datadir, @@tmpdir, @@innodb_temp_tablespaces_dir` en D: y espacio libre en D: según
+    la medición.
+  - (b) Ejecutar `Backup.ps1` y `Restore-Check.ps1`, con `completed=true` en la verificación, en la misma ventana e
+    inmediatamente antes de `Update.ps1`.
+  - (c) Usar una ventana sin usuarios. Si es antes del 15/12, dejar al menos dos días de margen.
+  - (d) Ante `MIGRATION_FAILED`, `PROMOTION_FAILED` o `START_FAILED`, detenerse. Se prohíbe reintentar, reparar
+    Flyway, borrar el diario o volver al JAR anterior. Conservar el respaldo, el descriptor, el diario y los logs
+    (`INSTALACION_VM.md`, «Actualizacion y recuperacion de error»). E14 verifica en el código y documenta qué ocurre
+    con las entregas del Formulario mientras SIGER está detenido.
+  - (e) Después de actualizar, ejecutar `Estado.ps1` y confirmar el esquema de la última migración, los marcadores
+    `RESUMEN_CAMBIOS_V18`, `RESULTADO_INMEDIATO_V20` y `DIMENSIONES_V21`, las filas y huellas de
+    `communication_original` iguales a las del respaldo y `stats.enabled` verdadero.
+  - (f) TI activa los catálogos con fundamento, citando la conformidad de DI-01 a DI-04.
 - Archivos autorizados: pruebas; indices si la medicion los pide (migracion nueva, con evidencia); archivos de version;
   documentos de la seccion 4.
 - Restricciones: si la medicion no cumple, detenerse y proponer la alternativa de `DISENO` 5.7 (decision expresa).
@@ -704,33 +734,29 @@ reducir pruebas ni criterios.
 - Cierre: commit `gate E14: integracion y cierre de version`.
 
 **E15 - Validacion de uso con la Direccion de UEP** (EXTERNO)
-- El responsable ejecuta U1-U10 con los funcionarios de UEP de DI-14 en una instancia de ensayo construida desde el
-  commit de cierre de E14 (o de su ultima correccion), con datos sinteticos, nunca en produccion ni con datos reales;
-  contrasta la Figura 1 sintetica con la lectura institucional de DI-13 y registra el resultado.
-- Un escenario no logrado sigue el ciclo de la seccion 5 (`E15b` correccion, `E15c` repeticion). El ciclo de E15 debe
-  quedar cerrado antes de E16.
+POSTERGADO por decisión del responsable (2026-11-25); ver bitácora.
 
-**E16 - Auditoria independiente** (EXTERNO): Claude Padre sobre un clon limpio del ultimo commit del ciclo de E15
-(cierre de E14 mas todas las correcciones de E15): diff completo contra `v0.7.0`, condiciones de la seccion 2,
+**E16 - Auditoria independiente** (EXTERNO): Claude Padre audita sobre un clon limpio del cierre de E14 o de su última
+corrección. Revisa la evidencia del humo U1-U10 de E09, E12, E13 y E14, el diff completo contra
+`v0.7.0`, las condiciones de la seccion 2,
 trazabilidad de D25-D51 (las vigentes) y de los escenarios, compatibilidad con el Formulario, migraciones y
 actualizacion, evidencia de mutacion, re-ejecucion de la suite por el responsable en un clon limpio; procedimiento de
 bloqueo y repeticion de la seccion 5.
 
-**E17 - Build de entrega, ensayo de actualizacion y etiqueta**
-- Precondiciones: ciclo de E15 cerrado; ultima auditoria (E16 o su ultima repeticion) CERRADO sobre el commit que
-  contiene todas las correcciones de E15 y de E16; ningun gate de correccion ABIERTO; DI-15 respondida.
+**E17 - Build de entrega y etiqueta**
+- Precondiciones: ultima auditoria (E16 o su ultima repeticion) CERRADO sobre el commit que contiene todas las
+  correcciones de E16; ningun gate de correccion ABIERTO; DI-15 respondida.
 - Alcance, en este orden:
   1. Build en Windows como T06a, desde ese commit: `manifest.json` con 0.8.0, esquema derivado y
      `automatedTestsExecuted` true; `SHA256SUMS.txt`; `scripts\` identico al del paquete 0.7.0; `Check-Scripts.ps1`;
      nombre y SHA-256 del ZIP.
-  2. Ensayo en TEST-SIGER, ruta nueva: instancia con el paquete inmutable de la version efectiva de produccion (DI-15:
-     0.6.0 o 0.7.0; la otra si el responsable lo pide) y datos sinteticos (incluidos los vectores de E00);
-     `Backup.ps1`, `Restore-Check.ps1`, `Update.ps1` a 0.8.0, `Start.ps1`, `Estado.ps1`; integridad (conteos, huellas
-     de `communication_original`, `external_*` intactas, marcadores); catalogos importados y activados; escenarios de
-     interfaz. Sin repetir P0, V0-V3, plan B ni pruebas de servicio ya acreditadas.
-  3. Limpieza, `SOURCE_SHA256.txt` y etiqueta anotada `v0.8.0`, solo si 1 y 2 estan conformes; si no, BLOQUEADO con la
-     evidencia y sin etiqueta.
-- Cierre: commit `gate E17: build, ensayo y etiqueta`, con "Cierre del plan 0.8.0".
+
+  Se omite el paso 2 (ensayo de actualización en TEST-SIGER) por decisión del responsable del 2026-11-25.
+  Las compensaciones se incorporan al paso U en E14.
+
+  3. Limpieza, `SOURCE_SHA256.txt` y etiqueta anotada `v0.8.0`, solo con el paso 1 conforme; si falla, BLOQUEADO con
+     la evidencia y sin etiqueta.
+- Cierre: commit `gate E17: build y etiqueta`, con "Cierre del plan 0.8.0".
 
 ## 7. Formato del registro de cierre (en la bitacora)
 
@@ -800,8 +826,10 @@ archivos previstos y pruebas, esta en `DISENO_0_8_0.md` seccion 15.
 | Paso de RDP a acceso por red (requisito del enlace directo del correo) | D49 | - | 15.5 |
 | Renovacion del certificado autofirmado | D49 | DI-10: desestimada; se mantienen certificado y HTTPS | 15.5 |
 | Dimension estadistica "instituciones de los hechos" (ficha, ficha de ingreso y Formulario) | D38 | GO de E08 (2026-11-25) | 15.7 |
+| Pantallas de resolución en el acto con derechos (COM_IMMEDIATE y ATTENTION_CREATE con resolve_now) | - | GO de E09, decisión D | - |
+| Caracterización de la COM en la ficha de la SOL (evita leer la ficha de la COM en el descarte) | - | hallazgo de E09 | - |
 | Otras mejoras operacionales sin relacion directa con los objetivos de 0.8.0 | - | - | - |
 
 En 0.8.0 la seguridad de la actualizacion se mantiene con los scripts y procedimientos vigentes: respaldo con
 `Backup.ps1` y verificacion con `Restore-Check.ps1` en la misma ventana, inmediatamente antes de `Update.ps1` (seccion 3
-y paso U de `DESPLIEGUE_VM.md`), ensayo en E17 y auditoria en E16.
+y paso U de `DESPLIEGUE_VM.md`), verificación de la migración en MySQL 8.4 y auditoria en E16.
