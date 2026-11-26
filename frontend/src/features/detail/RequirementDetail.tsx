@@ -17,6 +17,12 @@ import {Files} from './Files';
 import {Notes} from './Notes';
 import {noteFields, requestFlow, requestReopening} from './actions';
 import {ActionBar, DetailGrid} from './parts';
+import {RightsPanel} from '../../components/RightsPanel';
+import {Callout} from '../../components/Primitives';
+import {rightsPending} from '../../lib/rightsModel.ts';
+import {Characterization, characterizationOf, statField} from './Characterization';
+import {closeState, completeness, fichaVars} from './characterizationModel.ts';
+import {blockersOf} from './ClosureStatus';
 
 /**
  * Requerimiento: puede contener varios Casos. La jefatura principal clasifica, abre Casos,
@@ -37,7 +43,16 @@ export function RequirementDetail({r, ctx}: {r: Row; ctx: Context}) {
     {...matter, value: text(r, 'matter')},
   ], 'Solo la jefatura crea y asigna. Puede seleccionarse a sí misma si tiene facultad en este ámbito.');
   const setMatter = () => choice('Registrar o rectificar la materia del REQ', 'REQ_MATTER', [{...reqMatter, value: text(r, 'matter')}, reason], 'La Dirección nacional de esa materia podrá leer este REQ y su cadena, sin gestionarlos. La gestión sigue en la Coordinación regional.');
-  const close = () => choice('Cerrar Requerimiento expresamente', 'REQ_CLOSE', [reason], 'Requiere cero Casos abiertos y resolver las peticiones de continuidad. No se cierra al cerrar el último Caso.');
+  // Cierre (D28, E09): el dialogo resuelve en el mismo acto las variables del ingreso pendientes que el acto exige
+  // (stat_completeness y la ficha); derechos y contexto de una vulneracion se clasifican en su panel.
+  const characterization = characterizationOf(r), statVars = fichaVars(characterization), need = completeness(ctx.catalog);
+  const closing = closeState(blockersOf(r, 'closure_blockers'), need.intake, statVars);
+  const rightsLeft = rightsPending(need.vulnerability, obj(r, 'rights'));
+  const close = () => choice('Cerrar Requerimiento expresamente', 'REQ_CLOSE', [
+    ...(closing.resolvable.length ? [statField(ctx.catalog, statVars, {required: () => need.intake, lead: 'Para cerrar, completa la caracterización pendiente (puede ser «Sin información»).'})] : []),
+    ...(rightsLeft.length ? [{key: 'rights_info', label: 'Derechos y contexto', type: 'custom' as const,
+      render: () => <Callout tone="info">Si la solicitud es una vulneración, el cierre exige además derechos y contexto: clasifícalos en el panel «Derechos y contexto» de esta ficha.</Callout>}] : []),
+    reason], 'Requiere cero Casos abiertos y resolver las peticiones de continuidad. No se cierra al cerrar el último Caso.');
   const decideLink = (l: Row) => choose(ctx, 'Evaluar pertinencia y destino del antecedente', 'LINK_DECIDE', l, [
     decision([['ADMITIDA', 'Admitir'], ['RECHAZADA', 'No admitir']]),
     {key: 'case_id', label: 'Caso pertinente (opcional; no abre un Caso cerrado)', type: 'select', options: list(r, 'case_rows').map(c => ({value: number(c, 'id'), label: text(c, 'folio')}))},
@@ -57,9 +72,9 @@ export function RequirementDetail({r, ctx}: {r: Row; ctx: Context}) {
             {regional && <button onClick={setMatter}><Icon name="edit" size={18}/>Materia</button>}
             <button onClick={() => requestFlow(ctx, 'REQ', r, 'COLABORACION')}><Icon name="people" size={18}/>Pedir colaboración</button>
             <button onClick={() => requestFlow(ctx, 'REQ', r, 'TRANSFERENCIA')}><Icon name="swap" size={18}/>Transferir principal</button>
-            <button disabled={!bool(r, 'can_close')} title={bool(r, 'can_close') ? undefined : 'Revisa las condiciones de cierre'} onClick={close}><Icon name="lock" size={18}/>Cerrar REQ</button>
+            <button disabled={!bool(r, 'can_close') && !closing.enabled} title={bool(r, 'can_close') || closing.enabled ? undefined : 'Revisa las condiciones de cierre'} onClick={close}><Icon name="lock" size={18}/>Cerrar REQ</button>
           </>}
-          {!closed && bool(r, 'can_attention') && number(r, 'total_cases') === 0 && !hasAttention && <button onClick={() => choice('Registrar atención sin seguimiento', 'REQ_NOTE', noteFields(true))}><Icon name="file" size={18}/>Registrar atención sin Caso</button>}
+          {!closed && bool(r, 'can_attention') && number(r, 'total_cases') === 0 && !hasAttention && <button onClick={() => choice('Registrar atención sin seguimiento', 'REQ_NOTE', noteFields(ctx.catalog, true))}><Icon name="file" size={18}/>Registrar atención sin Caso</button>}
           {closed && head && <button onClick={() => requestReopening(ctx, 'REQ', r)}><Icon name="refresh" size={18}/>Evaluar nueva gestión</button>}
         </ActionBar>
         <Panel flush title="Casos del Requerimiento" icon="briefcase" count={list(r, 'case_rows').length}>
@@ -71,7 +86,7 @@ export function RequirementDetail({r, ctx}: {r: Row; ctx: Context}) {
               {name: 'Objetivo autorizado', render: c => text(c, 'objective') || <span className="muted">Solo estado de coordinación</span>},
             ]}/></div>}
         </Panel>
-        <Notes row={r} ctx={ctx} editable={!closed && bool(r, 'can_attention')}/>
+        <Notes row={r} ctx={ctx} editable={!closed && bool(r, 'can_attention')} rightsKind={Object.keys(obj(r, 'rights')).length ? 'REQ' : undefined}/>
         <Panel title="Comunicaciones posteriores" icon="mail" count={list(r, 'links').length} description="Antecedentes que llegaron después y se propusieron para este REQ.">
           {list(r, 'links').length === 0 ? <EmptyState compact icon="mail" title="Sin antecedentes vinculados visibles"/> : <ul className="stack-list">
             {list(r, 'links').map(l => <li key={number(l, 'id')} className="card">
@@ -106,6 +121,8 @@ export function RequirementDetail({r, ctx}: {r: Row; ctx: Context}) {
           ]}/>
           {bool(r, 'can_read_com') && <button className="block" onClick={() => ctx.go('COM', number(r, 'communication_id'))}><Icon name="mail" size={18}/>Consultar COM de origen</button>}
         </Panel>
+        <RightsPanel rights={obj(r, 'rights')} kind="REQ" id={number(r, 'id')} ctx={ctx}/>
+        <Characterization c={characterization} comId={number(r, 'communication_id')} ctx={ctx} closedRecord/>
         {!closed && head && <ClosureStatus row={r}/>}
       </>}/>
   </>;

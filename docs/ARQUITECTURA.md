@@ -156,6 +156,16 @@ lugar de los hechos y seleccion de codigos del listado vigente) son comunes a la
 en la ficha de la COM). Los archivos `territorio.json` y `paises.json` siguen en `features/attention/adult/` (huellas de
 E00); los modulos de esa carpeta reexportan los de `lib/person/`.
 
+Desde 0.8.0 (E09, D28-D36), la captura estadistica va en el flujo: el bloque "Caracterizacion del ingreso"
+(`components/StatFields.tsx`, logica en `features/detail/characterizationModel.ts`) en el ingreso manual, la nueva
+atencion, la distribucion, el descarte por duplicado y los cierres; la tarjeta "Caracterizacion" de COM y REQ
+(`features/detail/Characterization.tsx`); el panel de derechos y contexto (`components/RightsPanel.tsx`, logica en
+`lib/rightsModel.ts`) despues de "Datos del REQ" y de "Datos del Caso"; y el tipo de actuacion, las instituciones y el
+compromiso de las tareas (`features/detail/ActionFields.tsx`, `notesModel.ts`). Las variables, los listados y lo exigible
+salen siempre del servidor (`stat_catalogs`, `stat_completeness`, `characterization`, `rights`); la propuesta del
+Formulario solo se envia si la persona la elige. `ActionDialog` admite el campo propio `custom` (valor listo para enviar,
+validacion y dibujo propios) y el dialogo ancho, sin cambiar los demas dialogos.
+
 Presentacion: sistema visual propio sin dependencias nuevas (tokens CSS, iconos propios, Cabin OFL y escudo
 institucional servidos desde el JAR), con barra lateral por tipo de trabajo, paleta Ctrl+K, fichas con cadena
 COM->SOL->REQ->Caso y version movil. Decisiones en `docs/DISENO_0_4_0.md`.

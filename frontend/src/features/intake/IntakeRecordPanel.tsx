@@ -9,7 +9,7 @@ import {LabeledField} from '../../components/LabeledField';
 import {Icon} from '../../components/Icon';
 import {Busy, Callout, ErrorMessage, Panel} from '../../components/Primitives';
 import {orderedRegions} from '../../lib/person/catalog.ts';
-import {changeSummaryText, statCodes} from '../../lib/person/personModel.ts';
+import {changeSummaryText, statCodes, withCodeLabels} from '../../lib/person/personModel.ts';
 import type {IntakeControls} from './IntakeFields';
 import {FactsAndInstitutions, PersonsFields, PresenterFields} from './IntakeFields';
 import {IntakePreview, IntakeSummary} from './IntakePreview';
@@ -23,7 +23,7 @@ import {completePayload, intakeFromSaved, intakeProblems, presenterKindOf} from 
  */
 export function IntakeRecordPanel({r, ctx}: {r: Row; ctx: Context}) {
   const info = obj(r, 'intake'), saved = obj(info, 'data');
-  const codes = statCodes(ctx.catalog), regions = orderedRegions(list(ctx.catalog, 'regions'));
+  const codes = withCodeLabels(statCodes(ctx.catalog), r.code_labels), regions = orderedRegions(list(ctx.catalog, 'regions'));
   const current = intakeFromSaved(saved);
   const [editing, setEditing] = useState(false), [data, setData] = useState<IntakeData>(current), [kind, setKind] = useState<PresenterKind>(() => presenterKindOf(current));
   const [reason, setReason] = useState(''), [touched, setTouched] = useState<Set<string>>(() => new Set()), [attempted, setAttempted] = useState(false);

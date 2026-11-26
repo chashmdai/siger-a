@@ -14,7 +14,7 @@ import {payloadOf, signatureOf, submitStep} from '../lib/actionData';
 export type Option = {value: string | number; label: string; parent?: string | number};
 export type Field = {
   key: string; label: string;
-  type?: 'text' | 'textarea' | 'select' | 'date' | 'datetime-local' | 'checkbox' | 'password' | 'destination' | 'checklist';
+  type?: 'text' | 'textarea' | 'select' | 'date' | 'datetime-local' | 'checkbox' | 'password' | 'destination' | 'checklist' | 'custom';
   required?: boolean; options?: Option[];
   /** Filtra las opciones por el valor elegido en otro campo (Option.parent). */
   dependsOn?: string;
@@ -24,6 +24,15 @@ export type Field = {
   exact?: number | null;
   /** Selector de destino (type 'destination'): sus datos se envian con las claves de cada comando (payloadFor). */
   destination?: {destinations: Destinations; region?: string | null};
+  /**
+   * Campo propio (type 'custom', 0.8.0, E09): dibuja su control y guarda en los datos un valor ya listo para enviar (un
+   * objeto o una lista; undefined = no se envia). Entra en la revision previa y en el envio como cualquier otro dato.
+   */
+  render?: (value: unknown, set: (value: unknown) => void, disabled: boolean, data: Row) => ReactNode;
+  /** Valor inicial de un campo propio. */
+  initial?: unknown;
+  /** Validacion de un campo propio antes de enviar: mensaje en lenguaje llano, o null. */
+  validate?: (value: unknown, data: Row) => string | null;
 };
 /**
  * Revision previa al envio (opcional): lo que la orden provocara, calculado por el servidor sin escribir. extra se suma
@@ -39,10 +48,12 @@ export type Action = {title: string; type: string; id: number | null; revision: 
    * Revision antes de enviar (0.7.0, efecto territorial): el primer Continuar la pide y la muestra; el envio lleva sus
    * datos extra. Cambiar los datos la invalida y un rechazo la descarta: hay que revisar de nuevo. null = no hace falta.
    */
-  review?: (payload: Row) => Promise<Review | null>};
+  review?: (payload: Row) => Promise<Review | null>;
+  /** Dialogo ancho (por ejemplo, la clasificacion de derechos con su arbol). */
+  wide?: boolean};
 
 function initialData(fields: Field[]): Row {
-  return Object.fromEntries(fields.map(f => [f.key, f.destination ? initialChoice(f.destination.destinations, f.destination.region)
+  return Object.fromEntries(fields.map(f => [f.key, f.type === 'custom' ? f.initial : f.destination ? initialChoice(f.destination.destinations, f.destination.region)
     : f.value ?? (f.type === 'checkbox' ? false : f.type === 'checklist' ? [] : '')]));
 }
 
@@ -71,6 +82,9 @@ export function ActionDialog({action, close, completed}: {action: Action; close:
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    // Campos propios: su validacion se informa en el dialogo, sin enviar.
+    const invalid = action.fields.map(f => f.validate?.(data[f.key], data) ?? null).find(Boolean);
+    if (invalid) {setError(invalid); return;}
     setBusy(true);
     setError('');
     try {
@@ -125,7 +139,7 @@ export function ActionDialog({action, close, completed}: {action: Action; close:
   }
   const anyRequired = action.fields.some(f => f.required);
 
-  return <dialog ref={dialog} className={'modal' + (leaving ? ' closing' : '')} aria-labelledby="action-title" onCancel={e => {e.preventDefault(); if (!busy) exit();}}>
+  return <dialog ref={dialog} className={'modal' + (action.wide ? ' wide' : '') + (leaving ? ' closing' : '')} aria-labelledby="action-title" onCancel={e => {e.preventDefault(); if (!busy) exit();}}>
     <form onSubmit={submit}>
       <header className="modal-head">
         <div>
@@ -137,7 +151,9 @@ export function ActionDialog({action, close, completed}: {action: Action; close:
       <div className="modal-body">
         {action.note && <Callout>{action.note}</Callout>}
         {action.fields.length === 0 && <p>Esta acción no requiere datos adicionales. Confirma para registrarla.</p>}
-        {action.fields.map(f => f.destination
+        {action.fields.map(f => f.type === 'custom'
+          ? <div key={f.key} className="field-custom">{f.render?.(data[f.key], v => setData(previous => ({...previous, [f.key]: v})), busy, data)}</div>
+          : f.destination
           ? <DestinationPicker key={f.key} destinations={f.destination.destinations} region={f.destination.region} value={data[f.key] as Choice} disabled={busy} onChange={c => setData(previous => ({...previous, [f.key]: c}))}/>
           : f.type === 'checklist' ? <fieldset key={f.key} className="field-group" disabled={busy}>
             <legend>{f.label}</legend>

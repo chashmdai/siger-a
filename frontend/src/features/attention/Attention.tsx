@@ -27,7 +27,11 @@ import {Preview} from './Preview';
 import {fichaPayload, fichaProblems, prepareFicha, problemStep} from './fichaModel.ts';
 import {orderedRegions} from '../../lib/person/catalog.ts';
 import type {Institution} from '../../lib/person/personModel.ts';
-import {changeSummaryText, statCodes} from '../../lib/person/personModel.ts';
+import {changeSummaryText, statCodes, withCodeLabels} from '../../lib/person/personModel.ts';
+import {StatFields} from '../../components/StatFields';
+import type {StatBlock} from '../detail/characterizationModel.ts';
+import {newRecordVars, specials, statLists, statPayload, statProblems} from '../detail/characterizationModel.ts';
+import {rightsAnchor} from '../../components/RightsPanel';
 import {correctedOrigin} from '../../lib/regions';
 
 type Pending = {type: string; id: number | null; revision: number | null; data: Row; key: string};
@@ -53,6 +57,8 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
   const [editing, setEditing] = useState(isNew), [scope, setScope] = useState(String(ctx.user.home_scope)), [channel, setChannel] = useState('PRESENCIAL'), [received, setReceived] = useState(localTime());
   const [step, setStep] = useState(1), [dirty, setDirty] = useState(false), [reason, setReason] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(false), [preview, setPreview] = useState<Row | null>(null);
   const [attachments, setAttachments] = useState<string[]>([]), [unprepared, setUnprepared] = useState(false);
+  // Caracterizacion del ingreso (E09): opcional; solo variables con listado vigente; la atencion urgente no la exige.
+  const [stat, setStat] = useState<StatBlock | undefined>(undefined);
   // Operacion en curso: se conserva para reintentar con la misma clave si el resultado es incierto.
   const pending = useRef<Pending | null>(null);
   const top = useRef<HTMLDivElement>(null);
@@ -81,8 +87,8 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
   const change = (key: string, value: string) => {setForm(old => ({...old, [key]: value})); setDirty(true);};
   const setPeople = (update: (people: Person[]) => Person[]) => {setForm(old => ({...old, people: update(old.people)})); setDirty(true);};
   const setInstitutions = (update: (items: Institution[]) => Institution[]) => {setForm(old => ({...old, institutions_list: update(old.institutions_list)})); setDirty(true);};
-  // Codigos vigentes de relacion y tipo de institucion (sin listado vigente, solo texto).
-  const codes = statCodes(ctx.catalog);
+  // Codigos vigentes de relacion y tipo de institucion (sin listado vigente, solo texto) y rotulos por version (code_labels).
+  const codes = withCodeLabels(statCodes(ctx.catalog), info.code_labels);
   const problems = fichaProblems(form, saved, codes);
   const touch = (key: string) => setTouched(old => old.has(key) ? old : new Set(old).add(key));
   // Regiones en el orden que publica el servidor (catalog.regions), de norte a sur.
@@ -127,9 +133,11 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
       setAttempted(true); setError(`Revisa los datos marcados en ${STEPS[where - 1].title}. Puedes dejarlos en blanco si aún no se conocen.`); goStep(where); return;
     }
     if (isNew && (!scope || !received || Number.isNaN(new Date(received).getTime()))) {setError('Selecciona el ámbito y una fecha de recepción válida.'); goStep(1); return;}
+    const statVars = newRecordVars(ctx.catalog, channel), statIssue = isNew ? statProblems(statVars, stat)[0] : undefined, statBlock = isNew ? statPayload(statVars, stat) : undefined;
+    if (statIssue) {setError('Caracterización del ingreso: ' + statIssue); goStep(1); return;}
     if (!isNew && !reason.trim()) {setError('Indica el motivo de la complementación.'); return;}
     const data: Row = {form: fichaPayload(form)};
-    if (isNew) Object.assign(data, {scope_id: Number(scope), channel, received_at: new Date(received).toISOString(), attachment_tokens: attachments});
+    if (isNew) Object.assign(data, {scope_id: Number(scope), channel, received_at: new Date(received).toISOString(), attachment_tokens: attachments}, statBlock ? {stat: statBlock} : {});
     else data.reason = reason;
     pending.current = {type: isNew ? 'ATTENTION_CREATE' : 'ATTENTION_SAVE', id: row ? number(row, 'id') : null, revision: row ? number(row, 'revision') : null, data, key: crypto.randomUUID()};
     void execute();
@@ -167,6 +175,7 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
     </div>
     <ChipRadios legend="Canal" value={channel} options={labeled(CHANNELS, CHANNEL_LABELS)} onChange={v => {setChannel(v); setDirty(true);}}/>
     <ModalitySelect c={c}/>
+    <StatFields vars={newRecordVars(ctx.catalog, channel)} lists={statLists(ctx.catalog)} special={specials(ctx.catalog)} value={stat} onChange={v => {setStat(v); setDirty(true);}}/>
   </FormSection> : undefined;
   const locked = busy || uncertain;
   const motiveReady = String(form.motive).trim() !== '';
@@ -196,6 +205,7 @@ export default function Attention({ctx, row, completed}: {ctx: Context; row?: Ro
       <div className="actions">
         {editable && <button className="primary" onClick={() => {setEditing(true); setStep(1);}}><Icon name="edit" size={18}/>Completar o rectificar ficha</button>}
         <button onClick={() => setPreview({form, origin: info.origin, folio: row?.folio, author_name: nameOf(ctx.catalog, info.updated_by)})}><Icon name="printer" size={18}/>Ver ficha completa o imprimir</button>
+        {Object.keys(obj(row ?? {}, 'rights')).length > 0 && <button onClick={() => document.getElementById(rightsAnchor('REQ'))?.scrollIntoView({behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start'})}><Icon name="shield" size={18}/>Derechos y contexto</button>}
       </div>
       <AttentionSummary form={form}/>
     </section> : <form noValidate onSubmit={submit} className="attention-editor">

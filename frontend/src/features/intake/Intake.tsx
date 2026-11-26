@@ -20,6 +20,9 @@ import type {IntakeControls} from './IntakeFields';
 import {FactsAndInstitutions, PersonsFields, PresenterFields} from './IntakeFields';
 import type {IntakeData, PresenterKind} from './intakeModel.ts';
 import {comCreatePayload, emptyIntake, intakeProblems} from './intakeModel.ts';
+import {StatFields} from '../../components/StatFields';
+import type {StatBlock} from '../detail/characterizationModel.ts';
+import {newRecordVars, specials, statLists, statPayload, statProblems} from '../detail/characterizationModel.ts';
 
 const SECTIONS: [id: string, title: string, icon: IconName][] = [['recepcion', 'Recepción', 'inbox'], ['requiriente', 'Quién presenta y contacto', 'user'], ['personas', 'Personas relacionadas', 'people'], ['antecedentes', 'Antecedentes', 'message'], ['documentos', 'Documentos', 'file']];
 
@@ -43,6 +46,8 @@ export default function Intake({ctx, completed}: {ctx: Context; completed: (r: R
   const [scope, setScope] = useState(String(ctx.user.home_scope)), [channel, setChannel] = useState('PRESENCIAL'), [received, setReceived] = useState(localTime());
   const [values, setValues] = useState<Record<string, string>>({subject: '', body: ''});
   const [intake, setIntake] = useState<IntakeData>(emptyIntake), [kind, setKind] = useState<PresenterKind>('PERSONA');
+  // Caracterizacion del ingreso (E09): opcional; sin listado vigente no aparece. Lo minimo sigue siendo asunto y relato.
+  const [stat, setStat] = useState<StatBlock | undefined>(undefined);
   const [touched, setTouched] = useState<Set<string>>(() => new Set()), [attempted, setAttempted] = useState(false);
   const [drafts, setDrafts] = useState<Row[]>([]), [selected, setSelected] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [fileEpoch, setFileEpoch] = useState(0);
@@ -93,10 +98,13 @@ export default function Intake({ctx, completed}: {ctx: Context; completed: (r: R
     e.preventDefault();
     if (file) {setError('Prepara el archivo elegido o retíralo antes de confirmar el ingreso.'); return;}
     if (Object.keys(problems).length) {setAttempted(true); setError('Revisa los datos marcados. Puedes dejarlos en blanco si aún no se conocen.'); return;}
+    // La caracterizacion se revisa con el canal elegido al final (cambiar el canal cambia la via derivada).
+    const statVars = newRecordVars(ctx.catalog, channel), statIssue = statProblems(statVars, stat)[0];
+    if (statIssue) {setError('Caracterización del ingreso: ' + statIssue); return;}
     setBusy(true);
     setError('');
     try {
-      const payload = comCreatePayload({scope, channel, received, subject: values.subject, body: values.body, attachments: selected}, intake, kind);
+      const payload = comCreatePayload({scope, channel, received, subject: values.subject, body: values.body, attachments: selected}, intake, kind, statPayload(statVars, stat));
       completed(await command('COM_CREATE', null, null, payload, key.current));
     } catch (e) {
       setError((e as Error).message);
@@ -124,6 +132,7 @@ export default function Intake({ctx, completed}: {ctx: Context; completed: (r: R
               <label><span>Fecha y hora de recepción<span className="required-mark" aria-hidden="true">*</span></span><input type="datetime-local" value={received} required onChange={e => setReceived(e.target.value)}/></label>
             </div>
             <ChipRadios legend="Canal real" value={channel} options={labeled(CHANNELS, CHANNEL_LABELS)} onChange={setChannel}/>
+            <StatFields vars={newRecordVars(ctx.catalog, channel)} lists={statLists(ctx.catalog)} special={specials(ctx.catalog)} value={stat} onChange={setStat}/>
           </Section>
           <Section n={2}>
             <PresenterFields c={c}/>

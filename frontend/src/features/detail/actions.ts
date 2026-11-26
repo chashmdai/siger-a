@@ -6,15 +6,22 @@ import type {Operation} from '../../lib/destination';
 import {people} from '../../lib/catalog';
 import type {Context} from '../../app/context';
 import {FLOW_LABELS} from '../../lib/labels';
+import {actionTypeField, institutionsField, rightsHint} from './ActionFields';
 
-/** Actuacion de REQ (sin seguimiento) o de Caso (con reserva opcional). */
-export function noteFields(noCase = false): Field[] {
+/**
+ * Actuacion de REQ (sin seguimiento) o de Caso (con reserva opcional). Desde 0.8.0 (D36, E09): tipo de actuacion del
+ * listado vigente (opcional) e instituciones, y la orientacion hacia el panel de derechos del mismo registro.
+ */
+export function noteFields(catalog: Row, noCase = false): Field[] {
   return [
     {key: 'body', label: 'Actuación efectivamente realizada', type: 'textarea', required: true, max: 20000},
     {key: 'effective_at', label: 'Fecha efectiva de la gestión', type: 'datetime-local', required: true, value: localTime()},
     noCase
       ? {key: 'no_followup', label: 'Atención sin seguimiento posterior; si requiere seguimiento debe existir un Caso.', type: 'checkbox', required: true}
       : {key: 'reserved', label: 'Constancia reservada (responsable y jefatura)', type: 'checkbox'},
+    ...actionTypeField(catalog, 'Tipo de actuación (opcional)'),
+    institutionsField(catalog),
+    rightsHint,
   ];
 }
 
@@ -30,6 +37,8 @@ export function taskFields(ctx: Context, c: Row): Field[] {
     {key: 'executor_id', label: 'Responsable de esta tarea (equipo del Caso)', required: true, type: 'select', options: teamOptions(ctx, c), value: number(c, 'responsible_id')},
     {key: 'due_at', label: 'Cuándo recordarlo (fecha y hora)', type: 'datetime-local', required: true, value: localTime(3600000)},
     {key: 'remind_every_hours', label: 'Repetición del aviso interno', type: 'select', options: REMINDERS, value: '24', required: true},
+    // Compromiso (D36): la tarea no es una actuacion; completarla no registra una.
+    ...actionTypeField(ctx.catalog, 'Compromiso de (opcional)'),
   ];
 }
 
@@ -38,6 +47,7 @@ export function taskEditFields(ctx: Context, c: Row, t: Row): Field[] {
     {key: 'executor_id', label: 'Responsable del equipo', type: 'select', required: true, options: teamOptions(ctx, c), value: number(t, 'executor_id')},
     {key: 'due_at', label: 'Nueva fecha y hora de recordatorio', type: 'datetime-local', required: true, value: t.due_ms ? localTime(Number(t.due_ms) - Date.now()) : localTime(3600000)},
     {key: 'remind_every_hours', label: 'Repetición del aviso', type: 'select', required: true, options: REMINDERS, value: String(t.reminder_interval_hours ?? 24)},
+    ...actionTypeField(ctx.catalog, 'Compromiso de (opcional)', text(t, 'action_type'), text(t, 'action_label')),
     reason,
   ];
 }

@@ -58,9 +58,11 @@ export function intakePayload(data: IntakeData, kind: PresenterKind): Record<str
 }
 
 /** Datos de COM_CREATE: recepcion, asunto, relato, adjuntos y la ficha de ingreso (sin campos sueltos de personas). */
-export function comCreatePayload(base: {scope: string; channel: string; received: string; subject: string; body: string; attachments: string[]}, data: IntakeData, kind: PresenterKind): Record<string, unknown> {
+export function comCreatePayload(base: {scope: string; channel: string; received: string; subject: string; body: string; attachments: string[]}, data: IntakeData, kind: PresenterKind,
+  stat?: Record<string, unknown>): Record<string, unknown> {
+  // Caracterizacion del ingreso (E09): opcional; el bloque ya viene listo para enviar (statPayload) o no viaja.
   return {scope_id: base.scope, channel: base.channel, received_at: new Date(base.received).toISOString(), subject: base.subject, body: base.body,
-    attachment_tokens: base.attachments, intake: intakePayload(data, kind)};
+    attachment_tokens: base.attachments, intake: intakePayload(data, kind), ...(stat ? {stat} : {})};
 }
 /** Datos de COM_COMPLETE (id = COM y su revision; motivo obligatorio). */
 export const completePayload = (data: IntakeData, kind: PresenterKind, reason: string) => ({intake: intakePayload(data, kind), reason});

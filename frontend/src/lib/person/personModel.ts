@@ -85,7 +85,9 @@ export function personDocument(p: Partial<DeclaredPerson>): string {
 // --- Catalogos estadisticos vigentes (RELACION, TIPO_INSTITUCION) ---------------------------------------------
 export type CodeItem = {code: string; label: string; selectable: boolean; level: number};
 /** Version VIGENTE publicada en catalog.stat_catalogs: sin vigente, items vacio (solo se registra el texto). */
-export type CodeList = {version: number | null; items: CodeItem[]};
+export type CodeList = {version: number | null; items: CodeItem[];
+  /** Rotulos de los codigos registrados en la ficha segun su version ("version:codigo" -> rotulo; code_labels, E06). */
+  labels?: Record<string, string>};
 export type StatCodes = {relationship: CodeList; institution: CodeList};
 export const NO_CODES: StatCodes = {relationship: {version: null, items: []}, institution: {version: null, items: []}};
 /** Codigos vigentes de relacion y tipo de institucion desde el catalogo de la sesion. */
@@ -102,14 +104,27 @@ export function statCodes(catalog: unknown): StatCodes {
   return {relationship: of('RELACION'), institution: of('TIPO_INSTITUCION')};
 }
 export const selectableCodes = (list: CodeList) => list.items.filter(i => i.selectable);
-/** Codigo registrado con un listado retirado (DI-03; E06 entregara su rotulo): se muestra sin el codigo. */
+/**
+ * Rotulos por version que entrega la ficha (code_labels, gate E06; adoptados en E09) agregados a los listados: un codigo de
+ * un listado retirado se muestra con el rotulo con que se registro.
+ */
+export function withCodeLabels(codes: StatCodes, raw: unknown): StatCodes {
+  const labels = raw && typeof raw === 'object' && !Array.isArray(raw) ? Object.fromEntries(Object.entries(raw as Record<string, unknown>).map(([k, v]) => [k, str(v)])) : {};
+  return {relationship: {...codes.relationship, labels}, institution: {...codes.institution, labels}};
+}
+/** Rotulo registrado de un codigo que no esta en el listado vigente ('' si no hay uno unico). */
+export function registeredLabel(list: CodeList, code: string): string {
+  const found = new Set(Object.entries(list.labels ?? {}).filter(([k]) => k.slice(k.indexOf(':') + 1) === code).map(([, v]) => v).filter(Boolean));
+  return found.size === 1 ? [...found][0] : '';
+}
+/** Codigo registrado con un listado retirado sin rotulo conocido: se muestra sin el codigo. */
 export const RETIRED_CODE_TEXT = 'Valor registrado con un listado anterior';
-/** Rotulo visible de un codigo: el del listado vigente o el aviso de listado anterior; nunca el codigo. */
-export const codeLabel = (list: CodeList, code: string) => !code ? '' : list.items.find(i => i.code === code)?.label ?? RETIRED_CODE_TEXT;
-/** Relacion con el NNA para lectura: rotulo vigente o, si el listado se retiro, el texto que ya existia y el aviso. */
+/** Rotulo visible de un codigo: el del listado vigente, el registrado (code_labels) o el aviso de listado anterior; nunca el codigo. */
+export const codeLabel = (list: CodeList, code: string) => !code ? '' : list.items.find(i => i.code === code)?.label || registeredLabel(list, code) || RETIRED_CODE_TEXT;
+/** Relacion con el NNA para lectura: rotulo vigente o registrado y, sin rotulo, el texto que ya existia y el aviso. */
 export function relationLines(list: CodeList, code: string, text: string): string[] {
   if (!code) return text ? [text] : [];
-  const label = list.items.find(i => i.code === code)?.label;
+  const label = list.items.find(i => i.code === code)?.label || registeredLabel(list, code);
   return label ? [label, ...(text ? [text] : [])] : [...(text ? [text] : []), RETIRED_CODE_TEXT];
 }
 

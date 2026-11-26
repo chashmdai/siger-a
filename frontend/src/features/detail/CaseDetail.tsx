@@ -1,5 +1,5 @@
 import type {Row} from '../../lib/rows';
-import {bool, list, number, text, when} from '../../lib/rows';
+import {bool, list, number, obj, text, when} from '../../lib/rows';
 import {nameOf, scopeOf} from '../../lib/catalog';
 import {choose, fixedSelect, matter, person, reason} from '../../lib/fields';
 import {humanize, initials, MATTER_LABELS} from '../../lib/labels';
@@ -13,6 +13,7 @@ import {Files} from './Files';
 import {Notes} from './Notes';
 import {noteFields, requestFlow, requestReopening, taskEditFields, taskFields} from './actions';
 import {ActionBar, DetailGrid} from './parts';
+import {RightsPanel} from '../../components/RightsPanel';
 
 const OPEN_TASK = ['PENDIENTE', 'EN_CURSO'];
 
@@ -41,7 +42,7 @@ export function CaseDetail({r, ctx}: {r: Row; ctx: Context}) {
       <ActionBar label="Gestión">
         {owner && unacknowledged && <button className="primary" onClick={() => choice('Acusar asignación', 'CASE_ACK', [], 'La responsabilidad ya es efectiva. Este acuse es manual y no registra una actuación.')}><Icon name="check" size={18}/>Acusar asignación</button>}
         {!closed && write && <>
-          <button className={(owner && unacknowledged) || (mayConfirmClose && state === 'EN_REVISION') ? '' : 'primary'} onClick={() => choice('Registrar actuación', 'CASE_NOTE', noteFields())}><Icon name="file" size={18}/>Registrar actuación</button>
+          <button className={(owner && unacknowledged) || (mayConfirmClose && state === 'EN_REVISION') ? '' : 'primary'} onClick={() => choice('Registrar actuación', 'CASE_NOTE', noteFields(ctx.catalog))}><Icon name="file" size={18}/>Registrar actuación</button>
           <button onClick={() => choice('Crear tarea del Caso', 'TASK_CREATE', taskFields(ctx, r))}><Icon name="tasks" size={18}/>Nueva tarea</button>
         </>}
         {!closed && (head || owner) && <>
@@ -66,7 +67,7 @@ export function CaseDetail({r, ctx}: {r: Row; ctx: Context}) {
         <p className="muted">{humanize(r.closure_mode)} · {when(r.closed_ms)} · {nameOf(ctx.catalog, r.closed_by)}</p>
         <p className="preserve">{text(r, 'close_reason')}</p>
       </Panel>}
-      <Notes row={r} ctx={ctx} editable={!closed && write}/>
+      <Notes row={r} ctx={ctx} editable={!closed && write} rightsKind={Object.keys(obj(r, 'rights')).length ? 'CAS' : undefined}/>
       <Panel title="Agenda del Caso" icon="tasks" count={tasks.length}
         description="Recordatorios para quien debe realizar cada gestión. Una tarea no es una actuación, y ninguna tarea pendiente permite cerrar el Caso.">
         {pendingTasks > 0 && <p className="pending-tasks"><Icon name="clock" size={16}/>{pendingTasks === 1 ? '1 tarea pendiente' : `${pendingTasks} tareas pendientes`}</p>}
@@ -85,6 +86,7 @@ export function CaseDetail({r, ctx}: {r: Row; ctx: Context}) {
           ['Materia', humanize(r.matter, MATTER_LABELS)],
         ]}/>
       </Panel>
+      <RightsPanel rights={obj(r, 'rights')} kind="CAS" id={number(r, 'id')} ctx={ctx}/>
       {!closed && (head || owner) && <ClosureStatus row={r} action={owner && !mayConfirmClose && state !== 'EN_REVISION' ? 'request' : 'close'}/>}
       <Panel title="Equipo" icon="people">
         <ul className="team">
@@ -119,6 +121,7 @@ function Task({t, r, ctx}: {t: Row; r: Row; ctx: Context}) {
   const overdue = OPEN_TASK.includes(text(t, 'state')) && Number(t.due_ms) < Date.now();
   return <li className={'card task' + (overdue ? ' overdue' : '')}>
     <div className="row-between"><strong>{text(t, 'title')}</strong><Status value={t.state}/></div>
+    {(text(t, 'action_label') || t.action_type) ? <p className="timeline-meta"><span className="chip">Compromiso de: {text(t, 'action_label') || 'tipo de un listado anterior'}</span> <small className="muted">Completar la tarea no registra la actuación.</small></p> : null}
     <p className="timeline-meta">
       <Icon name="user" size={14}/> {nameOf(ctx.catalog, t.executor_id)} · <Icon name="calendar" size={14}/> {when(t.due_ms)}{overdue && <strong className="overdue-label"> · Vencida</strong>} · Próximo aviso: {when(t.next_reminder_ms)} · {hours === 0 ? 'Aviso único' : `Aviso cada ${hours} h`}
     </p>

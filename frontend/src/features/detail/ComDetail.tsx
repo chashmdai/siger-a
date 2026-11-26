@@ -13,12 +13,18 @@ import {Callout, EmptyState, Facts, Panel} from '../../components/Primitives';
 import {Files} from './Files';
 import {ActionBar, DetailGrid} from './parts';
 import {IntakeRecordPanel} from '../intake/IntakeRecordPanel';
+import {Characterization, characterizationOf, statField} from './Characterization';
+import {fichaVars} from './characterizationModel.ts';
 
 /** Comunicacion: lo recibido, tal como se registro. Distribucion, antecedente o asuncion propia. */
 export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
-  const route = () => choose(ctx, 'Clasificar y enviar SOL', 'COM_ROUTE', r, [destinationField(ctx.catalog, 'SOL', text(r, 'suggested_region')), reason]);
+  // Caracterizacion del ingreso (E09): opcional al distribuir o asumir; la propuesta solo se usa si se elige.
+  const characterization = characterizationOf(r), statVars = fichaVars(characterization);
+  // Con la facultad del propio comando (StatValues.inline); solo si la clasificacion no esta cerrada.
+  const stat = !text(characterization, 'blocked') && statVars.length ? [statField(ctx.catalog, statVars)] : [];
+  const route = () => choose(ctx, 'Clasificar y enviar SOL', 'COM_ROUTE', r, [destinationField(ctx.catalog, 'SOL', text(r, 'suggested_region')), ...stat, reason]);
   const link = () => choose(ctx, 'Vincular al REQ existente', 'COM_LINK', r, [{key: 'folio', label: 'Folio exacto del REQ', required: true, max: 48}, reason], 'La COM conserva su folio. El vínculo no crea otro REQ ni reabre Casos.');
-  const assume = () => choose(ctx, 'Asumir ingreso propio', 'COM_ASSUME', r, [{key: 'responsible_id', label: 'Profesional encargado de la unidad', type: 'select', required: true, options: solicitationPeople(ctx.catalog, number(r, 'origin_scope'))}, reason], 'La jefatura asume directamente un ingreso de su competencia, sin enviarlo artificialmente a central.');
+  const assume = () => choose(ctx, 'Asumir ingreso propio', 'COM_ASSUME', r, [{key: 'responsible_id', label: 'Profesional encargado de la unidad', type: 'select', required: true, options: solicitationPeople(ctx.catalog, number(r, 'origin_scope'))}, ...stat, reason], 'La jefatura asume directamente un ingreso de su competencia, sin enviarlo artificialmente a central.');
   const restrictions = text(r, 'contact_restrictions');
   const continuity = list(r, 'solicitations').length + list(r, 'requirements').length + list(r, 'links').length;
   // COM del Formulario Publico: proyeccion autorizada que entrega el servidor (sin el documento original).
@@ -41,6 +47,7 @@ export function ComDetail({r, ctx}: {r: Row; ctx: Context}) {
       </Panel>
       {isExternal && <ExternalCom external={external}/>}
       {hasIntake && <IntakeRecordPanel r={r} ctx={ctx}/>}
+      <Characterization c={characterization} comId={number(r, 'id')} ctx={ctx} closedRecord={!['INVALIDA', 'DUPLICADA', 'VINCULADA'].includes(text(r, 'state'))}/>
       {!hasIntake && list(r, 'persons').length > 0 && <Panel title="Personas relacionadas" icon="people" count={list(r, 'persons').length} description="Datos declarados en el ingreso; no constituyen un registro maestro.">
         <Table rows={list(r, 'persons')} columns={[
           {name: 'Rol', render: p => humanize(p.person_role, PERSON_ROLE_LABELS)},

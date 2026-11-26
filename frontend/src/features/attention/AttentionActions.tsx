@@ -13,6 +13,11 @@ import {Icon} from '../../components/Icon';
 import {Callout} from '../../components/Primitives';
 import {DestinationPicker} from '../../components/DestinationPicker';
 import {destinations, initialChoice, payloadFor, receiver} from '../../lib/destination';
+import {obj} from '../../lib/rows';
+import {characterizationOf, statField} from '../detail/Characterization';
+import {closeState, completeness, fichaVars} from '../detail/characterizationModel.ts';
+import {blockersOf} from '../detail/ClosureStatus';
+import {rightsPending} from '../../lib/rightsModel.ts';
 
 const LOCKED_NOTICE: Record<string, string> = {
   CON_CASO: 'La ficha inicial queda conservada. Las nuevas gestiones se registran en los Casos.',
@@ -43,13 +48,20 @@ export function AttentionActions({ctx, row, info}: {ctx: Context; row: Row; info
     ];
     ctx.act({title: 'Entregar primera atención', type: 'ATTENTION_SEND', id: number(row, 'id'), revision: number(row, 'revision'), fields, note: 'No crea una SOL ni un Caso. La persona a cargo se mantiene hasta que el destino recibe. No transfiere el principal del REQ.'});
   }
+  // Resolucion (D28, E09): bloqueos del servidor (resolve_blockers) y caracterizacion pendiente que el dialogo completa en
+  // el mismo acto; derechos y contexto de una vulneracion se clasifican en el panel del REQ.
+  const statVars = fichaVars(characterizationOf(row)), need = completeness(ctx.catalog);
+  const resolving = closeState(blockersOf(info, 'resolve_blockers'), need.intake, statVars);
+  const rightsLeft = rightsPending(need.vulnerability, obj(row, 'rights'));
   function resolve() {
     ctx.act({title: 'Resolver primera atención sin Caso', type: 'ATTENTION_RESOLVE', id: number(row, 'id'), revision: number(row, 'revision'), fields: [
       {key: 'result', label: 'Resultado', type: 'select', required: true, options: labeled(IMMEDIATE_RESULTS, RESULT_LABELS)},
       {key: 'effective_at', label: 'Fecha de la gestión realizada', type: 'datetime-local', required: true, value: localTime()},
       {key: 'reason', label: 'Qué se resolvió efectivamente', type: 'textarea', required: true, max: 12000},
+      ...(resolving.resolvable.length ? [statField(ctx.catalog, statVars, {required: () => need.intake, lead: 'Para resolver, completa la caracterización pendiente (puede ser «Sin información»).'})] : []),
     ], note: 'Cierra el REQ mediante la facultad de primera atención. No crea Caso, no envía correo y no cancela compromisos automáticamente.'});
   }
+  const blockers = blockersOf(info, 'resolve_blockers');
 
   if (!bool(info, 'can_edit') && text(info, 'state') === 'PENDIENTE_RECEPCION') return null;
   if (!bool(info, 'can_edit')) return <Callout tone="neutral">{LOCKED_NOTICE[text(info, 'state')] ?? 'La entrega debe recibirse, devolverse o retirarse antes de seguir editando.'}</Callout>;
@@ -76,7 +88,11 @@ export function AttentionActions({ctx, row, info}: {ctx: Context; row: Row; info
     <section className="panel">
       <div className="panel-head"><div><h2><Icon name="checkCircle"/>Resolver en el primer contacto</h2><p>Solo si la orientación, respuesta o remisión quedaron efectivamente concluidas, sin seguimiento pendiente.</p></div></div>
       {followup && <Callout tone="warn">La ficha indica seguimiento: requiere abrir un Caso o rectificar, con fundamento, el curso de acción.</Callout>}
-      <button disabled={followup} onClick={resolve}><Icon name="check" size={18}/>Resolver atención inmediata</button>
+      {blockers.length > 0 && <Callout tone={resolving.enabled ? 'info' : 'warn'} title={resolving.enabled ? 'Se completa al resolver' : 'Antes de resolver'}>
+        <ul>{blockers.map(b => <li key={b}>{b}</li>)}</ul>
+        {rightsLeft.length > 0 && !resolving.enabled && <p>Clasifica derechos y contexto en el panel «Derechos y contexto» de este REQ.</p>}
+      </Callout>}
+      <button disabled={followup || !resolving.enabled} onClick={resolve}><Icon name="check" size={18}/>Resolver atención inmediata</button>
     </section>
   </div>;
 }
