@@ -153,9 +153,10 @@ la validacion. Solo un consumidor por cola: al activar produccion, el de la vali
 - **Produccion en 0.8.0 y activacion de los catalogos**: el paso U se ejecuto el 2026-11-26 (U0-U6 conformes,
   `docs/PLAN_0_8_1.md` seccion 1); queda U7 (TI activa los catalogos con la conformidad de UEP), que sigue su propio
   curso y no depende de 0.8.1.
-- **0.8.1**: revision visual del responsable y auditoria de Claude Padre (F02, EXTERNO), build de entrega y etiqueta
-  `v0.8.1` (F03, en TEST-SIGER) y actualizacion de produccion por el responsable con autorizacion expresa (paso U81 de
-  `docs/DESPLIEGUE_VM.md`, seccion 6, despues de F03).
+- **Produccion en 0.8.1**: el plan 0.8.1 esta cerrado (revision visual y auditoria conformes en F02c; paquete
+  `SIGER-20261127-122505.zip` y etiqueta `v0.8.1` en F03, con nombre, tamano y SHA-256 del ZIP y del JAR en su registro
+  de `docs/BITACORA_0_8_1.md`); falta la actualizacion de produccion por el responsable con autorizacion expresa (paso
+  U81 de `docs/DESPLIEGUE_VM.md`, seccion 6).
 - Ejecucion en la VM de la salida a produccion (pasos V1-V6 de `docs/PLAN_0_6_0.md` y `docs/DESPLIEGUE_VM.md`): cierre
   de la validacion 0.4.0 con sus 9 recepciones de prueba, produccion nueva (0.7.0 o 0.6.0 segun el corte) en
   automatico, acreditacion (D13), eliminacion de la validacion con constancia y, sin entregas de prueba en produccion, la
