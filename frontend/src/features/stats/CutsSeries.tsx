@@ -133,6 +133,7 @@ function CutItem({ctx, c, reload}: {ctx: Context; c: CutRow; reload: () => void}
     fields: [{key: 'reason', label: 'Fundamento de la anulación', type: 'textarea', required: true, max: 12000}]});
   return <li className="stat-cut">
     <div className="stat-cut-head">
+      <span className="stat-cut-icon" aria-hidden="true"><Icon name="snowflake" size={18}/></span>
       <strong>{c.code}</strong> <span>{c.title}</span>
       <span className={'status' + (c.state === 'ANULADO' ? ' muted' : '')}>{cutStateLabel(c.state)}</span>
     </div>
@@ -364,12 +365,12 @@ function Series({ctx, cat, scope}: {ctx: Context; cat: StatsCatalog; scope: stri
       {error && <ErrorMessage>{error}</ErrorMessage>}
       {!series ? <Skeleton lines={3}/> : series.length === 0 ? <EmptyState icon="calendar" title="Aún no hay series que puedas ver">{manager ? 'Importa una con «Importar una serie».' : 'Las importa una cuenta con Gestión estadística.'}</EmptyState>
         : <ul className="stat-cuts">{series.map(s => <li key={text(s, 'id')} className="stat-cut">
-          <div className="stat-cut-head"><strong>{text(s, 'title')}</strong> <span className="status">{seriesStateLabel(text(s, 'state'))}</span></div>
+          <div className="stat-cut-head"><span className="stat-cut-icon series" aria-hidden="true"><Icon name="database" size={18}/></span><strong>{text(s, 'title')}</strong> <span className="status">{seriesStateLabel(text(s, 'state'))}</span></div>
           <p className="field-help">{text(s, 'indicator')} · {scopeName(ctx, s.scope_id)} · {periodLabel({type: 'PERSONALIZADO', from: text(s, 'period_from'), to: text(s, 'period_to')})} · {GRANULARITIES.find(g => g.code === text(s, 'granularity'))?.label ?? ''} · Fuente: {text(s, 'source')}</p>
           <div className="actions">
             <button type="button" className="sm" onClick={() => void view(s)}>Ver junto a SIGER</button>
-            {ctx.user.can_export === true && <><button type="button" className="sm" onClick={() => void exportSeries(s, 'csv')}><Icon name="download" size={16}/>CSV</button>
-              <button type="button" className="sm" onClick={() => void exportSeries(s, 'xlsx')}><Icon name="download" size={16}/>XLSX</button></>}
+            {ctx.user.can_export === true && <><button type="button" className="sm" onClick={() => void exportSeries(s, 'csv')}><Icon name="file" size={16}/>CSV</button>
+              <button type="button" className="sm" onClick={() => void exportSeries(s, 'xlsx')}><Icon name="fileSpreadsheet" size={16}/>XLSX</button></>}
             {manager && text(s, 'state') !== 'ANULADA' && <button type="button" className="sm ghost" onClick={() => annul(s)}>Anular</button>}
           </div>
         </li>)}</ul>}

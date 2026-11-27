@@ -209,9 +209,20 @@ grafico, Calidad sin enlace con 0 pendientes y un Panorama que muestra cada indi
 de permisos (`PermisosFinalesTest`: toda ruta `/api` clasificada) y mide con 50.005 COM la carga del Panorama y el
 explorador (`StatLoadMeasureTest.medicionE14`, cada consulta bajo 3 s, EXPLAIN de las tablas recien llenadas).
 
-Presentacion: sistema visual propio sin dependencias nuevas (tokens CSS, iconos propios, Cabin OFL y escudo
-institucional servidos desde el JAR), con barra lateral por tipo de trabajo, paleta Ctrl+K, fichas con cadena
-COM->SOL->REQ->Caso y version movil. Decisiones en `docs/DISENO_0_4_0.md`.
+Presentacion: sistema visual propio (tokens CSS, Cabin OFL y escudo institucional servidos desde el JAR), con barra
+lateral por tipo de trabajo, paleta Ctrl+K, fichas con cadena COM->SOL->REQ->Caso y version movil. Decisiones en
+`docs/DISENO_0_4_0.md`. Desde 0.8.1 (D54) los iconos son de `lucide-react` (ISC, version exacta 1.71.0), unica
+dependencia de interfaz agregada: solo `components/Icon.tsx` la importa, por nombre, y conserva la API
+`<Icon name size className/>` con el icono siempre decorativo (`aria-hidden`); licencias en `docs/LICENCIAS_TERCEROS.md`.
+
+0.8.1 (`docs/PLAN_0_8_1.md`, D52-D57, gate F01) redisena la presentacion del explorador estadistico sin cambiar el
+servidor, las consultas ni las cifras: tarjetas del Panorama que son, en toda su superficie, un enlace a su consulta en
+Explorar (`cardHref`), con el indicador de ingresos como principal y el tono de la variacion de D56
+(`variationTone`); pestanas como control segmentado; Explorar con preguntas como mosaicos, campos con icono por familia
+y boton "Campos" en movil, y una banda con el total; Informes con encabezado editorial y barra de datos en "% del
+total"; Cortes y series como tarjetas; Calidad con leyenda; graficos con realce, ayuda emergente y entrada animada
+solo en la pagina (`Chart.exportMarkup` deja el SVG descargado sin clases ni estilos, igual a 0.8.0 en marcas, cifras
+y colores).
 
 ## Operacion
 

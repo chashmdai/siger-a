@@ -15,6 +15,14 @@ export type ChartData = {categories: Category[]; series: Series[]; total?: numbe
   divider?: {after: number; label: string}};
 
 const W = 720;
+/**
+ * SVG que se descarga (0.8.1, regla 4 del plan): el del grafico sin lo que solo sirve en la pagina (clases, estilos y
+ * animaciones), para que el archivo siga autonomo con los colores como atributos.
+ */
+export function exportMarkup(markup: string) {
+  return markup.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<animate\w*\b[^>]*\/>/g, '').replace(/<animate\w*\b[\s\S]*?<\/animate\w*>/g, '')
+    .replace(/\s(?:class|style)="[^"]*"/g, '');
+}
 const short = (s: string, max = 34) => s.length > max ? s.slice(0, max - 1) + '…' : s;
 const color = (s: Series, i: number) => s.base ? BASE_COLOR : CHART_COLORS[i % CHART_COLORS.length];
 
@@ -50,7 +58,7 @@ function Bars({data, mode}: {data: ChartData; mode: 'barras' | 'agrupadas' | 'ap
     <Legend series={series} y={18}/>
     {sc.ticks.map(t => {
       const x = x0 + barLength(t, sc.max, plot);
-      return <g key={t}><line x1={x} x2={x} y1={legendH} y2={height - 24} stroke={GRID_COLOR} strokeWidth={1}/>
+      return <g key={t}><line x1={x} x2={x} y1={legendH} y2={height - 24} stroke={GRID_COLOR} strokeWidth={1} strokeDasharray="3 4"/>
         <text x={x} y={height - 8} fontSize={11} fill={MUTED_COLOR} fontFamily={FONT} textAnchor="middle">{data.format(t)}</text></g>;
     })}
     <line x1={x0} x2={x0} y1={legendH} y2={height - 24} stroke={MUTED_COLOR} strokeWidth={1}/>
@@ -68,7 +76,7 @@ function Bars({data, mode}: {data: ChartData; mode: 'barras' | 'agrupadas' | 'ap
           if (stacked) offset += len;
           const label = `${c.label}${series.length > 1 ? ', ' + s.label : ''}: ${data.format(v)}`;
           return <Mark key={s.key} label={label}>
-            {len > 0 && <rect x={x} y={y} width={Math.max(0, stacked && i < series.length - 1 ? len - gap : len)} height={bar} rx={stacked ? 0 : 3} fill={color(s, i)}/>}
+            {len > 0 && <rect x={x} y={y} width={Math.max(0, stacked && i < series.length - 1 ? len - gap : len)} height={bar} rx={stacked ? 0 : 4} fill={color(s, i)} className="chart-grow-x"/>}
             {/* Rotulo directo de la cifra; con varias series, un cero no se rotula (la tabla lo dice). */}
             {!stacked && (series.length === 1 || (v ?? 0) > 0) && <text x={x0 + len + 6} y={y + bar - 2} fontSize={11} fill={TEXT_COLOR} fontFamily={FONT}>{data.format(v)}</text>}
           </Mark>;
@@ -116,7 +124,7 @@ function Columns({data}: {data: ChartData}) {
     <g transform={`translate(${left} ${legendH + top})`}>
       {sc.ticks.map(t => {
         const y = plotH - t / sc.max * plotH;
-        return <g key={t}><line x1={0} x2={plot} y1={y} y2={y} stroke={GRID_COLOR} strokeWidth={1}/>
+        return <g key={t}><line x1={0} x2={plot} y1={y} y2={y} stroke={GRID_COLOR} strokeWidth={1} strokeDasharray="3 4"/>
           <text x={-8} y={y + 4} fontSize={11} fill={MUTED_COLOR} fontFamily={FONT} textAnchor="end">{data.format(t)}</text></g>;
       })}
       <line x1={0} x2={plot} y1={plotH} y2={plotH} stroke={MUTED_COLOR} strokeWidth={1}/>
@@ -129,7 +137,7 @@ function Columns({data}: {data: ChartData}) {
             const h = barLength(v, sc.max, plotH);
             const x = x0 + si * barW;
             return <Mark key={s.key} label={`${c.label}${series.length > 1 ? ', ' + s.label : ''}: ${data.format(v)}`}>
-              {h > 0 && <rect x={x} y={plotH - h} width={Math.max(1, barW - 2)} height={h} rx={2} fill={color(s, si)}/>}
+              {h > 0 && <rect x={x} y={plotH - h} width={Math.max(1, barW - 2)} height={h} rx={Math.min(4, (barW - 2) / 3)} fill={color(s, si)} className="chart-grow-y"/>}
               {value && (series.length === 1 || (v ?? 0) > 0) && <text x={x + barW / 2 - 1} y={plotH - h - 4} fontSize={10} fill={TEXT_COLOR} fontFamily={FONT} textAnchor="middle">{data.format(v)}</text>}
             </Mark>;
           })}
@@ -142,6 +150,7 @@ function Columns({data}: {data: ChartData}) {
 
 /** Lineas para un eje de periodo: 2 px, marcadores de 8 px, base en 0; la serie base de una comparacion, punteada. */
 function Lines({data}: {data: ChartData}) {
+  const uid = 'g' + useId().replace(/:/g, '');
   const series = data.series;
   const legendH = series.length > 1 ? 30 : 8, left = 56, right = 24, plotH = 220, top = data.divider ? 18 : 0;
   const plot = W - left - right;
@@ -155,7 +164,7 @@ function Lines({data}: {data: ChartData}) {
     <g transform={`translate(${left} ${legendH + top})`}>
       {sc.ticks.map(t => {
         const y = plotH - t / sc.max * plotH;
-        return <g key={t}><line x1={0} x2={plot} y1={y} y2={y} stroke={GRID_COLOR} strokeWidth={1}/>
+        return <g key={t}><line x1={0} x2={plot} y1={y} y2={y} stroke={GRID_COLOR} strokeWidth={1} strokeDasharray="3 4"/>
           <text x={-8} y={y + 4} fontSize={11} fill={MUTED_COLOR} fontFamily={FONT} textAnchor="end">{data.format(t)}</text></g>;
       })}
       <line x1={0} x2={plot} y1={plotH} y2={plotH} stroke={MUTED_COLOR} strokeWidth={1}/>
@@ -163,8 +172,15 @@ function Lines({data}: {data: ChartData}) {
       {series.map((s, si) => {
         const pts = linePoints(s.values, plot, plotH, sc.max);
         const path = pts.reduce((acc, p, i) => p.y == null ? acc : acc + (i === 0 || pts[i - 1].y == null ? ' M ' : ' L ') + p.x.toFixed(1) + ' ' + p.y.toFixed(1), '').trim();
+        // Area degradada bajo una serie completa (no la base de una comparacion): el color va como atributo del degradado.
+        const full = !s.base && pts.length > 1 && pts.every(p => p.y != null);
+        const area = full ? `${path} L ${pts[pts.length - 1].x.toFixed(1)} ${plotH} L ${pts[0].x.toFixed(1)} ${plotH} Z` : '';
         return <g key={s.key}>
-          <path d={path} fill="none" stroke={color(s, si)} strokeWidth={2} strokeLinejoin="round" strokeDasharray={s.base ? '6 4' : undefined}/>
+          {full && <defs><linearGradient id={`${uid}a${si}`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={color(s, si)} stopOpacity={0.18}/><stop offset="100%" stopColor={color(s, si)} stopOpacity={0}/>
+          </linearGradient></defs>}
+          {full && <path d={area} fill={`url(#${uid}a${si})`} stroke="none"/>}
+          <path d={path} fill="none" stroke={color(s, si)} strokeWidth={2.25} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={s.base ? '6 4' : undefined} className="chart-draw"/>
           {pts.map((p, i) => p.y != null && <Mark key={i} label={`${data.categories[i].label}${series.length > 1 ? ', ' + s.label : ''}: ${data.format(p.value)}`}>
             <circle cx={p.x} cy={p.y} r={4} fill={color(s, si)} stroke="#ffffff" strokeWidth={2}/>
           </Mark>)}
@@ -202,10 +218,35 @@ export function Chart({kind, data, title, subtitle, notes, source, file, tableId
   source: string; file: string; tableId?: string}) {
   const id = useId(), ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState('');
-  const svg = () => ref.current?.querySelector('svg') as SVGSVGElement | null;
+  const [tip, setTip] = useState<{text: string; x: number; y: number; below: boolean} | null>(null);
+  const hidden = useRef<{title: Element; text: string} | null>(null);
+  // El archivo descargado es el SVG del grafico sin clases, estilos ni animaciones (0.8.1, regla 4): mismas marcas, cifras
+  // y colores como atributos que en 0.8.0. Se reconstruye como elemento para que chartExport.ts no cambie.
+  const svg = () => {
+    const el = ref.current?.querySelector('svg');
+    if (!el) return null;
+    return new DOMParser().parseFromString(exportMarkup(new XMLSerializer().serializeToString(el)), 'image/svg+xml').documentElement as unknown as SVGSVGElement;
+  };
+  // Ayuda emergente al pasar el mouse o enfocar una marca: el mismo texto de su nombre accesible. Mientras se muestra, el
+  // <title> de la marca se vacia para que el navegador no muestre la suya encima, y se restituye al salir.
+  const restore = () => {if (hidden.current) {hidden.current.title.textContent = hidden.current.text; hidden.current = null;}};
+  const show = (target: EventTarget | null) => {
+    const mark = (target as Element | null)?.closest?.('.chart-mark');
+    const box = ref.current?.getBoundingClientRect();
+    if (!mark || !box) return;
+    restore();
+    const title = mark.querySelector('title');
+    if (title) {hidden.current = {title, text: title.textContent ?? ''}; title.textContent = '';}
+    const r = mark.getBoundingClientRect();
+    const top = r.top - box.top;
+    setTip({text: mark.getAttribute('aria-label') ?? '', x: Math.min(Math.max(r.left - box.left + r.width / 2 + (ref.current?.scrollLeft ?? 0), 90), box.width - 90 + (ref.current?.scrollLeft ?? 0)),
+      y: top < 48 ? r.bottom - box.top + 8 : top - 8, below: top < 48});
+  };
+  const hide = () => {restore(); setTip(null);};
   const texts = {title, subtitle, notes, source};
   const download = async (format: 'png' | 'svg') => {
     setError('');
+    hide();
     const el = svg();
     if (!el) return;
     try {
@@ -221,13 +262,15 @@ export function Chart({kind, data, title, subtitle, notes, source, file, tableId
       <strong id={id + 't'}>{title}</strong>
       {subtitle && <span className="stat-chart-sub">{subtitle}</span>}
     </figcaption>
-    <div ref={ref} className="stat-chart-canvas" role="group" aria-label={`${KIND_LABELS[kind]}: ${title}. ${data.categories.length} categorías.${tableId ? ' Las cifras están también en la tabla.' : ''}`}>{body}</div>
+    <div ref={ref} className="stat-chart-canvas" role="group" aria-label={`${KIND_LABELS[kind]}: ${title}. ${data.categories.length} categorías.${tableId ? ' Las cifras están también en la tabla.' : ''}`}
+      onMouseOver={e => show(e.target)} onMouseLeave={hide} onFocus={e => show(e.target)} onBlur={hide}>{body}
+      {tip && <span className={'chart-tip' + (tip.below ? ' below' : '')} style={{left: tip.x, top: tip.y}} aria-hidden="true">{tip.text}</span>}</div>
     {data.divider && <p className="stat-chart-divider"><span aria-hidden="true">┆ </span>{data.divider.label}</p>}
     {notes.length > 0 && <ul className="stat-chart-notes">{notes.map(n => <li key={n}>{n}</li>)}</ul>}
     <p className="stat-source">{source}</p>
     <div className="actions">
-      <button type="button" className="sm" onClick={() => void download('png')}><Icon name="download" size={16}/>Descargar PNG</button>
-      <button type="button" className="sm" onClick={() => void download('svg')}><Icon name="download" size={16}/>Descargar SVG</button>
+      <button type="button" className="sm" onClick={() => void download('png')}><Icon name="fileImage" size={16}/>Descargar PNG</button>
+      <button type="button" className="sm" onClick={() => void download('svg')}><Icon name="fileCode" size={16}/>Descargar SVG</button>
       {tableId && <button type="button" className="sm ghost" onClick={() => document.getElementById(tableId)?.focus()}>Ver la tabla</button>}
     </div>
     {error && <p role="alert" className="error">{error}</p>}

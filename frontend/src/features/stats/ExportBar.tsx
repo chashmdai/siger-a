@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import type {Context} from '../../app/context';
 import {Icon} from '../../components/Icon';
+import type {IconName} from '../../components/Icon';
 import {ErrorMessage} from '../../components/Primitives';
 import {downloadPost} from '../../lib/api';
 import type {Row} from '../../lib/rows';
@@ -9,6 +10,8 @@ import type {Query} from './statsModel';
 import {encodeRoute, errorText, fileStem, zipProblem} from './statsModel';
 import {queue} from './statQuery';
 
+/** Icono del tipo de archivo de cada descarga (0.8.1, seccion 3.3). */
+const FILE_ICONS: Record<'csv' | 'xlsx' | 'zip', IconName> = {csv: 'file', xlsx: 'fileSpreadsheet', zip: 'fileArchive'};
 export const EXPORT_NEEDS = 'Para descargar estas cifras en CSV, XLSX o el paquete ZIP necesitas la función Exportación.';
 export const ZIP_HELP = 'El paquete ZIP trae el agregado, los microdatos (un folio por requerimiento, sin datos de personas), el diccionario, los catálogos y sus huellas. Se genera uno a la vez en SIGER.';
 
@@ -29,7 +32,7 @@ export function ExportBar({ctx, q, body, title}: {ctx: Context; q: Query; body: 
       .then(() => ctx.message(format === 'zip' ? 'Paquete ZIP generado.' : 'Archivo generado.'), (e: Error & {status?: number}) => setError(errorText(e))).finally(() => setBusy(''));
   };
   const button = (format: 'csv' | 'xlsx' | 'zip', label: string, disabled = false) => <button type="button" className="sm" disabled={busy !== '' || disabled}
-    aria-describedby={format === 'zip' ? 'zip-ayuda' : undefined} onClick={() => download(format)}><Icon name="download" size={16}/>{busy === format ? 'Generando…' : label}</button>;
+    aria-describedby={format === 'zip' ? 'zip-ayuda' : undefined} onClick={() => download(format)}><Icon name={FILE_ICONS[format]} size={16}/>{busy === format ? 'Generando…' : label}</button>;
   return <div className="stat-export" role="group" aria-label="Descargar estas cifras">
     <div className="actions">{button('csv', 'CSV')}{button('xlsx', 'XLSX')}{button('zip', 'Paquete ZIP', zip !== '')}</div>
     <p id="zip-ayuda" className="field-help">{zip || ZIP_HELP}</p>
@@ -43,5 +46,5 @@ export function ExportBar({ctx, q, body, title}: {ctx: Context; q: Query; body: 
  */
 export function FreezeButton({ctx, q}: {ctx: Context; q: Query}) {
   if (ctx.user.can_manage_stats !== true || q.cut) return null;
-  return <button type="button" className="sm" onClick={() => {location.hash = encodeRoute('cortes', q, {nuevo: '1'});}}><Icon name="layers" size={16}/>Congelar estas cifras</button>;
+  return <button type="button" className="sm" onClick={() => {location.hash = encodeRoute('cortes', q, {nuevo: '1'});}}><Icon name="snowflake" size={16}/>Congelar estas cifras</button>;
 }

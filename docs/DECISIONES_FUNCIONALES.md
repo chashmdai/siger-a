@@ -437,3 +437,58 @@ comprometer criterios, pruebas ni seguridad. Prefijo E, decisiones D25 en adelan
 facilidad de uso es criterio transversal de aceptacion, en especial para la Direccion de UEP (`DISENO` 10.5). El
 ejecutor puede ser Claude Code o Codex: el repositorio agrega un `AGENTS.md` que remite a `CLAUDE.md`, sin duplicar
 contenido.
+
+## Precision 0.8.1 - rediseno visual del explorador estadistico e iconografia
+
+Decisiones del responsable del 2026-11-27, copiadas de la seccion 0 de `docs/PLAN_0_8_1.md` en el gate F01. 0.8.1 es solo
+interfaz: no cambia datos, cifras, consultas, contratos, exportaciones, servidor, migraciones ni scripts. Las decisiones
+D1-D51 siguen vigentes sin cambio; la hoja de ruta 0.9.0 (D44-D49) sigue fuera de alcance.
+
+D52. **Alcance.** 0.8.1 redisena por completo la presentacion del explorador estadistico (`#estadisticas`:
+Panorama, Informes, Explorar, Cortes y series, Calidad), incluido el dibujo de sus graficos y tablas, y cambia la
+iconografia de toda la aplicacion. Es un cambio de presentacion, no de contenido: sin cambios en el servidor (salvo
+el numero de version del `pom.xml`), en migraciones (esquema 24), en `scripts/` ni `.mvn/`, en las consultas que se
+envian, en el modelo de graficos (`chartModel.ts`: paleta, escalas, barras desde 0) ni en su exportacion
+(`chartExport.ts`), en el significado de ninguna cifra ni en los textos de ayuda y de "Como leer esta cifra" salvo lo
+que agrega D56. Ninguna pantalla agrega consultas nuevas al servidor para decorar.
+
+D53. **Tarjetas del Panorama.** Cada tarjeta de indicador es, en toda su superficie, un enlace real a su consulta
+en Explorar: un `<a href="#estadisticas?...">` con el `href` que hoy calcula `encodeRoute('explorar', q)`. Responde
+al clic en cualquier punto (titulo, cifra, variacion, linea mensual, ayuda, pie), al teclado (Tab y Enter), al clic
+central y a "abrir en una pestana nueva". La tarjeta en error no es enlace (conserva "Reintentar"); la tarjeta que
+calcula si lo es, como hoy. Se retira el patron de boton con capa `::after`.
+
+D54. **Iconos: autorizacion de dependencia (DI-12 de 0.8.0, para este caso).** Se autoriza una sola dependencia
+nueva de frontend: **`lucide-react`** (licencia ISC), en `dependencies`, con **version exacta** (sin `^` ni `~`),
+cuya `peerDependencies` admita React 19, verificada con `npm info lucide-react@<version> peerDependencies` y
+registrada en el cierre. Se adopta a traves del componente existente `components/Icon.tsx`, que conserva su API
+(`<Icon name size className/>`, `aria-hidden`, `focusable="false"`): ningun archivo importa `lucide-react`
+directamente salvo `Icon.tsx`. Solo se importan iconos por nombre (sin importacion global ni iconos dinamicos por
+cadena). El texto de la licencia ISC queda en `docs/LICENCIAS_TERCEROS.md` (con la de Cabin, OFL). Ninguna otra
+dependencia (ni de graficos, animacion, estilos o componentes) sin autorizacion expresa.
+
+D55. **Direccion visual.** "Tablero institucional": claro, sobrio y con jerarquia fuerte, dentro de
+`docs/MANUAL_IDENTIDAD_DDN_SIGER_A.md`. Se construye con los tokens existentes y, si hacen falta, tokens nuevos en
+`styles/tokens.css` derivados de la paleta (los colores del emblema solo como acentos, nunca de fondo de texto
+largo). Contraste: textos >= 4,5:1 e iconos y marcas >= 3:1 sobre su fondo, con prueba que lo calcula para cada
+token nuevo (como `tests/charts.test.ts`). Movimiento breve (<= 500 ms) y siempre desactivado con
+`prefers-reduced-motion: reduce`. Sin modo oscuro.
+
+D56. **Sentido de la variacion.** La variacion conserva cifra, porcentaje (o puntos), flecha y texto. El color es
+apoyo y solo expresa juicio donde hay uno: en "Ingresos con caracterizacion completa" subir es favorable; en
+"Registros tardios" bajar es favorable; en Ingresos, REQ constituidos, Casos y Actuaciones el color es neutro (mas
+ingresos no es mejor ni peor). Favorable usa los tonos `--ok-*`; desfavorable, `--warn-*` (nunca `--danger-*`);
+neutro, `--info-*` o la tinta. "Como leer esta cifra" del Panorama agrega una linea que lo explica.
+
+D57. **Entrega y produccion.** 0.8.1 se entrega con su propio paquete y la etiqueta `v0.8.1`; el paquete 0.8.0
+(`SIGER-20261126-212826.zip`) y las etiquetas anteriores quedan inmutables. La actualizacion de produccion
+(DDN-SIGER) de 0.8.0 a 0.8.1 la ejecuta el responsable, con autorizacion expresa, por el paso U81 (seccion 9),
+despues de F03. La activacion de los catalogos (U7 de 0.8.0) sigue su propio curso con UEP y no depende de 0.8.1.
+
+Aplicacion en F01 (GO del responsable del 2026-11-27): `lucide-react` fijado en **1.71.0** (publicado el 2026-11-10;
+`peerDependencies` `react ^16.5.1 || ^17 || ^18 || ^19` y `@types/react` opcional). Su `LICENSE` es ISC con un aviso MIT
+para los iconos derivados de Feather: `docs/LICENCIAS_TERCEROS.md` copia ese archivo integro (desvio de D54, que solo
+nombra ISC). Tres nombres indicativos del plan no existen en esa version y se usan sus equivalentes:
+`TriangleAlert` -> `TriangleExclamationPoint`, `ClockAlert` -> `ClockExclamationPoint` e `History` -> `RotateCcwClock`.
+Ningun icono conserva su trazo propio. La animacion de conteo de la cifra (opcional en el plan) no se implemento: el
+render en servidor, el texto accesible y la pantalla muestran siempre la cifra exacta.

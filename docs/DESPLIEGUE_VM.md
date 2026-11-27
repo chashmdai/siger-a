@@ -959,3 +959,31 @@ que defina DI-11 (U0) y usa el mecanismo de reapertura vigente (DI-07).
 
 Despues, TI revisa en Auditoria y operacion el Formulario en "Esperando entregas" con su ultimo exito reciente, y el
 responsable anota la ventana con sus cifras (U2, U4 y U6) en la bitacora de produccion.
+
+## 6. Actualizacion de produccion a 0.8.1 (paso U81)
+
+Actualiza en sitio la produccion de `D:\SIGER` de 0.8.0 a 0.8.1 (`docs/PLAN_0_8_1.md`, D57 y seccion 9). 0.8.1 es solo
+interfaz: no tiene migraciones (esquema 24, igual que 0.8.0) ni cambia `scripts\`, el servidor, las consultas ni las
+cifras. Lo ejecuta el responsable, solo en DDN-SIGER y solo en D:, con **autorizacion expresa** para esta ventana y
+**despues de F03 CERRADO** (paquete y etiqueta `v0.8.1`). Esta seccion no agrega ordenes: cada tarea usa las mismas de la
+seccion 5, con el paquete 0.8.1 en lugar del 0.8.0. `FECHA081` es el sufijo del ZIP 0.8.1 (`SIGER-FECHA081.zip`); el
+registro de F03 en `docs/BITACORA_0_8_1.md` trae su nombre, su tamano y su SHA-256 (y los del JAR). Rigen las reglas de
+la seccion 5 (solo lectura o cambio de estado, consolas, lo que se preserva y la detencion). El paquete 0.8.0 y las
+etiquetas anteriores no se tocan.
+
+| Tarea | Tipo | Como (ordenes de la seccion 5) | Resultado esperado |
+|---|---|---|---|
+| U81-0. Requisitos | Responsable | F03 CERRADO; ventana acordada; aviso a los usuarios | Ventana autorizada por el responsable |
+| U81-1. Paquete | Preparacion, no cambia la instancia | Como U1, con `D:\Entregas\SIGER-FECHA081.zip`: `certutil` contra el SHA-256 del registro de F03 antes de descomprimir, `Expand-Archive` y lectura de `manifest.json` | Misma huella; `manifest.json` con `"version": "0.8.1"`, `"schema": 24` y `"automatedTestsExecuted": true` |
+| U81-2. Detener SIGER | Cambio de estado | Como U3 | Servicio detenido; las entregas del Formulario esperan en su cola, como en la seccion 5 |
+| U81-3. Respaldo y ensayo | Cambio de estado | Como U4, inmediatamente antes de actualizar (respaldo y `Restore-Check.ps1`), con carpetas nuevas para 0.8.1 en lugar de las de U4 (por ejemplo `previo-0.8.1` y `D:\SIGER-RESTORE-PREVIO-081`); las de 0.8.0 se conservan | Respaldo verificado y restauracion de ensayo conforme |
+| U81-4. Actualizacion | Cambio de estado | Como U5: `Update.ps1` con la carpeta del paquete 0.8.1 y arranque | Diario sin `MIGRATION_FAILED`, `PROMOTION_FAILED` ni `START_FAILED`; ninguna migracion aplicada (esquema 24) |
+| U81-5. Verificacion | Solo lectura | Como U6: `/api/health` y, en el navegador, una cuenta con Reportes | `/api/health` con `version` 0.8.1 y `schema` 24; en "Explorador estadistico", un clic en la cifra de una tarjeta del Panorama abre Explorar con la consulta del indicador |
+
+- **Sin U2 ni U7.** Los temporales de MySQL ya se verificaron en U2 de 0.8.0 y 0.8.1 no los cambia; la activacion de los
+  catalogos (U7 de 0.8.0) sigue su propio curso con UEP y no depende de 0.8.1.
+- **Ante una falla** se aplica la detencion de U5 (seccion 5): no se reintenta ni se vuelve al JAR anterior por cuenta
+  propia; se conservan el respaldo de U81-3, el descriptor anterior (`config\instance-update-*.previous.json`), el diario
+  y los logs, y se informa al responsable. La vuelta atras es la de la seccion 5 (descriptor anterior y respaldo de U81-3).
+- **Despues**: el responsable anota la ventana (U81-1 a U81-5, sin datos personales ni secretos) en la bitacora de
+  produccion.

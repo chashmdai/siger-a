@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react';
 import type {DragEvent} from 'react';
 import type {Context} from '../../app/context';
 import {Icon} from '../../components/Icon';
+import type {IconName} from '../../components/Icon';
 import {Callout, ErrorMessage, Panel, Skeleton} from '../../components/Primitives';
 import type {Axis} from './FieldPicker';
 import {FieldPicker} from './FieldPicker';
@@ -31,6 +32,9 @@ export function useCuts(enabled: boolean) {
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('es-CL');
 const AXIS_LABELS: Record<Axis, string> = {rows: 'Filas', columns: 'Columnas', filters: 'Filtros'};
+const AXIS_ICONS: Record<Axis, IconName> = {rows: 'rows', columns: 'columns', filters: 'sliders'};
+/** Icono de cada pregunta guiada (0.8.1, seccion 3.3): apoyo visual junto al texto. */
+const GUIDED_ICONS: Record<string, IconName> = {cuantos: 'chart', via: 'chartBar', comparar: 'swap', figura: 'fileChart'};
 const COUNTS = ['REQUERIMIENTOS_CON_VALOR', 'MENCIONES'];
 
 /** Agrega un campo a filas, columnas o filtros (sale de los otros ejes; un filtro conserva sus valores). */
@@ -80,7 +84,7 @@ export default function Explore({ctx, cat, scope, query}: {ctx: Context; cat: St
   const today = chileDay();
   const base = panoramaPeriod(today).period;
   const q = query;
-  const [editing, setEditing] = useState(''), [over, setOver] = useState<Axis | ''>('');
+  const [editing, setEditing] = useState(''), [over, setOver] = useState<Axis | ''>(''), [fieldsOpen, setFieldsOpen] = useState(false);
   const go = (next: Query) => {location.hash = encodeRoute('explorar', next);};
   const problem = q ? queryProblem(cat, q) : '';
   const body = q && !problem ? requestBody(q, cat) : null;
@@ -92,14 +96,17 @@ export default function Explore({ctx, cat, scope, query}: {ctx: Context; cat: St
   const eje = useStat(levelBody('DERECHO_EJE'), ctx.user.id), der = useStat(levelBody('DERECHO'), ctx.user.id), sub = useStat(levelBody('DERECHO_SUBCATEGORIA'), ctx.user.id);
   const cuts = useCuts(cat.compares.includes('CORTE'));
 
-  if (!q) return <section aria-label="Explorar">
+  if (!q) return <section aria-label="Explorar" className="stat-start">
     <h2 className="stat-section-title">¿Qué quieres saber?</h2>
     <div className="stat-guided">{GUIDED.map(g => <button key={g.key} type="button" className="stat-guided-item" onClick={() => {
       if (g.key === 'figura') location.hash = encodeRoute('informes');
       else {const next = guidedQuery(g.key, base); if (next) go(next);}
-    }}><strong>{g.label}</strong><span>{g.help}</span></button>)}</div>
-    <p className="field-help">También puedes partir de una consulta vacía y armarla con los campos.</p>
-    <div className="actions"><button type="button" onClick={() => go({...guidedQuery('cuantos', base)!, rows: []})}><Icon name="plus" size={18}/>Consulta vacía</button></div>
+    }}><span className="stat-guided-icon"><Icon name={GUIDED_ICONS[g.key] ?? 'chart'} size={22}/></span><strong>{g.label}</strong><span>{g.help}</span>
+      <Icon name="arrowRight" size={18} className="stat-guided-go"/></button>)}</div>
+    <div className="stat-guided-empty">
+      <p className="field-help">También puedes partir de una consulta vacía y armarla con los campos.</p>
+      <button type="button" onClick={() => go({...guidedQuery('cuantos', base)!, rows: []})}><Icon name="plus" size={18}/>Consulta vacía</button>
+    </div>
     <SavedViews ctx={ctx} cat={cat} q={null}/>
   </section>;
 
@@ -145,7 +152,9 @@ export default function Explore({ctx, cat, scope, query}: {ctx: Context; cat: St
   const compareChoices = q.cut ? [] : cat.compares.filter(c => c !== 'CORTE');
 
   return <section aria-label="Explorar" className="stat-explore">
-    <FieldPicker cat={cat} q={q} add={add}/>
+    <button type="button" className="stat-fields-toggle" aria-expanded={fieldsOpen} aria-controls="stat-campos" onClick={() => setFieldsOpen(!fieldsOpen)}>
+      <Icon name="panel" size={18}/>Campos<Icon name="down" size={18} className="stat-fields-chevron"/></button>
+    <FieldPicker cat={cat} q={q} add={add} open={fieldsOpen}/>
     <div className="stat-work">
       <Panel title="Consulta" icon="search">
         {q.cut && <Callout tone="info" title={`Cifras congeladas del corte ${onCut?.code ?? ''}`.trim()}>
@@ -204,11 +213,11 @@ export default function Explore({ctx, cat, scope, query}: {ctx: Context; cat: St
         </details>
         <div className="stat-axes">
           {(['rows', 'columns'] as const).map(axis => <div key={axis} className={'stat-axis' + (over === axis ? ' over' : '')} {...zone(axis)} aria-label={AXIS_LABELS[axis]} role="group">
-            <h3>{AXIS_LABELS[axis]}</h3>
+            <h3><Icon name={AXIS_ICONS[axis]} size={16}/>{AXIS_LABELS[axis]}</h3>
             {q[axis].length ? <ul>{axisChips(axis)}</ul> : <p className="field-help">Usa el botón «{AXIS_LABELS[axis]}» de un campo o arrástralo aquí.</p>}
           </div>)}
           <div className={'stat-axis' + (over === 'filters' ? ' over' : '')} {...zone('filters')} aria-label="Filtros" role="group">
-            <h3>Filtros</h3>
+            <h3><Icon name="sliders" size={16}/>Filtros</h3>
             {Object.keys(q.filters).length ? <ul>{Object.entries(q.filters).map(([code, values]) => {
               const labels = filterValues(cat, ctx.catalog, code).filter(o => values.includes(o.code)).map(o => o.label);
               return <li key={code} className="stat-chip filter">

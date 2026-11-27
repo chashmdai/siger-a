@@ -1,9 +1,10 @@
-import {useEffect} from 'react';
+import {useEffect, useRef} from 'react';
 import type {Context} from '../../app/context';
 import {Icon} from '../../components/Icon';
+import type {IconName} from '../../components/Icon';
 import {Callout, EmptyState, PageHeader} from '../../components/Primitives';
 import type {Section} from './statsModel';
-import {decodeRoute, encodeRoute, scopeLabel, statsCatalog} from './statsModel';
+import {decodeRoute, encodeRoute, scopeLabel, statsCatalog, tabScroll} from './statsModel';
 import {queue} from './statQuery';
 import Panorama from './Panorama';
 import Informes from './Informes';
@@ -11,12 +12,12 @@ import Explore from './Explore';
 import CutsSeries from './CutsSeries';
 import Quality from './Quality';
 
-const TABS: {key: Section; label: string; hint: string}[] = [
-  {key: 'panorama', label: 'Panorama', hint: 'Indicadores principales y su variación'},
-  {key: 'informes', label: 'Informes', hint: 'Figura 1 de la Cuenta Pública'},
-  {key: 'explorar', label: 'Explorar', hint: 'Tablas, cruces y gráficos a tu medida'},
-  {key: 'cortes', label: 'Cortes y series', hint: 'Cifras congeladas y series de informes anteriores'},
-  {key: 'calidad', label: 'Calidad', hint: 'Completitud de la clasificación y registros pendientes'},
+const TABS: {key: Section; label: string; hint: string; icon: IconName}[] = [
+  {key: 'panorama', label: 'Panorama', hint: 'Indicadores principales y su variación', icon: 'dashboard'},
+  {key: 'informes', label: 'Informes', hint: 'Figura 1 de la Cuenta Pública', icon: 'fileChart'},
+  {key: 'explorar', label: 'Explorar', hint: 'Tablas, cruces y gráficos a tu medida', icon: 'chartCombined'},
+  {key: 'cortes', label: 'Cortes y series', hint: 'Cifras congeladas y series de informes anteriores', icon: 'layers'},
+  {key: 'calidad', label: 'Calidad', hint: 'Completitud de la clasificación y registros pendientes', icon: 'shield'},
 ];
 
 /**
@@ -32,6 +33,18 @@ export default function Stats({ctx, route}: {ctx: Context; route: string}) {
   useEffect(() => () => queue.cancelPending(), [section]);
   const scope = scopeLabel(ctx.user, ctx.catalog);
   const go = (s: Section) => {location.hash = encodeRoute(s);};
+  // En movil las pestanas se desplazan en una fila: la activa se lleva a la vista moviendo solo el contenedor (scrollLeft),
+  // sin desplazar la pagina en vertical; con movimiento reducido, sin animacion (ajuste 5 del GO de F01).
+  const nav = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = nav.current, on = el?.querySelector<HTMLElement>('[aria-current=page]');
+    if (!el || !on) return;
+    const a = el.getBoundingClientRect(), b = on.getBoundingClientRect();
+    const left = tabScroll({left: a.left, right: a.right, scroll: el.scrollLeft}, {left: b.left, right: b.right});
+    if (left == null) return;
+    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollTo({left, behavior: reduced ? 'auto' : 'smooth'});
+  }, [section]);
   let content;
   if (!cat) content = <EmptyState icon="chart" title="El explorador no está disponible para tu cuenta">Requiere la función Reportes vigente.</EmptyState>;
   else if (!cat.enabled) content = <Callout tone="warn" title="El explorador estadístico está deshabilitado">La configuración técnica de la base de datos no permite calcular cifras en este momento. Avisa al equipo técnico; el resto de SIGER funciona con normalidad.</Callout>;
@@ -43,9 +56,9 @@ export default function Stats({ctx, route}: {ctx: Context; route: string}) {
   return <>
     <PageHeader eyebrow={<><Icon name="chart" size={14}/>Reportes</>} title="Explorador estadístico"
       lead="Cifras exactas de los requerimientos de tu alcance, sin datos de personas. Cada cifra trae cómo leerla."/>
-    <nav className="stat-tabs" aria-label="Secciones del explorador">
+    <nav ref={nav} className="stat-tabs" aria-label="Secciones del explorador">
       {TABS.map(t => <button key={t.key} type="button" className={'stat-tab' + (t.key === section ? ' on' : '')} aria-current={t.key === section ? 'page' : undefined}
-        title={t.hint} onClick={() => go(t.key)}>{t.label}</button>)}
+        title={t.hint} onClick={() => go(t.key)}><Icon name={t.icon} size={18}/>{t.label}</button>)}
     </nav>
     {content}
   </>;

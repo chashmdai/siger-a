@@ -1,4 +1,4 @@
-# SIGER 0.8.0 - alcance y pendientes
+# SIGER 0.8.1 - alcance y pendientes
 
 ## Incluido en el fuente
 
@@ -108,6 +108,12 @@ negocios para Estudios; migraciones V17 a V24, aditivas; sin cambios en scripts 
   por una SOL, con fundamento obligatorio; distribuir, asumir, redirigir y redistribuir admiten omitir el fundamento.
 - Rendimiento medido en E14 con 50.005 COM sinteticas: cada consulta del Panorama y del explorador bajo 3 s (registro de
   E14 en `docs/BITACORA_0_8_0.md`).
+- **Rediseno visual del explorador estadistico e iconografia** (0.8.1, `docs/PLAN_0_8_1.md`, D52-D57, gate F01): solo
+  interfaz, sin cambios de servidor, consultas, cifras, migraciones (esquema 24) ni scripts. Las tarjetas del Panorama
+  abren su consulta en Explorar al hacer clic en cualquier punto (enlace real, tambien con el teclado y en otra pestana);
+  el color de la variacion solo juzga en caracterizacion completa y registros tardios (D56); las cinco secciones y sus
+  graficos y tablas tienen nueva presentacion; los iconos de toda la aplicacion son de `lucide-react` 1.71.0 (ISC,
+  `docs/LICENCIAS_TERCEROS.md`).
 
 ## Verificado en la VM
 
@@ -144,11 +150,12 @@ la validacion. Solo un consumidor por cola: al activar produccion, el de la vali
 
 ## Pendientes que NO se presentan como terminados
 
-- **Actualizacion de produccion a 0.8.0** (paso U de `docs/DESPLIEGUE_VM.md`, seccion 5): produccion corre 0.7.0
-  (DI-15: instalada con 0.6.0 y actualizada a 0.7.0 con `Update.ps1`). El paso U lo ejecuta el responsable con
-  autorizacion expresa con el paquete `SIGER-20261126-212826.zip` (E17 CERRADO, etiqueta `v0.8.0`; SHA-256 en el
-  registro de E17 de `docs/BITACORA_0_8_0.md`), con DI-11 respondida, respaldo y ensayo de restauracion inmediatamente
-  antes de `Update.ps1` y, antes del 15/12, al menos dos dias de margen. TI activa los catalogos despues (U7).
+- **Produccion en 0.8.0 y activacion de los catalogos**: el paso U se ejecuto el 2026-11-26 (U0-U6 conformes,
+  `docs/PLAN_0_8_1.md` seccion 1); queda U7 (TI activa los catalogos con la conformidad de UEP), que sigue su propio
+  curso y no depende de 0.8.1.
+- **0.8.1**: revision visual del responsable y auditoria de Claude Padre (F02, EXTERNO), build de entrega y etiqueta
+  `v0.8.1` (F03, en TEST-SIGER) y actualizacion de produccion por el responsable con autorizacion expresa (paso U81 de
+  `docs/DESPLIEGUE_VM.md`, seccion 6, despues de F03).
 - Ejecucion en la VM de la salida a produccion (pasos V1-V6 de `docs/PLAN_0_6_0.md` y `docs/DESPLIEGUE_VM.md`): cierre
   de la validacion 0.4.0 con sus 9 recepciones de prueba, produccion nueva (0.7.0 o 0.6.0 segun el corte) en
   automatico, acreditacion (D13), eliminacion de la validacion con constancia y, sin entregas de prueba en produccion, la

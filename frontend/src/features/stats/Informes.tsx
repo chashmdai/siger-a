@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
+import type {CSSProperties} from 'react';
 import type {Context} from '../../app/context';
 import {Chart} from '../../components/charts/Chart';
 import {Icon} from '../../components/Icon';
@@ -6,7 +7,7 @@ import {Callout, ErrorMessage, Panel, Skeleton} from '../../components/Primitive
 import {downloadPost} from '../../lib/api';
 import {filenameOf} from '../reports/reportsModel';
 import type {Query, StatsCatalog} from './statsModel';
-import {breakdownView, chileDay, emptyQuery, encodeRoute, errorText, FIGURE_DIMS, FIGURE_TITLES, figureRows, figureTable, fileStem, fmtInt, fmtPct, howToRead, periodLabel, publicAccount, publicYearOf,
+import {breakdownView, chileDay, databarWidth, emptyQuery, encodeRoute, errorText, FIGURE_DIMS, FIGURE_TITLES, figureRows, figureTable, fileStem, fmtInt, fmtPct, howToRead, periodLabel, publicAccount, publicYearOf,
   readResult, requestBody, sameMinute, sourceFooter} from './statsModel';
 import {queue, useStat} from './statQuery';
 import {Freshness, HowToRead} from './ResultView';
@@ -19,14 +20,17 @@ export function figureYears(today: string) {
 /** Consulta de un desglose de la Figura 1: ingresos de julio a junio por la dimension, con el porcentaje del total. */
 export const figureQuery = (dim: string, year: number): Query => ({...emptyQuery(publicAccount(year)), rows: [dim], percent: 'TOTAL'});
 
-function Breakdown({ctx, cat, dim, year, scope, exporter, report, ownFresh}: {ctx: Context; cat: StatsCatalog; dim: string; year: number; scope: string; exporter: boolean;
-  report: (dim: string, at: number, refresh: () => void) => void; ownFresh: boolean}) {
+function Breakdown({n, ctx, cat, dim, year, scope, exporter, report, ownFresh}: {n: number; ctx: Context; cat: StatsCatalog; dim: string; year: number; scope: string; exporter: boolean;
+  report: (dim: string, at: number, refresh: () => void, total: number | null) => void; ownFresh: boolean}) {
   const q = figureQuery(dim, year);
   const body = requestBody(q, cat);
   const s = useStat(body, ctx.user.id);
   const [busy, setBusy] = useState(''), [error, setError] = useState('');
   const at = s.status === 'ok' ? s.at : 0;
-  useEffect(() => report(dim, at, s.refresh), [dim, at, report, s.refresh]);
+  const grand = s.status === 'ok' && s.data ? readResult(s.data).grand.n : null;
+  useEffect(() => report(dim, at, s.refresh, grand), [dim, at, report, s.refresh, grand]);
+  // Encabezado numerado del desglose (0.8.1, seccion 3.4); el numero es solo apoyo visual.
+  const heading = <><span className="stat-breakdown-n" aria-hidden="true">{n}</span>{FIGURE_TITLES[dim]}</>;
   const title = `Figura 1, ${FIGURE_TITLES[dim].toLocaleLowerCase('es-CL')}: Cuenta Pública ${year}-${year + 1}`;
   const download = (format: 'csv' | 'xlsx') => {
     setBusy(format);
@@ -34,8 +38,8 @@ function Breakdown({ctx, cat, dim, year, scope, exporter, report, ownFresh}: {ct
     queue.run(() => downloadPost('/stats/export/' + format, body, fileStem(title) + '.' + format, filenameOf))
       .then(() => ctx.message('Archivo generado.'), (e: Error & {status?: number}) => setError(errorText(e))).finally(() => setBusy(''));
   };
-  if (s.status === 'error') return <Panel title={FIGURE_TITLES[dim]}><ErrorMessage>{s.error}</ErrorMessage></Panel>;
-  if (s.status !== 'ok' || !s.data) return <Panel title={FIGURE_TITLES[dim]}><div aria-busy="true"><Skeleton lines={5}/></div></Panel>;
+  if (s.status === 'error') return <Panel className="stat-breakdown-panel" title={heading}><ErrorMessage>{s.error}</ErrorMessage></Panel>;
+  if (s.status !== 'ok' || !s.data) return <Panel className="stat-breakdown-panel" title={heading}><div aria-busy="true"><Skeleton lines={5}/></div></Panel>;
   const r = readResult(s.data);
   const figure = figureTable(figureRows(cat, ctx.catalog, dim, r));
   const view = breakdownView(figure.note, r.grand.n);
@@ -43,9 +47,9 @@ function Breakdown({ctx, cat, dim, year, scope, exporter, report, ownFresh}: {ct
   const percent = (key: string) => r.cells.find(c => c.row[0] === key)?.percent ?? 0;
   const source = sourceFooter({at: s.at, scope, basis: 'RECEPCION', mode: 'VIGENTE'});
   const tableId = 'figura-' + dim.toLowerCase();
-  return <Panel title={FIGURE_TITLES[dim]} actions={exporter ? <>
-    <button type="button" className="sm" disabled={busy !== ''} onClick={() => download('csv')}><Icon name="download" size={16}/>{busy === 'csv' ? 'Generando…' : 'CSV'}</button>
-    <button type="button" className="sm" disabled={busy !== ''} onClick={() => download('xlsx')}><Icon name="download" size={16}/>{busy === 'xlsx' ? 'Generando…' : 'XLSX'}</button>
+  return <Panel className="stat-breakdown-panel" title={heading} actions={exporter ? <>
+    <button type="button" className="sm" disabled={busy !== ''} onClick={() => download('csv')}><Icon name="file" size={16}/>{busy === 'csv' ? 'Generando…' : 'CSV'}</button>
+    <button type="button" className="sm" disabled={busy !== ''} onClick={() => download('xlsx')}><Icon name="fileSpreadsheet" size={16}/>{busy === 'xlsx' ? 'Generando…' : 'XLSX'}</button>
   </> : undefined}>
     {error && <ErrorMessage>{error}</ErrorMessage>}
     <div className="stat-breakdown">
@@ -54,7 +58,7 @@ function Breakdown({ctx, cat, dim, year, scope, exporter, report, ownFresh}: {ct
           <table id={tableId} tabIndex={-1} className="stat-table sticky-first">
             <caption>{title}</caption>
             <thead><tr><th scope="col">Categoría</th><th scope="col" className="num">Ingresos</th><th scope="col" className="num">% del total</th></tr></thead>
-            <tbody>{rows.map(x => <tr key={x.key}><th scope="row">{x.label}</th><td className="num">{fmtInt(x.n)}</td><td className="num">{fmtPct(percent(x.key))}</td></tr>)}</tbody>
+            <tbody>{rows.map(x => <tr key={x.key}><th scope="row">{x.label}</th><td className="num">{fmtInt(x.n)}</td><td className="num"><span className="stat-databar" style={{'--share': databarWidth(percent(x.key))} as CSSProperties}><span>{fmtPct(percent(x.key))}</span></span></td></tr>)}</tbody>
             <tfoot><tr className="total"><th scope="row">Total</th><td className="num">{fmtInt(r.grand.n)}</td><td className="num">{r.grand.n > 0 ? fmtPct(100) : '—'}</td></tr></tfoot>
           </table>
         </div>
@@ -85,24 +89,34 @@ export default function Informes({ctx, cat, scope, params}: {ctx: Context; cat: 
   const dims = FIGURE_DIMS.filter(d => cat.dimensions.some(x => x.code === d));
   const known = useRef(new Map<string, {at: number; refresh: () => void}>());
   const [ats, setAts] = useState<Record<string, number>>({});
-  const report = useCallback((dim: string, at: number, refresh: () => void) => {
+  const [totals, setTotals] = useState<Record<string, number | null>>({});
+  const report = useCallback((dim: string, at: number, refresh: () => void, n: number | null) => {
     known.current.set(dim, {at, refresh});
     setAts(prev => prev[dim] === at ? prev : {...prev, [dim]: at});
+    setTotals(prev => prev[dim] === n ? prev : {...prev, [dim]: n});
   }, []);
   const common = sameMinute(dims.map(d => ats[d] ?? 0));
+  // Total del periodo para el encabezado: el que entrega el servidor en el primer desglose (todos suman lo mismo); sin consulta propia.
+  const total = dims.map(d => totals[d]).find(n => n != null);
   return <section aria-label="Informes">
-    <div className="stat-toolbar">
-      <label><span>Cuenta Pública</span><select value={year} onChange={e => {location.hash = encodeRoute('informes', undefined, {cp: e.target.value === String(years[0]) ? '' : e.target.value});}}>
-        {years.map(y => <option key={y} value={y}>{`Julio de ${y} a junio de ${y + 1}`}</option>)}
-      </select></label>
-      {common != null && <Freshness at={common} refresh={() => known.current.forEach(k => k.refresh())}/>}
-      {ctx.user.can_manage_stats === true && <button type="button" className="sm" onClick={() => {location.hash = encodeRoute('cortes', {...q, rows: [], percent: ''}, {nuevo: '1'});}}>
-        <Icon name="layers" size={16}/>Congelar estas cifras</button>}
+    <div className="stat-section-head stat-report-head">
+      <div className="stat-section-lead">
+        <h2 className="stat-section-title">Figura 1: ingresos de la Cuenta Pública {year}-{year + 1}</h2>
+        <p className="stat-report-total">{total != null ? <><strong>{fmtInt(total)}</strong> {total === 1 ? 'ingreso' : 'ingresos'} de julio de {year} a junio de {year + 1}</>
+          : <>Ingresos de julio de {year} a junio de {year + 1}</>}</p>
+      </div>
+      <div className="stat-toolbar">
+        <label className="stat-report-year"><span>Cuenta Pública</span><select value={year} onChange={e => {location.hash = encodeRoute('informes', undefined, {cp: e.target.value === String(years[0]) ? '' : e.target.value});}}>
+          {years.map(y => <option key={y} value={y}>{`Julio de ${y} a junio de ${y + 1}`}</option>)}
+        </select></label>
+        {common != null && <Freshness at={common} refresh={() => known.current.forEach(k => k.refresh())}/>}
+        {ctx.user.can_manage_stats === true && <button type="button" className="sm" onClick={() => {location.hash = encodeRoute('cortes', {...q, rows: [], percent: ''}, {nuevo: '1'});}}>
+          <Icon name="snowflake" size={16}/>Congelar estas cifras</button>}
+      </div>
     </div>
-    <h2 className="stat-section-title">Figura 1: ingresos de la Cuenta Pública {year}-{year + 1}</h2>
     {!exporter && <Callout tone="neutral">Para descargar estas tablas en CSV o XLSX necesitas la función Exportación.</Callout>}
     <div className="stat-figure">
-      {dims.map(d => <Breakdown key={d + year} ctx={ctx} cat={cat} dim={d} year={year} scope={scope} exporter={exporter} report={report} ownFresh={common == null}/>)}
+      {dims.map((d, i) => <Breakdown key={d + year} n={i + 1} ctx={ctx} cat={cat} dim={d} year={year} scope={scope} exporter={exporter} report={report} ownFresh={common == null}/>)}
     </div>
     <HowToRead lines={howToRead({cat, q: {...q, rows: []}, r: null, scope, extra: [
       'Cada desglose cuenta los mismos ingresos una vez: todos suman el total.',

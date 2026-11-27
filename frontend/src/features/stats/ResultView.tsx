@@ -4,10 +4,15 @@ import {Chart} from '../../components/charts/Chart';
 import type {ChartKind} from '../../components/charts/chartModel';
 import {choices, suggest} from '../../components/charts/chartModel';
 import {Icon} from '../../components/Icon';
+import type {IconName} from '../../components/Icon';
 import type {Metric, Query, Result, StatsCatalog, TreeRow} from './statsModel';
 import {catalogName, chartData, chartShape, chileTime, EMPTY_PERIOD, dimOf, fieldLabel, fileStem, fmtInt, howToRead, isMultiple, measureOf, MULTIPLE_NOTE, NON_ADDITIVE_DIMS,
   NON_ADDITIVE_NOTE, periodLabel, sourceFooter, tableModel, HIERARCHY_NOTE} from './statsModel';
 import {ResultTable} from './ResultTable';
+
+/** Icono de cada tipo de grafico (0.8.1, seccion 3.3); en el boton va despues del texto y el CSS lo muestra primero. */
+const KIND_ICONS: Record<ChartKind, IconName> = {barras: 'chartBar', agrupadas: 'chartGrouped', apiladas: 'chartStacked', pareadas: 'chartPaired', columnas: 'chart',
+  lineas: 'chartLine', circular: 'chartPie'};
 
 /** "Como leer esta cifra": siempre a la vista, con cada aviso del servidor en una frase. */
 export function HowToRead({lines}: {lines: string[]}) {
@@ -64,12 +69,15 @@ export function ResultView({cat, catalog, q, r, at, refresh, scope, levels, tree
   const tableId = 'tabla-' + id;
   const unavailable = options.filter(o => !o.ok && o.kind !== kind);
   return <div className="stat-result">
-    <Freshness at={at} refresh={refresh}/>
-    <p className="stat-total"><strong>{fmtInt(r.grand.n)}</strong> {multiple ? 'requerimientos únicos en total' : 'en total'}</p>
+    <div className="stat-result-band">
+      <p className="stat-total"><strong>{fmtInt(r.grand.n)}</strong> {multiple ? 'requerimientos únicos en total' : 'en total'}</p>
+      <div className="stat-result-what"><h3>{title}</h3><p>{subtitle}</p></div>
+      <Freshness at={at} refresh={refresh}/>
+    </div>
     {r.grand.n === 0 ? <p className="field-help stat-empty">{EMPTY_PERIOD}</p> : kind ? <>
       <div className="stat-kinds" role="radiogroup" aria-label="Tipo de gráfico">
         {options.filter(o => o.ok).map(o => <button key={o.kind} type="button" role="radio" aria-checked={o.kind === kind} className="stat-kind"
-          onClick={() => setPicked(o.kind)}>{o.label}</button>)}
+          onClick={() => setPicked(o.kind)}>{o.label}<Icon name={KIND_ICONS[o.kind]} size={16}/></button>)}
       </div>
       {unavailable.some(o => o.kind === 'circular') && <p className="field-help">Circular no disponible: {unavailable.find(o => o.kind === 'circular')!.reason}</p>}
       <Chart kind={kind} data={data} title={title} subtitle={subtitle} notes={notes} source={source} file={fileStem(title)} tableId={tableId}/>

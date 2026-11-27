@@ -842,3 +842,32 @@ export function chartData(t: TableModel, metric: Metric, comparison: boolean, ba
         values: t.rows.map(r => t.delta(r.key, [])?.base_n ?? 0)}] : [])];
   return {categories, series, total: t.rowTotal([])?.n ?? null, percent: metric === 'percent', format: (v: number | null) => metric === 'percent' ? fmtPct(v) : v == null ? '—' : fmtInt(v)};
 }
+
+// --- Presentacion del Panorama (0.8.1, D53 y D56) -----------------------------------------------------------------------
+/** Destino de una tarjeta del Panorama: la direccion de su consulta en Explorar (la misma que abria el boton de 0.8.0). */
+export const cardHref = (q: Query) => '#' + encodeRoute('explorar', q);
+export type Tone = 'favorable' | 'desfavorable' | 'neutro';
+/**
+ * Sentido de la variacion (D56). El color solo expresa juicio donde lo hay: mas ingresos con caracterizacion completa es
+ * favorable y mas registros tardios es desfavorable; en ingresos, REQ, Casos y actuaciones (y sin cambio o sin base de
+ * comparacion) es neutro. La cifra, el porcentaje, la flecha y el texto se muestran igual en los tres tonos.
+ */
+export function variationTone(indicator: string, direction: string, hasBase: boolean): Tone {
+  if (!hasBase || (direction !== 'up' && direction !== 'down')) return 'neutro';
+  const better = indicator === 'completos' ? 'up' : indicator === 'tardios' ? 'down' : null;
+  if (!better) return 'neutro';
+  return direction === better ? 'favorable' : 'desfavorable';
+}
+/** Linea de "Como leer esta cifra" del Panorama que explica los colores de la variacion (D56). */
+export const TONE_NOTE = 'El color de la variación solo indica un sentido donde lo hay: en los ingresos con caracterización completa subir es favorable (verde) y en los registros tardíos bajar es favorable; en ingresos, REQ constituidos, Casos y actuaciones el color es neutro, porque más o menos no es mejor ni peor. La cifra, la flecha y el texto dicen siempre lo mismo.';
+/**
+ * Desplazamiento horizontal del contenedor de pestanas para que la activa quede a la vista (0.8.1, ajuste 5 del GO de F01):
+ * solo cambia scrollLeft del contenedor, nunca el desplazamiento vertical de la pagina. Devuelve null si ya se ve entera.
+ */
+export function tabScroll(view: {left: number; right: number; scroll: number}, tab: {left: number; right: number}, margin = 12): number | null {
+  if (tab.left >= view.left && tab.right <= view.right) return null;
+  if (tab.left < view.left) return Math.max(0, view.scroll - (view.left - tab.left) - margin);
+  return view.scroll + (tab.right - view.right) + margin;
+}
+/** Ancho de la barra de datos decorativa de una celda de porcentaje (0.8.1, seccion 3.4): entre 0 % y 100 %; la cifra va en texto. */
+export const databarWidth = (percent: number | null | undefined) => (percent == null || !Number.isFinite(percent) ? 0 : Math.max(0, Math.min(100, percent))).toFixed(1) + '%';

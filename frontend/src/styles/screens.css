@@ -534,26 +534,114 @@ dialog.modal.profile-modal { --modal-width: 980px; }
 @media (prefers-reduced-motion: reduce) { .region-mark-breathing::after { animation: none; opacity: 0; } }
 
 /* Explorador estadistico (0.8.0, E12): tablas con cifras a la derecha, graficos SVG propios, campos y ejes */
-.stat-tabs { display: flex; gap: .25rem; flex-wrap: wrap; margin: 0 0 1.25rem; border-bottom: 1px solid var(--line); }
-.stat-tab { --btn-bg: transparent; --btn-line: transparent; box-shadow: none; border-radius: var(--radius-sm) var(--radius-sm) 0 0; color: var(--ink-600); border-bottom: 3px solid transparent; }
-.stat-tab.on { color: var(--primary-ink); border-bottom-color: var(--primary); font-weight: 700; }
+/* Marco del explorador (0.8.1, D55, seccion 3.2): las pestanas son un control segmentado con icono y texto que en movil
+   se desplaza en una fila, sin envolverse. */
+.stat-tabs { display: flex; gap: 4px; padding: 4px; margin: 0 0 1.5rem; width: fit-content; max-width: 100%; overflow-x: auto; scrollbar-width: none;
+  background: var(--stat-segment-bg); border-radius: 14px; scroll-behavior: smooth; overscroll-behavior-x: contain; }
+.stat-tabs::-webkit-scrollbar { display: none; }
+.stat-tab { --btn-bg: transparent; --btn-line: transparent; flex: none; display: inline-flex; align-items: center; gap: .45rem; padding: .55rem .95rem; border-radius: 10px;
+  box-shadow: none; color: var(--ink-600); font-weight: 600; white-space: nowrap; }
+.stat-tab svg { color: var(--ink-500); transition: color var(--fast) var(--ease); }
+.stat-tab:hover:not(:disabled) { --btn-bg: var(--surface-2); --btn-line: transparent; color: var(--ink-900); }
+.stat-tab.on, .stat-tab.on:hover:not(:disabled) { --btn-bg: var(--surface); --btn-line: var(--line); color: var(--primary-ink); box-shadow: var(--shadow-1); }
+.stat-tab.on svg { color: var(--primary); }
+.stat-tab:focus-visible { box-shadow: var(--ring); outline: none; }
+
+/* Encabezado de cada seccion: el periodo como titular y, a su lado, alcance y comparacion como marcas informativas. */
+.stat-section-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem 2rem; margin: 0 0 1.25rem; }
+.stat-section-lead { display: grid; gap: .55rem; min-width: 0; }
+.stat-period { display: flex; align-items: center; gap: .55rem; margin: 0; font-size: clamp(1.25rem, 1.05rem + .8vw, 1.6rem); line-height: 1.2; font-weight: 700;
+  color: var(--ink-900); letter-spacing: -.01em; }
+.stat-period svg { color: var(--primary); flex: none; }
+.stat-marks { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0; }
+.stat-mark { display: inline-flex; align-items: center; gap: .35rem; padding: .22rem .6rem; border-radius: 999px; background: var(--surface); border: 1px solid var(--line);
+  font-size: .82rem; color: var(--ink-700); }
+.stat-mark svg { color: var(--ink-500); }
 .stat-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem 1rem; margin: 0 0 .75rem; }
+.stat-section-head .stat-toolbar { margin: 0; justify-content: flex-end; }
 .stat-toolbar label { display: grid; gap: .25rem; min-width: 14rem; }
-.stat-period { margin: 0 0 1rem; color: var(--ink-700); font-weight: 600; }
+.stat-toolbar label > span { font-size: .82rem; font-weight: 600; color: var(--ink-700); }
+.stat-section-head .stat-fresh { margin: 0 0 .35rem; }
 .stat-section-title { font-size: 1.15rem; margin: .5rem 0 1rem; }
 .stat-fresh { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: 0 0 .5rem; color: var(--ink-600); font-size: .86rem; }
-.stat-fresh-inline { display: block; color: var(--ink-600); font-size: .78rem; margin-top: .35rem; }
-.stat-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 1rem; margin: 0 0 1.25rem; }
-.stat-card { position: relative; display: grid; align-content: start; gap: .35rem; padding: 1rem 1.1rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1); }
-.stat-card h3 { margin: 0; font-size: .92rem; color: var(--ink-700); }
-.stat-card-link { all: unset; cursor: pointer; }
-.stat-card-link::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius); }
-.stat-card-link:focus-visible::after { box-shadow: var(--ring); }
-.stat-card.clickable:hover { border-color: var(--line-strong); box-shadow: var(--shadow-2); }
-.stat-card-value { margin: 0; font-size: 1.6rem; font-weight: 700; color: var(--ink-900); font-variant-numeric: tabular-nums; }
-.stat-change { margin: 0; font-size: .86rem; font-weight: 600; color: var(--ink-700); }
-.stat-card-open { display: inline-flex; align-items: center; gap: .25rem; font-size: .84rem; color: var(--primary-ink); font-weight: 600; }
-.stat-spark { display: block; }
+.stat-fresh-inline { display: block; color: var(--ink-600); font-size: .78rem; }
+
+/* Panorama (0.8.1, seccion 3.1). Ingresos es el indicador principal (2x2 en escritorio); los demas, mas sobrios. Cada
+   tarjeta es un enlace en toda su superficie: el realce, el foco y el hundido son de la tarjeta completa, nunca de un hijo. */
+.stat-cards { display: grid; grid-template-columns: 1fr; gap: 1rem; margin: 0 0 1.5rem; }
+@media (min-width: 700px) { .stat-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stat-card.main { grid-column: span 2; } }
+@media (min-width: 1200px) { .stat-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } .stat-card.main { grid-row: span 2; } }
+.stat-card { position: relative; display: flex; flex-direction: column; gap: .7rem; min-height: 13.5rem; padding: 1.1rem 1.2rem 1rem; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius-lg); color: var(--ink-800); text-decoration: none; }
+a.stat-card-link { cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--base) var(--ease), transform var(--fast) var(--ease); }
+a.stat-card-link:hover { color: var(--ink-800); text-decoration: none; border-color: var(--line-strong); box-shadow: var(--shadow-2); transform: translateY(-2px); }
+a.stat-card-link:active { transform: translateY(0) scale(.992); box-shadow: var(--shadow-1); }
+a.stat-card-link:focus-visible { outline: none; box-shadow: var(--ring), var(--shadow-2); border-color: var(--primary); }
+.stat-card.main { background: var(--stat-hero-bg); border-color: var(--stat-hero-line); padding: 1.4rem 1.5rem 1.2rem; }
+.stat-card-head { display: flex; align-items: center; gap: .6rem; }
+.stat-card h3 { margin: 0; font-size: .98rem; line-height: 1.3; font-weight: 600; color: var(--ink-800); }
+.stat-card.main h3 { font-size: 1.08rem; }
+.stat-card-icon { flex: none; display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--kind-com-bg); color: var(--kind-com-ink); }
+.stat-card-icon[data-accent=req] { background: var(--kind-req-bg); color: var(--kind-req-ink); }
+.stat-card-icon[data-accent=cas] { background: var(--kind-cas-bg); color: var(--kind-cas-ink); }
+.stat-card-icon[data-accent=act] { background: var(--stat-accent-act-bg); color: var(--stat-accent-act-ink); }
+.stat-card-icon[data-accent=ok] { background: var(--ok-bg); color: var(--ok-ink); }
+.stat-card-icon[data-accent=warn] { background: var(--warn-bg); color: var(--warn-ink); }
+.stat-card.main .stat-card-icon { width: 40px; height: 40px; border-radius: 12px; }
+.stat-card-body { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.stat-card-figure { display: grid; gap: .5rem; justify-items: start; min-width: 0; }
+.stat-card-value { font-size: 2rem; line-height: 1.05; font-weight: 700; color: var(--ink-900); font-variant-numeric: tabular-nums; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.stat-card.main .stat-card-value { font-size: clamp(2.6rem, 2rem + 2.2vw, 3.6rem); }
+.stat-change { display: inline-flex; align-items: center; gap: .35rem; padding: .22rem .6rem .22rem .45rem; border-radius: 999px; font-size: .84rem; font-weight: 600;
+  font-variant-numeric: tabular-nums; }
+.stat-change.tone-neutro { background: var(--surface-3); color: var(--ink-700); }
+.stat-change.tone-favorable { background: var(--ok-bg); color: var(--ok-ink); }
+.stat-change.tone-desfavorable { background: var(--warn-bg); color: var(--warn-ink); }
+.stat-card-trend { display: grid; gap: .2rem; }
+.stat-card.main .stat-card-trend { flex: 1; min-height: 150px; }
+.stat-spark { display: block; width: 100%; height: 48px; overflow: visible; }
+.stat-months { display: flex; align-items: stretch; gap: clamp(3px, .6vw, 10px); height: 100%; min-height: 150px; padding-top: .25rem; }
+.stat-month { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: .3rem; }
+.stat-month-n { font-size: .78rem; font-weight: 600; color: var(--ink-700); font-variant-numeric: tabular-nums; }
+.stat-month-bar { flex: 1; width: 100%; max-width: 44px; display: flex; align-items: flex-end; border-bottom: 1px solid var(--line-strong); }
+.stat-month-bar > span { display: block; width: 100%; min-height: 2px; border-radius: 6px 6px 0 0; background: var(--chart-1); opacity: .78;
+  transform-origin: bottom; animation: stat-grow var(--slow) var(--ease) both; }
+.stat-month.last .stat-month-bar > span { opacity: 1; }
+.stat-month.last .stat-month-n { color: var(--ink-900); }
+.stat-month-label { font-size: .76rem; color: var(--ink-600); }
+.stat-month.last .stat-month-label { font-weight: 700; color: var(--ink-800); }
+.stat-month:nth-child(2) .stat-month-bar > span { animation-delay: 30ms; } .stat-month:nth-child(3) .stat-month-bar > span { animation-delay: 60ms; }
+.stat-month:nth-child(4) .stat-month-bar > span { animation-delay: 90ms; } .stat-month:nth-child(5) .stat-month-bar > span { animation-delay: 120ms; }
+.stat-month:nth-child(6) .stat-month-bar > span { animation-delay: 150ms; } .stat-month:nth-child(n+7) .stat-month-bar > span { animation-delay: 180ms; }
+@keyframes stat-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.stat-card-help { margin-top: auto; font-size: .82rem; line-height: 1.45; color: var(--ink-600); }
+
+.stat-card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem .75rem; padding-top: .6rem; border-top: 1px solid var(--line); }
+.stat-card.main .stat-card-foot { border-top-color: var(--stat-hero-line); }
+.stat-card-open { display: inline-flex; align-items: center; gap: .3rem; font-size: .86rem; color: var(--primary-ink); font-weight: 600; }
+.stat-card-arrow { transition: transform var(--base) var(--ease); }
+a.stat-card-link:hover .stat-card-arrow, a.stat-card-link:focus-visible .stat-card-arrow { transform: translateX(3px); }
+.stat-ring { flex: none; }
+.stat-ring-track { stroke: var(--stat-track); }
+.stat-ring-value { stroke: var(--stat-ring); }
+.stat-card-skeleton { display: grid; gap: .55rem; flex: 1; align-content: start; }
+.stat-card-skeleton .skeleton { margin: 0; }
+.stat-card-skeleton .skeleton.value { height: 2.1rem; width: 45%; }
+.stat-card.main .stat-card-skeleton .skeleton.value { height: 3.4rem; width: 38%; }
+.stat-card-skeleton .skeleton.line { width: 70%; }
+.stat-card-skeleton .skeleton.line:last-child { width: 55%; }
+.stat-card-skeleton .skeleton.spark { height: 48px; border-radius: 8px; }
+.stat-card.main .stat-card-skeleton .skeleton.spark { height: auto; flex: 1; min-height: 150px; }
+.stat-card.failed { border-color: var(--danger-line); }
+.stat-card.failed .error { display: flex; align-items: flex-start; gap: .4rem; margin: 0; }
+.stat-card.off { background: var(--surface-2); }
+@media (prefers-reduced-motion: reduce) {
+  a.stat-card-link, a.stat-card-link:hover, a.stat-card-link:active, .stat-card-arrow, a.stat-card-link:hover .stat-card-arrow { transition: none; transform: none; }
+  .stat-card-skeleton .skeleton { animation: none; }
+  .stat-tabs { scroll-behavior: auto; }
+}
+
 .stat-howto { margin: 1rem 0; padding: .9rem 1.1rem; background: var(--info-bg); border: 1px solid var(--info-line); border-radius: var(--radius); color: var(--ink-800); }
 .stat-howto h3 { display: flex; align-items: center; gap: .4rem; margin: 0 0 .5rem; font-size: .95rem; color: var(--info-ink); }
 .stat-howto ul { margin: 0; padding-left: 1.2rem; display: grid; gap: .3rem; font-size: .88rem; }
@@ -632,7 +720,6 @@ dialog.modal.profile-modal { --modal-width: 980px; }
   .stat-chart-canvas svg { min-width: 560px; }
   .stat-table tbody th, .stat-table tfoot th { min-width: 8rem; }
 }
-@media (prefers-reduced-motion: reduce) { .stat-card, .stat-card.clickable:hover { transition: none; } }
 /* E13: ajustes de presentacion, cortes, series y calidad (DISENO 10.3 y 10.4). */
 .stat-figure { grid-template-columns: 1fr; }
 .stat-breakdown { display: grid; gap: 1rem; grid-template-columns: 1fr; align-items: start; }
@@ -679,3 +766,160 @@ dialog.modal.profile-modal { --modal-width: 980px; }
 .stat-quality-track .q-no_declarado { background: var(--chart-3); }
 .stat-quality-track .q-no_aplica { background: var(--chart-base); }
 .stat-quality-track .q-pendiente { background: var(--chart-7); }
+@media (prefers-reduced-motion: reduce) { .stat-month-bar > span { animation: none; } }
+.stat-card.main .stat-card-skeleton { grid-template-rows: auto auto 1fr auto; }
+
+/* Explorar (0.8.1, seccion 3.3): entrada con preguntas como mosaicos, constructor con iconos por familia y zonas de destino
+   claras, resultado con banda superior y graficos con realce. Va al final y reemplaza lo anterior por orden. */
+.stat-start .stat-section-title { font-size: 1.35rem; margin: .25rem 0 1rem; color: var(--ink-900); }
+.stat-guided { grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 1rem; margin: 0 0 1.25rem; }
+.stat-guided-item { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto 1fr; column-gap: .85rem; row-gap: .3rem;
+  align-items: start; text-align: left; padding: 1.15rem 1.2rem 1.25rem; min-height: 7.5rem; border-radius: var(--radius-lg); --btn-line: var(--line); }
+.stat-guided-item:hover:not(:disabled) { --btn-bg: var(--surface); --btn-line: var(--primary); box-shadow: var(--shadow-2); }
+.stat-guided-icon { grid-row: 1 / span 2; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--primary-soft); color: var(--primary); }
+.stat-guided-item strong { font-size: 1.02rem; color: var(--ink-900); padding-right: 1.5rem; }
+.stat-guided-item > span:not(.stat-guided-icon) { grid-column: 2; font-weight: 400; color: var(--ink-600); font-size: .88rem; line-height: 1.4; }
+.stat-guided-go { position: absolute; top: 1.2rem; right: 1.1rem; color: var(--ink-500); transition: transform var(--base) var(--ease), color var(--fast) var(--ease); }
+.stat-guided-item:hover .stat-guided-go, .stat-guided-item:focus-visible .stat-guided-go { transform: translateX(3px); color: var(--primary); }
+.stat-guided-empty { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1.25rem; margin: 0 0 1.5rem; padding: .9rem 1.1rem;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); background: var(--surface-2); }
+.stat-guided-empty .field-help { margin: 0; font-size: .9rem; }
+
+.stat-fields { padding: .85rem; border-radius: var(--radius-lg); gap: .35rem; }
+.stat-family { border-top: 1px solid var(--line); }
+.stat-family:first-of-type { border-top: 0; }
+.stat-family summary { display: flex; align-items: center; gap: .5rem; padding: .6rem .2rem; list-style: none; border-radius: var(--radius-sm); }
+.stat-family summary::-webkit-details-marker { display: none; }
+.stat-family summary svg { color: var(--primary); flex: none; }
+.stat-family summary small { margin-left: auto; min-width: 1.6rem; text-align: center; padding: .05rem .4rem; border-radius: 999px; background: var(--surface-3); color: var(--ink-700); font-weight: 600; }
+.stat-family summary:hover { background: var(--surface-2); }
+.stat-family ul { padding: 0 0 .6rem; }
+.stat-field { background: var(--surface); transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease); }
+.stat-field[draggable=true]:hover { border-color: var(--line-strong); box-shadow: var(--shadow-1); }
+.stat-field.used { border-color: var(--primary); background: var(--primary-tint); }
+.stat-used { display: inline-flex; align-items: center; gap: .2rem; font-size: .72rem; font-weight: 700; color: var(--primary-ink); }
+.stat-fields-toggle { display: none; }
+
+.stat-axes { gap: .75rem; }
+.stat-axis { border: 1.5px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface-2); padding: .7rem .8rem; transition: border-color var(--fast) var(--ease), background-color var(--fast) var(--ease); }
+.stat-axis.over { border-style: solid; border-color: var(--primary); background: var(--primary-tint); box-shadow: 0 0 0 4px var(--primary-soft); }
+.stat-axis h3 { display: flex; align-items: center; gap: .4rem; text-transform: none; letter-spacing: 0; font-size: .9rem; color: var(--ink-800); }
+.stat-axis h3 svg { color: var(--primary); }
+.stat-chip { border-radius: 10px; box-shadow: var(--shadow-1); }
+
+.stat-result-band { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .5rem 1.5rem; margin: 0 0 1rem; padding: 1rem 1.2rem;
+  border-radius: var(--radius-lg); background: var(--stat-hero-bg); border: 1px solid var(--stat-hero-line); }
+.stat-result-band .stat-total { display: grid; margin: 0; color: var(--ink-700); font-size: .84rem; line-height: 1.25; max-width: 11rem; }
+.stat-result-band .stat-total strong { font-size: clamp(2rem, 1.6rem + 1.4vw, 2.75rem); line-height: 1; letter-spacing: -.02em; }
+.stat-result-what { min-width: 0; padding-left: 1.5rem; border-left: 1px solid var(--stat-hero-line); }
+.stat-result-what h3 { margin: 0; font-size: 1.08rem; color: var(--ink-900); }
+.stat-result-what p { margin: .2rem 0 0; color: var(--ink-600); font-size: .88rem; }
+.stat-result-band .stat-fresh { margin: 0; justify-self: end; }
+/* En el resultado, titulo y periodo ya estan en la banda: el pie del grafico queda solo para lectores de pantalla. */
+.stat-result .stat-chart figcaption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: 0; }
+.stat-kinds { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin: 0 0 .75rem; border-radius: 12px; background: var(--stat-segment-bg); }
+.stat-kind { display: inline-flex; flex-direction: row-reverse; align-items: center; gap: .35rem; padding: .4rem .8rem; border-radius: 9px; --btn-bg: transparent; --btn-line: transparent;
+  box-shadow: none; color: var(--ink-700); font-weight: 600; }
+.stat-kind svg { color: var(--ink-500); }
+.stat-kind:hover:not(:disabled) { --btn-bg: var(--surface-2); --btn-line: transparent; }
+.stat-kind[aria-checked=true], .stat-kind[aria-checked=true]:hover:not(:disabled) { --btn-bg: var(--surface); --btn-line: var(--line); color: var(--primary-ink); box-shadow: var(--shadow-1); }
+.stat-kind[aria-checked=true] svg { color: var(--primary); }
+.stat-result-actions { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .75rem 1rem; margin: 1rem 0; padding: .8rem 1rem;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.stat-result-actions .stat-export { display: grid; gap: .35rem; flex: 1 1 22rem; }
+.stat-result-actions .stat-export .field-help { margin: 0; font-size: .8rem; }
+
+/* Graficos (0.8.1, seccion 3.6): solo en la pagina. Al pasar el mouse o enfocar una marca, esa marca se realza y las demas
+   se atenuan; entrada breve; sin movimiento con prefers-reduced-motion. Nada de esto viaja en el SVG descargado. */
+.stat-chart-canvas { position: relative; border-radius: var(--radius-lg); padding: .75rem .5rem; }
+.chart-svg .chart-mark { transition: opacity var(--fast) var(--ease); }
+.chart-svg:has(.chart-mark:hover) .chart-mark:not(:hover), .chart-svg:has(.chart-mark:focus-visible) .chart-mark:not(:focus-visible) { opacity: .32; }
+.chart-mark circle { transition: r var(--fast) var(--ease); }
+.chart-mark:hover circle, .chart-mark:focus-visible circle { r: 6px; }
+.chart-mark:focus-visible { outline: none; }
+.chart-mark:focus-visible rect, .chart-mark:focus-visible path, .chart-mark:focus-visible circle { stroke: var(--ink-900); stroke-width: 2px; }
+.chart-grow-x { transform-box: fill-box; transform-origin: left center; animation: chart-grow-x var(--slow) var(--ease) both; }
+.chart-grow-y { transform-box: fill-box; transform-origin: center bottom; animation: chart-grow-y var(--slow) var(--ease) both; }
+.chart-draw { stroke-dasharray: none; animation: chart-fade var(--slow) var(--ease) both; }
+@keyframes chart-grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes chart-grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes chart-fade { from { opacity: 0; } to { opacity: 1; } }
+.chart-tip { position: absolute; z-index: 5; transform: translate(-50%, -100%); max-width: 280px; padding: .4rem .65rem; border-radius: 8px; background: var(--ink-900);
+  color: #fff; font-size: .8rem; font-weight: 600; line-height: 1.35; box-shadow: var(--shadow-2); pointer-events: none; white-space: normal; text-align: center; }
+.chart-tip.below { transform: translate(-50%, 0); }
+.stat-chart .actions { margin-top: .6rem; }
+
+/* Tablas estadisticas (0.8.1, seccion 3.7): encabezado fijo con mas contraste, filas alternas, realce de fila y totales
+   separados. Sin cambiar columnas, orden ni cifras. */
+.stat-table thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-3); color: var(--ink-800); font-size: .78rem; letter-spacing: .01em;
+  text-transform: none; border-bottom: 1px solid var(--line-strong); }
+.stat-table thead th:first-child { z-index: 4; background: var(--surface-3); }
+.stat-table tbody tr:nth-child(even) > * { background: var(--stat-row-alt); }
+.stat-table tbody tr:hover > *, .stat-table tbody tr:focus-within > * { background: var(--stat-row-hover); }
+.stat-table tbody td.changed { background: var(--warn-bg); }
+.stat-table tfoot th, .stat-table tfoot td, .stat-table .total { border-top: 2px solid var(--line-strong); }
+.stat-table td.num, .stat-table th.num { font-variant-numeric: tabular-nums; }
+.stat-databar { position: relative; display: block; min-width: 5.5rem; padding: .1rem .35rem; text-align: right; }
+.stat-databar::before { content: ''; position: absolute; left: 0; top: 50%; height: 1.35rem; width: var(--share, 0%); transform: translateY(-50%); border-radius: 4px; background: var(--stat-databar); z-index: 0; }
+.stat-databar > span { position: relative; z-index: 1; }
+
+@media (max-width: 960px) {
+  .stat-fields-toggle { display: inline-flex; justify-self: start; }
+  .stat-fields-chevron { transition: transform var(--base) var(--ease); }
+  .stat-fields-toggle[aria-expanded=true] .stat-fields-chevron { transform: rotate(180deg); }
+  .stat-fields { order: 0; display: none; }
+  .stat-fields.open { display: grid; }
+  .stat-result-band { grid-template-columns: 1fr; }
+  .stat-result-what { padding-left: 0; border-left: 0; }
+  .stat-result-band .stat-fresh { justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-grow-x, .chart-grow-y, .chart-draw { animation: none; }
+  .chart-svg .chart-mark, .chart-mark circle, .stat-guided-go, .stat-fields-chevron { transition: none; }
+}
+
+/* Informes (0.8.1, seccion 3.4): encabezado editorial con la figura, su total y la Cuenta Publica destacada; cada desglose
+   numerado con tabla y grafico lado a lado y barra de datos en "% del total" (decorativa: la cifra va en texto). */
+.stat-report-head .stat-section-title { margin: 0; font-size: clamp(1.25rem, 1.05rem + .8vw, 1.6rem); color: var(--ink-900); letter-spacing: -.01em; }
+.stat-report-total { margin: 0; color: var(--ink-700); }
+.stat-report-total strong { font-size: 1.35rem; color: var(--ink-900); font-variant-numeric: tabular-nums; margin-right: .15rem; }
+.stat-report-year select { font-weight: 700; border-color: var(--primary); color: var(--primary-ink); background-color: var(--primary-tint); }
+.stat-figure { gap: 1.25rem; }
+.stat-breakdown-panel .panel-head h2 { align-items: center; }
+.stat-breakdown-n { display: inline-grid; place-items: center; width: 1.9rem; height: 1.9rem; margin-right: .15rem; border-radius: 9px; background: var(--primary); color: #fff;
+  font-size: .95rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-breakdown-table .table-scroll { border-radius: var(--radius); }
+
+/* Cortes y series (0.8.1, seccion 3.5): cada corte y cada serie como tarjeta con icono y su estado en texto. */
+.stat-cuts { gap: .9rem; }
+.stat-cut { position: relative; padding: 1rem 1.1rem 1rem 4.1rem; background: var(--surface); border-radius: var(--radius-lg); transition: box-shadow var(--fast) var(--ease), border-color var(--fast) var(--ease); }
+.stat-cut:hover { border-color: var(--line-strong); box-shadow: var(--shadow-1); }
+.stat-cut-icon { position: absolute; left: 1.1rem; top: 1rem; display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 11px;
+  background: var(--kind-com-bg); color: var(--kind-com-ink); }
+.stat-cut-icon.series { background: var(--stat-accent-act-bg); color: var(--stat-accent-act-ink); }
+.stat-cut-head { align-items: center; min-height: 38px; gap: .35rem .6rem; }
+.stat-cut-head strong { font-size: 1rem; color: var(--ink-900); }
+.stat-cut-head .status { padding: .15rem .6rem; border-radius: 999px; background: var(--ok-bg); color: var(--ok-ink); font-weight: 600; }
+.stat-cut-head .status.muted { background: var(--surface-3); color: var(--ink-700); }
+.stat-cut .actions { margin-top: .55rem; }
+@media (max-width: 640px) { .stat-cut { padding-left: 1.1rem; } .stat-cut-icon { position: static; width: 32px; height: 32px; } }
+.stat-panel-empty .empty-icon, section[aria-label="Cortes y series"] .empty-icon { width: 56px; height: 56px; border-radius: 16px; }
+section[aria-label="Cortes y series"] .empty-icon svg { width: 28px; height: 28px; }
+
+/* Calidad (0.8.1, seccion 3.5): leyenda de los estados, barras mas gruesas con extremos redondeados y la variable elegida
+   resaltada. Los colores de las partes son los de antes; sin umbrales ni juicios nuevos. */
+.stat-legend { list-style: none; display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: 0 0 1rem; padding: 0; font-size: .84rem; color: var(--ink-700); }
+.stat-legend li { display: inline-flex; align-items: center; gap: .4rem; }
+.stat-swatch { display: inline-block; width: .85rem; height: .85rem; border-radius: 4px; background: var(--chart-base); }
+.stat-swatch.q-informado { background: var(--chart-1); } .stat-swatch.q-sin_informacion { background: var(--chart-6); } .stat-swatch.q-no_declarado { background: var(--chart-3); }
+.stat-swatch.q-no_aplica { background: var(--chart-base); } .stat-swatch.q-pendiente { background: var(--chart-7); }
+.stat-quality { gap: .6rem; }
+.stat-quality > li { padding: .8rem 1rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); transition: border-color var(--fast) var(--ease), background-color var(--fast) var(--ease); }
+.stat-quality > li.on { padding-left: 1rem; border-left: 1px solid var(--primary); border-color: var(--primary); background: var(--primary-tint); box-shadow: inset 4px 0 0 var(--primary); }
+.stat-quality-head { align-items: baseline; }
+.stat-quality-head button.link { font-size: 1rem; font-weight: 700; }
+.stat-quality-head > span { font-weight: 700; color: var(--ink-800); }
+.stat-quality-track { height: 14px; border: 0; gap: 2px; background: var(--surface-3); margin-top: .45rem; }
+.stat-quality-track span:first-child { border-radius: 999px 0 0 999px; }
+.stat-quality-track span:last-child { border-radius: 0 999px 999px 0; }
+.stat-quality-track span:only-child { border-radius: 999px; }

@@ -60,3 +60,7 @@ export function pendingLink(user: User, variable: string, pending = 1): {href: s
   if (!has) return {href: null, text: NO_BOARD_TEXT + '.'};
   return {href: '#' + boardRoute(kind, PENDING_FILTER), text: kind === 'com' ? 'Ver las comunicaciones con datos pendientes' : 'Ver los requerimientos con datos pendientes'};
 }
+/** Leyenda de la barra apilada (0.8.1, seccion 3.5): los estados de las columnas de la tabla, en el orden de las barras. */
+export function legendStates(t: TableModel): {state: string; label: string}[] {
+  return t.columns.map(c => ({state: c.key[0], label: c.labels[0]})).sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state));
+}

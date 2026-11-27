@@ -81,6 +81,18 @@
   --chart-muted: #4a626d;
   --chart-grid: #dce5ea;
 
+  /* Explorador estadistico (0.8.1, D55): derivados de la paleta. Contraste probado en tests/tokensF01.test.ts:
+     textos >= 4,5:1 sobre su fondo; marcas e iconos >= 3:1. */
+  --stat-segment-bg: #e7eef2;   /* pista del control segmentado (pestanas, tipo de grafico) */
+  --stat-row-alt: #f7fafb;      /* filas alternas de las tablas */
+  --stat-row-hover: #e9f3f8;    /* fila realzada */
+  --stat-databar: #cde3ee;      /* barra de datos tras una cifra (decorativa) */
+  --stat-track: #dfe8ed;        /* pista del anillo de progreso */
+  --stat-ring: #23794b;         /* progreso del anillo (marca) */
+  --stat-accent-act-bg: #efe9fb; --stat-accent-act-ink: #4b2a8c; /* ficha de icono de actuaciones */
+  --stat-hero-bg: #f3f9fc;      /* fondo del indicador principal */
+  --stat-hero-line: #b8d6e4;    /* borde del indicador principal */
+
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 16px;

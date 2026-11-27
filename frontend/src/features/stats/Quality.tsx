@@ -4,7 +4,7 @@ import {Chart} from '../../components/charts/Chart';
 import {Callout, Panel, Skeleton} from '../../components/Primitives';
 import type {Period, StatsCatalog, TableModel} from './statsModel';
 import {EMPTY_PERIOD, encodeRoute, fmtInt, fmtPct, readResult, requestBody, sameMinute, sourceFooter, tableModel} from './statsModel';
-import {byMonth, byScope, byVariable, count, partsText, pendingLink, REGION_NOTE, share, stateParts} from './qualityModel';
+import {byMonth, byScope, byVariable, count, legendStates, partsText, pendingLink, REGION_NOTE, share, stateParts} from './qualityModel';
 import {useStat} from './statQuery';
 import {Freshness, HowToRead} from './ResultView';
 import {panoramaChoices} from './Panorama';
@@ -19,6 +19,15 @@ function StateBar({t, row, label}: {t: TableModel; row: string[]; label: string}
     </div>
     <p className="field-help">{partsText(parts)}</p>
   </div>;
+}
+
+/** Leyenda de los colores de las barras: cada estado con su muestra y su nombre (el porcentaje sigue en el texto de cada fila). */
+function Legend({t}: {t: TableModel}) {
+  const states = legendStates(t);
+  if (states.length < 2) return null;
+  return <ul className="stat-legend" aria-label="Colores de los estados">
+    {states.map(s => <li key={s.state}><span className={'stat-swatch q-' + s.state.toLowerCase()} aria-hidden="true"/>{s.label}</li>)}
+  </ul>;
 }
 
 /**
@@ -52,7 +61,7 @@ export default function Quality({ctx, cat, scope, params}: {ctx: Context; cat: S
       {common != null && <Freshness at={common} refresh={refreshAll}/>}
     </div>
     <Panel title="Completitud por variable" icon="checkCircle">
-      {main.status === 'error' ? <Callout tone="warn">{main.error}</Callout> : !t ? <Skeleton lines={6}/> : t.rows.length === 0 ? <p className="field-help">Sin registros en el periodo.</p> : <ul className="stat-quality">
+      {main.status === 'error' ? <Callout tone="warn">{main.error}</Callout> : !t ? <Skeleton lines={6}/> : t.rows.length === 0 ? <p className="field-help">Sin registros en el periodo.</p> : <><Legend t={t}/><ul className="stat-quality">
         {t.rows.map(r => {
           const code = r.key[0], link = pendingLink(ctx.user, code, count(t, r.key, 'PENDIENTE'));
           return <li key={code} className={code === variable ? 'on' : ''}>
@@ -65,13 +74,13 @@ export default function Quality({ctx, cat, scope, params}: {ctx: Context; cat: S
               : <p className="field-help">{REGION_NOTE}</p>}
           </li>;
         })}
-      </ul>}
+      </ul></>}
       {common == null && main.status === 'ok' && <Freshness at={main.at} refresh={main.refresh}/>}
     </Panel>
     <Panel title={`${label}: por ámbito`} icon="layers">
       {scopes.status === 'error' ? <Callout tone="warn">{scopes.error}</Callout> : !ts ? <Skeleton lines={4}/> : ts.rows.length === 0 ? <p className="field-help">Sin registros en el periodo.</p>
-        : <ul className="stat-quality">{ts.rows.map(r => <li key={r.key[0]}><div className="stat-quality-head"><strong>{r.labels[0]}</strong>
-          <span>{fmtInt(ts.rowTotal(r.key)?.n ?? 0)} requerimientos</span></div><StateBar t={ts} row={r.key} label={r.labels[0]}/></li>)}</ul>}
+        : <><Legend t={ts}/><ul className="stat-quality">{ts.rows.map(r => <li key={r.key[0]}><div className="stat-quality-head"><strong>{r.labels[0]}</strong>
+          <span>{fmtInt(ts.rowTotal(r.key)?.n ?? 0)} requerimientos</span></div><StateBar t={ts} row={r.key} label={r.labels[0]}/></li>)}</ul></>}
       {common == null && scopes.status === 'ok' && <Freshness at={scopes.at} refresh={scopes.refresh}/>}
     </Panel>
     <Panel title={`${label}: mes a mes`} icon="chart">
