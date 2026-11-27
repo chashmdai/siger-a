@@ -146,7 +146,8 @@ la validacion. Solo un consumidor por cola: al activar produccion, el de la vali
 
 - **Actualizacion de produccion a 0.8.0** (paso U de `docs/DESPLIEGUE_VM.md`, seccion 5): produccion corre 0.7.0
   (DI-15: instalada con 0.6.0 y actualizada a 0.7.0 con `Update.ps1`). El paso U lo ejecuta el responsable con
-  autorizacion expresa despues de E17 CERRADO, con DI-11 respondida, respaldo y ensayo de restauracion inmediatamente
+  autorizacion expresa con el paquete `SIGER-20261126-212826.zip` (E17 CERRADO, etiqueta `v0.8.0`; SHA-256 en el
+  registro de E17 de `docs/BITACORA_0_8_0.md`), con DI-11 respondida, respaldo y ensayo de restauracion inmediatamente
   antes de `Update.ps1` y, antes del 15/12, al menos dos dias de margen. TI activa los catalogos despues (U7).
 - Ejecucion en la VM de la salida a produccion (pasos V1-V6 de `docs/PLAN_0_6_0.md` y `docs/DESPLIEGUE_VM.md`): cierre
   de la validacion 0.4.0 con sus 9 recepciones de prueba, produccion nueva (0.7.0 o 0.6.0 segun el corte) en
