@@ -1,0 +1,34 @@
+{
+  "comunicacion" : {
+    "version" : "ANT-1.0",
+    "id" : "77777777-7777-4777-8777-777777777711",
+    "invitacion" : "77777777-7777-4777-8777-777777777701",
+    "recibidaEn" : "2026-11-28T15:30:00Z",
+    "avisoVersion" : "ANT_SINTETICO_1",
+    "identidad" : {
+      "runNumero" : "11111111",
+      "runDv" : "1",
+      "fuente" : "CLAVE_UNICA_USERINFO",
+      "nivel" : "IDENTIDAD_AUTENTICADA",
+      "verificadaEn" : "2026-11-28T15:20:00Z",
+      "evidencia" : "77777777-7777-4777-8777-777777777720"
+    },
+    "texto" : "Adjunto el antecedente solicitado (sintético).",
+    "adjuntos" : [ {
+      "id" : "77777777-7777-4777-8777-777777777712",
+      "nombre" : "antecedente-sintetico.txt",
+      "tamanio" : 46,
+      "sha256" : "c8386652add4935ac5fd9b7e4df72b30e75aa33b60f03c3196bb81a943ee5b53",
+      "tipo" : "text/plain",
+      "estado" : "VALIDADO"
+    } ]
+  },
+  "sha256" : "0f45c0a27198733b4516e7c4c51aef07127ba7fcf6bd635ac560e0e49c8047f8",
+  "huellaProcedencia" : "912bcd25a806a75cb8215041222043b485dc653c747f3cfbef560cb46c41319f",
+  "custodia" : {
+    "algoritmo" : "Ed25519",
+    "keyId" : "antecedentes-formulario-test",
+    "payload" : "eyJ2ZXJzaW9uIjoiMS4wIiwiaWQiOiI3Nzc3Nzc3Ny03Nzc3LTQ3NzctODc3Ny03Nzc3Nzc3Nzc3MTEiLCJyZWNpYmlkYUVuIjoiMjAyNi0xMS0yOFQxNTozMDowMFoiLCJ0aXBvUmVjZXBjaW9uIjoiQ1VTVE9ESUFfUFVCTElDQSIsImh1ZWxsYUNvbnRlbmlkbyI6IjBmNDVjMGEyNzE5ODczM2I0NTE2ZTdjNGM1MWFlZjA3MTI3YmE3ZmNmNmJkNjM1YWM1NjBlMGU0OWM4MDQ3ZjgiLCJodWVsbGFQcm9jZWRlbmNpYSI6IjkxMmJjZDI1YTgwNmE3NWNiODIxNTA0MTIyMjA0M2I0ODVkYzY1M2M3NDdmM2NmYmVmNTYwY2I0NmM0MTMxOWYiLCJlbWlzb3IiOiJGT1JNVUxBUklPX1BVQkxJQ09fREROIiwiYXZpc29WZXJzaW9uIjoiQU5UX1NJTlRFVElDT18xIn0",
+    "firma" : "OGniqx5dPNERxQNxzElV8XQoiUDnlprs0Slp371A0T1_AAo-MI5q61e_CfBzKOeD_fTV69esoUmxNg6V3jaEAg"
+  }
+}

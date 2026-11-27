@@ -1,0 +1,11 @@
+{
+  "descripcion" : "Vector negativo: la firma cubre solo el cuerpo, sin la etiqueta (como un ACK). Debe rechazarse con 403.",
+  "metodo" : "POST",
+  "ruta" : "/integracion/v3/antecedentes/invitaciones",
+  "cabeceras" : {
+    "X-Siger-Clave" : "antecedentes-siger-test",
+    "X-Siger-Firma" : "RdsHfElzVhI0j52801lxbF6Xs4bTYRx1T6kFFojwx5MurjIJPbU8QjEEYT5GxcKWwsiIFN6wDUZAqNzhTRSIAg"
+  },
+  "cuerpo" : "{\"version\":\"1.0\",\"publicId\":\"77777777-7777-4777-8777-777777777701\",\"tokenSha256\":\"6066cc26eb136239104ca79f8c3f02968d65965e034a207d980ad2179b35232a\",\"runEsperado\":{\"numero\":\"11111111\",\"dv\":\"1\"},\"textoSolicitado\":\"Copia sintética del certificado solicitado, para el contrato de prueba.\",\"venceEn\":\"2026-12-14T02:59:59Z\",\"folioSiger\":\"COMA-123\"}",
+  "resultadoEsperado" : 403
+}

@@ -492,3 +492,69 @@ nombra ISC). Tres nombres indicativos del plan no existen en esa version y se us
 `TriangleAlert` -> `TriangleExclamationPoint`, `ClockAlert` -> `ClockExclamationPoint` e `History` -> `RotateCcwClock`.
 Ningun icono conserva su trazo propio. La animacion de conteo de la cifra (opcional en el plan) no se implemento: el
 render en servidor, el texto accesible y la pantalla muestran siempre la cifra exacta.
+
+## Precisión 0.9.1 - antecedentes complementarios y aviso de cierre de gestión
+
+Decisiones del responsable del 2026-11-26, copiadas textualmente de la sección 0 de `docs/PLAN_0_9_1.md` en el gate A00
+(serie 0.9.x: `docs/PLAN_0_9_0.md`). Las decisiones D1-D57 siguen vigentes sin cambio salvo lo que digan D58-D74; D2 (TI
+sin lectura), D17 (liberación por análisis en origen) y D25 (estadística de ingresos) quedan intactas. La hoja de ruta
+heredada D44-D49 se implementa en 0.9.2. Las precisiones de diseño aprobadas en el GO de A00 (2026-11-27) están en
+"Diferencias aprobadas" de `docs/DISENO_0_9_1.md` y en el contrato `contratos/antecedentes-complementarios-v1.0.md` de
+formulario-web.
+
+### Antecedentes complementarios
+
+- **D58 Invitación.** El profesional del Caso (quien puede escribir en el Caso abierto) solicita antecedentes al
+  requirente desde el CAS. Solo se puede invitar a un requirente con **RUN verificado por ClaveÚnica** y con **correo
+  declarado**; si falta cualquiera de los dos, SIGER no ofrece la acción. Sin ClaveÚnica no hay invitación.
+- **D59 Correo y enlace.** Graph envía la invitación al correo declarado por el requirente, con un texto fijo mínimo y
+  un enlace al Formulario (`https://formulario.defensorianinez.gob.cl/antecedentes#<token>`). El token es aleatorio
+  (256 bits) y viaja en el fragmento de la URL, que el navegador no envía al servidor: no queda en registros de acceso
+  ni en `Referer`. El enlace no lleva RUN, folio interno ni datos del expediente.
+- **D60 Identidad.** En el Formulario, el aporte exige autenticarse **exclusivamente con ClaveÚnica** (sin la vía de
+  identificación declarada) y que el RUN autenticado coincida con el esperado. Si no coincide, la invitación venció,
+  fue revocada o ya se usó, el Formulario muestra un mensaje genérico que no revela nada.
+- **D61 Vigencia y uso.** Vigencia de **17 días corridos**. **Una sola entrega** por invitación, con texto y adjuntos
+  opcionales. Si se necesita más, el profesional crea otra invitación.
+- **D62 Admisión automática.** La entrega llega por el PULL/ACK existente como una COM nueva y queda **vinculada y
+  admitida automáticamente** al REQ y al CAS que la solicitaron (actor técnico, fundamento "Antecedentes solicitados por
+  la gestión", auditoría). Se avisa al profesional. Los archivos aparecen en "Documentos del requiriente" del Caso. En
+  estadística cuenta como VINCULADA, no como requerimiento nuevo.
+- **D63 Cierre.** La invitación **muere automáticamente al cerrarse el CAS que la emitió**. Una entrega que cruce el
+  cierre no se pierde: entra como COM ordinaria a Distribución, sin admisión automática.
+- **D64 Reutilización.** Se reutiliza lo existente: PULL/ACK v3, custodia, integridad y D17; vínculo COM-REQ-CAS;
+  panel "Documentos del requiriente"; ClaveÚnica y carga de adjuntos del Formulario; Graph con su outbox; auditoría y
+  avisos. Lo nuevo: la invitación (SIGER y Formulario), el canal de creación y revocación SIGER→Formulario, la pantalla
+  del Formulario, la variante de entrega y las plantillas de correo al ciudadano.
+- **D65 Habilitación.** Las invitaciones se despliegan **apagadas por configuración** en SIGER y en el Formulario. Se
+  encienden cuando ClaveÚnica esté certificada por Gobierno Digital y el responsable haya acreditado un ingreso real de
+  punta a punta con sus propios datos. El aviso de cierre no depende de ClaveÚnica.
+- **D66 Lo que debe aportar.** Al invitar, el profesional escribe un texto breve con lo que el requirente debe aportar.
+  Ese texto se muestra solo dentro del Formulario, después de ingresar con ClaveÚnica; nunca va en el correo ni en la
+  auditoría.
+- **D67 Estado visible.** El CAS muestra el estado de cada invitación (pendiente de publicación, vigente, entregada,
+  vencida, revocada) y el profesional puede revocarla.
+
+### Aviso de cierre
+
+- **D68 Check opcional.** Al cerrar un CAS, el profesional puede marcar **"Dar aviso de cierre de gestión"**. Viene
+  desmarcado y solo aparece si el requirente tiene correo declarado.
+- **D69 Envío y trazabilidad.** Graph envía el aviso al correo declarado mediante el outbox existente. Se registran
+  destinatario, fecha, intentos y resultado. La aceptación de Graph no acredita la entrega. Queda auditado quién marcó
+  el aviso y cuándo, aunque el envío falle.
+- **D70 Contenido.** En 0.9.1 el aviso es un correo con texto institucional mínimo. El bloque PDF/SMS le agrega después
+  el PDF de cierre adjunto (plantilla de la Defensoría) y el SMS.
+- **D71 Destinatarios.** El aviso no exige ClaveÚnica: basta el correo declarado. Al incorporar el PDF se reevalúa si
+  su contenido exige una verificación adicional.
+- **D72 Textos.** Los correos de invitación y de aviso de cierre usan textos fijos y sencillos definidos por el equipo
+  de SIGER (propuesta en `DISENO_0_9_1.md` 5.3; el texto final se aprueba en el GO de A03).
+
+### Despliegue y confianza
+
+- **D73 Despliegue.** Primero el paso U de SIGER 0.9.1; después la actualización **en sitio** del Formulario con su
+  procedimiento vigente (`docs/ACTUALIZACION_UBUNTU_PRODUCCION.md` de `formulario-web`), con paquete de release y
+  simulacro aislado de restauración y migración. Sin reinstalación limpia.
+- **D74 Confianza.** La confianza Formulario-SIGER no cambia: Bearer de integración, claves Ed25519 del Formulario, par
+  ACK de SIGER en DPAPI y CA del TLS se conservan; no se crean ni regeneran credenciales. Las invitaciones viajan con
+  el Bearer existente y además van **firmadas por SIGER con su clave ACK**, con la etiqueta de dominio
+  `SIGER-INVITACION-v1`, para que el Bearer solo no baste para emitirlas.

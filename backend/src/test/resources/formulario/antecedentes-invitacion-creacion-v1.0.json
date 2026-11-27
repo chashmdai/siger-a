@@ -1,0 +1,12 @@
+{
+  "descripcion" : "Creacion de una invitacion firmada por SIGER con su clave ACK y la etiqueta SIGER-INVITACION-v1.",
+  "metodo" : "POST",
+  "ruta" : "/integracion/v3/antecedentes/invitaciones",
+  "cabeceras" : {
+    "X-Siger-Clave" : "antecedentes-siger-test",
+    "X-Siger-Firma" : "ynT11KMuEDM8g-SMxnv2nXnHaHsMck17hOSePGIQoDBAYbd5AvmUO6WWp45c_CNPSBNkEfCf-aEIzfG81wPSCQ"
+  },
+  "cuerpo" : "{\"version\":\"1.0\",\"publicId\":\"77777777-7777-4777-8777-777777777701\",\"tokenSha256\":\"6066cc26eb136239104ca79f8c3f02968d65965e034a207d980ad2179b35232a\",\"runEsperado\":{\"numero\":\"11111111\",\"dv\":\"1\"},\"textoSolicitado\":\"Copia sintética del certificado solicitado, para el contrato de prueba.\",\"venceEn\":\"2026-12-14T02:59:59Z\",\"folioSiger\":\"COMA-123\"}",
+  "resultadoEsperado" : 201,
+  "tokenPrueba" : "eptkMmcq6qgM_tRZkuEJJhF5jZspeaLvNmp29ZhLrqs"
+}

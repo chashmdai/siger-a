@@ -1,0 +1,11 @@
+{
+  "descripcion" : "Revocacion de la misma invitacion, firmada igual que la creacion.",
+  "metodo" : "POST",
+  "ruta" : "/integracion/v3/antecedentes/invitaciones/77777777-7777-4777-8777-777777777701/revocacion",
+  "cabeceras" : {
+    "X-Siger-Clave" : "antecedentes-siger-test",
+    "X-Siger-Firma" : "ARza7gzrp3NUHsxzDuk-UbuHKwR-SsDq1K_y7URPK6zc3U--AuyJruwkTTU00K8coiFdVAiLX2gq9rplQDXuBg"
+  },
+  "cuerpo" : "{\"version\":\"1.0\",\"publicId\":\"77777777-7777-4777-8777-777777777701\",\"causa\":\"MANUAL\",\"revocadaEn\":\"2026-11-28T15:00:00Z\"}",
+  "resultadoEsperado" : 200
+}

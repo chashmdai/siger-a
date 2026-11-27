@@ -29,3 +29,29 @@ frontend/src/features/attention/adult/, que deben tener la misma huella):
 
 191621ac1fbbe69e7d45eb069b193c76493b4373ad187267b5339a76c98ae66b  territorio.json  formulario-publico/front/src/formulario/territorio.json
 0cc7d5c8eb3054cde6cf11c35b124facc58a1dbb793096673cbd1666f0e4bd26  paises.json  formulario-publico/front/src/formulario/paises.json
+
+--- Antecedentes complementarios 1.0 (SIGER 0.9.1, gate A00, 2026-11-27) ---
+
+Repositorio: chashmdai/formulario-web, rama main. Commit: 8da8e4a1bd2c4a292e90163d2daa236a0ff3da12 (gate A00, 2026-11-27).
+Contrato: contratos/antecedentes-complementarios-v1.0.md. La fuente canonica de estos fixtures es contratos/fixtures/ del
+Formulario; estos son copia byte a byte del blob de git (fin de linea LF).
+Generador: backend/src/test/java/cl/nexbyte/sigera/AntecedentesFixtures.java de SIGER (solo con
+-Dtest=AntecedentesFixtures -Dsiger.antecedentes.fixtures=<directorio nuevo>; nunca en la suite ni en la CI), con dos pares
+Ed25519 efimeros: las claves privadas solo existieron en memoria y no se escribieron. Las claves publicas son solo de prueba:
+no se instalan en un ambiente operativo. Identidad ficticia (RUN 11111111-1). Verificacion cruzada con CanonFormulario,
+ComprobanteDigital y ComprobanteInstitucional reales del Formulario (copia temporal en WSL, sin commit): conforme.
+
+Formato de cada linea de huella: <sha256>  <nombre>  <origen en formulario-web>
+
+ead930c7c41ad6ec9dd343ec0af282fcb8c33cbd3a9bfa3ff01b3a2713d00c27  antecedentes-invitacion-creacion-v1.0.json  contratos/fixtures/antecedentes-invitacion-creacion-v1.0.json
+99db5dde9f67a87d6578565e1e79abd46f8c1a5315540b19f4268f87b04bbc9b  antecedentes-invitacion-revocacion-v1.0.json  contratos/fixtures/antecedentes-invitacion-revocacion-v1.0.json
+ce4218ad3ebdff84b86227da123d7633c6230af1c77769c5468f95a6fa7695a3  antecedentes-invitacion-sin-etiqueta-v1.0.json  contratos/fixtures/antecedentes-invitacion-sin-etiqueta-v1.0.json
+0547ef39ceb8c44aeee12bf7f5a43d0a35245f624ecb7ae5ca5fceeebd3bd15f  antecedentes-entrega-texto-v1.0.json  contratos/fixtures/antecedentes-entrega-texto-v1.0.json
+5c98bec8705476cfdd55f9e7bd2ba6b51846623297770f5c3a3d663b09eb2571  antecedentes-entrega-adjunto-v1.0.json  contratos/fixtures/antecedentes-entrega-adjunto-v1.0.json
+423a9e50d4d0e6b959688381ef05e79d502c75ffd48ca80f5a730693ab455760  registro-antecedentes-v1.0.json  contratos/fixtures/registro-antecedentes-v1.0.json
+1b1819376923c9686ce43ce6463513c0e32d3edf3529776027b137b1014b8b10  public-antecedentes-test.json  contratos/fixtures/public-antecedentes-test.json
+a5e17eb1a97795f7228b5f5b16bdc5502f1cd0cdc191df453b9ff16ca68f981e  institution-public-antecedentes-test.json  contratos/fixtures/institution-public-antecedentes-test.json
+
+Adjunto del vector con adjunto (no es un archivo del contrato: sus 46 bytes los define AntecedentesFixtures.attachment()):
+
+c8386652add4935ac5fd9b7e4df72b30e75aa33b60f03c3196bb81a943ee5b53  adjunto-ant-1.0  AntecedentesFixtures.attachment()

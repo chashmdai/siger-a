@@ -1,0 +1,27 @@
+{
+  "comunicacion" : {
+    "version" : "ANT-1.0",
+    "id" : "77777777-7777-4777-8777-777777777710",
+    "invitacion" : "77777777-7777-4777-8777-777777777701",
+    "recibidaEn" : "2026-11-28T15:30:00Z",
+    "avisoVersion" : "ANT_SINTETICO_1",
+    "identidad" : {
+      "runNumero" : "11111111",
+      "runDv" : "1",
+      "fuente" : "CLAVE_UNICA_USERINFO",
+      "nivel" : "IDENTIDAD_AUTENTICADA",
+      "verificadaEn" : "2026-11-28T15:20:00Z",
+      "evidencia" : "77777777-7777-4777-8777-777777777720"
+    },
+    "texto" : "Antecedentes exclusivamente sintéticos para el contrato ANT-1.0.",
+    "adjuntos" : [ ]
+  },
+  "sha256" : "96f8f948844103d8730043f8fd240aa7f6dca97c95a0c53afdecb4511659b2cc",
+  "huellaProcedencia" : "912bcd25a806a75cb8215041222043b485dc653c747f3cfbef560cb46c41319f",
+  "custodia" : {
+    "algoritmo" : "Ed25519",
+    "keyId" : "antecedentes-formulario-test",
+    "payload" : "eyJ2ZXJzaW9uIjoiMS4wIiwiaWQiOiI3Nzc3Nzc3Ny03Nzc3LTQ3NzctODc3Ny03Nzc3Nzc3Nzc3MTAiLCJyZWNpYmlkYUVuIjoiMjAyNi0xMS0yOFQxNTozMDowMFoiLCJ0aXBvUmVjZXBjaW9uIjoiQ1VTVE9ESUFfUFVCTElDQSIsImh1ZWxsYUNvbnRlbmlkbyI6Ijk2ZjhmOTQ4ODQ0MTAzZDg3MzAwNDNmOGZkMjQwYWE3ZjZkY2E5N2M5NWEwYzUzYWZkZWNiNDUxMTY1OWIyY2MiLCJodWVsbGFQcm9jZWRlbmNpYSI6IjkxMmJjZDI1YTgwNmE3NWNiODIxNTA0MTIyMjA0M2I0ODVkYzY1M2M3NDdmM2NmYmVmNTYwY2I0NmM0MTMxOWYiLCJlbWlzb3IiOiJGT1JNVUxBUklPX1BVQkxJQ09fREROIiwiYXZpc29WZXJzaW9uIjoiQU5UX1NJTlRFVElDT18xIn0",
+    "firma" : "_qUiBtFsYQs9MPJulZ9-KSguaVmCujiGfIUfYVXJzFtNgbJPRxRKzzU3qDRFaqfrv4b005j0X0AWbWWy56ZxBg"
+  }
+}

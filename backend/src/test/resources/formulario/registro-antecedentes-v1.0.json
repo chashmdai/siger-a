@@ -1,0 +1,21 @@
+{
+  "registro" : {
+    "version" : "1.0",
+    "emisor" : "SIGER_DDN",
+    "hecho" : "COMUNICACION_REGISTRADA",
+    "operacionPublicaId" : "77777777-7777-4777-8777-777777777711",
+    "comunicacionId" : "77777777-7777-4777-8777-777777777730",
+    "numeroFolio" : 123,
+    "folio" : "COMA-123",
+    "registradaEn" : "2026-11-28T16:00:00Z",
+    "canalOrigen" : "FORMULARIO_WEB_PUBLICO",
+    "sha256" : "0f45c0a27198733b4516e7c4c51aef07127ba7fcf6bd635ac560e0e49c8047f8",
+    "huellaProcedencia" : "912bcd25a806a75cb8215041222043b485dc653c747f3cfbef560cb46c41319f"
+  },
+  "comprobante" : {
+    "algoritmo" : "Ed25519",
+    "keyId" : "antecedentes-siger-test",
+    "payload" : "eyJ2ZXJzaW9uIjoiMS4wIiwiZW1pc29yIjoiU0lHRVJfREROIiwiaGVjaG8iOiJDT01VTklDQUNJT05fUkVHSVNUUkFEQSIsIm9wZXJhY2lvblB1YmxpY2FJZCI6Ijc3Nzc3Nzc3LTc3NzctNDc3Ny04Nzc3LTc3Nzc3Nzc3NzcxMSIsImNvbXVuaWNhY2lvbklkIjoiNzc3Nzc3NzctNzc3Ny00Nzc3LTg3NzctNzc3Nzc3Nzc3NzMwIiwibnVtZXJvRm9saW8iOjEyMywiZm9saW8iOiJDT01BLTEyMyIsInJlZ2lzdHJhZGFFbiI6IjIwMjYtMTEtMjhUMTY6MDA6MDBaIiwiY2FuYWxPcmlnZW4iOiJGT1JNVUxBUklPX1dFQl9QVUJMSUNPIiwic2hhMjU2IjoiMGY0NWMwYTI3MTk4NzMzYjQ1MTZlN2M0YzUxYWVmMDcxMjdiYTdmY2Y2YmQ2MzVhYzU2MGUwZTQ5YzgwNDdmOCIsImh1ZWxsYVByb2NlZGVuY2lhIjoiOTEyYmNkMjVhODA2YTc1Y2I4MjE1MDQxMjIyMDQzYjQ4NWRjNjUzYzc0N2YzY2ZiZWY1NjBjYjQ2YzQxMzE5ZiJ9",
+    "firma" : "7Iey2i7ALwaU65aR8YUl73Dda8Gi8EA4MwbLJecL_1_iMNZUmUVqR8-DEzXvIDp1ZNSPs6XV7Ujb9XcypFHCAg"
+  }
+}
