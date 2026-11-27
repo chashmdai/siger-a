@@ -150,9 +150,11 @@ Formulario: `contratos/antecedentes-complementarios-v1.0.md` y sus fixtures (A00
    de `DISENO_0_9_1.md` del gate. Tomar el **primer gate ABIERTO**; se saltan CERRADO, BLOQUEADO, POSTERGADO y
    EXTERNO. Si el prompt nombra otro gate, detenerse y preguntar. Un gate por sesión. En un gate [FORMULARIO], leer
    también `AGENTS.md` y `CLAUDE.md` del clon del Formulario (ruta: DI-17).
-2. **Precondiciones**: `git status` limpio (en ambos repositorios si el gate es [FORMULARIO]); `git log --oneline -5`
-   con el commit del último gate cerrado; dependencias CERRADO; definiciones exigidas respondidas en la bitácora. Si
-   falta algo, detenerse.
+2. **Precondiciones**: **equipo correcto** (el de la columna "Equipo" de la sección 6; se comprueba con el sistema
+   operativo y la ruta del clon, DI-17); `git status` limpio y `git pull` al día (en ambos repositorios si el gate es
+   [FORMULARIO]); `git log --oneline -5` con el commit del último gate cerrado; dependencias CERRADO; definiciones
+   exigidas respondidas en la bitácora. Si el equipo no corresponde, no inventariar ni editar: detenerse e indicar al
+   responsable a qué equipo cambiarse. Si falta otra cosa, detenerse.
 3. **Inventario y plan antes de editar**: usos de todo lo que se cambia, plan, archivos propuestos, pruebas previstas
    (mutaciones, MySQL, CI del Formulario), riesgos. Esperar el **GO explícito**; un mensaje que solo repite el plan no
    es GO.
@@ -167,7 +169,22 @@ Formulario: `contratos/antecedentes-complementarios-v1.0.md` y sus fixtures (A00
 7. **Push** a `main` en `origin` de cada repositorio tocado, después de revisar con `git show --stat HEAD` que no
    viajen archivos sensibles (`var/`, `.env`, CSV de claves, bases H2, `release/`, `.tools/`, `*.clixml`, `*.pfx`,
    `*.p12`, `*.pem`, `*.sigerpkg`, secretos o configuración privada del Formulario).
-8. **Detenerse** e informar: qué se hizo, cómo verificarlo y cuál es el gate siguiente. No continuar.
+8. **Detenerse** e informar: qué se hizo, cómo verificarlo, cuál es el gate siguiente y **en qué equipo se ejecuta**.
+   Si cambia de equipo, decirlo en la primera línea del informe ("Siguiente gate: A08, en CachyOS; haz pull de ambos
+   repositorios allí"). No continuar.
+
+### Equipos
+
+- **TEST-SIGER** (Windows Server, `C:\sigera` y `C:\formulario-web`): equipo principal. Todo lo de SIGER (PowerShell
+  5.1, `Check-Scripts.ps1`, DPAPI, MySQL 8.4 aislado en `D:\Ensayo-*`, build de entrega) y el desarrollo y las pruebas
+  del Formulario.
+- **CachyOS** (Linux del responsable, `~/sigera` y `~/formulario-web`): solo lo del Formulario que exige Linux y
+  Docker (paquete de release y simulacro aislado; el ensayo de A05 si A00 determina que el Formulario local necesita
+  Docker).
+- Un gate corre entero en un solo equipo. Al cambiar de equipo: push en el que termina, pull de ambos repositorios en
+  el que empieza. La bitácora registra el equipo de cada cierre.
+- Si A00 determina que A05 debe correr en CachyOS, lo registra como hallazgo y el responsable actualiza la columna
+  "Equipo" de A05 con un commit de documentación antes de A05.
 
 Gates EXTERNO (A06): no los ejecuta el ejecutor ni edita su registro o estado. Con hallazgos en A06, el responsable deja
 A06 BLOQUEADO y agrega `A06b` (ABIERTO, corrección) y `A06c` (EXTERNO, repetición), y así sucesivamente. A07 exige el
@@ -202,19 +219,21 @@ cuando el responsable registra la respuesta.
 
 Con un solo ejecutor, los gates se ejecutan en el orden de la tabla.
 
-| Gate | Título | Repos | Depende de | DISENO |
-|---|---|---|---|---|
-| A00 | Línea base, decisiones, contrato de antecedentes y diseño verificado | ambos [FORMULARIO] | - | 1, 2, 7 |
-| A01 | Invitaciones en SIGER: modelo, comandos, revocación y canal firmado hacia el Formulario (servidor) | SIGER | A00 | 2, 3 |
-| A02 | Recepción de antecedentes y admisión automática (servidor) | SIGER | A01 | 4 |
-| A03 | Interfaz del Caso y correos al ciudadano: invitación y aviso de cierre | SIGER | A02 | 5, 6 |
-| A04 | Formulario: invitaciones, ingreso con ClaveÚnica, aporte de antecedentes y variante de entrega | Formulario [FORMULARIO] | A00 | 7 |
-| A05 | Integración de punta a punta, MySQL, aceptación y cierre de versión | ambos [FORMULARIO] | A01-A04 | 8, 9 |
-| A06 | Auditoría independiente (EXTERNO) | ambos | A05 | todo |
-| A07 | Build de entrega, paquete del Formulario y etiqueta | ambos [FORMULARIO] | Ciclo de A06 cerrado | 9 |
+| Gate | Título | Repos | Equipo | Depende de | DISENO |
+|---|---|---|---|---|---|
+| A00 | Línea base, decisiones, contrato de antecedentes y diseño verificado | ambos [FORMULARIO] | TEST-SIGER | - | 1, 2, 7 |
+| A01 | Invitaciones en SIGER: modelo, comandos, revocación y canal firmado hacia el Formulario (servidor) | SIGER | TEST-SIGER | A00 | 2, 3 |
+| A02 | Recepción de antecedentes y admisión automática (servidor) | SIGER | TEST-SIGER | A01 | 4 |
+| A03 | Interfaz del Caso y correos al ciudadano: invitación y aviso de cierre | SIGER | TEST-SIGER | A02 | 5, 6 |
+| A04 | Formulario: invitaciones, ingreso con ClaveÚnica, aporte de antecedentes y variante de entrega | Formulario [FORMULARIO] | TEST-SIGER | A00 | 7 |
+| A05 | Integración de punta a punta, MySQL, aceptación y cierre de versión | ambos [FORMULARIO] | TEST-SIGER (CachyOS si A00 lo determina) | A01-A04 | 8, 9 |
+| A06 | Auditoría independiente (EXTERNO) | ambos | - | A05 | todo |
+| A07 | Build de entrega de SIGER y etiqueta | SIGER | TEST-SIGER | Ciclo de A06 cerrado | 9 |
+| A08 | Paquete del Formulario, simulacro aislado y etiqueta | Formulario [FORMULARIO] | CachyOS | A07 | 9 |
 
-Ruta crítica: A00 -> A01 -> A02 -> A03 -> A05 -> A06 -> A07 -> paso U. A04 solo depende de A00 y debe estar CERRADO
-antes de A05.
+Ruta crítica: A00 -> A01 -> A02 -> A03 -> A05 -> A06 -> A07 -> A08 -> pasos en producción. A04 solo depende de A00 y
+debe estar CERRADO antes de A05. A07 y A08 son un solo build separado por equipo: SIGER se empaqueta en Windows y el
+Formulario en Linux con Docker.
 
 ### Detalle de cada gate
 
@@ -227,7 +246,8 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
   1. Línea base: contar pruebas sobre el HEAD de ambos repositorios (SIGER: H2, MySQL si hay servidor aislado,
      frontend, `Check-Scripts.ps1` si hay Windows; Formulario: pruebas locales y última CI de `main`). Verificar contra
      el código cada referencia de `DISENO_0_9_1.md` 1; una diferencia se registra como hallazgo y, si afecta una
-     decisión, detiene el gate.
+     decisión, detiene el gate. Determinar si el Formulario local puede levantarse en TEST-SIGER sin Docker para el
+     ensayo de A05; si no puede, registrarlo como hallazgo ("A05 en CachyOS").
   2. Contrato: redactar en el Formulario `contratos/antecedentes-complementarios-v1.0.md` (invitación: creación y
      revocación con Bearer y firma `SIGER-INVITACION-v1`; variante de entrega: campos, firma Ed25519 del Formulario,
      referencia a la invitación, RUN autenticado; errores) y sus fixtures firmados con claves de prueba en
@@ -334,13 +354,20 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
   seguridad del token y de la firma, privacidad, regresión de la recepción, interfaz y documentación. El responsable
   registra el resultado.
 
-**A07 - Build de entrega, paquete del Formulario y etiqueta** [FORMULARIO]
-- Alcance: SIGER: build de entrega con el procedimiento vigente, `SOURCE_SHA256.txt`, etiqueta anotada `v0.9.1`.
-  Formulario: paquete con `scripts/linux/empaquetar-release.py --commit <SHA>`, sus `SHA256SUMS` y manifiesto, y el
-  simulacro aislado de restauración y migración del procedimiento (debe informar `appSaludable: true`,
-  `flywayFailed: 0`, Flyway en V14 y `coincideConOrigen: true`); etiqueta anotada `siger-v0.9.1` en `formulario-web`.
-  Marcar 0.9.1 CERRADA y 0.9.2 EN CURSO en `PLAN_0_9_0.md` 1. Ante un fallo, BLOQUEADO con la evidencia y sin etiqueta.
-- Cierre: `gate A07: build y etiqueta` con "Cierre del plan 0.9.1".
+**A07 - Build de entrega de SIGER y etiqueta** (TEST-SIGER)
+- Alcance: build de entrega con el procedimiento vigente, `SOURCE_SHA256.txt`, etiqueta anotada `v0.9.1`. Ante un
+  fallo, BLOQUEADO con la evidencia y sin etiqueta.
+- Cierre: `gate A07: build y etiqueta de SIGER`. El informe indica que A08 se ejecuta en CachyOS.
+
+**A08 - Paquete del Formulario, simulacro aislado y etiqueta** [FORMULARIO] (CachyOS)
+- Alcance: pull de ambos repositorios; paquete con `scripts/linux/empaquetar-release.py --commit <SHA de A05 o
+  posterior>`, sus `SHA256SUMS` y manifiesto; simulacro aislado de restauración y migración de
+  `docs/ACTUALIZACION_UBUNTU_PRODUCCION.md` (debe informar `appSaludable: true`, `flywayFailed: 0`, Flyway en V14 y
+  `coincideConOrigen: true`); etiqueta anotada `siger-v0.9.1` en `formulario-web`. El paquete queda fuera de Git y el
+  responsable lo copia a DDN-UBUNTU. Marcar 0.9.1 CERRADA y 0.9.2 EN CURSO en `PLAN_0_9_0.md` 1. Ante un fallo,
+  BLOQUEADO con la evidencia y sin etiqueta.
+- Cierre: `gate A08: paquete y simulacro del Formulario` en ambos repositorios, con "Cierre del plan 0.9.1". El informe
+  indica que 0.9.2 vuelve a TEST-SIGER.
 
 ## 7. Formato del registro de cierre (en la bitácora)
 

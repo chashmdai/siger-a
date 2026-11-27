@@ -4,7 +4,7 @@ Operación y pendientes: seguimiento de la gestión por folio, selector de antec
 distribución territorial del Formulario, correo de avisos, hallazgos de 0.8.0 y scripts de operación. Decisiones D44-D49
 (heredadas de 0.8.0, `DECISIONES_FUNCIONALES.md`, con DI-05, DI-06 y DI-09 respondidas) y D75-D78 del responsable
 (2026-11-26 y 2026-11-27). Versión 0.9.2, prefijo de gates **B**, registro en `docs/BITACORA_0_9_2.md`, diseño en
-`docs/DISENO_0_9_2.md`, serie en `docs/PLAN_0_9_0.md`. Empieza con A07 (0.9.1) CERRADO. Solo SIGER: el repositorio
+`docs/DISENO_0_9_2.md`, serie en `docs/PLAN_0_9_0.md`. Empieza con A08 (0.9.1) CERRADO. Solo SIGER: el repositorio
 `formulario-web` se lee. Este plan solo cambia con aprobación del responsable.
 
 ## 0. Decisiones (B00 copia D75-D78 a `DECISIONES_FUNCIONALES.md` como "Precisión 0.9.2" y retira el rótulo "hoja de ruta" de D44-D49)
@@ -44,7 +44,7 @@ global y división del código del frontend.
 
 ## 1. Punto de partida
 
-Se verifica en B00 sobre el HEAD posterior a A07: versión 0.9.1, esquema 25, conteos de pruebas de A05, `v0.9.1`
+Se verifica en B00 sobre el HEAD posterior a A08: versión 0.9.1, esquema 25, conteos de pruebas de A05, `v0.9.1`
 etiquetada y paso U-0.9.1 registrado (puede estar pendiente: 0.9.2 no depende de él).
 
 ## 2. Reglas para todos los gates
@@ -89,13 +89,13 @@ etiquetada y paso U-0.9.1 registrado (puede estar pendiente: 0.9.2 no depende de
 ## 5. Protocolo de cada sesión y corte por cuota
 
 Idénticos a `PLAN_0_9_1.md` secciones 5 y 5 «Corte por cuota o cambio de agente», con el prefijo B, esta bitácora y sin
-gates [FORMULARIO]. Gate EXTERNO: B09 (ciclo `B09b`/`B09c` como en 0.9.1). B10 exige el ciclo de B09 cerrado.
+gates [FORMULARIO]. Equipo: **TEST-SIGER en todos los gates**. Gate EXTERNO: B09 (ciclo `B09b`/`B09c` como en 0.9.1). B10 exige el ciclo de B09 cerrado.
 
 ## 6. Gates
 
 | Gate | Título | Depende de | DISENO |
 |---|---|---|---|
-| B00 | Línea base, decisiones y diseño verificado | A07 | 1 |
+| B00 | Línea base, decisiones y diseño verificado | A08 | 1 |
 | B01 | Seguimiento de la gestión por folio (servidor e interfaz) | B00 | 2 |
 | B02 | Vínculo con buscador y distribución ágil (servidor e interfaz) | B01 | 3, 4 |
 | B03 | Sedes: fechas de apertura y distribución territorial del Formulario (servidor e interfaz) | B00 | 5 |

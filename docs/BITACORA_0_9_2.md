@@ -19,7 +19,7 @@ reglas que `BITACORA_0_9_1.md`. Cada sesión empieza con el prompt universal de 
 | B09 | Auditoría independiente | EXTERNO |
 | B10 | Build de entrega y etiqueta | ABIERTO |
 
-0.9.2 empieza con A07 de 0.9.1 CERRADO (`PLAN_0_9_0.md` 1). Mientras 0.9.1 esté EN CURSO, el prompt universal no lee
+0.9.2 empieza con A08 de 0.9.1 CERRADO (`PLAN_0_9_0.md` 1). Mientras 0.9.1 esté EN CURSO, el prompt universal no lee
 esta bitácora.
 
 ## Decisiones del responsable

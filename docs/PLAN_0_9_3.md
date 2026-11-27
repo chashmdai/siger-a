@@ -42,7 +42,7 @@ salvo un gate de corrección que lo autorice expresamente).
 
 ## 5. Protocolo
 
-`PLAN_0_9_1.md` 5 con el prefijo C, esta bitácora y sin gates [FORMULARIO].
+`PLAN_0_9_1.md` 5 con el prefijo C, esta bitácora y sin gates [FORMULARIO]. Equipo: TEST-SIGER en todos los gates.
 
 ## 6. Gates
 

@@ -68,4 +68,4 @@ SMS
 | P04 | Auditoría independiente (EXTERNO) |
 | P05 | Build y etiqueta |
 
-No toca el Formulario.
+No toca el Formulario. Equipo: TEST-SIGER en todos los gates.

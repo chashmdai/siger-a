@@ -176,7 +176,7 @@ E10 apagado por defecto en ambos sistemas; E11 regresión de los recorridos 1.0,
 ## 9. Despliegue y habilitación
 
 1. U-0.9.1: paso U de SIGER (respaldo y `Restore-Check.ps1` en la misma ventana, `Update.ps1`); todo apagado.
-2. F-0.9.1: actualización en sitio del Formulario con el paquete y el simulacro de A07; todo apagado.
+2. F-0.9.1: actualización en sitio del Formulario con el paquete y el simulacro de A08 (CachyOS); todo apagado.
 3. C-0.9.1: encender el aviso de cierre en SIGER.
 4. H-0.9.1: con ClaveÚnica certificada, encender en el Formulario y en SIGER y acreditar un ingreso real con datos
    propios del responsable (invitación a sí mismo en un Caso de prueba autorizado), luego revocar y documentar.
@@ -184,7 +184,7 @@ E10 apagado por defecto en ambos sistemas; E11 regresión de los recorridos 1.0,
 ## 10. Riesgos
 
 - R1 ClaveÚnica sin certificar: la función queda lista y apagada (D65).
-- R2 Primera actualización en sitio del Formulario: simulacro aislado obligatorio en A07 y ventana coordinada.
+- R2 Primera actualización en sitio del Formulario: simulacro aislado obligatorio en A08 y ventana coordinada.
 - R3 Correo a dirección errada: el enlace sin la ClaveÚnica del requirente no sirve (D60); el aviso de cierre no lleva
   datos del expediente.
 - R4 Contacto no seguro (NNA o restricciones declaradas): DI-20.

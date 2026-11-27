@@ -33,7 +33,7 @@ Reglas de la serie:
 |---|---|
 | 27-30/11 | Gates A00-A02 |
 | 30/11-06/12 | Gates A03-A05 |
-| 07-10/12 | A06 (auditoría), A07 (build) |
+| 07-10/12 | A06 (auditoría), A07 (build de SIGER, TEST-SIGER), A08 (paquete del Formulario, CachyOS) |
 | 10-12/12 | Paso U de SIGER 0.9.1; actualización en sitio del Formulario |
 | 12-21/12 | 0.9.2 (B00-B10) |
 | 22-23/12 | Paso U de SIGER 0.9.2 |
@@ -54,6 +54,9 @@ responsable puede pasarlo a POSTERGADO con fundamento.
 Solo 0.9.1 modifica el repositorio `formulario-web`. 0.9.2 y 0.9.3 solo lo leen (B00 confirma que D45 no necesita
 cambios del Formulario; si los necesitara, ese punto sale de 0.9.2 junto con D38).
 
+- Equipos: TEST-SIGER (Windows Server) es el equipo principal de toda la serie. CachyOS (Linux con Docker) se usa
+  solo para lo del Formulario que exige Linux y Docker (A08 de 0.9.1). Cada plan indica el equipo de cada gate; el
+  ejecutor comprueba el equipo al empezar y avisa al cerrar si el gate siguiente va en otro.
 - Un solo plan y una sola bitácora: los gates del Formulario están en `PLAN_0_9_1.md` marcados **[FORMULARIO]** y se
   registran en `BITACORA_0_9_1.md` del repositorio de SIGER.
 - La sesión del ejecutor se abre en el clon de SIGER con acceso adicional al clon del Formulario (ruta en la bitácora
