@@ -176,6 +176,8 @@ decisiones y definiciones ya aprobadas se conservan como base de su planificacio
 | Paquete ZIP escrito por flujo a un temporal (menos memoria; opcion 4 de la detencion de E11) | - | detencion de E11 |
 | Figura 1 en un solo libro XLSX (cuatro hojas) | - | GO de E12 |
 | Reportes de gestion y su exportacion (`Reports`) que excluyan a una cuenta TI con una concesion inconsistente (TI con REPORTES insertada por SQL; la aplicacion no permite crearla y Administracion avisa `TI_INCOMPATIBLE`); en 0.8.0 queda como excepcion explicita de `PermisosFinalesTest` | - | hallazgo de E14 (preexistente desde 0.5.0) |
+| Retencion y borrado del esquema siger_a_restore_* que deja el paso U en produccion | - | auditoria E16 |
+| Division del codigo del frontend (code splitting; 508 kB) | - | auditoria E16 |
 | Otras mejoras operacionales sin relacion directa con los objetivos de 0.8.0 | - | - |
 
 Pendientes sin version asignada (detalle en `docs/BITACORA_0_6_0.md`):

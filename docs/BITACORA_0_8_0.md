@@ -31,7 +31,7 @@ Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombra
 | E13 | Explorador: exportacion, cortes, series historicas y calidad (interfaz) | CERRADO |
 | E14 | Integracion MySQL, rendimiento, aceptacion y cierre de version | CERRADO |
 | E15 | Validacion de uso con la Direccion de UEP | POSTERGADO |
-| E16 | Auditoria independiente | EXTERNO |
+| E16 | Auditoria independiente | CERRADO |
 | E17 | Build de entrega y etiqueta | ABIERTO |
 
 Todo gate depende de E00 y de su contrato del Formulario (seccion 3 del plan). Un gate ABIERTO cuyas dependencias
@@ -1620,3 +1620,16 @@ Recorridos U de E14 (acciones desde la vista indicada, medidas en el navegador):
 | U11 Indicador a % por fila | clic en «Ingresos» del Panorama, Cifra > «% por fila» | 2 |
 | U12 Por que no suma | la nota «Los niveles inferiores no suman el superior» a la vista | 0 |
 | U13 Grafico para el informe | «Descargar SVG» (titulo y fuente en el archivo) | 1 |
+
+### E16 - Auditoria independiente (CERRADO)
+- Fecha: 2026-11-26. Claude Padre, sobre el commit 801ac90 (cierre de E14). Re-ejecucion del responsable en un clon limpio (D:\Auditoria-E16, TEST-SIGER): JUnit H2 392 corridas, 388 ok y 4 mediciones omitidas, BUILD SUCCESS; frontend 252 de 252 ok, typecheck y build conformes.
+- Diff contra v0.7.0 (241 archivos): scripts/, .mvn/, Reports.java, Territory.java y los 7 archivos de recepcion del Formulario sin cambios; conserveExternal identico; REOPEN_* sin cambios (RequirementCommands solo agrega clasificacion y completitud al cierre).
+- Originales: en src/main, sobre communication_original y external_* solo hay INSERT, en la recepcion. Migraciones V17-V24 aditivas (sin DROP, DELETE, TRUNCATE ni cambios de columnas); V1-V16 intactas; actualizaciones desde 0.4.0 y 0.7.0 probadas en cada gate de servidor.
+- Logs nuevos: solo cifras, codigos y nombres de tipo; sin datos personales.
+- Puntos especiales: el incidente de C: (E08) y el error 1112 quedan cubiertos por el confinamiento de StatGuard (datadir, tmpdir e innodb_temp_tablespaces_dir en la unidad de la instancia; si no, el motor se deshabilita y la operacion sigue); Workflow.afterPreviousCommand con log RELOJ_ATRASADO y espera sin consumo de CPU (E10); lock de los cortes segun la decision A de E10; ZIP exclusivo y memoria bajo 75 % (E11); cierres por otro agente segun el protocolo de la seccion 5 (E11 y E12).
+- Gates de Codex: E11 y E12b con matrices y mutaciones completas; E07 con 15 mutaciones agrupadas en 5 pruebas (observacion aceptada: sus reglas quedan cubiertas por los escenarios del motor de E08 y las matrices de E10-E14).
+- Evidencia de mutacion en todos los gates, en formato regla -> prueba que fallo. Trazabilidad de escenarios 1-15 y U1-U13 en docs/PRUEBAS_MANUALES_0_8_0.md.
+- Paso U (DESPLIEGUE_VM.md, seccion 5) revisado contra los scripts: funciones de Common.ps1, marcadores, columna amount (V14), privilegios del dueno sobre el esquema restaurado, secuencia Update.ps1 -> Start.ps1 y log en D:\SIGER\logs\siger.log; conforme.
+- Resultado: conforme, sin correcciones (sin E16b).
+- Observaciones para 0.9.0: retencion y borrado del esquema siger_a_restore_* que deja el paso U en el MySQL de produccion; division del codigo del frontend (508 kB, sobre el umbral de Vite); las ya registradas (TI con REPORTES por SQL en Reports, espera de 2 s de H2 y pool de 6 conexiones durante un corte).
+- Pendientes: E17 (build y etiqueta); DI-11 antes del paso U; borrar D:\Auditoria-E16 -> responsable.
