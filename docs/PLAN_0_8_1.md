@@ -228,7 +228,9 @@ el estado de un gate EXTERNO.
 |---|---|---|---|
 | F01 | Rediseno visual del explorador estadistico e iconografia (frontend, version y documentos) | - | Cualquiera de `CLAUDE.md` |
 | F02 | Revision visual del responsable y auditoria de Claude Padre (EXTERNO) | F01 | - |
-| F03 | Build de entrega y etiqueta `v0.8.1` | Ciclo de F02 cerrado, sin correcciones ABIERTO | DDN-TEST-SIGER |
+| F02b | Correcciones de la revision visual de F02 | F02 (BLOQUEADO con observaciones) | Cualquiera de `CLAUDE.md` |
+| F02c | Nueva revision visual y auditoria de F02b (EXTERNO) | F02b | - |
+| F03 | Build de entrega y etiqueta `v0.8.1` | Ciclo de F02 cerrado (F02c CERRADO), sin correcciones ABIERTO | DDN-TEST-SIGER |
 
 ### F01 - Rediseno visual del explorador estadistico e iconografia
 
@@ -268,9 +270,41 @@ El responsable revisa las capturas de F01 (y, si quiere, la instancia local) y d
 altura; Claude Padre audita el diff `v0.8.0..<commit de F01>` contra este plan y la seccion 2. El responsable registra
 el resultado a mano: CERRADO (conforme) o BLOQUEADO con la lista de observaciones, que toma `F02b`.
 
+Resultado (2026-11-27): BLOQUEADO. Auditoria de codigo de `9277b0d` conforme (condiciones de la seccion 2 verificadas
+por Claude Padre); la revision visual dejo las observaciones que corrige F02b.
+
+### F02b - Correcciones de la revision visual de F02
+
+- **Hace** (observaciones de F02, 2026-11-27):
+  1. **Informes: cada grafico debe leerse.** A 1440 px ningun texto de un grafico queda bajo 10 px efectivos (tamano
+     del texto del SVG por la escala con que se dibuja). Para eso, tabla y grafico van lado a lado solo si el grafico
+     dispone de al menos 560 px de ancho; si no, el grafico va bajo la tabla, a todo el ancho.
+  2. **Panorama: ninguna tarjeta queda con una franja vacia.** La linea mensual crece para ocupar el alto disponible
+     de la tarjeta y la ayuda y el pie quedan abajo. La linea, su area y su punto toman el color de acento de su
+     tarjeta, con contraste >= 3:1 sobre el fondo de la tarjeta, probado.
+  3. **Graficos a 390 px** (Explorar, Informes y Calidad): cuando un grafico se desborda en horizontal se muestra el
+     aviso visible "Desliza para ver el grafico completo" y un difuminado en el borde. No cambian `chartModel.ts`,
+     `chartExport.ts` ni el SVG descargado.
+  4. **Detalles menores**: en `tokens.css`, el comentario de la prueba de contraste cita `tests/tokensF01.test.ts`,
+     que no existe; la prueba esta en `tests/statsF01.test.ts`. En la nota de D56 (`TONE_NOTE`) se nombra tambien el
+     ambar de los registros tardios.
+- **Archivos autorizados**: los mismos de F01 (seccion 6, F01).
+- **Pruebas minimas**: las reglas de F01 (pruebas nuevas, cada regla nueva con su mutacion y la evidencia "regla ->
+  prueba que fallo"; suite completa del frontend y JUnit H2; condiciones de la seccion 2) y una prueba que verifique
+  las reglas 1 y 2 donde sea posible: la regla de ancho de Informes (lado a lado solo con >= 560 px para el grafico) y
+  que la linea mensual llene la tarjeta.
+- **Humo (obligatorio)**: como F01, con capturas de las cinco secciones a 1440 px y 390 px en `D:\Ensayo-F02b` (no en
+  el repositorio), con su lista en el registro; procesos cerrados por PID en `finally`.
+- **Registro**: el formato de la seccion 7, con los tamanos de `dist` antes y despues (regla 10).
+
+### F02c - Nueva revision visual y auditoria de F02b (EXTERNO)
+
+Como F02, sobre las capturas de F02b y el diff `9277b0d..<commit de F02b>`. El responsable registra el resultado a
+mano: CERRADO (conforme) o BLOQUEADO con observaciones, que toma `F02d` (y su revision `F02e`), y asi sucesivamente.
+
 ### F03 - Build de entrega y etiqueta `v0.8.1`
 
-Como E17 de 0.8.0: en DDN-TEST-SIGER, desde el commit auditado en F02, `Build.ps1 -IncludeJava` sin `-SkipChecks`
+Como E17 de 0.8.0: en DDN-TEST-SIGER, desde el commit auditado en la ultima revision del ciclo de F02 (F02c o la que la siga), `Build.ps1 -IncludeJava` sin `-SkipChecks`
 (que corre `Check-Scripts.ps1`, el frontend y JUnit), `git status` vacio antes y despues; `npm ci` necesita acceso al
 registro npm para descargar `lucide-react` (sin acceso, F03 queda BLOQUEADO y se detiene). Revision del paquete:
 `manifest.json` con `version` 0.8.1 y `schema` 24; `scripts\` con SHA-256 iguales uno a uno a los del ZIP 0.8.0;

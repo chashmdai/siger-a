@@ -7,15 +7,17 @@ Estados: ABIERTO (por hacer), CERRADO (verificado, con commit y push), BLOQUEADO
 definicion; ver su registro), POSTERGADO (fuera del cierre por decision expresa del responsable), EXTERNO (lo realiza
 el responsable fuera del ejecutor; el ejecutor lo salta y nunca edita su registro ni su estado).
 Cada sesion empieza con el prompt universal de la seccion 8 del plan, sin nombrar gates.
-F03 depende del ciclo de F02 cerrado: mientras F02 no este CERRADO, la sesion que encuentre F03 como primer ABIERTO
-verifica esa dependencia, informa y se detiene sin editar.
+F03 depende del ciclo de F02 cerrado (hoy, F02c CERRADO): mientras la ultima revision del ciclo no este CERRADO, la
+sesion que encuentre F03 como primer ABIERTO verifica esa dependencia, informa y se detiene sin editar.
 
 ## Estado
 
 | Gate | Titulo | Estado |
 |---|---|---|
 | F01 | Rediseno visual del explorador estadistico e iconografia (frontend, version y documentos) | CERRADO |
-| F02 | Revision visual del responsable y auditoria de Claude Padre | EXTERNO |
+| F02 | Revision visual del responsable y auditoria de Claude Padre | BLOQUEADO |
+| F02b | Correcciones de la revision visual de F02 | ABIERTO |
+| F02c | Nueva revision visual y auditoria de F02b | EXTERNO |
 | F03 | Build de entrega y etiqueta `v0.8.1` | ABIERTO |
 
 ## Decisiones del responsable
@@ -71,3 +73,17 @@ condiciones del GO, verifica que la base no haya cambiado y no necesita volver a
 - Hallazgos para gates siguientes: Calidad no calcula una cifra global de completitud (ajuste 7: no se agrego); las capturas de pagina completa deben tomarse desde arriba (los elementos fijos salen corridos si la pagina esta desplazada); `npm ci` en F03 necesita el registro npm para `lucide-react`.
 - Pendientes: revision visual y auditoria del diff `v0.8.0..<commit de F01>` -> F02 (EXTERNO); paquete, `SOURCE_SHA256.txt` y etiqueta `v0.8.1` -> F03; actualizacion de produccion -> U81 (responsable).
 - Verificacion manual sugerida al usuario: `docs/PRUEBAS_MANUALES_0_8_1.md` (secciones 1 y 2: clic en la cifra de cada tarjeta, Tab + Enter, otra pestana y colores de la variacion) y las capturas de `D:\Ensayo-F01\capturas`.
+
+### F02 - Revision visual del responsable y auditoria de Claude Padre   (BLOQUEADO)
+- Fecha: 2026-11-27; registrado por encargo de documentacion del responsable (commit `docs: revision F02 y gate F02b`).
+- Auditoria de codigo de `9277b0d` (Claude Padre): conforme, con las condiciones de la seccion 2 del plan verificadas.
+- Revision visual del responsable: con observaciones, que toma F02b (detalle en `docs/PLAN_0_8_1.md`, seccion 6, F02b):
+  (1) Informes: cada grafico debe leerse; a 1440 px ningun texto del grafico bajo 10 px efectivos; tabla y grafico lado a
+  lado solo si el grafico tiene al menos 560 px, si no, el grafico bajo la tabla a todo el ancho. (2) Panorama: ninguna
+  tarjeta con una franja vacia; la linea mensual crece para ocupar el alto disponible, con la ayuda y el pie abajo; linea,
+  area y punto con el color de acento de su tarjeta, contraste >= 3:1 probado. (3) Graficos a 390 px en Explorar, Informes
+  y Calidad: si se desbordan en horizontal, aviso visible "Desliza para ver el grafico completo" y difuminado en el borde;
+  sin cambios en `chartModel.ts`, `chartExport.ts` ni el SVG descargado. (4) Menores: el comentario de `tokens.css` cita
+  `tests/tokensF01.test.ts`, que no existe (la prueba esta en `statsF01.test.ts`); `TONE_NOTE` debe nombrar tambien el
+  ambar de los registros tardios.
+- Siguiente: F02b (ABIERTO, correcciones, pruebas con mutacion y capturas en `D:\Ensayo-F02b`); despues F02c (EXTERNO).
