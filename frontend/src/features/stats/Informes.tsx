@@ -52,7 +52,8 @@ function Breakdown({n, ctx, cat, dim, year, scope, exporter, report, ownFresh}: 
     <button type="button" className="sm" disabled={busy !== ''} onClick={() => download('xlsx')}><Icon name="fileSpreadsheet" size={16}/>{busy === 'xlsx' ? 'Generando…' : 'XLSX'}</button>
   </> : undefined}>
     {error && <ErrorMessage>{error}</ErrorMessage>}
-    <div className="stat-breakdown">
+    {/* F02b: el desglose decide por su propio ancho (@container) si el grafico cabe a su tamano natural junto a la tabla. */}
+    <div className="stat-breakdown-box"><div className="stat-breakdown">
       <div className="stat-breakdown-table">
         <div className="table-scroll">
           <table id={tableId} tabIndex={-1} className="stat-table sticky-first">
@@ -69,7 +70,7 @@ function Breakdown({n, ctx, cat, dim, year, scope, exporter, report, ownFresh}: 
           data={{categories: rows.map(x => ({key: x.key, label: x.label})), series: [{key: 'n', label: 'Ingresos', values: rows.map(x => x.n)}], total: r.grand.n, percent: false,
             format: v => v == null ? '—' : fmtInt(v), keepOrder: true}}/> : <p className="field-help stat-empty">{view.empty}</p>}
       </div>
-    </div>
+    </div></div>
     {ownFresh && <Freshness at={s.at} refresh={s.refresh}/>}
   </Panel>;
 }
@@ -78,7 +79,8 @@ function Breakdown({n, ctx, cat, dim, year, scope, exporter, report, ownFresh}: 
  * Informes (DISENO 10.3): la Figura 1 de la Cuenta Publica (julio a junio) con sus cuatro desgloses de ingresos (tipo de
  * solicitud, requirente, via y adscripcion institucional, DI-13), con todas las categorias del catalogo (0 si no hay) en el
  * orden institucional; los estados especiales sin registros van en una nota (E13, ajuste 1). Tabla y grafico lado a lado
- * en escritorio (ajuste 2) y "Datos de las HH:MM" una sola vez si los cuatro desgloses son del mismo momento (ajuste 6).
+ * solo si el grafico cabe a su tamano natural (F02b; si no, bajo la tabla) y "Datos de las HH:MM" una sola vez si los
+ * cuatro desgloses son del mismo momento (ajuste 6).
  * Cada desglose suma el total y se descarga en CSV y XLSX con la funcion Exportacion; con Gestion estadistica se congela.
  */
 export default function Informes({ctx, cat, scope, params}: {ctx: Context; cat: StatsCatalog; scope: string; params: URLSearchParams}) {

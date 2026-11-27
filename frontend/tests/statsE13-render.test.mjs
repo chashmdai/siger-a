@@ -118,8 +118,9 @@ test('ajuste 4: la tabla ancha indica el desplazamiento y fija la primera column
   const css = readFileSync(fileURLToPath(new URL('../src/styles/screens.css', import.meta.url)), 'utf8');
   assert.match(css, /\.stat-table-wrap\.wide \.table-scroll \{[\s\S]*?local,\s*radial-gradient\([^;]*scroll/, 'sombra de desplazamiento');
   assert.match(css, /\.stat-table thead th:first-child, \.stat-table tbody th \{ position: sticky; left: 0/, 'primera columna fija');
-  // Ajuste 2: en escritorio (desde 1.200 px) la tabla y el grafico de Informes van lado a lado.
-  assert.match(css, /@media \(min-width: 1200px\) \{ \.stat-breakdown \{ grid-template-columns: minmax\(0, 2fr\) minmax\(0, 3fr\); \} \}/);
+  // Ajuste 2, reemplazado en 0.8.1 por F02b (observacion 1 de F02, opcion A del GO): la tabla y el grafico de Informes van
+  // lado a lado solo si el grafico cabe a su tamano natural; lo decide el ancho del desglose (@container), no la ventana.
+  assert.match(css, /@container desglose \(min-width: 1094px\) \{\s*\.stat-breakdown \{ grid-template-columns: minmax\(340px, 1fr\) 738px; \}/);
 });
 
 test('comparación con un corte: cada celda cambiada dice «antes» y la diferencia, también con columnas, y se resume', () => {

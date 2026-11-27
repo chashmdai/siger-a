@@ -859,7 +859,7 @@ export function variationTone(indicator: string, direction: string, hasBase: boo
   return direction === better ? 'favorable' : 'desfavorable';
 }
 /** Linea de "Como leer esta cifra" del Panorama que explica los colores de la variacion (D56). */
-export const TONE_NOTE = 'El color de la variación solo indica un sentido donde lo hay: en los ingresos con caracterización completa subir es favorable (verde) y en los registros tardíos bajar es favorable; en ingresos, REQ constituidos, Casos y actuaciones el color es neutro, porque más o menos no es mejor ni peor. La cifra, la flecha y el texto dicen siempre lo mismo.';
+export const TONE_NOTE = 'El color de la variación solo indica un sentido donde lo hay: en los ingresos con caracterización completa subir es favorable (verde) y bajar, desfavorable (ámbar); en los registros tardíos bajar es favorable (verde) y subir, desfavorable (ámbar); en ingresos, REQ constituidos, Casos y actuaciones el color es neutro, porque más o menos no es mejor ni peor. La cifra, la flecha y el texto dicen siempre lo mismo.';
 /**
  * Desplazamiento horizontal del contenedor de pestanas para que la activa quede a la vista (0.8.1, ajuste 5 del GO de F01):
  * solo cambia scrollLeft del contenedor, nunca el desplazamiento vertical de la pagina. Devuelve null si ya se ve entera.
@@ -871,3 +871,36 @@ export function tabScroll(view: {left: number; right: number; scroll: number}, t
 }
 /** Ancho de la barra de datos decorativa de una celda de porcentaje (0.8.1, seccion 3.4): entre 0 % y 100 %; la cifra va en texto. */
 export const databarWidth = (percent: number | null | undefined) => (percent == null || !Number.isFinite(percent) ? 0 : Math.max(0, Math.min(100, percent))).toFixed(1) + '%';
+
+// --- Lectura de los graficos de Informes (0.8.1, F02b, observacion 1; GO: opcion A) -------------------------------------
+/** Ancho del lienzo con que dibuja Chart.tsx (viewBox): a ese ancho cada texto se ve a su tamano de diseno. */
+export const CHART_VIEW_WIDTH = 720;
+/** Marco del lienzo (.stat-chart-canvas): relleno horizontal de 8 px por lado mas 1 px de borde por lado. */
+export const CHART_FRAME = 18;
+/** Ningun texto de un grafico de Informes se ve bajo este tamano (px efectivos) a 1440 px. */
+export const CHART_MIN_TEXT = 10;
+/** Texto mas pequeno que dibujan las barras horizontales de Chart.tsx (cifras y eje); lo comprueba statsF02b-render. */
+export const CHART_MIN_FONT = 11;
+/** Ancho minimo de la tabla del desglose junto al grafico, separacion de la grilla y tope del grafico bajo la tabla. */
+export const BREAKDOWN_TABLE_MIN = 340;
+export const BREAKDOWN_GAP = 16;
+export const BREAKDOWN_STACKED_MAX = 840;
+/**
+ * Ancho del desglose desde el que tabla y grafico van lado a lado: el grafico cabe a su tamano natural (720 px mas el marco)
+ * junto a la tabla. Bajo ese ancho el grafico va bajo la tabla, a todo el ancho y hasta 840 px. screens.css usa el mismo
+ * valor en su @container (lo comprueba statsF02b.test.ts).
+ */
+export const BREAKDOWN_SIDE_MIN = BREAKDOWN_TABLE_MIN + BREAKDOWN_GAP + CHART_VIEW_WIDTH + CHART_FRAME;
+/** Tamano con que se ve un texto de `font` px del lienzo cuando el grafico se dibuja con `width` px de ancho. */
+export const effectiveText = (font: number, width: number) => font * width / CHART_VIEW_WIDTH;
+/**
+ * Disposicion de un desglose de Informes segun su ancho: lado a lado solo si el grafico se dibuja entero a su tamano natural;
+ * si no, bajo la tabla con todo el ancho disponible hasta 840 px. Devuelve el ancho del grafico y el tamano efectivo del texto
+ * mas pequeno.
+ */
+export function breakdownLayout(width: number, minFont = CHART_MIN_FONT): {side: boolean; chart: number; text: number} {
+  const side = width >= BREAKDOWN_SIDE_MIN;
+  const room = side ? width - BREAKDOWN_TABLE_MIN - BREAKDOWN_GAP - CHART_FRAME : width - CHART_FRAME;
+  const chart = Math.max(0, Math.min(side ? CHART_VIEW_WIDTH : BREAKDOWN_STACKED_MAX, room));
+  return {side, chart, text: effectiveText(minFont, chart)};
+}

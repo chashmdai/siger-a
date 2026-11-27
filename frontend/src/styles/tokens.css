@@ -81,7 +81,7 @@
   --chart-muted: #4a626d;
   --chart-grid: #dce5ea;
 
-  /* Explorador estadistico (0.8.1, D55): derivados de la paleta. Contraste probado en tests/tokensF01.test.ts:
+  /* Explorador estadistico (0.8.1, D55): derivados de la paleta. Contraste probado en tests/statsF01.test.ts:
      textos >= 4,5:1 sobre su fondo; marcas e iconos >= 3:1. */
   --stat-segment-bg: #e7eef2;   /* pista del control segmentado (pestanas, tipo de grafico) */
   --stat-row-alt: #f7fafb;      /* filas alternas de las tablas */
@@ -92,6 +92,10 @@
   --stat-accent-act-bg: #efe9fb; --stat-accent-act-ink: #4b2a8c; /* ficha de icono de actuaciones */
   --stat-hero-bg: #f3f9fc;      /* fondo del indicador principal */
   --stat-hero-line: #b8d6e4;    /* borde del indicador principal */
+  /* Linea mensual de cada tarjeta del Panorama en el color de acento de su tarjeta (0.8.1, F02b): >= 3:1 sobre la tarjeta
+     (--surface) y sobre el indicador principal (--stat-hero-bg). Contraste probado en tests/statsF02b.test.ts. */
+  --stat-spark-com: #1a76a3; --stat-spark-req: #4d7f1c; --stat-spark-cas: #a8336e;
+  --stat-spark-act: #6b4fc8; --stat-spark-ok: #23794b;  --stat-spark-warn: #9a5d00;
 
   --radius-sm: 8px;
   --radius: 12px;

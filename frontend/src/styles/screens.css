@@ -724,7 +724,6 @@ a.stat-card-link:hover .stat-card-arrow, a.stat-card-link:focus-visible .stat-ca
 .stat-figure { grid-template-columns: 1fr; }
 .stat-breakdown { display: grid; gap: 1rem; grid-template-columns: 1fr; align-items: start; }
 .stat-breakdown-table, .stat-breakdown-chart { min-width: 0; }
-@media (min-width: 1200px) { .stat-breakdown { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); } }
 .stat-empty-note { margin: .5rem 0 0; }
 .stat-table-wrap.wide .table-scroll {
   background: linear-gradient(to left, var(--surface) 30%, transparent) right center / 2.5rem 100% no-repeat local,
@@ -923,3 +922,38 @@ section[aria-label="Cortes y series"] .empty-icon svg { width: 28px; height: 28p
 .stat-quality-track span:first-child { border-radius: 999px 0 0 999px; }
 .stat-quality-track span:last-child { border-radius: 0 999px 999px 0; }
 .stat-quality-track span:only-child { border-radius: 999px; }
+
+/* F02b (observacion 1): el desglose de Informes decide por su propio ancho. Tabla y grafico van lado a lado solo si el
+   grafico cabe a su tamano natural (720 px mas el marco de 18 px) junto a una tabla de 340 px; si no, el grafico va bajo la
+   tabla a todo el ancho, hasta 840 px. Mismos valores que BREAKDOWN_* en statsModel.ts (tests/statsF02b.test.ts). */
+.stat-breakdown-box { container: desglose / inline-size; }
+.stat-breakdown { grid-template-columns: minmax(0, 858px); }
+.stat-breakdown-chart .stat-chart-canvas svg { width: 100%; max-width: 840px; }
+@container desglose (min-width: 1094px) {
+  .stat-breakdown { grid-template-columns: minmax(340px, 1fr) 738px; }
+}
+
+/* F02b (observacion 2): ninguna tarjeta del Panorama queda con una franja vacia. La linea mensual ocupa el alto que queda,
+   con la ayuda y el pie abajo, en el color de acento de su tarjeta. */
+.stat-card-trend.spark { position: relative; flex: 1 1 auto; min-height: 56px; }
+.stat-card-trend.spark .stat-spark { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--stat-spark-com); }
+.stat-card[data-accent=req] .stat-spark { color: var(--stat-spark-req); }
+.stat-card[data-accent=cas] .stat-spark { color: var(--stat-spark-cas); }
+.stat-card[data-accent=act] .stat-spark { color: var(--stat-spark-act); }
+.stat-card[data-accent=ok] .stat-spark { color: var(--stat-spark-ok); }
+.stat-card[data-accent=warn] .stat-spark { color: var(--stat-spark-warn); }
+.stat-card-skeleton { grid-template-rows: auto auto minmax(56px, 1fr) auto; align-content: stretch; }
+.stat-card-skeleton .skeleton.spark { height: auto; }
+.stat-card.failed .actions { margin-top: auto; }
+
+/* F02b (observacion 3): un grafico que no cabe a lo ancho avisa que se desliza y difumina el borde que sigue. El aviso va sobre
+   el lienzo (nunca encima de rotulos ni cifras) y el difuminado se apaga en el borde que ya se ve entero. Solo en la pagina. */
+.stat-chart-hint { display: flex; align-items: center; gap: .35rem; margin: 0 0 .4rem; font-size: .84rem; font-weight: 600; color: var(--ink-700); }
+.stat-chart-hint svg { color: var(--primary); flex: none; }
+.stat-chart-frame { position: relative; }
+.stat-chart-frame::before, .stat-chart-frame::after { content: ''; position: absolute; top: 1px; bottom: 1px; width: 2.75rem; z-index: 3; pointer-events: none;
+  opacity: 0; transition: opacity var(--base) var(--ease); }
+.stat-chart-frame::before { left: 1px; border-radius: var(--radius-lg) 0 0 var(--radius-lg); background: linear-gradient(to right, var(--surface), rgba(255, 255, 255, 0)); }
+.stat-chart-frame::after { right: 1px; border-radius: 0 var(--radius-lg) var(--radius-lg) 0; background: linear-gradient(to left, var(--surface), rgba(255, 255, 255, 0)); }
+.stat-chart-frame.fade-start::before, .stat-chart-frame.fade-end::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .stat-chart-frame::before, .stat-chart-frame::after { transition: none; } }

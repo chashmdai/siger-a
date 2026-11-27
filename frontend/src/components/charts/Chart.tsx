@@ -1,5 +1,5 @@
-import {useId, useRef, useState} from 'react';
-import type {ReactNode} from 'react';
+import {useEffect, useId, useRef, useState} from 'react';
+import type {ReactNode, RefObject} from 'react';
 import {Icon} from '../Icon';
 import type {ChartKind} from './chartModel';
 import {arcPath, barLength, BASE_COLOR, byValue, CHART_COLORS, FONT, GRID_COLOR, KIND_LABELS, linePoints, MUTED_COLOR, periodAxis, pieSlices, scale, TEXT_COLOR} from './chartModel';
@@ -210,6 +210,59 @@ function Pie({data}: {data: ChartData}) {
   </svg>;
 }
 
+/** Aviso visible cuando el grafico no cabe a lo ancho (0.8.1, F02b, observacion 3). */
+export const CHART_SCROLL_HINT = 'Desliza para ver el gráfico completo';
+export type ChartScroll = {overflow: boolean; start: boolean; end: boolean};
+const NO_SCROLL: ChartScroll = {overflow: false, start: true, end: true};
+/**
+ * Estado del desplazamiento horizontal del lienzo: si el grafico se desborda y si ya se ve su comienzo o su final (con un
+ * margen de 2 px por el redondeo de los navegadores). Sin desborde no hay nada que deslizar.
+ */
+export function chartScroll(scrollWidth: number, clientWidth: number, scrollLeft: number, tolerance = 2): ChartScroll {
+  if (scrollWidth - clientWidth <= tolerance) return NO_SCROLL;
+  return {overflow: true, start: scrollLeft <= tolerance, end: scrollLeft + clientWidth >= scrollWidth - tolerance};
+}
+type Scrollable = Pick<HTMLElement, 'scrollWidth' | 'clientWidth' | 'scrollLeft' | 'addEventListener' | 'removeEventListener'> & {firstElementChild: Element | null};
+type Observer = {observe: (target: Element) => void; disconnect: () => void};
+/**
+ * Observa el lienzo (su tamano, el del grafico y su desplazamiento, con una escucha pasiva) e informa cada cambio de estado.
+ * Devuelve la funcion que desconecta el observador y quita la escucha: la llama ChartScrollHint al desmontarse.
+ */
+export function watchScroll(el: Scrollable, report: (state: ChartScroll) => void,
+  makeObserver: ((update: () => void) => Observer) | null = typeof ResizeObserver === 'undefined' ? null : update => new ResizeObserver(update)) {
+  const update = () => report(chartScroll(el.scrollWidth, el.clientWidth, el.scrollLeft));
+  update();
+  const observer = makeObserver?.(update) ?? null;
+  observer?.observe(el as unknown as Element);
+  if (el.firstElementChild) observer?.observe(el.firstElementChild);
+  el.addEventListener('scroll', update, {passive: true});
+  return () => {
+    observer?.disconnect();
+    el.removeEventListener('scroll', update);
+  };
+}
+/**
+ * Marco del lienzo con el aviso y el difuminado del borde (solo en la pagina; nada de esto entra al SVG descargado). El aviso
+ * va sobre el lienzo, fuera de el, y nunca tapa rotulos ni cifras; es una instruccion visual (aria-hidden): el grupo del
+ * grafico ya remite a la tabla. El difuminado se apaga en el borde que ya se ve entero.
+ */
+export function ScrollHintView({state, children}: {state: ChartScroll; children: ReactNode}) {
+  return <>
+    {state.overflow && <p className="stat-chart-hint" aria-hidden="true"><Icon name="moveRight" size={16}/>{CHART_SCROLL_HINT}</p>}
+    <div className={'stat-chart-frame' + (state.overflow && !state.start ? ' fade-start' : '') + (state.overflow && !state.end ? ' fade-end' : '')}>{children}</div>
+  </>;
+}
+/** ScrollHintView con su observador: lo conecta al montar (y al cambiar el grafico) y lo desconecta al desmontarse. */
+export function ChartScrollHint({target, watch, children}: {target: RefObject<HTMLDivElement | null>; watch: string; children: ReactNode}) {
+  const [state, setState] = useState<ChartScroll>(NO_SCROLL);
+  useEffect(() => {
+    const el = target.current;
+    if (!el) return;
+    return watchScroll(el, next => setState(prev => prev.overflow === next.overflow && prev.start === next.start && prev.end === next.end ? prev : next));
+  }, [target, watch]);
+  return <ScrollHintView state={state}>{children}</ScrollHintView>;
+}
+
 /**
  * Grafico con titulo, subtitulo, notas y pie de fuente; nombre accesible, ayuda por marca (con foco por teclado) y la
  * tabla como alternativa textual (la presenta la pantalla). Descarga en PNG y SVG con los mismos textos.
@@ -262,9 +315,11 @@ export function Chart({kind, data, title, subtitle, notes, source, file, tableId
       <strong id={id + 't'}>{title}</strong>
       {subtitle && <span className="stat-chart-sub">{subtitle}</span>}
     </figcaption>
-    <div ref={ref} className="stat-chart-canvas" role="group" aria-label={`${KIND_LABELS[kind]}: ${title}. ${data.categories.length} categorías.${tableId ? ' Las cifras están también en la tabla.' : ''}`}
-      onMouseOver={e => show(e.target)} onMouseLeave={hide} onFocus={e => show(e.target)} onBlur={hide}>{body}
-      {tip && <span className={'chart-tip' + (tip.below ? ' below' : '')} style={{left: tip.x, top: tip.y}} aria-hidden="true">{tip.text}</span>}</div>
+    <ChartScrollHint target={ref} watch={`${kind}:${data.categories.length}:${data.series.length}`}>
+      <div ref={ref} className="stat-chart-canvas" role="group" aria-label={`${KIND_LABELS[kind]}: ${title}. ${data.categories.length} categorías.${tableId ? ' Las cifras están también en la tabla.' : ''}`}
+        onMouseOver={e => show(e.target)} onMouseLeave={hide} onFocus={e => show(e.target)} onBlur={hide}>{body}
+        {tip && <span className={'chart-tip' + (tip.below ? ' below' : '')} style={{left: tip.x, top: tip.y}} aria-hidden="true">{tip.text}</span>}</div>
+    </ChartScrollHint>
     {data.divider && <p className="stat-chart-divider"><span aria-hidden="true">┆ </span>{data.divider.label}</p>}
     {notes.length > 0 && <ul className="stat-chart-notes">{notes.map(n => <li key={n}>{n}</li>)}</ul>}
     <p className="stat-source">{source}</p>

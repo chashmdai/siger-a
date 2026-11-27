@@ -2,7 +2,7 @@ import {useCallback, useEffect, useId, useState} from 'react';
 import type {Context} from '../../app/context';
 import {Icon} from '../../components/Icon';
 import type {IconName} from '../../components/Icon';
-import {barLength, CHART_COLORS, linePoints, MUTED_COLOR, periodTick, scale} from '../../components/charts/chartModel';
+import {barLength, linePoints, MUTED_COLOR, periodTick, scale} from '../../components/charts/chartModel';
 import {Callout} from '../../components/Primitives';
 import type {Indicator, Period, Query, Result, StatsCatalog} from './statsModel';
 import {cardHref, chileDay, chileTime, COMPARE_LABELS, COMPLETE_NOTE, completeShare, encodeRoute, fmtInt, fmtPoints, indicatorQuery, INDICATORS, panoramaPeriod, periodLabel,
@@ -30,7 +30,10 @@ const look = (key: string): {icon: IconName; accent: string} => LOOK[key] ?? {ic
 
 /**
  * Linea mensual decorativa (las cifras van en el texto de la tarjeta): area degradada, linea base y punto en el ultimo
- * mes. El degradado usa un identificador propio de la tarjeta.
+ * mes. El degradado usa un identificador propio de la tarjeta. F02b (observacion 2): la linea ocupa todo el alto que queda
+ * en la tarjeta (el SVG se estira) y toma el color de acento de su tarjeta (currentColor, token --stat-spark-*). Los trazos
+ * no se deforman al estirarse (non-scaling-stroke) y el punto final es un trazo de largo cero con extremo redondo, que se
+ * ve redondo a cualquier proporcion.
  */
 function Spark({values}: {values: number[]}) {
   const uid = useId().replace(/:/g, '');
@@ -42,12 +45,13 @@ function Spark({values}: {values: number[]}) {
   const area = last ? `${line} L${last.x.toFixed(1)} ${h - pad} L${pts[0].x.toFixed(1)} ${h - pad} Z` : '';
   return <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="stat-spark" aria-hidden="true" focusable="false">
     <defs><linearGradient id={'sg' + uid} x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0%" stopColor={CHART_COLORS[0]} stopOpacity={0.24}/><stop offset="100%" stopColor={CHART_COLORS[0]} stopOpacity={0}/>
+      <stop offset="0%" stopColor="currentColor" stopOpacity={0.22}/><stop offset="100%" stopColor="currentColor" stopOpacity={0}/>
     </linearGradient></defs>
     <line x1={pad} x2={w - pad} y1={h - pad} y2={h - pad} stroke={MUTED_COLOR} strokeWidth={1} strokeOpacity={0.5} vectorEffect="non-scaling-stroke"/>
     {pts.length > 1 && <path d={area} fill={`url(#sg${uid})`}/>}
-    {pts.length > 1 && <path d={line} fill="none" stroke={CHART_COLORS[0]} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>}
-    {last && <circle cx={last.x} cy={last.y} r={3} fill={CHART_COLORS[0]}/>}
+    {pts.length > 1 && <path d={line} fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>}
+    {last && <path className="stat-spark-dot" d={`M${last.x.toFixed(1)} ${last.y.toFixed(1)}h0`} fill="none" stroke="currentColor" strokeWidth={7} strokeLinecap="round"
+      vectorEffect="non-scaling-stroke"/>}
   </svg>;
 }
 
@@ -135,7 +139,7 @@ export function IndicatorCard({ind, q, s, total, inlineFresh}: {ind: Indicator; 
   const tone = change ? variationTone(ind.key, change.direction, hasBase) : 'neutro';
   const base = g && g.base_n > 0 && ind.key !== 'completos' ? ` respecto de ${fmtInt(g.base_n)}` : '';
   const described = [change ? id + 'c' : '', id + 'm', id + 'h'].filter(Boolean).join(' ');
-  return <a className={cls + ' stat-card-link'} href={href} aria-label={`${ind.label}: ${value}. Abrir en Explorar.`} aria-describedby={described}>
+  return <a className={cls + ' stat-card-link'} href={href} data-accent={look(ind.key).accent} aria-label={`${ind.label}: ${value}. Abrir en Explorar.`} aria-describedby={described}>
     <CardHead ind={ind}/>
     <span className="stat-card-body">
       <span className="stat-card-figure">
@@ -147,7 +151,7 @@ export function IndicatorCard({ind, q, s, total, inlineFresh}: {ind: Indicator; 
       </span>
       {ind.key === 'completos' && <Ring share={share}/>}
     </span>
-    <span className="stat-card-trend">
+    <span className={'stat-card-trend' + (ind.key === 'ingresos' ? '' : ' spark')}>
       {ind.key === 'ingresos' ? <MonthBars months={months}/> : <Spark values={months.map(m => m.n)}/>}
     </span>
     <span id={id + 'm'} className="sr-only">{'Mes a mes: ' + months.map(m => `${m.label} ${fmtInt(m.n)}`).join('; ') + '.'}</span>
