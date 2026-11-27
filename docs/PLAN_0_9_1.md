@@ -175,7 +175,7 @@ Formulario: `contratos/antecedentes-complementarios-v1.0.md` y sus fixtures (A00
 
 ### Equipos
 
-- **TEST-SIGER** (Windows Server, `C:\sigera` y `C:\formulario-web`): equipo principal. Todo lo de SIGER (PowerShell
+- **TEST-SIGER** (Windows Server, `C:\sigera` y `D:\formulario-web`): equipo principal. Todo lo de SIGER (PowerShell
   5.1, `Check-Scripts.ps1`, DPAPI, MySQL 8.4 aislado en `D:\Ensayo-*`, build de entrega) y el desarrollo y las pruebas
   del Formulario.
 - **CachyOS** (Linux del responsable, `~/sigera` y `~/formulario-web`): solo lo del Formulario que exige Linux y
