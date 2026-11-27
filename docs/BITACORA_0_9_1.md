@@ -17,7 +17,7 @@ Cada sesión empieza con el prompt universal de `PLAN_0_9_0.md` sección 5, sin 
 | A02 | Recepción de antecedentes y admisión automática (servidor) | SIGER | TEST-SIGER | ABIERTO |
 | A03 | Interfaz del Caso y correos al ciudadano: invitación y aviso de cierre | SIGER | TEST-SIGER | ABIERTO |
 | A04 | Formulario: invitaciones, ingreso con ClaveÚnica, aporte de antecedentes y variante de entrega | Formulario [FORMULARIO] | TEST-SIGER | ABIERTO |
-| A05 | Integración de punta a punta, MySQL, aceptación y cierre de versión | ambos [FORMULARIO] | TEST-SIGER (CachyOS si A00 lo determina) | ABIERTO |
+| A05 | Integración de punta a punta, MySQL, aceptación y cierre de versión | ambos [FORMULARIO] | CachyOS | ABIERTO |
 | A06 | Auditoría independiente | ambos | - | EXTERNO |
 | A07 | Build de entrega de SIGER y etiqueta | SIGER | TEST-SIGER | ABIERTO |
 | A08 | Paquete del Formulario, simulacro aislado y etiqueta | Formulario [FORMULARIO] | CachyOS | ABIERTO |

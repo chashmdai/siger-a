@@ -181,6 +181,12 @@ Formulario: `contratos/antecedentes-complementarios-v1.0.md` y sus fixtures (A00
 - **CachyOS** (Linux del responsable, `~/sigera` y `~/formulario-web`): solo lo del Formulario que exige Linux y
   Docker (paquete de release y simulacro aislado; el ensayo de A05 si A00 determina que el Formulario local necesita
   Docker).
+
+  Todo contenedor que cree un gate es volátil: usa `--rm` o un proyecto de Compose con nombre propio del gate, no usa
+  volúmenes con nombre ni monta datos persistentes del equipo, y al cerrar (también ante una falla o un corte) se
+  eliminan el contenedor, sus volúmenes anónimos y su red (`docker compose down -v` o `docker rm -f`). Nunca se tocan
+  contenedores, imágenes ni volúmenes ajenos al gate. La evidencia (logs, huellas, salidas del simulacro) queda en
+  `~/ensayo-<gate>/`, fuera de Docker.
 - Un gate corre entero en un solo equipo. Al cambiar de equipo: push en el que termina, pull de ambos repositorios en
   el que empieza. La bitácora registra el equipo de cada cierre.
 - Si A00 determina que A05 debe correr en CachyOS, lo registra como hallazgo y el responsable actualiza la columna
@@ -226,7 +232,7 @@ Con un solo ejecutor, los gates se ejecutan en el orden de la tabla.
 | A02 | Recepción de antecedentes y admisión automática (servidor) | SIGER | TEST-SIGER | A01 | 4 |
 | A03 | Interfaz del Caso y correos al ciudadano: invitación y aviso de cierre | SIGER | TEST-SIGER | A02 | 5, 6 |
 | A04 | Formulario: invitaciones, ingreso con ClaveÚnica, aporte de antecedentes y variante de entrega | Formulario [FORMULARIO] | TEST-SIGER | A00 | 7 |
-| A05 | Integración de punta a punta, MySQL, aceptación y cierre de versión | ambos [FORMULARIO] | TEST-SIGER (CachyOS si A00 lo determina) | A01-A04 | 8, 9 |
+| A05 | Integración de punta a punta, MySQL, aceptación y cierre de versión | ambos [FORMULARIO] | CachyOS | A01-A04 | 8, 9 |
 | A06 | Auditoría independiente (EXTERNO) | ambos | - | A05 | todo |
 | A07 | Build de entrega de SIGER y etiqueta | SIGER | TEST-SIGER | Ciclo de A06 cerrado | 9 |
 | A08 | Paquete del Formulario, simulacro aislado y etiqueta | Formulario [FORMULARIO] | CachyOS | A07 | 9 |
@@ -368,8 +374,10 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
 **A05 - Integración de punta a punta, MySQL, aceptación y cierre de versión** [FORMULARIO]
 - Alcance: ensayo con SIGER y el Formulario locales (identidad simulada del perfil de pruebas del Formulario, nunca
   ClaveÚnica real): invitar, publicar, correo con Graph falso, aportar, PULL/ACK, admisión, aviso, documentos en el
-  Caso; cierre con invitación vigente (revocación y entrega cruzada); aviso de cierre. Suite MySQL de SIGER completa en
-  `D:\Ensayo-A05`. Versión 0.9.1 en `backend/pom.xml`, `frontend/package.json` y `package-lock.json`. Redactar el paso U
+  Caso; cierre con invitación vigente (revocación y entrega cruzada); aviso de cierre. Suite MySQL de SIGER completa con
+  MySQL 8.4 en un contenedor volátil (`docker run --rm`, datos en `--tmpfs`, sin volúmenes con nombre), publicado solo en
+  `127.0.0.1:3417`. En `~/ensayo-a05/` van solo los logs y la evidencia.
+  Versión 0.9.1 en `backend/pom.xml`, `frontend/package.json` y `package-lock.json`. Redactar el paso U
   de 0.9.1 y la habilitación (D65: orden, propiedades en ambos sistemas, prueba real del responsable con sus propios
   datos) en `DESPLIEGUE_VM.md`; `PRUEBAS_MANUALES_0_9_1.md`; sección "Qué cambia en esta versión" de
   `ACTUALIZACION_UBUNTU_PRODUCCION.md` del Formulario; `ALCANCE_Y_PENDIENTES.md`, `CLAUDE.md`, `ARQUITECTURA.md`,
@@ -378,6 +386,8 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
   - `DESPLIEGUE_VM.md` y la habilitación indican el apagado: primero el Formulario y después SIGER, cuando no queden
     entregas `ANT-1.0` pendientes.
 - Cierre: `gate A05: integracion y cierre de version` en ambos repositorios.
+- A05 no corre `Check-Scripts.ps1`, porque CachyOS no tiene PowerShell 5.1. A07 lo corre en TEST-SIGER como primera
+  verificación, antes del build. Si falla, A07 queda BLOQUEADO y se abre A05b (corrección, TEST-SIGER).
 
 **A06 - Auditoría independiente** (EXTERNO)
 - La realiza Claude Padre sobre el commit de A05 de ambos repositorios: decisiones D58-D74, reglas de la sección 2,
@@ -385,6 +395,8 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
   registra el resultado.
 
 **A07 - Build de entrega de SIGER y etiqueta** (TEST-SIGER)
+- Primera verificación: `Check-Scripts.ps1` (5.1) sobre el HEAD, con los conteos de A00 (40 scripts, 81 órdenes en 63
+  procesos) o los que justifiquen los gates siguientes.
 - Alcance: build de entrega con el procedimiento vigente, `SOURCE_SHA256.txt`, etiqueta anotada `v0.9.1`. Ante un
   fallo, BLOQUEADO con la evidencia y sin etiqueta.
 - Cierre: `gate A07: build y etiqueta de SIGER`. El informe indica que A08 se ejecuta en CachyOS.
