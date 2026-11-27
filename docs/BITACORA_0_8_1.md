@@ -17,7 +17,7 @@ sesion que encuentre F03 como primer ABIERTO verifica esa dependencia, informa y
 | F01 | Rediseno visual del explorador estadistico e iconografia (frontend, version y documentos) | CERRADO |
 | F02 | Revision visual del responsable y auditoria de Claude Padre | BLOQUEADO |
 | F02b | Correcciones de la revision visual de F02 | CERRADO |
-| F02c | Nueva revision visual y auditoria de F02b | EXTERNO |
+| F02c | Nueva revision visual y auditoria de F02b | CERRADO |
 | F03 | Build de entrega y etiqueta `v0.8.1` | ABIERTO |
 
 ## Decisiones del responsable
@@ -106,3 +106,16 @@ condiciones del GO, verifica que la base no haya cambiado y no necesita volver a
 - Hallazgos para gates siguientes: a 1440 px Informes queda apilado (lado a lado desde unos 1.505 px de ventana: el desglose mide 1.030 px a 1440 px y crece con ella); Playwright MCP solo escribe en `C:\sigera\.playwright-mcp` (ignorada por git): las capturas se movieron a D:.
 - Pendientes: nueva revision visual y auditoria del diff `9277b0d..<commit de F02b>` -> F02c (EXTERNO); paquete y etiqueta -> F03; produccion -> U81 (responsable).
 - Verificacion manual sugerida al usuario: `docs/PRUEBAS_MANUALES_0_8_1.md`, seccion 6, y las capturas de `D:\Ensayo-F02b\capturas`.
+
+### F02c - Nueva revision visual y auditoria de F02b   (CERRADO)
+- Fecha: 2026-11-27; registrado por encargo de documentacion del responsable (commit `docs: revision F02c conforme`).
+- Auditoria de codigo del diff `9277b0d..ba39b7e`: conforme.
+- Las condiciones de la seccion 2 fueron verificadas por Claude Padre: sin cambios en servidor, `scripts/`, `.mvn/`, `chartModel.ts`, `chartExport.ts` ni dependencias.
+- `statsModel.ts` solo agrega funciones y cambia el texto de `TONE_NOTE`.
+- El ajuste de `statsE13-render.test.mjs` es el autorizado en el GO.
+- Revision visual de las capturas de `D:\Ensayo-F02b\capturas`: conforme.
+  - Informes legible a 1440 px (apilado) y a 1920 px (lado a lado).
+  - Panorama sin franjas vacias y con el color de acento de cada tarjeta.
+  - Aviso y difuminado a 390 px.
+- Observacion sin bloqueo, para 0.9.x: a 1440 px, la columna apilada de Informes (858 px) deja vacio el costado derecho del panel.
+- El ciclo de F02 queda cerrado. El commit auditado para F03 es `ba39b7e`.
