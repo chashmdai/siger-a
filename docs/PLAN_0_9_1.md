@@ -267,7 +267,8 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
 - Cierre: `gate A00: linea base, decisiones y contrato de antecedentes` en ambos repositorios.
 
 **A01 - Invitaciones en SIGER (servidor)**
-- Alcance: V25 (`case_invitation` y `invitation_sync`, `DISENO_0_9_1.md` 2); comandos `CASE_INVITE` y
+- Alcance: V25 (`case_invitation` y `invitation_sync`, `DISENO_0_9_1.md` 2) y las columnas nulas de la marca del
+  aviso de cierre en `case_record` (quién y cuándo, DI-16), sin lógica; la lógica es de A03; comandos `CASE_INVITE` y
   `INVITE_REVOKE` por `Workflow.run`; elegibilidad (D58: requirente con RUN autenticado por ClaveÚnica y correo
   declarado; Caso abierto; actor con escritura en el Caso; una invitación vigente por Caso, DI-18); revocación
   automática dentro de `CASE_CLOSE` (D63); vencimiento por tiempo (D61); canal SIGER→Formulario con outbox durable,
@@ -278,7 +279,7 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
 - Archivos autorizados: migración V25, `CaseCommands.java` (solo el enganche de `CASE_CLOSE`), clases nuevas de
   invitación y canal, `Workflow.java`, `Access.java` si hace falta una facultad, `Queries.java` (ficha del Caso),
   `FormularioClient.java` (solo métodos nuevos de invitación; regla 2), configuración de ejemplo, pruebas.
-- Definiciones: DI-18 y DI-20 respondidas.
+- Definiciones: DI-16, DI-18 y DI-20 respondidas.
 - Pruebas y mutación: elegibilidad (incluida la restricción de contacto de DI-20) (sin RUN ClaveÚnica, sin correo, Caso cerrado, sin facultad, segunda vigente);
   revocación al cierre en la misma transacción; vencimiento; firma verificable con la clave pública de prueba y
   rechazo con la etiqueta de un ACK; idempotencia del canal; Formulario falso que falla (reintento) y que rechaza
