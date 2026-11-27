@@ -1,7 +1,8 @@
 # SIGER 0.9.1 - diseño de referencia
 
-Diseño de `docs/PLAN_0_9_1.md` (decisiones D52-D68). Las referencias de la sección 1 se verificaron al planificar
-(SIGER `4b482be`, Formulario `6f886eb`); A00 las vuelve a verificar. Una diferencia aprobada se registra al final de
+Diseño de `docs/PLAN_0_9_1.md` (decisiones D58-D74). Las referencias de la sección 1 se verificaron al planificar
+(SIGER `4b482be`, Formulario `6f886eb`); 0.8.1 solo cambió la interfaz (iconos y explorador estadístico), por lo
+que las líneas del frontend pueden haberse desplazado. A00 las vuelve a verificar sobre el HEAD. Una diferencia aprobada se registra al final de
 este documento ("Diferencias aprobadas").
 
 ## 1. Referencias verificadas
@@ -41,12 +42,12 @@ este documento ("Diferencias aprobadas").
 
 `case_invitation`
 - `id`, `case_id`, `requirement_id`, `public_id` (UUID que conoce el Formulario), `token_sha256` (CHAR 64, UNIQUE),
-  `expected_run` (RUN normalizado del requirente autenticado), `request_text` (hasta 1.000 caracteres, D60),
+  `expected_run` (RUN normalizado del requirente autenticado), `request_text` (hasta 1.000 caracteres, D66),
   `contact_email` (instantánea del correo declarado al invitar), `created_by`, `created_ms`, `expires_ms`,
   `state` (PUBLICANDO, VIGENTE, ENTREGADA, VENCIDA, REVOCADA, FALLIDA), `published_ms`, `delivered_ms`,
   `delivered_communication_id`, `revoked_ms`, `revoked_by`, `revoke_cause` (MANUAL, CIERRE_CASO), `revision`.
 - Vigente: `state='VIGENTE' AND expires_ms > now`. VENCIDA se calcula por tiempo y se fija al leer o al recibir.
-- `expires_ms`: fin del día 17 contado desde la creación, 23:59:59 de America/Santiago (D55); el correo informa la fecha.
+- `expires_ms`: fin del día 17 contado desde la creación, 23:59:59 de America/Santiago (D61); el correo informa la fecha.
 - Una vigente por Caso (DI-18): índice o comprobación bajo el lock del comando.
 
 `invitation_sync` (outbox hacia el Formulario)
@@ -54,7 +55,7 @@ este documento ("Diferencias aprobadas").
   RECHAZADA), `attempts`, `last_attempt_ms`, `last_status`, `created_ms`. Sin token ni texto (el payload se arma al
   enviar desde `case_invitation`; el token no se guarda: ver 3).
 
-Elegibilidad (D52), regla única en el servidor y publicada en la ficha como `invite_eligible` con razón:
+Elegibilidad (D58), regla única en el servidor y publicada en la ficha como `invite_eligible` con razón:
 1. Caso abierto y actor con escritura en el Caso.
 2. Requirente con identidad autenticada por ClaveÚnica: `external_person` del requirente de la COM de origen del REQ
    con `authenticated = true` y RUN válido (A00 fija la condición exacta: rol del requirente y `run_source`).
@@ -78,7 +79,7 @@ Elegibilidad (D52), regla única en el servidor y publicada en la ficha como `in
   5xx o red → REINTENTABLE con espera creciente.
 - Revocar: `INVITE_REVOKE` o `CASE_CLOSE` fijan REVOCADA y encolan REVOCAR (`POST .../invitaciones/{public_id}/revocacion`,
   misma firma). Un correo RETENIDO o PENDIENTE de esa invitación se descarta.
-- El texto requerido (D60) viaja al Formulario porque allí se muestra tras ClaveÚnica; nunca va en el correo.
+- El texto requerido (D66) viaja al Formulario porque allí se muestra tras ClaveÚnica; nunca va en el correo.
 - Sin red real en pruebas: Formulario falso en proceso con la clave pública de prueba.
 
 ## 4. Recepción y admisión automática
@@ -99,7 +100,7 @@ CLAVEUNICA), texto aportado, descriptores de adjuntos, sellos y firma Ed25519 de
    `decision_reason` fijos ("Antecedentes solicitados por la gestión"), COM en estado VINCULADA, invitación ENTREGADA con
    `delivered_communication_id`, aviso al profesional responsable del Caso y auditoría `ANTECEDENTES_RECIBIDOS`.
 4. Si no (vencida, revocada, Caso cerrado): COM NUEVA a Distribución como cualquier ingreso, con la referencia visible
-   "Llegó por una solicitud de antecedentes del Caso <folio> que ya no estaba vigente" (D57).
+   "Llegó por una solicitud de antecedentes del Caso <folio> que ya no estaba vigente" (D63).
 5. RUN distinto del esperado: no se crea la COM; la entrega se informa como fallo contractual (`CONTRATO_INVALIDO`) y se
    registra en el estado de integración para TI (no debería ocurrir: el Formulario ya lo valida).
 6. Estadística: la COM vinculada sigue las reglas vigentes de VINCULADA (no es un requerimiento nuevo, D25).
@@ -125,7 +126,7 @@ interno a un dominio no permitido sigue rechazado.
   indicando este número."
 - Ambos: remitente `siger@defensorianinez.cl`, texto plano, sin nombres, RUN, relato ni datos del expediente.
 
-5.4 Aviso de cierre (D62-D65): el check viaja en el comando de cierre según DI-16; con el cierre concretado se encola
+5.4 Aviso de cierre (D68-D71): el check viaja en el comando de cierre según DI-16; con el cierre concretado se encola
 AVISO_CIERRE a `contact_email` de la COM de origen; auditoría `AVISO_CIERRE_SOLICITADO` (actor, sin dirección).
 
 ## 6. Interfaz del Caso (A03)
@@ -182,9 +183,9 @@ E10 apagado por defecto en ambos sistemas; E11 regresión de los recorridos 1.0,
 
 ## 10. Riesgos
 
-- R1 ClaveÚnica sin certificar: la función queda lista y apagada (D59).
+- R1 ClaveÚnica sin certificar: la función queda lista y apagada (D65).
 - R2 Primera actualización en sitio del Formulario: simulacro aislado obligatorio en A07 y ventana coordinada.
-- R3 Correo a dirección errada: el enlace sin la ClaveÚnica del requirente no sirve (D54); el aviso de cierre no lleva
+- R3 Correo a dirección errada: el enlace sin la ClaveÚnica del requirente no sirve (D60); el aviso de cierre no lleva
   datos del expediente.
 - R4 Contacto no seguro (NNA o restricciones declaradas): DI-20.
 - R5 Token filtrado: huella en ambos lados, fragmento de URL, minimización del correo, una entrega, vigencia acotada.

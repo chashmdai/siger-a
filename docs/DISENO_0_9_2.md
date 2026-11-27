@@ -1,6 +1,6 @@
 # SIGER 0.9.2 - diseño de referencia
 
-Diseño de `docs/PLAN_0_9_2.md`. Referencias tomadas al planificar sobre SIGER `4b482be`; B00 las verifica sobre el HEAD
+Diseño de `docs/PLAN_0_9_2.md`. Referencias tomadas al planificar sobre SIGER `4b482be` (antes de 0.8.1); B00 las verifica sobre el HEAD
 posterior a 0.9.1 y registra las diferencias al final.
 
 ## 1. Referencias
@@ -18,7 +18,7 @@ posterior a 0.9.1 y registra las diferencias al final.
 | R9 | `DISENO_0_8_0.md` 15.1-15.5 | Diseño aprobado de D44, D45, D46, D48 y D49. |
 | R10 | `BITACORA_0_8_0.md` E09, E11, E12, E16 | GO y hallazgos de origen de B05, B06 y B07. |
 
-## 2. Seguimiento de la gestión por folio (B01, D70)
+## 2. Seguimiento de la gestión por folio (B01, D76)
 
 - Entrada: el buscador reconoce un folio (SIGER-XXXXXX o folio de COM, SOL, REQ o Caso). Con una sola coincidencia por
   folio, muestra la vista de seguimiento en lugar de abrir la ficha (R2 se mantiene para búsquedas por persona).
@@ -30,9 +30,9 @@ posterior a 0.9.1 y registra las diferencias al final.
   estado actual destacado arriba en palabras ("En gestión en el Caso N° ...", "Cerrada el ..."); botón "Abrir ficha" por
   registro legible.
 - Privacidad: lo no legible no aparece ni se cuenta; un folio inexistente y uno ilegible responden igual.
-- Sin facultad nueva: la amplitud la da la lectura que ya tenga la cuenta (D70).
+- Sin facultad nueva: la amplitud la da la lectura que ya tenga la cuenta (D76).
 
-## 3. Vínculo con buscador (B02, D69)
+## 3. Vínculo con buscador (B02, D75)
 
 - El diálogo de vínculo de la COM reemplaza "Folio exacto del REQ" por un campo de búsqueda que usa el mismo servicio
   del buscador (folio, RUN o nombre) y lista resultados con su cadena REQ-Casos y estados.
@@ -41,7 +41,7 @@ posterior a 0.9.1 y registra las diferencias al final.
 - Selección: el usuario elige un REQ; el comando sigue siendo `COM_LINK` con el REQ (sin `target_case_id`). Observación
   opcional. Errores de servidor iguales a 0.9.1.
 
-## 4. Distribución ágil (B02, D71)
+## 4. Distribución ágil (B02, D77)
 
 - "Usar todas las propuestas": botón en el diálogo de distribución que copia a los selectores las propuestas vigentes de
   R6 (solo códigos seleccionables del catálogo vigente); el usuario revisa y confirma. Sin propuesta, no hace nada.
@@ -53,10 +53,10 @@ posterior a 0.9.1 y registra las diferencias al final.
 Diseño completo en `DISENO_0_8_0.md` 15.1 y 15.2 (R9), con DI-05 y DI-06. B00 confirma que la región vigente de la COM
 del Formulario (`OriginRegion.current`) basta sin cambios en el Formulario.
 
-## 6. Correo de avisos, índice y reportes (B04, D46, D48, D72)
+## 6. Correo de avisos, índice y reportes (B04, D46, D48, D78)
 
 - D46 y D48: `DISENO_0_8_0.md` 15.3 y 15.4. Las plantillas ciudadanas de 0.9.1 quedan fuera del cambio de asuntos.
-- D72: `Reports` (consultas y exportación) aplica la misma regla que el resto: una cuenta TI no consulta reportes aunque
+- D78: `Reports` (consultas y exportación) aplica la misma regla que el resto: una cuenta TI no consulta reportes aunque
   tenga una concesión REPORTES insertada fuera de la aplicación; Administración sigue avisando `TI_INCOMPATIBLE`.
 
 ## 7. Captura en el flujo (B05)

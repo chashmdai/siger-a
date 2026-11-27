@@ -8,11 +8,11 @@ detallados) y crea su bitácora. Prefijo de gates **P**. Fecha de corte para los
 
 ## 0. Decisiones y propuestas
 
-Vigentes (de 0.9.1): D62-D66 (aviso de cierre por correo con check opcional; el PDF se agrega a ese mismo correo).
+Vigentes (de 0.9.1): D68-D72 (aviso de cierre por correo con check opcional; el PDF se agrega a ese mismo correo).
 
-Propuestas pendientes de validación institucional (se convierten en decisiones D73+ al validarse):
+Propuestas pendientes de validación institucional (se convierten en decisiones, con el siguiente número libre, al validarse):
 - **DS-1 Eventos SMS.** "En gestión" al abrirse el Caso; "cierre" al cerrar el Caso con el mismo check del correo
-  (D62); "solicitud de antecedentes" con el mismo enlace de la invitación de 0.9.1 (un solo token para correo y SMS;
+  (D68); "solicitud de antecedentes" con el mismo enlace de la invitación de 0.9.1 (un solo token para correo y SMS;
   una sola entrega).
 - **DS-2 Textos.** Fijos, breves, con el folio SIGER-XXXXXX como única referencia, sin datos del expediente. Ejemplos:
   "Defensoría de la Niñez: su gestión SIGER-XXXXXX está en curso." / "Defensoría de la Niñez: su gestión
@@ -23,7 +23,7 @@ Propuestas pendientes de validación institucional (se convierten en decisiones 
 - **DS-4 Validación.** La Defensoría valida eventos, textos y si "en gestión" se envía siempre o con check. Si un REQ
   abre varios Casos, "en gestión" saldría una vez por Caso; si se prefiere uno solo, el evento es la apertura del
   primer Caso del REQ.
-- **Reevaluación del PDF (D65).** Al conocer el contenido de la plantilla, el responsable decide si el aviso con PDF
+- **Reevaluación del PDF (D71).** Al conocer el contenido de la plantilla, el responsable decide si el aviso con PDF
   exige verificación adicional del destinatario (por ejemplo, solo requirentes con ClaveÚnica o confirmación del correo
   por el profesional).
 
@@ -44,7 +44,7 @@ integración sin enviar mensajes reales.
 
 PDF de cierre
 - Generación en el servidor desde la plantilla institucional, con los datos que la plantilla exija (se revisan contra
-  D65 y la reserva); adjunto al correo AVISO_CIERRE de 0.9.1 (Graph acepta adjuntos de hasta unos 3 MB en envío
+  D71 y la reserva); adjunto al correo AVISO_CIERRE de 0.9.1 (Graph acepta adjuntos de hasta unos 3 MB en envío
   directo; un PDF de cierre es menor).
 - Librería de PDF: requiere autorización expresa (regla de dependencias); alternativa sin librería si la plantilla lo
   permite.
@@ -61,7 +61,7 @@ SMS
 
 | Gate | Título |
 |---|---|
-| P00 | Línea base, decisiones validadas (DS-1 a DS-4 como D73+) y diseño con la plantilla y la API reales |
+| P00 | Línea base, decisiones validadas (DS-1 a DS-4 con el siguiente número libre) y diseño con la plantilla y la API reales |
 | P01 | PDF de cierre adjunto al aviso (servidor) |
 | P02 | SMS: outbox, proveedor, estados y textos (servidor e interfaz) |
 | P03 | Integración, aceptación y cierre de versión |

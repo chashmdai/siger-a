@@ -1,7 +1,8 @@
 # SIGER 0.9.0 - hoja de ruta de la serie 0.9.x
 
 Documento rector de la serie 0.9.x. Planificación consolidada por el responsable el 2026-11-26 y el 2026-11-27
-sobre `v0.8.0` (`842d012`), en producción desde el 2026-11-26. Cada versión 0.9.X es un ciclo completo con plan,
+sobre `v0.8.1` (`99c31b2`, rediseño visual sobre `v0.8.0`). Producción en 0.8.0 desde el 2026-11-26; el paso U81 a 0.8.1
+lo ejecuta el responsable fuera de esta serie. Las decisiones D52-D57 son de 0.8.1; la serie 0.9.x empieza en D58. Cada versión 0.9.X es un ciclo completo con plan,
 bitácora, diseño, gates, etiqueta y paso U propios. Este documento solo cambia con aprobación del responsable.
 
 Plazo de la serie: **31 de diciembre de 2026**.
@@ -68,14 +69,14 @@ cambios del Formulario; si los necesitara, ese punto sale de 0.9.2 junto con D38
 
 ## 4. Decisiones de la serie (numeración continua)
 
-D44-D49 (hoja de ruta heredada de 0.8.0) se implementan en 0.9.2. Las nuevas son D52-D72:
+D44-D49 (hoja de ruta heredada de 0.8.0) se implementan en 0.9.2. Las nuevas son D58-D78:
 
 | Decisiones | Versión | Tema |
 |---|---|---|
-| D52-D61 | 0.9.1 | Antecedentes complementarios (invitación, enlace, ClaveÚnica, vigencia, admisión automática, cierre, reutilización, habilitación, texto de lo requerido, estado visible) |
-| D62-D66 | 0.9.1 | Aviso de cierre por correo |
-| D67-D68 | 0.9.1 | Despliegue del Formulario y confianza entre sistemas |
-| D69-D72 | 0.9.2 | Selector de antecedentes, seguimiento por folio, distribución ágil, reportes sin TI inconsistente |
+| D58-D67 | 0.9.1 | Antecedentes complementarios (invitación, enlace, ClaveÚnica, vigencia, admisión automática, cierre, reutilización, habilitación, texto de lo requerido, estado visible) |
+| D68-D72 | 0.9.1 | Aviso de cierre por correo |
+| D73-D74 | 0.9.1 | Despliegue del Formulario y confianza entre sistemas |
+| D75-D78 | 0.9.2 | Selector de antecedentes, seguimiento por folio, distribución ágil, reportes sin TI inconsistente |
 | propuestas DS-1 a DS-4 | bloque PDF/SMS | SMS al requirente, pendientes de validación institucional |
 
 El texto completo de cada decisión está en el plan de su versión; el gate 00 de cada versión las copia a
@@ -119,6 +120,7 @@ texto, sin cambios. No nombra versión ni gate. La fuente de verdad es el reposi
 
 ## 7. Pendientes fuera de la serie (no tienen gate)
 
+- U81: actualización de producción a 0.8.1 (paso del responsable, `BITACORA_0_8_1.md`).
 - U7 de 0.8.0: activación de los catálogos estadísticos en producción, coordinada con UEP.
 - Limpieza en TEST-SIGER de las carpetas de ensayo de 0.8.0 (`D:\Ensayo-E12` a `D:\Ensayo-E17-registro`,
   `D:\Auditoria-E16`), después de revisarlas.

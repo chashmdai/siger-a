@@ -2,20 +2,20 @@
 
 Operación y pendientes: seguimiento de la gestión por folio, selector de antecedentes, distribución ágil, sedes y
 distribución territorial del Formulario, correo de avisos, hallazgos de 0.8.0 y scripts de operación. Decisiones D44-D49
-(heredadas de 0.8.0, `DECISIONES_FUNCIONALES.md`, con DI-05, DI-06 y DI-09 respondidas) y D69-D72 del responsable
+(heredadas de 0.8.0, `DECISIONES_FUNCIONALES.md`, con DI-05, DI-06 y DI-09 respondidas) y D75-D78 del responsable
 (2026-11-26 y 2026-11-27). Versión 0.9.2, prefijo de gates **B**, registro en `docs/BITACORA_0_9_2.md`, diseño en
 `docs/DISENO_0_9_2.md`, serie en `docs/PLAN_0_9_0.md`. Empieza con A07 (0.9.1) CERRADO. Solo SIGER: el repositorio
 `formulario-web` se lee. Este plan solo cambia con aprobación del responsable.
 
-## 0. Decisiones (B00 copia D69-D72 a `DECISIONES_FUNCIONALES.md` como "Precisión 0.9.2" y retira el rótulo "hoja de ruta" de D44-D49)
+## 0. Decisiones (B00 copia D75-D78 a `DECISIONES_FUNCIONALES.md` como "Precisión 0.9.2" y retira el rótulo "hoja de ruta" de D44-D49)
 
-- **D69 Selector de antecedentes (P-001).** En el diálogo "Vincular al REQ existente" de la COM, el campo de folio
+- **D75 Selector de antecedentes (P-001).** En el diálogo "Vincular al REQ existente" de la COM, el campo de folio
   exacto se reemplaza por el buscador institucional (folio SIGER, COM o REQ, RUN o nombre), sin salir de la COM. Si la
   COM trae RUN, las gestiones de ese mismo RUN aparecen arriba como "posibles gestiones relacionadas". Cada resultado
   muestra su REQ con sus Casos y estados. **El destino sigue siendo solo el REQ**: la gestión lo revisa y lo encamina al
   Caso por el circuito actual. Observación opcional (vigente desde 0.8.0). Validaciones, permisos y auditoría sin
   cambios; los resultados muestran solo lo que el actor ya puede leer.
-- **D70 Seguimiento por folio (P-008), como ajuste de la lectura existente.** Al buscar un folio `SIGER-XXXXXX` (o el de
+- **D76 Seguimiento por folio (P-008), como ajuste de la lectura existente.** Al buscar un folio `SIGER-XXXXXX` (o el de
   cualquier registro de la cadena), el buscador muestra primero una **vista de seguimiento** de la gestión en vez de
   abrir automáticamente la ficha: COM de origen, SOL con destino y estado, REQ si existe, Casos con número, estado y
   responsable, y las actuaciones del REQ y de cada Caso, con fechas e hitos; desde ahí se abre la ficha completa. No se
@@ -23,11 +23,11 @@ distribución territorial del Formulario, correo de avisos, hallazgos de 0.8.0 y
   Para que un administrativo que atiende llamadas vea toda la cadena, TI le concede la lectura institucional existente.
   Las consultas de seguimiento quedan auditadas como hoy. Confirmar la identidad de quien llama es protocolo de
   atención, no código.
-- **D71 Distribución ágil (P-007.1 y P-007.3).** "Usar todas las propuestas" aplica a la vez las propuestas de tipo de
+- **D77 Distribución ágil (P-007.1 y P-007.3).** "Usar todas las propuestas" aplica a la vez las propuestas de tipo de
   solicitud, tipo de requirente y vía, que siguen visibles y editables antes de confirmar. "Distribuir" desde la bandeja
   «Ingreso por clasificar» abre el mismo diálogo de distribución sin entrar a la ficha. Nada se clasifica, distribuye ni
   desestima automáticamente.
-- **D72 Reportes sin TI inconsistente (hallazgo de E14).** `Reports` y su exportación excluyen a una cuenta TI con una
+- **D78 Reportes sin TI inconsistente (hallazgo de E14).** `Reports` y su exportación excluyen a una cuenta TI con una
   concesión de REPORTES insertada fuera de la aplicación, igual que el resto del sistema (D2). Se retira la excepción
   `TI_MIXED_KNOWN` de `PermisosFinalesTest`.
 
@@ -59,7 +59,7 @@ etiquetada y paso U-0.9.1 registrado (puede estar pendiente: 0.9.2 no depende de
 5. **Escritura y lectura**: toda escritura por `Workflow.run`; ninguna lectura recibe rol, autor ni alcance del
    navegador; visibilidad doble (`Access` y `BoardQueries.Visibility`) con su prueba de equivalencia cuando cambie
    (B01, B02, B03).
-6. **Reglas vigentes**: D1-D68 no cambian salvo lo que digan D44-D49 y D69-D72.
+6. **Reglas vigentes**: D1-D74 no cambian salvo lo que digan D44-D49 y D75-D78.
 7. **Inmutabilidad** (D35) y barridos de `ImmutabilityTest` e `InstitutionalReaderTest` para todo comando nuevo.
 8. **Privacidad**: el seguimiento y el selector no revelan registros que el actor no puede leer, ni por inferencia
    (conteos, órdenes, mensajes); auditoría sin términos de búsqueda en claro, como hoy.
@@ -119,7 +119,7 @@ Valores comunes como en `PLAN_0_9_1.md` 6.
   0.9.1 (V25).
 - Archivos autorizados: documentos, pruebas y recursos de prueba, bitácora. Ninguna línea de `src/main` cambia.
 
-**B01 - Seguimiento de la gestión por folio (D70)**
+**B01 - Seguimiento de la gestión por folio (D76)**
 - Alcance: lectura de la cadena con actuaciones para un folio (consulta bajo demanda, solo del registro buscado, no de
   todos los resultados de una búsqueda amplia), reutilizando `PersonSearch.chains()` y los filtros de actuaciones de
   `Queries`; vista de seguimiento en el buscador cuando la búsqueda es por folio (reemplaza la apertura automática de
@@ -128,7 +128,7 @@ Valores comunes como en `PLAN_0_9_1.md` 6.
   y folio no legible con la misma respuesta; casos múltiples, antecedentes admitidos y devueltos, transferencias y
   cerrados; sin inferencia por conteos; equivalencia `Access`/`Visibility` si se toca; móvil 390×844.
 
-**B02 - Vínculo con buscador y distribución ágil (D69, D71)**
+**B02 - Vínculo con buscador y distribución ágil (D75, D77)**
 - Alcance: diálogo de vínculo con buscador embebido, sugeridos por RUN de la COM y cadena REQ-CAS por resultado;
   `COM_LINK` sin cambios de regla (destino REQ); botón "Usar todas las propuestas"; acción "Distribuir" en la bandeja
   «Ingreso por clasificar» que abre el mismo diálogo y comando de la ficha (revisión, permisos y auditoría iguales).
@@ -139,9 +139,9 @@ Valores comunes como en `PLAN_0_9_1.md` 6.
 **B03 - Sedes: fechas y distribución territorial del Formulario (D44, D45)**
 - Alcance y pruebas: `DISENO_0_8_0.md` 15.1 y 15.2 completos (DI-05 y DI-06), con la equivalencia de bandejas.
 
-**B04 - Correo de avisos, índice de avisos y reportes (D46, D48, D72)**
+**B04 - Correo de avisos, índice de avisos y reportes (D46, D48, D78)**
 - Alcance: `DISENO_0_8_0.md` 15.3 (asunto por evento, folio, descripción breve, enlace solo con `siger.mail.link`) y
-  15.4 (medir el plan de `DistributionNotices` en MySQL con volumen alto; índice solo si hay recorrido completo); D72.
+  15.4 (medir el plan de `DistributionNotices` en MySQL con volumen alto; índice solo si hay recorrido completo); D78.
   Las plantillas ciudadanas de 0.9.1 no cambian.
 - Pruebas: Graph falso; un asunto por evento; ningún asunto ni cuerpo con datos personales; sin `siger.mail.link`, sin
   enlace; `PermisosFinalesTest` sin `TI_MIXED_KNOWN` y con la mutación que reintroduce la inconsistencia.

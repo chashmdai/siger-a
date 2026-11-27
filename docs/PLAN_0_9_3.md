@@ -14,7 +14,7 @@ Los gates de corrección no existen al planificar: dependen de lo que observe la
    regla (requiere decisión nueva) o fuera de alcance.
 3. El responsable decide y aprueba un lote. Claude Padre redacta los gates del lote en la sección 6 de este plan
    (alcance, archivos autorizados, pruebas, aceptación), con un commit de documentación, y los agrega a la bitácora como
-   ABIERTO. Un cambio de regla lleva su decisión nueva (D73 en adelante).
+   ABIERTO. Un cambio de regla lleva su decisión nueva (siguiente número libre en `DECISIONES_FUNCIONALES.md`).
 4. Se ejecutan con el protocolo de siempre. Al final: integración, auditoría y build.
 
 Criterio de corte: lo que llegue después del **26/12/2026** o requiera más de un gate grande pasa a una versión

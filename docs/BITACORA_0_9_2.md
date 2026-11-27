@@ -26,10 +26,10 @@ esta bitácora.
 
 | Decisión | Antes de | Respuesta |
 |---|---|---|
-| D69 selector de antecedentes; destino solo el REQ | B02 | 2026-11-27: aprobada por el responsable. |
-| D70 seguimiento por folio como ajuste de la lectura existente, sin facultad nueva | B01 | 2026-11-26: aprobada por el responsable. |
-| D71 "usar todas las propuestas" y distribuir desde la bandeja | B02 | 2026-11-27: aprobada (dentro del alcance confirmado de 0.9.2). |
-| D72 reportes sin TI inconsistente | B04 | 2026-11-27: aprobada (hallazgo de E14). |
+| D75 selector de antecedentes; destino solo el REQ | B02 | 2026-11-27: aprobada por el responsable. |
+| D76 seguimiento por folio como ajuste de la lectura existente, sin facultad nueva | B01 | 2026-11-26: aprobada por el responsable. |
+| D77 "usar todas las propuestas" y distribuir desde la bandeja | B02 | 2026-11-27: aprobada (dentro del alcance confirmado de 0.9.2). |
+| D78 reportes sin TI inconsistente | B04 | 2026-11-27: aprobada (hallazgo de E14). |
 | Alcance de 0.9.2 y lo que queda fuera (`PLAN_0_9_0.md` 7) | B00 | 2026-11-27: aprobado por el responsable. |
 
 ## Definiciones pendientes

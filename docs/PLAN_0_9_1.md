@@ -2,7 +2,7 @@
 
 Ampliación contractual, parte habilitable: **antecedentes complementarios** solicitados por la gestión y aportados por
 el requirente en el Formulario Público con ClaveÚnica, y **aviso de cierre de gestión** por correo. Decisiones del
-responsable del 2026-11-26 (aquí D52-D68). Versión 0.9.1, prefijo de gates **A**, registro en
+responsable del 2026-11-26 (aquí D58-D74). Versión 0.9.1, prefijo de gates **A**, registro en
 `docs/BITACORA_0_9_1.md`, diseño de referencia en `docs/DISENO_0_9_1.md`, hoja de ruta de la serie en
 `docs/PLAN_0_9_0.md`. Es la única versión de la serie que modifica el repositorio `formulario-web` (gates
 **[FORMULARIO]**). Este plan solo cambia con aprobación del responsable; si una sesión encuentra que es incorrecto o
@@ -15,65 +15,67 @@ SMS. Bloqueados por insumos de la Defensoría (plantilla del PDF y proveedor de 
 
 ### Antecedentes complementarios
 
-- **D52 Invitación.** El profesional del Caso (quien puede escribir en el Caso abierto) solicita antecedentes al
+- **D58 Invitación.** El profesional del Caso (quien puede escribir en el Caso abierto) solicita antecedentes al
   requirente desde el CAS. Solo se puede invitar a un requirente con **RUN verificado por ClaveÚnica** y con **correo
   declarado**; si falta cualquiera de los dos, SIGER no ofrece la acción. Sin ClaveÚnica no hay invitación.
-- **D53 Correo y enlace.** Graph envía la invitación al correo declarado por el requirente, con un texto fijo mínimo y
+- **D59 Correo y enlace.** Graph envía la invitación al correo declarado por el requirente, con un texto fijo mínimo y
   un enlace al Formulario (`https://formulario.defensorianinez.gob.cl/antecedentes#<token>`). El token es aleatorio
   (256 bits) y viaja en el fragmento de la URL, que el navegador no envía al servidor: no queda en registros de acceso
   ni en `Referer`. El enlace no lleva RUN, folio interno ni datos del expediente.
-- **D54 Identidad.** En el Formulario, el aporte exige autenticarse **exclusivamente con ClaveÚnica** (sin la vía de
+- **D60 Identidad.** En el Formulario, el aporte exige autenticarse **exclusivamente con ClaveÚnica** (sin la vía de
   identificación declarada) y que el RUN autenticado coincida con el esperado. Si no coincide, la invitación venció,
   fue revocada o ya se usó, el Formulario muestra un mensaje genérico que no revela nada.
-- **D55 Vigencia y uso.** Vigencia de **17 días corridos**. **Una sola entrega** por invitación, con texto y adjuntos
+- **D61 Vigencia y uso.** Vigencia de **17 días corridos**. **Una sola entrega** por invitación, con texto y adjuntos
   opcionales. Si se necesita más, el profesional crea otra invitación.
-- **D56 Admisión automática.** La entrega llega por el PULL/ACK existente como una COM nueva y queda **vinculada y
+- **D62 Admisión automática.** La entrega llega por el PULL/ACK existente como una COM nueva y queda **vinculada y
   admitida automáticamente** al REQ y al CAS que la solicitaron (actor técnico, fundamento "Antecedentes solicitados por
   la gestión", auditoría). Se avisa al profesional. Los archivos aparecen en "Documentos del requiriente" del Caso. En
   estadística cuenta como VINCULADA, no como requerimiento nuevo.
-- **D57 Cierre.** La invitación **muere automáticamente al cerrarse el CAS que la emitió**. Una entrega que cruce el
+- **D63 Cierre.** La invitación **muere automáticamente al cerrarse el CAS que la emitió**. Una entrega que cruce el
   cierre no se pierde: entra como COM ordinaria a Distribución, sin admisión automática.
-- **D58 Reutilización.** Se reutiliza lo existente: PULL/ACK v3, custodia, integridad y D17; vínculo COM-REQ-CAS;
+- **D64 Reutilización.** Se reutiliza lo existente: PULL/ACK v3, custodia, integridad y D17; vínculo COM-REQ-CAS;
   panel "Documentos del requiriente"; ClaveÚnica y carga de adjuntos del Formulario; Graph con su outbox; auditoría y
   avisos. Lo nuevo: la invitación (SIGER y Formulario), el canal de creación y revocación SIGER→Formulario, la pantalla
   del Formulario, la variante de entrega y las plantillas de correo al ciudadano.
-- **D59 Habilitación.** Las invitaciones se despliegan **apagadas por configuración** en SIGER y en el Formulario. Se
+- **D65 Habilitación.** Las invitaciones se despliegan **apagadas por configuración** en SIGER y en el Formulario. Se
   encienden cuando ClaveÚnica esté certificada por Gobierno Digital y el responsable haya acreditado un ingreso real de
   punta a punta con sus propios datos. El aviso de cierre no depende de ClaveÚnica.
-- **D60 Lo que debe aportar.** Al invitar, el profesional escribe un texto breve con lo que el requirente debe aportar.
+- **D66 Lo que debe aportar.** Al invitar, el profesional escribe un texto breve con lo que el requirente debe aportar.
   Ese texto se muestra solo dentro del Formulario, después de ingresar con ClaveÚnica; nunca va en el correo ni en la
   auditoría.
-- **D61 Estado visible.** El CAS muestra el estado de cada invitación (pendiente de publicación, vigente, entregada,
+- **D67 Estado visible.** El CAS muestra el estado de cada invitación (pendiente de publicación, vigente, entregada,
   vencida, revocada) y el profesional puede revocarla.
 
 ### Aviso de cierre
 
-- **D62 Check opcional.** Al cerrar un CAS, el profesional puede marcar **"Dar aviso de cierre de gestión"**. Viene
+- **D68 Check opcional.** Al cerrar un CAS, el profesional puede marcar **"Dar aviso de cierre de gestión"**. Viene
   desmarcado y solo aparece si el requirente tiene correo declarado.
-- **D63 Envío y trazabilidad.** Graph envía el aviso al correo declarado mediante el outbox existente. Se registran
+- **D69 Envío y trazabilidad.** Graph envía el aviso al correo declarado mediante el outbox existente. Se registran
   destinatario, fecha, intentos y resultado. La aceptación de Graph no acredita la entrega. Queda auditado quién marcó
   el aviso y cuándo, aunque el envío falle.
-- **D64 Contenido.** En 0.9.1 el aviso es un correo con texto institucional mínimo. El bloque PDF/SMS le agrega después
+- **D70 Contenido.** En 0.9.1 el aviso es un correo con texto institucional mínimo. El bloque PDF/SMS le agrega después
   el PDF de cierre adjunto (plantilla de la Defensoría) y el SMS.
-- **D65 Destinatarios.** El aviso no exige ClaveÚnica: basta el correo declarado. Al incorporar el PDF se reevalúa si
+- **D71 Destinatarios.** El aviso no exige ClaveÚnica: basta el correo declarado. Al incorporar el PDF se reevalúa si
   su contenido exige una verificación adicional.
-- **D66 Textos.** Los correos de invitación y de aviso de cierre usan textos fijos y sencillos definidos por el equipo
+- **D72 Textos.** Los correos de invitación y de aviso de cierre usan textos fijos y sencillos definidos por el equipo
   de SIGER (propuesta en `DISENO_0_9_1.md` 5.3; el texto final se aprueba en el GO de A03).
 
 ### Despliegue y confianza
 
-- **D67 Despliegue.** Primero el paso U de SIGER 0.9.1; después la actualización **en sitio** del Formulario con su
+- **D73 Despliegue.** Primero el paso U de SIGER 0.9.1; después la actualización **en sitio** del Formulario con su
   procedimiento vigente (`docs/ACTUALIZACION_UBUNTU_PRODUCCION.md` de `formulario-web`), con paquete de release y
   simulacro aislado de restauración y migración. Sin reinstalación limpia.
-- **D68 Confianza.** La confianza Formulario-SIGER no cambia: Bearer de integración, claves Ed25519 del Formulario, par
+- **D74 Confianza.** La confianza Formulario-SIGER no cambia: Bearer de integración, claves Ed25519 del Formulario, par
   ACK de SIGER en DPAPI y CA del TLS se conservan; no se crean ni regeneran credenciales. Las invitaciones viajan con
   el Bearer existente y además van **firmadas por SIGER con su clave ACK**, con la etiqueta de dominio
   `SIGER-INVITACION-v1`, para que el Bearer solo no baste para emitirlas.
 
 ## 1. Punto de partida (verificado al planificar, 2026-11-27)
 
-- SIGER: `main` = `4b482be` (documentación posterior a `v0.8.0` = `842d012`). Versión 0.8.0, esquema 24 (V1-V24).
-  Producción (DDN-SIGER) actualizada a 0.8.0 el 2026-11-26 (paso U, U0-U6 conformes; U7 pendiente con UEP).
+- SIGER: `main` = `203d15c` (planificación de esta serie), sobre `v0.8.1` = `99c31b2`. Versión 0.8.1 (rediseño visual del
+  explorador estadístico e iconografía, D52-D57; solo interfaz sobre `v0.8.0` = `842d012`), esquema 24 (V1-V24).
+  Producción (DDN-SIGER) en 0.8.0 desde el 2026-11-26 (paso U, U0-U6 conformes; U7 pendiente con UEP); actualización a
+  0.8.1 pendiente (paso U81 del responsable). El paso U de 0.9.1 parte de 0.8.0 o de 0.8.1, ambos con esquema 24.
 - Pruebas al cierre de 0.8.0 (E14): JUnit H2 388 ok y 4 omitidas; MySQL 8.4 392 ok y 4 omitidas; frontend 252 ok;
   `Check-Scripts.ps1`: 40 scripts, 81 órdenes en 63 procesos. A00 vuelve a contar sobre el HEAD.
 - Formulario: `main` = `6f886eb` (15/11/2026). Producción en DDN-UBUNTU con RC1 `c16d135` (04/11/2026). Flyway del
@@ -86,14 +88,14 @@ SMS. Bloqueados por insumos de la Defensoría (plantilla del PDF y proveedor de 
 
 ## 2. Reglas para todos los gates (condiciones del responsable)
 
-1. **Inmutables**: `v0.5.0` a `v0.8.0`, sus paquetes y evidencias, los respaldos y constancias de las VM. El ejecutor
+1. **Inmutables**: `v0.5.0` a `v0.8.1`, sus paquetes y evidencias, los respaldos y constancias de las VM. El ejecutor
    no modifica DDN-SIGER ni DDN-UBUNTU.
 2. **Recepción del Formulario en SIGER**: `FormularioClient`, `FormularioConsumer`, `FormularioAutomatic`,
    `FormularioPull`, `ExternalOriginal`, `ExternalProjection`, `FormularioReception` e
    `IntakeCommands.conserveExternal` solo cambian en A02 y de forma aditiva: los documentos 1.0, 1.1 y NNA se procesan
-   igual que en `v0.8.0` (regresión con sus vectores de prueba). Ningún código actualiza ni borra
+   igual que en `v0.8.1` (regresión con sus vectores de prueba). Ningún código actualiza ni borra
    `communication_original`, `external_person`, `external_attribute`, `external_field` ni `external_document`.
-3. **Scripts**: `git diff v0.8.0 -- scripts/ .mvn/` vacío en toda la versión. Las propiedades nuevas van a
+3. **Scripts**: `git diff v0.8.1 -- scripts/ .mvn/` vacío en toda la versión. Las propiedades nuevas van a
    `deploy/config-ejemplo/*` comentadas y apagadas.
 4. **Migraciones SIGER**: V1-V24 no se modifican; V25 es aditiva y portable (H2 `MODE=MySQL` y MySQL 8.4);
    `MySql84UpgradeTest` y `MySql84Upgrade070Test` pasan hasta V25, y A00 agrega la prueba de actualización desde un
@@ -101,18 +103,18 @@ SMS. Bloqueados por insumos de la Defensoría (plantilla del PDF y proveedor de 
 5. **Migraciones Formulario**: V1-V13 no se modifican; V14 es aditiva en H2 y MySQL; Flyway nunca baja.
 6. **Escritura y lectura**: toda escritura de SIGER por `Workflow.run`; ninguna lectura recibe rol, autor ni alcance
    del navegador; visibilidad doble (`Access` y `BoardQueries.Visibility`) con su equivalencia si cambia.
-7. **Reglas vigentes**: D1-D51 no cambian salvo lo que digan D52-D68. D2 (TI sin lectura), D17 (liberación por
+7. **Reglas vigentes**: D1-D57 no cambian salvo lo que digan D58-D74. D2 (TI sin lectura), D17 (liberación por
    análisis en origen) y D25 (estadística de ingresos) intactos.
 8. **Inmutabilidad** (D35): no se invita ni se admite sobre un Caso cerrado; los comandos nuevos se clasifican en
    `ImmutabilityTest`.
 9. **Datos personales y secretos**: el token en claro solo existe en el cuerpo del correo pendiente en el outbox
    (hasta que el envío queda en estado final o la invitación vence, momento en que se minimiza), en el correo enviado
    y en el navegador del ciudadano; en ambos sistemas se guarda solo su huella SHA-256. Nunca en logs, URLs de
-   servidor, auditoría, bitácora ni salidas. El texto de lo requerido (D60) no va al correo ni a la
+   servidor, auditoría, bitácora ni salidas. El texto de lo requerido (D66) no va al correo ni a la
    auditoría. RUN nunca en URL. Los correos al ciudadano no llevan datos del expediente más allá del folio SIGER.
 10. **Apagado por defecto**: toda función nueva de SIGER y del Formulario arranca apagada; encenderla es un paso del
-    responsable en producción (D59). El Formulario rechaza encender las invitaciones sin ClaveÚnica aprobada.
-11. **Confianza** (D68): ninguna credencial, clave ni certificado nuevo o regenerado.
+    responsable en producción (D65). El Formulario rechaza encender las invitaciones sin ClaveÚnica aprobada.
+11. **Confianza** (D74): ninguna credencial, clave ni certificado nuevo o regenerado.
 12. **Dependencias**: ninguna librería nueva sin autorización expresa.
 13. **Mutación**: cada regla nueva con una prueba que falla si se rompe; evidencia "regla -> prueba que falló".
 14. **Facilidad de uso**: todo gate de interfaz declara cómo lo comprobó (texto, flujo, ayuda, móvil) y no expone
@@ -124,10 +126,10 @@ SMS. Bloqueados por insumos de la Defensoría (plantilla del PDF y proveedor de 
 
 ## 3. Relación con producción y plazo
 
-- 0.9.1 no cambia la producción hasta su paso U. Orden (D67): paso U de SIGER 0.9.1 (redacta A05, ejecuta el
+- 0.9.1 no cambia la producción hasta su paso U. Orden (D73): paso U de SIGER 0.9.1 (redacta A05, ejecuta el
   responsable con autorización expresa, respaldo y verificación en la misma ventana); luego la actualización en sitio
-  del Formulario; luego, por separado, la habilitación (D59).
-- El aviso de cierre (D62-D66) puede encenderse desde el paso U, porque solo depende de Graph, ya operativo.
+  del Formulario; luego, por separado, la habilitación (D65).
+- El aviso de cierre (D68-D72) puede encenderse desde el paso U, porque solo depende de Graph, ya operativo.
 - Plazo de la serie: 31/12/2026; calendario de referencia en `PLAN_0_9_0.md` 2. El plazo no reduce pruebas,
   mutaciones, auditoría ni ensayo.
 - Trabajo en paralelo del responsable: GO oportunos; respuestas a las definiciones (bitácora); gestión de la
@@ -135,7 +137,7 @@ SMS. Bloqueados por insumos de la Defensoría (plantilla del PDF y proveedor de 
 
 ## 4. Documentación que se actualiza
 
-SIGER: `DECISIONES_FUNCIONALES.md` (D52-D68, A00), `CLAUDE.md` (estado en A00; arquitectura en cada gate; revisión en
+SIGER: `DECISIONES_FUNCIONALES.md` (D58-D74, A00), `CLAUDE.md` (estado en A00; arquitectura en cada gate; revisión en
 A05), `AGENTS.md` (A00: remite al prompt de `PLAN_0_9_0.md` 5), `ARQUITECTURA.md`, `ALCANCE_Y_PENDIENTES.md`,
 `DESPLIEGUE_VM.md` (paso U de 0.9.1 y habilitación, A05), `deploy/config-ejemplo/*`, el nuevo
 `docs/PRUEBAS_MANUALES_0_9_1.md` (A05) y `DISENO_0_9_1.md` solo para diferencias aprobadas.
@@ -234,7 +236,7 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
      firman como dice el contrato (sin código de producción nuevo).
   3. Decide la vía de la variante (`DISENO_0_9_1.md` 4.1): misma cola `formulario-completo` con `document_kind`
      nuevo (preferida) o cola propia; registra la evidencia.
-  4. Decisiones: copiar D52-D68 textuales a `DECISIONES_FUNCIONALES.md` ("Precisión 0.9.1"); `CLAUDE.md`: estado
+  4. Decisiones: copiar D58-D74 textuales a `DECISIONES_FUNCIONALES.md` ("Precisión 0.9.1"); `CLAUDE.md`: estado
      "plan 0.9.1 en curso"; `AGENTS.md`: remitir a `CLAUDE.md` y al prompt de `PLAN_0_9_0.md` 5. Prueba de
      actualización desde un volcado sintético de 0.8.0 (V24) en H2 y MySQL.
 - Archivos autorizados: SIGER: `docs/DECISIONES_FUNCIONALES.md`, `CLAUDE.md`, `AGENTS.md`, pruebas y recursos de
@@ -246,9 +248,9 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
 
 **A01 - Invitaciones en SIGER (servidor)**
 - Alcance: V25 (`case_invitation` y `invitation_sync`, `DISENO_0_9_1.md` 2); comandos `CASE_INVITE` y
-  `INVITE_REVOKE` por `Workflow.run`; elegibilidad (D52: requirente con RUN autenticado por ClaveÚnica y correo
+  `INVITE_REVOKE` por `Workflow.run`; elegibilidad (D58: requirente con RUN autenticado por ClaveÚnica y correo
   declarado; Caso abierto; actor con escritura en el Caso; una invitación vigente por Caso, DI-18); revocación
-  automática dentro de `CASE_CLOSE` (D57); vencimiento por tiempo (D55); canal SIGER→Formulario con outbox durable,
+  automática dentro de `CASE_CLOSE` (D63); vencimiento por tiempo (D61); canal SIGER→Formulario con outbox durable,
   firma `SIGER-INVITACION-v1` con la clave ACK y el Bearer existentes, reintentos y estados (`DISENO_0_9_1.md` 3);
   propiedad `siger.antecedentes.enabled=false` por defecto (con ella apagada, los comandos responden 409 y el canal no
   envía); auditoría sin token, sin texto requerido y sin RUN; ficha del Caso con `invitations` (estado, fechas, actor;
@@ -270,7 +272,7 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
   por el camino existente con sus originales (custodia y D17 sin cambios); si la invitación estaba vigente y el Caso
   abierto: vínculo `ADMITIDA` al REQ con `target_case_id`, actor técnico, fundamento fijo, invitación ENTREGADA, aviso
   al profesional (`Access.notice`), estado de la COM y estadística como VINCULADA; si no: COM NUEVA a Distribución con
-  la referencia visible de la invitación vencida o revocada (D57); idempotencia por origen e identificador.
+  la referencia visible de la invitación vencida o revocada (D63); idempotencia por origen e identificador.
 - Archivos autorizados: `FormularioReception.java`, `ExternalOriginal.java` (solo la variante nueva),
   `IntakeCommands.java` (vínculo admitido técnico), clases de invitación de A01, `Queries.java` (referencia en la COM),
   pruebas.
@@ -281,9 +283,9 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
 - Cierre: `gate A02: recepcion de antecedentes y admision automatica`.
 
 **A03 - Interfaz del Caso y correos al ciudadano**
-- Alcance: en la ficha del Caso, panel "Antecedentes solicitados" (crear con el texto de lo requerido, estados de D61,
+- Alcance: en la ficha del Caso, panel "Antecedentes solicitados" (crear con el texto de lo requerido, estados de D67,
   revocar; acción oculta si no es elegible, con la razón en texto simple); en el cierre del Caso, el check "Dar aviso de
-  cierre de gestión" (D62, según DI-16); envíos al ciudadano por el outbox (`DISENO_0_9_1.md` 5): plantillas fijas de
+  cierre de gestión" (D68, según DI-16); envíos al ciudadano por el outbox (`DISENO_0_9_1.md` 5): plantillas fijas de
   invitación (solo cuando el Formulario confirmó la publicación) y de aviso de cierre (al cierre efectivo), destinatario
   externo fuera de `siger.mail.allowed-domains` solo para estas dos plantillas, minimización del cuerpo con el enlace
   al quedar en estado final, estados visibles para TI como los demás correos; propiedad
@@ -321,14 +323,14 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
   ClaveÚnica real): invitar, publicar, correo con Graph falso, aportar, PULL/ACK, admisión, aviso, documentos en el
   Caso; cierre con invitación vigente (revocación y entrega cruzada); aviso de cierre. Suite MySQL de SIGER completa en
   `D:\Ensayo-A05`. Versión 0.9.1 en `backend/pom.xml`, `frontend/package.json` y `package-lock.json`. Redactar el paso U
-  de 0.9.1 y la habilitación (D59: orden, propiedades en ambos sistemas, prueba real del responsable con sus propios
+  de 0.9.1 y la habilitación (D65: orden, propiedades en ambos sistemas, prueba real del responsable con sus propios
   datos) en `DESPLIEGUE_VM.md`; `PRUEBAS_MANUALES_0_9_1.md`; sección "Qué cambia en esta versión" de
   `ACTUALIZACION_UBUNTU_PRODUCCION.md` del Formulario; `ALCANCE_Y_PENDIENTES.md`, `CLAUDE.md`, `ARQUITECTURA.md`,
   `README.md`.
 - Cierre: `gate A05: integracion y cierre de version` en ambos repositorios.
 
 **A06 - Auditoría independiente** (EXTERNO)
-- La realiza Claude Padre sobre el commit de A05 de ambos repositorios: decisiones D52-D68, reglas de la sección 2,
+- La realiza Claude Padre sobre el commit de A05 de ambos repositorios: decisiones D58-D74, reglas de la sección 2,
   seguridad del token y de la firma, privacidad, regresión de la recepción, interfaz y documentación. El responsable
   registra el resultado.
 

@@ -35,11 +35,11 @@ el ciclo de A06 cerrado y ningún gate de corrección ABIERTO.
 
 | Decisión | Antes de | Respuesta |
 |---|---|---|
-| D52-D61 antecedentes complementarios | A00 | 2026-11-26: aprobadas por el responsable (invitación solo con RUN ClaveÚnica y correo declarado; enlace con token por correo de Graph; ingreso exclusivo con ClaveÚnica y RUN coincidente; 17 días corridos; una entrega con texto y adjuntos; admisión automática al CAS solicitante; la invitación muere al cerrarse el CAS que la emitió; reutilización de lo existente; apagada hasta la certificación de ClaveÚnica; texto de lo requerido visible solo tras ClaveÚnica; estado visible y revocación en el CAS). |
-| D62-D66 aviso de cierre | A00 | 2026-11-26: aprobadas (check opcional al cerrar el CAS, desmarcado; a todo requirente con correo declarado, sin exigir ClaveÚnica; texto mínimo en 0.9.1 y PDF en el bloque PDF/SMS; textos fijos definidos por el equipo). |
-| D67 despliegue del Formulario | A00 | 2026-11-26: actualización en sitio, sin reinstalación limpia; primero SIGER y después el Formulario. |
-| D68 confianza Formulario-SIGER | A00 | 2026-11-26: sin credenciales nuevas; invitaciones firmadas con la clave ACK de SIGER y etiqueta `SIGER-INVITACION-v1`. |
-| Destino del vínculo de antecedentes solicitados | A02 | 2026-11-26: al CAS que lo solicitó (admisión automática). El vínculo manual de Distribución sigue siendo solo al REQ (D69, 0.9.2). |
+| D58-D67 antecedentes complementarios | A00 | 2026-11-26: aprobadas por el responsable (invitación solo con RUN ClaveÚnica y correo declarado; enlace con token por correo de Graph; ingreso exclusivo con ClaveÚnica y RUN coincidente; 17 días corridos; una entrega con texto y adjuntos; admisión automática al CAS solicitante; la invitación muere al cerrarse el CAS que la emitió; reutilización de lo existente; apagada hasta la certificación de ClaveÚnica; texto de lo requerido visible solo tras ClaveÚnica; estado visible y revocación en el CAS). |
+| D68-D72 aviso de cierre | A00 | 2026-11-26: aprobadas (check opcional al cerrar el CAS, desmarcado; a todo requirente con correo declarado, sin exigir ClaveÚnica; texto mínimo en 0.9.1 y PDF en el bloque PDF/SMS; textos fijos definidos por el equipo). |
+| D73 despliegue del Formulario | A00 | 2026-11-26: actualización en sitio, sin reinstalación limpia; primero SIGER y después el Formulario. |
+| D74 confianza Formulario-SIGER | A00 | 2026-11-26: sin credenciales nuevas; invitaciones firmadas con la clave ACK de SIGER y etiqueta `SIGER-INVITACION-v1`. |
+| Destino del vínculo de antecedentes solicitados | A02 | 2026-11-26: al CAS que lo solicitó (admisión automática). El vínculo manual de Distribución sigue siendo solo al REQ (D75, 0.9.2). |
 | Plan 0.9.1 (prefijo A, A00-A07), serie 0.9.x y prompt universal de la serie | A00 | 2026-11-27: aprobado por el responsable para iniciar la ejecución. |
 
 ## Definiciones pendientes
