@@ -194,4 +194,19 @@ E10 apagado por defecto en ambos sistemas; E11 regresión de los recorridos 1.0,
 
 ## Diferencias aprobadas
 
-(ninguna)
+Aprobadas en el GO de A00 (2026-11-27; registro en `BITACORA_0_9_1.md`):
+
+- **2 (elegibilidad, punto 2).** Condición exacta de D58: un `external_person` de la COM de origen del REQ con
+  `person_role='PRESENTADOR'`, `authenticated=TRUE`, `run_source='CLAVE_UNICA_USERINFO'` y `run_valid=TRUE`. Solo los
+  recorridos `ADULTO_CU` permiten invitar.
+- **3 y 7.2 (canal y rutas de integración).** Además de `X-Siger-Firma`, la cabecera `X-Siger-Clave` con el keyId del
+  mapa `publico.comprobante.institutional-trusted-keys`; `X-Siger-Firma` es Ed25519 en base64url sin relleno sobre
+  `SIGER-INVITACION-v1\n` más los bytes exactos del cuerpo, verificada antes de leer el JSON (lectura estricta: lista
+  cerrada de campos y sin claves repetidas). Revocación de un `publicId` desconocido: el Formulario lo registra como
+  REVOCADA y responde 200; una creación posterior con ese `publicId` responde 409 y no revive la invitación.
+- **4.1 (vía de la variante).** Misma cola `formulario-completo` con la versión documental `ANT-1.0`. SIGER la pide en
+  `X-Formulario-Versiones` solo con `siger.antecedentes.enabled=true`, lo que toca `FormularioClient` (cambio aditivo,
+  A02): RC1 responde 400 a una versión desconocida.
+- **5.1 (outbox).** Tabla `citizen_mail` separada (V25, A01), en vez de extender `MailOutbox`; `mail_outbox` no cambia.
+  `citizen_mail` no guarda el cuerpo (se arma al enviar con la plantilla fija) y su columna `link` es el único lugar del
+  token en claro, anulada al minimizar.

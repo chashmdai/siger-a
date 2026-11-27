@@ -285,6 +285,16 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
   rechazo con la etiqueta de un ACK; idempotencia del canal; Formulario falso que falla (reintento) y que rechaza
   (estado final); token nunca en auditoría ni logs (prueba que lo busca); `ImmutabilityTest` con los comandos nuevos;
   barrido de `InstitutionalReaderTest`.
+- Traspaso del GO de A00 (H1, 2026-11-27):
+  - V25 agrega la tabla `citizen_mail`, separada de `mail_outbox`, que no cambia. Columnas: plantilla
+    (`INVITACION_ANTECEDENTES` o `AVISO_CIERRE`); destinatario en instantánea, `case_id` e `invitation_id` (nulo en el
+    aviso de cierre); `link`, el único lugar del token en claro, que se anula al minimizar; los estados de
+    `mail_outbox` más `RETENIDO`, con intentos y resultado equivalentes.
+  - No guarda el cuerpo: el cuerpo se arma al enviar, con la plantilla fija.
+  - `CASE_INVITE` inserta la fila en `RETENIDO` en el mismo COMMIT. El canal la pasa a `PENDIENTE` al confirmarse la
+    publicación, o la descarta y anula `link` si la publicación se rechaza o la invitación se revoca.
+  - A01 no envía correos. Se autorizan las clases nuevas de correo ciudadano, solo para el modelo y el encolado.
+  - Una prueba comprueba que el token solo está en `citizen_mail.link` y que el descarte lo anula.
 - Cierre: `gate A01: invitaciones en SIGER`.
 
 **A02 - Recepción de antecedentes y admisión automática (servidor)**
@@ -301,6 +311,11 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
   admisión con Caso abierto; cruce con el cierre; RUN distinto rechazado sin crear COM; reentrega idempotente;
   documentos visibles en `citizen_documents` del Caso; estadística (VINCULADA, sin requerimiento nuevo, D25);
   concurrencia entre la recepción y `CASE_CLOSE` (un solo resultado coherente).
+- Traspaso del GO de A00 (H2, 2026-11-27):
+  - `FormularioClient` agrega `ANT-1.0` a `X-Formulario-Versiones` solo con `siger.antecedentes.enabled=true`. Es un
+    cambio aditivo según la regla 2.
+  - Una prueba comprueba que, con la propiedad apagada, la cabecera es idéntica a la de `v0.8.1`.
+  - La entrega no trae nombres, así que A02 define qué muestra la COM en Distribución cuando no se admite (D63).
 - Cierre: `gate A02: recepcion de antecedentes y admision automatica`.
 
 **A03 - Interfaz del Caso y correos al ciudadano**
@@ -318,6 +333,13 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
 - Pruebas y mutación: Graph falso; avisos internos siguen restringidos a los dominios permitidos; correo ciudadano solo
   con sus plantillas; sin correo declarado, sin check; el aviso no sale si el cierre no se concreta; minimización;
   ningún correo con texto requerido, RUN ni relato; interfaz en 1366×768 y 390×844 (regla 14).
+- Traspaso del GO de A00 (2026-11-27):
+  - Envía `citizen_mail` con `MailWorker` y `GraphMail`, usando las plantillas de DI-19.
+  - Minimiza (`link` nulo) en estado final o al vencer la invitación.
+  - `siger.mail.allowed-domains` sigue rigiendo sin cambios para `mail_outbox`; `citizen_mail` solo acepta sus dos
+    plantillas.
+  - Ya no extiende `mail_outbox` (lo que este detalle dice de extender `MailOutbox` queda reemplazado por
+    `citizen_mail`).
 - Cierre: `gate A03: interfaz del caso y correos al ciudadano`.
 
 **A04 - Formulario: invitaciones, ingreso con ClaveÚnica, aporte de antecedentes y variante de entrega** [FORMULARIO]
@@ -336,6 +358,10 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
 - Pruebas y mutación: token inválido, vencido, revocado o usado; RUN distinto; segunda entrega rechazada; carrera de
   dos envíos; firma de invitación inválida o con etiqueta ajena; Bearer sin firma rechazado; apagado por defecto;
   logs sin token (prueba que los inspecciona); CI remota verde en los tres jobs.
+- Traspaso del GO de A00 (2026-11-27):
+  - `reclamar` acepta `ANT-1.0`.
+  - Implementa el registro de revocada para un `publicId` desconocido, que impide crearlo después.
+  - Una prueba permanente verifica `contratos/fixtures/` con `CanonFormulario` y `ComprobanteDigital` reales.
 - Cierre: `gate A04: antecedentes complementarios en el Formulario` (Formulario) y registro en la bitácora de SIGER
   con commit `docs: cierre de A04`.
 
@@ -348,6 +374,9 @@ evidencia con el formato de la sección 7; cierre con estado CERRADO, commit(s) 
   datos) en `DESPLIEGUE_VM.md`; `PRUEBAS_MANUALES_0_9_1.md`; sección "Qué cambia en esta versión" de
   `ACTUALIZACION_UBUNTU_PRODUCCION.md` del Formulario; `ALCANCE_Y_PENDIENTES.md`, `CLAUDE.md`, `ARQUITECTURA.md`,
   `README.md`.
+- Traspaso del GO de A00 (2026-11-27):
+  - `DESPLIEGUE_VM.md` y la habilitación indican el apagado: primero el Formulario y después SIGER, cuando no queden
+    entregas `ANT-1.0` pendientes.
 - Cierre: `gate A05: integracion y cierre de version` en ambos repositorios.
 
 **A06 - Auditoría independiente** (EXTERNO)
